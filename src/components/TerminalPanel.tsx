@@ -1,0 +1,433 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { Trash2, Copy, Check, AlertCircle, CornerDownLeft, Download, Maximize2, X, Square } from 'lucide-react';
+import { ExecutionEngine, PyodideStatus, TerminalEntry } from '../types/ide';
+import { renderAnsiText, stripAnsi } from '../utils/ansiParser';
+import { useI18n } from '../services/i18n';
+import { downloadDataUrl } from '../utils/downloadBlob';
+
+interface TerminalPanelProps {
+  entries: TerminalEntry[];
+  status: PyodideStatus;
+  engine: ExecutionEngine;
+  onChangeEngine: (engine: ExecutionEngine) => void;
+  termuxConnected: boolean;
+  lastDurationMs: number | null;
+  pendingInputPrompt: string | null;
+  onSubmitInput: (value: string) => void;
+  onRunRepl: (statement: string) => Promise<void>;
+  onSendTermuxStdin?: (text: string) => Promise<void>;
+  onStopTermux?: () => Promise<void>;
+  onClear: () => void;
+}
+
+export const TerminalPanel: React.FC<TerminalPanelProps> = ({
+  entries,
+  status,
+  engine,
+  onChangeEngine,
+  termuxConnected,
+  lastDurationMs,
+  pendingInputPrompt,
+  onSubmitInput,
+  onRunRepl,
+  onSendTermuxStdin,
+  onStopTermux,
+  onClear,
+}) => {
+  const { t } = useI18n();
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const replInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [stdinValue, setStdinValue] = useState('');
+  const [replValue, setReplValue] = useState('');
+  const [replHistory, setReplHistory] = useState<string[]>([]);
+  const [historyIdx, setHistoryIdx] = useState<number>(-1);
+  const [copied, setCopied] = useState(false);
+  const [expandedPlot, setExpandedPlot] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [entries, pendingInputPrompt]);
+
+  useEffect(() => {
+    if (pendingInputPrompt !== null) {
+      inputRef.current?.focus();
+    }
+  }, [pendingInputPrompt]);
+
+  const handleCopyAll = async () => {
+    const text = entries
+      .filter((e) => e.type !== 'plot')
+      .map((e) => stripAnsi(e.content))
+      .join('\n');
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // Clipboard blocked
+    }
+  };
+
+  const handleStdinSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmitInput(stdinValue);
+    setStdinValue('');
+  };
+
+  const handleReplSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = replValue.trim();
+    if (!trimmed || status === 'running' || (engine === 'pyodide' && status === 'loading')) return;
+    setReplHistory((prev) => [trimmed, ...prev.slice(0, 29)]);
+    setHistoryIdx(-1);
+    setReplValue('');
+    await onRunRepl(trimmed);
+    replInputRef.current?.focus();
+  };
+
+  const handleTermuxStdinSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!onSendTermuxStdin) return;
+    const val = stdinValue;
+    setStdinValue('');
+    await onSendTermuxStdin(val);
+  };
+
+  const handleReplKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const nextIdx = Math.min(historyIdx + 1, replHistory.length - 1);
+      if (replHistory[nextIdx] !== undefined) {
+        setHistoryIdx(nextIdx);
+        setReplValue(replHistory[nextIdx]);
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const nextIdx = historyIdx - 1;
+      if (nextIdx < 0) {
+        setHistoryIdx(-1);
+        setReplValue('');
+      } else if (replHistory[nextIdx] !== undefined) {
+        setHistoryIdx(nextIdx);
+        setReplValue(replHistory[nextIdx]);
+      }
+    }
+  };
+
+  const statusLabel =
+    engine === 'termux'
+      ? termuxConnected
+        ? t('term_status_termux_ok')
+        : t('term_status_termux_off')
+      : status === 'loading'
+      ? t('term_status_loading')
+      : status === 'running'
+      ? t('term_status_running')
+      : status === 'error'
+      ? t('term_status_error')
+      : t('term_status_ready');
+
+  return (
+    <div className="flex flex-col h-full bg-[var(--ide-surface-alt)] text-[var(--ide-text)]">
+      {/* Sub-header */}
+      <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-[var(--ide-border)] bg-[var(--ide-surface)] shrink-0">
+        <div className="flex items-center gap-2 text-xs text-[var(--ide-text-muted)] min-w-0">
+          <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-[var(--ide-surface-alt)] border border-[var(--ide-border)] shrink-0">
+            <button
+              type="button"
+              onClick={() => onChangeEngine('pyodide')}
+              className={`min-h-[28px] px-2 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap ${
+                engine === 'pyodide'
+                  ? 'bg-[var(--ide-surface)] text-[var(--ide-text)] shadow-sm'
+                  : 'text-[var(--ide-text-muted)]'
+              }`}
+            >
+              {t('term_sandbox')}
+            </button>
+            <button
+              type="button"
+              onClick={() => onChangeEngine('termux')}
+              className={`min-h-[28px] px-2 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap ${
+                engine === 'termux'
+                  ? 'bg-[var(--ide-accent)] text-white shadow-sm'
+                  : 'text-[var(--ide-text-muted)]'
+              }`}
+            >
+              Termux
+            </button>
+          </div>
+          <span className="truncate whitespace-nowrap">{statusLabel}</span>
+          {lastDurationMs !== null && (
+            <>
+              <span aria-hidden="true">·</span>
+              <span className="font-mono tabular-nums whitespace-nowrap">{lastDurationMs} ms</span>
+            </>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={handleCopyAll}
+            disabled={entries.length === 0}
+            className="min-h-[36px] px-2.5 flex items-center gap-1.5 rounded-lg text-xs font-medium text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-accent-soft)] disabled:opacity-40 transition-colors whitespace-nowrap"
+          >
+            {copied ? <Check className="w-3.5 h-3.5 text-[var(--ide-accent)]" /> : <Copy className="w-3.5 h-3.5" />}
+            <span>{copied ? t('term_copied') : t('term_copy')}</span>
+          </button>
+          <button
+            type="button"
+            onClick={onClear}
+            disabled={entries.length === 0}
+            className="min-h-[36px] px-2.5 flex items-center gap-1.5 rounded-lg text-xs font-medium text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-accent-soft)] disabled:opacity-40 transition-colors whitespace-nowrap"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>{t('term_clear')}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Output Scroll Area */}
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto ide-scroll p-4 font-mono text-[13px] leading-relaxed space-y-2"
+      >
+        {entries.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-center py-8 text-[var(--ide-text-muted)] font-sans">
+            <p className="text-sm font-medium text-[var(--ide-text)]">{t('term_empty_title')}</p>
+            <p className="text-xs mt-1 max-w-xs">{t('term_empty_desc')}</p>
+          </div>
+        ) : (
+          entries.map((entry) => {
+            if (entry.type === 'plot' && entry.imageDataUrl) {
+              return (
+                <div
+                  key={entry.id}
+                  className="my-2 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-3 font-sans"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-[var(--ide-text-muted)]">
+                      {t('term_plot_title')}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedPlot(entry.imageDataUrl!)}
+                        className="min-h-[32px] px-2 flex items-center gap-1 rounded-md text-xs text-[var(--ide-text-muted)] hover:bg-[var(--ide-accent-soft)]"
+                      >
+                        <Maximize2 className="w-3.5 h-3.5" />
+                        <span>{t('term_plot_zoom')}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          downloadDataUrl(
+                            entry.imageDataUrl!,
+                            `droidpy-plot-${entry.timestamp.replace(/:/g, '')}.png`,
+                            'image/png'
+                          )
+                        }
+                        className="min-h-[32px] px-2 flex items-center gap-1 rounded-md text-xs text-[var(--ide-accent-text)] hover:bg-[var(--ide-accent-soft)]"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>PNG</span>
+                      </button>
+                    </div>
+                  </div>
+                  <img
+                    src={entry.imageDataUrl}
+                    alt={t('term_plot_title')}
+                    referrerPolicy="no-referrer"
+                    className="w-full max-w-md rounded-lg bg-white"
+                  />
+                </div>
+              );
+            }
+
+            if (entry.type === 'stderr') {
+              return (
+                <div
+                  key={entry.id}
+                  className="rounded-lg border border-red-200 dark:border-red-900/60 bg-red-50/80 dark:bg-red-950/30 px-3 py-2 text-red-700 dark:text-red-300"
+                >
+                  <div className="flex items-center gap-1.5 text-xs font-sans font-semibold mb-1 text-red-600 dark:text-red-400">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{t('term_err_title')}</span>
+                  </div>
+                  <pre className="whitespace-pre-wrap break-words text-xs">{renderAnsiText(entry.content)}</pre>
+                </div>
+              );
+            }
+
+            if (entry.type === 'system') {
+              return (
+                <div key={entry.id} className="text-xs text-[var(--ide-text-muted)] font-sans">
+                  <span className="font-mono tabular-nums mr-2 opacity-75">
+                    [{entry.timestamp}]
+                  </span>
+                  {entry.content}
+                </div>
+              );
+            }
+
+            if (entry.type === 'repl-in') {
+              return (
+                <div key={entry.id} className="text-[var(--ide-accent-text)] whitespace-pre-wrap break-words">
+                  {entry.content.startsWith('$ ') ? entry.content : `>>> ${entry.content}`}
+                </div>
+              );
+            }
+
+            if (entry.type === 'repl-out') {
+              return (
+                <div key={entry.id} className="text-amber-600 dark:text-amber-300 whitespace-pre-wrap break-words">
+                  {renderAnsiText(entry.content)}
+                </div>
+              );
+            }
+
+            return (
+              <pre
+                key={entry.id}
+                className="whitespace-pre-wrap break-words text-[var(--ide-text)]"
+              >
+                {renderAnsiText(entry.content)}
+              </pre>
+            );
+          })
+        )}
+      </div>
+
+      {/* Inline input() prompt bar when script requests stdin */}
+      {pendingInputPrompt !== null ? (
+        <form
+          onSubmit={handleStdinSubmit}
+          className="p-2.5 border-t border-amber-300 dark:border-amber-700/70 bg-amber-50 dark:bg-amber-950/30 flex items-center gap-2 shrink-0"
+        >
+          <span className="text-xs font-semibold text-amber-700 dark:text-amber-300 whitespace-nowrap shrink-0">
+            {t('term_input_label')}
+          </span>
+          <input
+            ref={inputRef}
+            type="text"
+            value={stdinValue}
+            onChange={(e) => setStdinValue(e.target.value)}
+            placeholder={pendingInputPrompt || t('term_input_placeholder')}
+            className="flex-1 min-w-0 min-h-[40px] px-3 rounded-lg bg-[var(--ide-surface)] border border-amber-300 dark:border-amber-700 text-sm font-mono text-[var(--ide-text)] focus:outline-none focus:ring-2 focus:ring-amber-500"
+          />
+          <button
+            type="submit"
+            className="min-h-[40px] px-4 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-colors"
+          >
+            <span>{t('term_send')}</span>
+            <CornerDownLeft className="w-3.5 h-3.5" />
+          </button>
+        </form>
+      ) : engine === 'termux' && status === 'running' ? (
+        <form
+          onSubmit={handleTermuxStdinSubmit}
+          className="p-2 border-t border-[var(--ide-border)] bg-[var(--ide-surface)] flex items-center gap-2 shrink-0"
+        >
+          <span className="text-xs font-semibold text-[var(--ide-accent-text)] pl-1.5 whitespace-nowrap shrink-0">
+            {t('term_stdin_label')}
+          </span>
+          <input
+            type="text"
+            value={stdinValue}
+            onChange={(e) => setStdinValue(e.target.value)}
+            placeholder={t('term_stdin_placeholder')}
+            className="flex-1 min-w-0 min-h-[40px] px-3 rounded-lg bg-[var(--ide-bg)] border border-[var(--ide-border)] text-sm font-mono text-[var(--ide-text)] focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
+          />
+          <button
+            type="submit"
+            className="min-h-[40px] px-3.5 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium whitespace-nowrap shrink-0"
+          >
+            {t('term_send')}
+          </button>
+          {onStopTermux && (
+            <button
+              type="button"
+              onClick={() => void onStopTermux()}
+              className="min-h-[40px] px-3 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold inline-flex items-center gap-1 whitespace-nowrap shrink-0"
+            >
+              <Square className="w-3.5 h-3.5 fill-current" />
+              <span>{t('cta_stop_short')}</span>
+            </button>
+          )}
+        </form>
+      ) : (
+        /* Persistent Interactive Python REPL Input */
+        <form
+          onSubmit={handleReplSubmit}
+          className="p-2 border-t border-[var(--ide-border)] bg-[var(--ide-surface)] flex items-center gap-2 shrink-0"
+        >
+          <span className="font-mono text-xs font-semibold text-[var(--ide-accent-text)] pl-2 shrink-0 select-none">
+            {engine === 'termux' ? '$' : '>>>'}
+          </span>
+          <input
+            ref={replInputRef}
+            type="text"
+            value={replValue}
+            onChange={(e) => setReplValue(e.target.value)}
+            onKeyDown={handleReplKeyDown}
+            disabled={status === 'running' || (engine === 'pyodide' && status === 'loading')}
+            placeholder={
+              engine === 'termux'
+                ? t('term_repl_termux_placeholder')
+                : t('term_repl_py_placeholder')
+            }
+            aria-label="REPL"
+            className="flex-1 min-w-0 min-h-[40px] px-2 bg-transparent font-mono text-sm text-[var(--ide-text)] placeholder:text-[var(--ide-text-muted)] focus:outline-none"
+          />
+          <button
+            type="submit"
+            disabled={
+              !replValue.trim() ||
+              status === 'running' ||
+              (engine === 'pyodide' && status === 'loading')
+            }
+            className="min-h-[40px] px-3.5 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium disabled:opacity-40 transition-colors whitespace-nowrap shrink-0"
+          >
+            {t('term_exec_btn')}
+          </button>
+        </form>
+      )}
+
+      {/* Plot Lightbox Modal */}
+      {expandedPlot && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+          onClick={() => setExpandedPlot(null)}
+        >
+          <div
+            className="relative max-w-3xl w-full rounded-2xl bg-[var(--ide-surface)] p-4 border border-[var(--ide-border)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-semibold text-[var(--ide-text)]">{t('term_plot_modal_title')}</span>
+              <button
+                type="button"
+                onClick={() => setExpandedPlot(null)}
+                aria-label={t('pwa_got_it')}
+                className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:bg-[var(--ide-accent-soft)]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <img
+              src={expandedPlot}
+              alt={t('term_plot_modal_title')}
+              referrerPolicy="no-referrer"
+              className="w-full rounded-xl bg-white"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
