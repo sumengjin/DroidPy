@@ -24,9 +24,9 @@ jobs:
       - name: Install Dependencies & Build Web UI
         run: |
           if [ -f "package-lock.json" ]; then
-            npm ci
+            npm ci || npm install --legacy-peer-deps --no-audit --no-fund
           else
-            npm install --no-audit --no-fund
+            npm install --legacy-peer-deps --no-audit --no-fund
           fi
           npm run lint
           npm run build

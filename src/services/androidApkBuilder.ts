@@ -59,9 +59,9 @@ jobs:
         run: |
           if [ -f "package.json" ]; then
             if [ -f "package-lock.json" ]; then
-              npm ci
+              npm ci || npm install --legacy-peer-deps --no-audit --no-fund
             else
-              npm install --no-audit --no-fund
+              npm install --legacy-peer-deps --no-audit --no-fund
             fi
             npm run build
             rm -rf android/app/src/main/assets/www

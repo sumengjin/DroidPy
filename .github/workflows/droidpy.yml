@@ -23,13 +23,21 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: "pip"
 
       - name: 安裝依賴與測試工具
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest
+
+      - name: 檢查是否具備 Buildozer 設定
+        id: check_spec
+        run: |
+          if [ -f buildozer.spec ]; then
+            echo "has_spec=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_spec=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: 執行單元測試
         run: |
@@ -39,11 +47,13 @@ jobs:
             echo "尚未偵測到測試檔案，先執行語法檢查"
             python -m compileall -q .
           fi
+    outputs:
+      has_spec: ${{ steps.check_spec.outputs.has_spec }}
 
   build-apk:
-    name: 打包 Android APK
+    name: 打包 Android APK (Buildozer)
     needs: test
-    if: github.event_name == 'push' || startsWith(github.ref, 'refs/tags/v')
+    if: needs.test.outputs.has_spec == 'true' && (github.event_name == 'push' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
     steps:
       - name: 檢出程式碼
@@ -63,7 +73,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             git zip unzip openjdk-17-jdk python3-pip autoconf libtool pkg-config \
-            zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev
+            zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo6 cmake libffi-dev libssl-dev
           pip install --upgrade pip buildozer cython==0.29.36 virtualenv
 
       - name: 快取 Buildozer 下載與建置檔
@@ -77,22 +87,16 @@ jobs:
             buildozer-${{ runner.os }}-
 
       - name: 建置 APK
-        run: |
-          if [ -f buildozer.spec ]; then
-            buildozer android debug
-          else
-            echo "找不到 buildozer.spec，請確認打包工具設定"
-            exit 1
-          fi
+        run: buildozer android debug
 
       - name: 上傳 APK 建置產物
         uses: actions/upload-artifact@v4
         with:
-          name: droidpy-apk-${{ github.run_number }}
+          name: droidpy-buildozer-apk-${{ github.run_number }}
           path: bin/*.apk
 
   release:
-    name: 建立 GitHub Release
+    name: 建立 GitHub Release (Buildozer)
     needs: build-apk
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
@@ -103,7 +107,7 @@ jobs:
       - name: 下載剛打包的 APK
         uses: actions/download-artifact@v4
         with:
-          pattern: droidpy-apk-*
+          pattern: droidpy-buildozer-apk-*
           merge-multiple: true
           path: release_assets
 
