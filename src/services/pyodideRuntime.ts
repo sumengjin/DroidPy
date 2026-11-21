@@ -197,7 +197,8 @@ async def __droidpy_async_input__(prompt=""):
     return str(val)
 
 def __droidpy_patch_matplotlib__():
-    if "matplotlib" in sys.modules:
+    import importlib.util
+    if "matplotlib" in sys.modules or importlib.util.find_spec("matplotlib") is not None:
         try:
             import matplotlib
             matplotlib.use("Agg")
@@ -376,6 +377,16 @@ _ns = {"__name__": "__main__", "__file__": f"/home/pyodide/{__droidpy_filename__
     return { durationMs, success: true };
   } catch (err) {
     let message = err instanceof Error ? err.message : String(err);
+    const sysExitMatch = message.match(/SystemExit:\s*(.*)$/m);
+    if (sysExitMatch) {
+      const codeRaw = sysExitMatch[1].trim();
+      const durationMs = Math.round(performance.now() - startedAt);
+      if (!codeRaw || codeRaw === '0' || codeRaw === 'None') {
+        return { durationMs, success: true };
+      }
+      callbacks.onStderr(`SystemExit: ${codeRaw}`);
+      return { durationMs, success: false };
+    }
     if (
       message.includes('SyntaxError') &&
       /^[!%]?\s*pip\s+install\b/m.test(activeFile.content)
@@ -444,17 +455,22 @@ export async function executeReplLine(
     py.globals.set('__droidpy_repl_stmt__', statement);
     const result = await py.runPythonAsync(`
 import ast as _ast
+import inspect as _inspect
 _stmt_src = str(__droidpy_repl_stmt__).strip()
 _repl_out = None
 if _stmt_src:
     _parsed = _ast.parse(_stmt_src, mode="exec")
     if len(_parsed.body) == 1 and isinstance(_parsed.body[0], _ast.Expr):
-        _val = eval(compile(_ast.Expression(_parsed.body[0].value), "<repl>", "eval"), __droidpy_repl_ns__)
+        _val = eval(compile(_ast.Expression(_parsed.body[0].value), "<repl>", "eval", flags=_ast.PyCF_ALLOW_TOP_LEVEL_AWAIT), __droidpy_repl_ns__)
+        if _inspect.isawaitable(_val):
+            _val = await _val
         if _val is not None:
             __droidpy_repl_ns__["_"] = _val
             _repl_out = repr(_val)
     else:
-        exec(compile(_parsed, "<repl>", "exec"), __droidpy_repl_ns__)
+        _res = eval(compile(_parsed, "<repl>", "exec", flags=_ast.PyCF_ALLOW_TOP_LEVEL_AWAIT), __droidpy_repl_ns__)
+        if _inspect.isawaitable(_res):
+            await _res
 _repl_out
 `);
     if (result !== undefined && result !== null && String(result).length > 0) {

@@ -57,10 +57,10 @@ npm run build
 
 1. 在 DroidPy 切換至 **「Android 部署」** 分頁，填寫應用程式名稱與 `Package ID`（例如 `org.droidpy.app`）。
 2. 點擊 **「匯出 GitHub 獨立 APK 專案（內嵌 Termux）」** 下載專案 ZIP。
-3. 解壓縮並將全部檔案（包含 `.github/workflows/build-apk.yml` 與 `android/`）上傳／Push 到你的 GitHub 倉庫 `main` 分支：
-   - 若倉庫根目錄同時包含前端 `package.json`，Workflow 會自動執行 `npm ci && npm run build` 並把離線前端複製進 `android/app/src/main/assets/www/`。
-   - Workflow 會自動下載最新版 Termux `bootstrap-aarch64.zip` 並編譯出 `arm64-v8a` APK。
-4. 前往 GitHub 倉庫的 **Actions** 頁籤等待工作流程完成，即可在 **Artifacts** 下載 `.apk` 安裝至 Android 手機（或推送 `v1.0.0` Tag 自動發佈至 **Releases**）。
+3. 解壓縮並將全部檔案（包含 `.github/workflows/build-apk.yml`、`android/` 與 `CHANGELOG.md`）上傳／Push 到你的 GitHub 倉庫 `main` 分支：
+   - 若倉庫根目錄同時包含前端 `package.json`，Workflow 會自動安裝相依套件（`npm ci` / `npm install`）、編譯 `dist/` 並複製進 `android/app/src/main/assets/www/` 打包為完全離線 APK（由內建 `127.0.0.1:8765` 靜態伺服器載入，無 `file://` CORS 限制）。
+   - Workflow 會使用 Gradle 8.7 + JDK 17 自動下載最新版 Termux `bootstrap-aarch64.zip` 並編譯出 `arm64-v8a` APK。
+4. 前往 GitHub 倉庫的 **Actions** 頁籤等待工作流程完成，即可在 **Artifacts** 下載 `.apk` 安裝至 Android 手機（推送 `v*` Tag 如 `v1.2.0` 亦會自動附帶 `CHANGELOG.md` 發佈至 **GitHub Releases**）。
 
 ### 首次安裝 APK 後初始化爬蟲環境
 1. 開啟安裝好的 DroidPy APK（會自動偵測並切換至內建原生引擎）。

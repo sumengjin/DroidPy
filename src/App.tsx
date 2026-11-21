@@ -398,6 +398,7 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (executionEngine === 'termux') return;
     let cancelled = false;
     const timer = window.setTimeout(async () => {
       if (cancelled) return;
@@ -409,6 +410,11 @@ export default function App() {
         }
       } catch (err) {
         if (!cancelled) {
+          const isNative = Boolean(window.DroidPyNative?.isNativeApp?.());
+          if (isNative) {
+            setPyodideStatus('idle');
+            return;
+          }
           setPyodideStatus('error');
           appendEntry('stderr', err instanceof Error ? err.message : String(err));
         }
@@ -418,6 +424,7 @@ export default function App() {
       cancelled = true;
       window.clearTimeout(timer);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appendEntry]);
 
   const handleLinkDirectory = useCallback(async () => {
@@ -1471,7 +1478,7 @@ export default function App() {
             )}
           </div>
         ) : (
-          <div className="flex-1 min-h-0 flex flex-col overflow-hidden pb-14">
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
             {mobileTab === 'editor' && (
               <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-[var(--ide-surface)]">
                 {/* Mobile Quick File Switcher + Quick Actions */}
@@ -1708,10 +1715,10 @@ export default function App() {
         )}
       </main>
 
-      {/* Mobile Fixed Thumb-Zone Bottom Navigation Bar (56px) */}
+      {/* Mobile Thumb-Zone Bottom Navigation Bar (56px flex footer so keyboard never overlaps) */}
       <nav
         aria-label={t('nav_workspace')}
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 h-14 pb-safe bg-[var(--ide-surface)]/95 backdrop-blur-md border-t border-[var(--ide-border)] grid grid-cols-5"
+        className="lg:hidden shrink-0 h-14 pb-safe bg-[var(--ide-surface)]/95 backdrop-blur-md border-t border-[var(--ide-border)] grid grid-cols-5"
       >
         {(
           [

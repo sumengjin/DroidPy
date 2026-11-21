@@ -16,6 +16,8 @@ export async function generateGitHubApkProjectZip(opts: GitHubApkBundleOptions):
   const pkgPath = safePkg.replace(/\./g, '/');
   const safeToken = opts.bridgeToken.replace(/["'\\]/g, '') || 'droidpy-local';
 
+  const appSlug = safeTitle.replace(/\s+/g, '-') || 'DroidPy';
+
   // 1. GitHub Actions Workflow — builds standalone ARM64 APK with embedded Termux bootstrap
   zip.file(
     '.github/workflows/build-apk.yml',
@@ -24,6 +26,7 @@ export async function generateGitHubApkProjectZip(opts: GitHubApkBundleOptions):
 on:
   push:
     branches: [ main, master ]
+    tags: [ 'v*' ]
   workflow_dispatch:
 
 permissions:
@@ -42,8 +45,10 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Gradle
+      - name: Setup Gradle 8.7
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -53,8 +58,13 @@ jobs:
       - name: Bundle Offline Web UI if present
         run: |
           if [ -f "package.json" ]; then
-            npm ci
+            if [ -f "package-lock.json" ]; then
+              npm ci
+            else
+              npm install --no-audit --no-fund
+            fi
             npm run build
+            rm -rf android/app/src/main/assets/www
             mkdir -p android/app/src/main/assets/www
             cp -r dist/* android/app/src/main/assets/www/
           fi
@@ -69,17 +79,26 @@ jobs:
         working-directory: android
         run: gradle assembleDebug --no-daemon
 
+      - name: Prepare Release APK Filename
+        run: |
+          mkdir -p release-apk
+          TAG_NAME="\${GITHUB_REF_NAME:-dev}"
+          cp android/app/build/outputs/apk/debug/*.apk "release-apk/${appSlug}-arm64-\${TAG_NAME}.apk"
+
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${safeTitle.replace(/\s+/g, '-')}-arm64-apk
-          path: android/app/build/outputs/apk/debug/*.apk
+          name: ${appSlug}-arm64-apk
+          path: release-apk/*.apk
 
       - name: Publish GitHub Release on Tag
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: android/app/build/outputs/apk/debug/*.apk
+          generate_release_notes: true
+          body_path: CHANGELOG.md
+          files: |
+            release-apk/*.apk
 `
   );
 
@@ -196,6 +215,7 @@ ${storagePerms}
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|screenSize|keyboardHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -518,7 +538,23 @@ class MainActivity : AppCompatActivity() {
 
         webView.addJavascriptInterface(NativeDownloadBridge(), "DroidPyNative")
         webView.webChromeClient = WebChromeClient()
-        webView.webViewClient = WebViewClient()
+        webView.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                val url = request?.url?.toString() ?: return false
+                if (url.startsWith("http://127.0.0.1") || url.startsWith("http://localhost") || url.startsWith("file://")) {
+                    return false
+                }
+                if (url.startsWith("https://") && url.contains(request.url?.host ?: "")) {
+                    return false
+                }
+                return try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    true
+                } catch (_: Exception) {
+                    true
+                }
+            }
+        }
         webView.setDownloadListener { url, _, contentDisposition, mimeType, _ ->
             val fileName = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimeType)
             if (url.startsWith("blob:") || url.startsWith("data:")) {
@@ -730,17 +766,99 @@ class EmbeddedTermuxBridge(
         try { serverSocket?.close() } catch (_: Exception) {}
     }
 
+    private fun ensurePrefixWrappers(): File {
+        val homeDir = workspaceDir.parentFile!!
+        val wrapperDir = File(homeDir, ".droidpy_bin").apply { mkdirs() }
+        val prefix = usrDir.absolutePath
+        val cert = File(usrDir, "etc/tls/cert.pem").absolutePath
+        val d = '$'
+
+        val pkgLines = listOf(
+            "#!/system/bin/sh",
+            "PREFIX=\\"$prefix\\"",
+            "export PREFIX",
+            "APT_OPTS=\\"-o Dir=\${d}PREFIX -o Dir::State=\${d}PREFIX/var/lib/apt -o Dir::State::status=\${d}PREFIX/var/lib/dpkg/status -o Dir::Cache=\${d}PREFIX/var/cache/apt -o Dir::Etc=\${d}PREFIX/etc/apt -o Dir::Etc::sourcelist=\${d}PREFIX/etc/apt/sources.list -o Dir::Etc::sourceparts=\${d}PREFIX/etc/apt/sources.list.d -o Dir::Bin::methods=\${d}PREFIX/lib/apt/methods -o Dir::Bin::dpkg=\${d}PREFIX/bin/dpkg -o DPkg::Options::=--admindir=\${d}PREFIX/var/lib/dpkg -o Acquire::AllowInsecureRepositories=true -o Acquire::https::CaInfo=$cert\\"",
+            "mkdir -p \\"\${d}PREFIX/var/lib/apt/lists/partial\\" \\"\${d}PREFIX/var/cache/apt/archives/partial\\" \\"\${d}PREFIX/var/lib/dpkg/updates\\" \\"\${d}PREFIX/var/lib/dpkg/info\\"",
+            "touch \\"\${d}PREFIX/var/lib/dpkg/status\\"",
+            "SUB=\\"\${d}1\\"",
+            "[ -z \\"\${d}SUB\\" ] && exit 1",
+            "shift",
+            "relocate_debs() {",
+            "  STAGE=\\"\${d}PREFIX/tmp_pkg_stage\\"",
+            "  for deb in \\"\${d}PREFIX/var/cache/apt/archives/\\"*.deb; do",
+            "    [ -f \\"\${d}deb\\" ] || continue",
+            "    rm -rf \\"\${d}STAGE\\" && mkdir -p \\"\${d}STAGE\\"",
+            "    \\"\${d}PREFIX/bin/dpkg-deb\\" -x \\"\${d}deb\\" \\"\${d}STAGE\\" || continue",
+            "    if [ -d \\"\${d}STAGE/data/data/com.termux/files/usr\\" ]; then",
+            "      (\\"\${d}PREFIX/bin/cp\\" -af \\"\${d}STAGE/data/data/com.termux/files/usr/.\\" \\"\${d}PREFIX/\\" 2>/dev/null || cp -rf \\"\${d}STAGE/data/data/com.termux/files/usr/.\\" \\"\${d}PREFIX/\\")",
+            "    fi",
+            "    rm -f \\"\${d}deb\\"",
+            "  done",
+            "  rm -rf \\"\${d}STAGE\\"",
+            "  chmod -R 755 \\"\${d}PREFIX/libexec\\" 2>/dev/null || true",
+            "  for f in \\"\${d}PREFIX/bin/\\"*; do",
+            "    [ -f \\"\${d}f\\" ] || continue",
+            "    chmod 755 \\"\${d}f\\" 2>/dev/null || true",
+            "    if head -c 40 \\"\${d}f\\" 2>/dev/null | grep -q \\"#!/data/data/com.termux/files/usr/bin/\\"; then",
+            "      sed -i \\"1s|^#!/data/data/com.termux/files/usr/bin/|#!\${d}PREFIX/bin/|\\" \\"\${d}f\\" 2>/dev/null || true",
+            "    fi",
+            "  done",
+            "}",
+            "case \\"\${d}SUB\\" in",
+            "  update)",
+            "    \\"\${d}PREFIX/bin/apt-get\\" \${d}APT_OPTS update \\"\${d}@\\"",
+            "    ;;",
+            "  upgrade)",
+            "    \\"\${d}PREFIX/bin/apt-get\\" \${d}APT_OPTS upgrade -y --download-only \\"\${d}@\\" && relocate_debs",
+            "    ;;",
+            "  install|reinstall)",
+            "    \\"\${d}PREFIX/bin/apt-get\\" \${d}APT_OPTS install -y --download-only \\"\${d}@\\" && relocate_debs",
+            "    ;;",
+            "  search|show|list)",
+            "    \\"\${d}PREFIX/bin/apt-cache\\" \${d}APT_OPTS \\"\${d}SUB\\" \\"\${d}@\\"",
+            "    ;;",
+            "  list-installed)",
+            "    \\"\${d}PREFIX/bin/dpkg-query\\" --admindir=\\"\${d}PREFIX/var/lib/dpkg\\" -W \\"\${d}@\\"",
+            "    ;;",
+            "  *)",
+            "    \\"\${d}PREFIX/bin/apt-get\\" \${d}APT_OPTS \\"\${d}SUB\\" \\"\${d}@\\"",
+            "    ;;",
+            "esac"
+        )
+        File(wrapperDir, "pkg").apply {
+            writeText(pkgLines.joinToString("\\n") + "\\n")
+            setExecutable(true, false)
+        }
+        val pipScript = "#!/system/bin/sh\\nexec \\"$prefix/bin/python\\" -m pip \\"\${d}@\\"\\n"
+        File(wrapperDir, "pip").apply {
+            writeText(pipScript)
+            setExecutable(true, false)
+        }
+        File(wrapperDir, "pip3").apply {
+            writeText(pipScript)
+            setExecutable(true, false)
+        }
+        return wrapperDir
+    }
+
     private fun buildEnv(): Map<String, String> {
+        val wrapperBin = ensurePrefixWrappers().absolutePath
         val bin = File(usrDir, "bin").absolutePath
         val lib = File(usrDir, "lib").absolutePath
+        val cert = File(usrDir, "etc/tls/cert.pem").absolutePath
         return mapOf(
             "PREFIX" to usrDir.absolutePath,
             "HOME" to workspaceDir.parentFile!!.absolutePath,
-            "PATH" to "$bin:/system/bin",
+            "PATH" to "$wrapperBin:$bin:/system/bin",
             "LD_LIBRARY_PATH" to lib,
             "TMPDIR" to File(workspaceDir.parentFile, "tmp").apply { mkdirs() }.absolutePath,
             "PYTHONUNBUFFERED" to "1",
-            "SSL_CERT_FILE" to File(usrDir, "etc/tls/cert.pem").absolutePath
+            "TERM" to "xterm-256color",
+            "LANG" to "en_US.UTF-8",
+            "SSL_CERT_FILE" to cert,
+            "CURL_CA_BUNDLE" to cert,
+            "REQUESTS_CA_BUNDLE" to cert,
+            "PIP_CERT" to cert
         )
     }
 
@@ -840,7 +958,8 @@ class EmbeddedTermuxBridge(
                                 File(workspaceDir, name).writeText(f.getString("content"))
                             }
                             val entry = File(bodyJson.optString("entry", "main.py")).name
-                            "[ -x \\"\$PREFIX/bin/python\\" ] || { echo \\"[DroidPy] Python not initialized yet. Tap One-Tap Init in Termux Bridge.\\"; exit 127; }; python -u \\"$entry\\""
+                            val pyPath = File(usrDir, "bin/python").absolutePath
+                            "if [ ! -x \\"$pyPath\\" ]; then echo \\"[DroidPy] Python not initialized yet. Tap One-Tap Init in Termux Bridge.\\"; exit 127; fi; exec \\"$pyPath\\" -u \\"$entry\\""
                         }
                         "/install-stream" -> {
                             val mode = bodyJson.optString("mode", "pip")
@@ -1116,8 +1235,17 @@ class EmbeddedTermuxBridge(
 3. 如需抓取需登入的網站資料，開啟 **「爬蟲瀏覽器」** → 點擊 **「APK 原生瀏覽器登入抓 Cookie」** 完成登入並點右上角 **「擷取 Cookie」**，即可直接讀取包含 \`HttpOnly\` 的認證 Cookie 並寫入工作區 \`cookies.json\`。
 `;
 
+  const changelogContent = `# Changelog / 更新日誌
+
+## [1.2.0] - 2026-11-21
+- 新增 \`.droidpy_bin\` 跨包名 Termux 前綴轉接層（\`pkg\` / \`pip\`），讓獨立 APK 可於自有沙盒目錄安裝 \`python\`、\`clang\`、\`libxml2\`、\`libxslt\`、\`ffmpeg\` 與 pip 套件。
+- 修正 APK 離線前端靜態伺服（\`http://127.0.0.1:8765/\`）、Android \`adjustResize\` 虛擬鍵盤避讓與零孤兒進程停止（\`exec python -u\`）。
+- 修正 GitHub Actions Workflow（支援 \`v*\` Tag 觸發、指定 Gradle 8.7、彈性 \`npm ci / npm install\`）並自動附帶本更新日誌發佈 GitHub Releases。
+`;
+
   zip.file('README.md', githubApkReadme);
   zip.file('README_GITHUB_APK.md', githubApkReadme);
+  zip.file('CHANGELOG.md', changelogContent);
 
   return zip.generateAsync({ type: 'blob' });
 }

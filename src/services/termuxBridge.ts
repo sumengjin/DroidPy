@@ -24,10 +24,12 @@ import platform
 import pty
 import re
 import select
+import shlex
 import shutil
 import signal
 import ssl
 import subprocess
+import sys
 import threading
 import time
 import urllib.error
@@ -278,7 +280,10 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
             target = str(data.get("target", "")).strip()
             if not target:
                 return self._send_json(400, {"error": "Missing package target"})
-            cmd = ["pkg", "install", "-y", target] if mode == "pkg" else ["pip", "install", target]
+            pkgs = shlex.split(target)
+            if not pkgs:
+                return self._send_json(400, {"error": "Missing package target"})
+            cmd = (["pkg", "install", "-y"] + pkgs) if mode == "pkg" else ([sys.executable, "-m", "pip", "install"] + pkgs)
             if self.path == "/install-stream":
                 return self._stream_pty_command(cmd, shell=False)
 

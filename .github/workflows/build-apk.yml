@@ -1,0 +1,102 @@
+name: Build DroidPy Web & Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Dependencies & Build Web UI
+        run: |
+          if [ -f "package-lock.json" ]; then
+            npm ci
+          else
+            npm install --no-audit --no-fund
+          fi
+          npm run lint
+          npm run build
+
+      - name: Upload Web PWA Dist Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: droidpy-web-dist
+          path: dist/
+
+      - name: Check Android Gradle Project Presence
+        id: check_android
+        run: |
+          if [ -f "android/settings.gradle.kts" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up JDK 17
+        if: steps.check_android.outputs.exists == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle 8.7
+        if: steps.check_android.outputs.exists == 'true'
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Bundle Offline Web UI into Android Assets
+        if: steps.check_android.outputs.exists == 'true'
+        run: |
+          rm -rf android/app/src/main/assets/www
+          mkdir -p android/app/src/main/assets/www
+          cp -r dist/* android/app/src/main/assets/www/
+
+      - name: Download Termux ARM64 Bootstrap
+        if: steps.check_android.outputs.exists == 'true'
+        run: |
+          mkdir -p android/app/src/main/assets
+          curl -fL "https://github.com/termux/termux-packages/releases/latest/download/bootstrap-aarch64.zip" \
+            -o android/app/src/main/assets/bootstrap-aarch64.zip
+
+      - name: Build Debug APK (Arm64)
+        if: steps.check_android.outputs.exists == 'true'
+        working-directory: android
+        run: gradle assembleDebug --no-daemon
+
+      - name: Prepare Release APK Filename
+        if: steps.check_android.outputs.exists == 'true'
+        run: |
+          mkdir -p release-apk
+          TAG_NAME="${GITHUB_REF_NAME:-dev}"
+          cp android/app/build/outputs/apk/debug/*.apk "release-apk/DroidPy-arm64-${TAG_NAME}.apk"
+
+      - name: Upload APK Artifact
+        if: steps.check_android.outputs.exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: DroidPy-arm64-apk
+          path: release-apk/*.apk
+
+      - name: Publish GitHub Release on Tag
+        if: startsWith(github.ref, 'refs/tags/') && steps.check_android.outputs.exists == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body_path: CHANGELOG.md
+          files: |
+            release-apk/*.apk
