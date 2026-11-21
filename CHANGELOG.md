@@ -2,6 +2,13 @@
 
 All notable changes to **DroidPy** are documented in this file.
 
+## [1.2.2] - 2026-11-21
+
+### Fixed (GitHub Release Automation)
+- **修復推送分支時「建立 GitHub Release」被跳過問題**：更新 `.github/workflows/droidpy.yml`，於一般 Push 至 `main`/`master` 或手動觸發（未填 `release_tag`）時自動讀取 `CHANGELOG.md` 最新版本號（如 `v1.2.2`），直接建立或覆寫更新對應的 GitHub Release 與 APK 附件，不再跳過第三階段工作。
+
+---
+
 ## [1.2.1] - 2026-11-21
 
 ### Fixed (GitHub Actions CI & Auto Android APK Build)

@@ -68,6 +68,8 @@ jobs:
     needs: test
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.resolve_tag.outputs.release_tag }}
     steps:
       - name: 檢出程式碼
         uses: actions/checkout@v4
@@ -118,13 +120,26 @@ jobs:
         working-directory: android
         run: gradle assembleDebug --no-daemon
 
-      - name: 整理 APK 輸出檔名
+      - name: 解析發佈版本並整理 APK 檔名
+        id: resolve_tag
         run: |
           mkdir -p release-apk
-          TAG_NAME="${{ inputs.release_tag || github.ref_name }}"
-          TAG_NAME="${TAG_NAME:-dev}"
-          TAG_NAME="${TAG_NAME//\//-}"
-          cp android/app/build/outputs/apk/debug/*.apk "release-apk/DroidPy-arm64-${TAG_NAME}.apk"
+          INPUT_TAG="${{ inputs.release_tag }}"
+          if [ -n "$INPUT_TAG" ]; then
+            REL_TAG="$INPUT_TAG"
+          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            REL_TAG="${GITHUB_REF_NAME}"
+          else
+            VER=$(grep -m1 -oE '\[[0-9]+\.[0-9]+\.[0-9]+[^]]*\]' CHANGELOG.md 2>/dev/null | tr -d '[]' || true)
+            if [ -n "$VER" ]; then
+              REL_TAG="v${VER#v}"
+            else
+              REL_TAG="v0.0.${GITHUB_RUN_NUMBER}"
+            fi
+          fi
+          SAFE_TAG="${REL_TAG//\//-}"
+          cp android/app/build/outputs/apk/debug/*.apk "release-apk/DroidPy-arm64-${SAFE_TAG}.apk"
+          echo "release_tag=${REL_TAG}" >> "$GITHUB_OUTPUT"
 
       - name: 上傳 APK Artifact
         uses: actions/upload-artifact@v4
@@ -135,7 +150,7 @@ jobs:
   release:
     name: 建立 GitHub Release
     needs: build-apk
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - name: 檢出程式碼
@@ -148,10 +163,26 @@ jobs:
           path: release-apk
 
       - name: 發布 GitHub Release 並附加 APK
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ inputs.release_tag || github.ref_name }}
-          body_path: CHANGELOG.md
-          generate_release_notes: true
-          files: |
-            release-apk/*.apk
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REL_TAG: ${{ needs.build-apk.outputs.release_tag }}
+        run: |
+          APK_FILE=$(ls release-apk/*.apk | head -n1)
+          if gh release view "$REL_TAG" >/dev/null 2>&1; then
+            gh release upload "$REL_TAG" "$APK_FILE" --clobber
+            if [ -f CHANGELOG.md ]; then
+              gh release edit "$REL_TAG" --notes-file CHANGELOG.md
+            fi
+          else
+            if [ -f CHANGELOG.md ]; then
+              gh release create "$REL_TAG" "$APK_FILE" \
+                --title "DroidPy ${REL_TAG}" \
+                --notes-file CHANGELOG.md \
+                --target "${GITHUB_SHA}"
+            else
+              gh release create "$REL_TAG" "$APK_FILE" \
+                --title "DroidPy ${REL_TAG}" \
+                --generate-notes \
+                --target "${GITHUB_SHA}"
+            fi
+          fi

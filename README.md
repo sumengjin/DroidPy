@@ -57,8 +57,8 @@ npm run build
 
 ### 方式一：本倉庫直接推送自動化（`.github/workflows/droidpy.yml`）
 1. 直接 Push 至 `main` / `master` 分支（或進入 GitHub **Actions** 手動觸發 `DroidPy CI / APK / Release`）。
-2. 工作流程會自動完成 **Python 語法檢查 + 前端編譯** → 呼叫 `scripts/prepare-android.ts` 自動產生 `android/` Gradle 專案並嵌入離線 `dist/` → 下載 Termux `bootstrap-aarch64.zip` → 編譯出 `DroidPy-arm64-*.apk` 並上傳至 **Actions → Artifacts**。
-3. 若需建立公開的 **GitHub Releases**，請推送 `v*` 版本標籤（例如 `git tag v1.2.1 && git push origin --tags`），或在 Actions 手動觸發時填入 `release_tag`，第 3 階段 `建立 GitHub Release` 即會自動附加 APK 與 `CHANGELOG.md` 發布。
+2. 工作流程會依序完成：**測試與網頁建置** → **打包 Android APK (ARM64)**（自動呼叫 `scripts/prepare-android.ts` 產生 `android/` 並嵌入離線 `dist/` 與 Termux `bootstrap-aarch64.zip`）→ **建立 GitHub Release**，全程三項工作自動執行不跳過。
+3. 若未另外推送 `v*` 標籤或填寫 `release_tag`，第 3 階段會自動讀取 `CHANGELOG.md` 最新版本號（例如 `v1.2.2`）直接建立或更新對應的 GitHub Release 並附加 `DroidPy-arm64-*.apk`。
 
 ### 方式二：從 App 內客製包名匯出獨立專案
 1. 在 DroidPy 切換至 **「Android 部署」** 分頁，填寫應用程式名稱與 `Package ID`（例如 `org.droidpy.app`）。

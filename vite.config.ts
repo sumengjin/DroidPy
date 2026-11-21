@@ -114,6 +114,10 @@ export default defineConfig(() => {
           if (fs.existsSync(distDir) && fs.existsSync(srcAssets)) {
             fs.cpSync(srcAssets, distAssets, {recursive: true, force: true});
           }
+          const strayUploads = path.resolve(distDir, 'assets/aistudio');
+          if (fs.existsSync(strayUploads)) {
+            fs.rmSync(strayUploads, {recursive: true, force: true});
+          }
         },
       },
     ],
