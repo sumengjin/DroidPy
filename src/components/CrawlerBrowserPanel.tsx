@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Globe,
   RotateCw,
@@ -37,17 +37,6 @@ import {
   parseRawCrawlerInput,
   parseSetCookieLines,
 } from '../utils/crawlerSession';
-
-declare global {
-  interface Window {
-    DroidPyNative?: {
-      isNativeApp?: () => boolean;
-      openCrawlerBrowser?: (url: string, desktopUa: boolean) => void;
-      closeCrawlerBrowser?: () => void;
-      saveBase64File?: (base64Data: string, fileName: string, mimeType: string) => void;
-    };
-  }
-}
 
 interface CrawlerBrowserPanelProps {
   session: CrawlerSessionData;
@@ -96,6 +85,11 @@ export const CrawlerBrowserPanel: React.FC<CrawlerBrowserPanelProps> = ({
   const isDesktopUa = session.userAgent === DESKTOP_CHROME_UA;
   const enabledCookiesCount = session.cookies.filter((c) => c.enabled).length;
   const bookmarkletCode = useMemo(() => buildBookmarkletCode(), []);
+
+  useEffect(() => {
+    setUrlInput(session.url);
+    setLoadedUrl(session.url);
+  }, [session.url]);
 
   const navigateTo = (rawUrl: string) => {
     const clean = normalizeUrlInput(rawUrl);

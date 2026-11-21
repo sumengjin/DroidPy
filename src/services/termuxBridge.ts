@@ -1,4 +1,11 @@
-import { PythonFile, TermuxConfig, TermuxHealthInfo, UrlProbeResult } from '../types/ide';
+import {
+  PythonFile,
+  SdcardEntry,
+  SdcardStatusInfo,
+  TermuxConfig,
+  TermuxHealthInfo,
+  UrlProbeResult,
+} from '../types/ide';
 
 export const DEFAULT_TERMUX_CONFIG: TermuxConfig = {
   endpointUrl: 'http://127.0.0.1:8765',
@@ -18,7 +25,8 @@ export interface TermuxStreamCallbacks {
 
 export function buildTermuxBridgeScript(token: string): string {
   const safeToken = token.replace(/["'\\]/g, '') || 'droidpy-local';
-  return `import json
+  return `import codecs
+import json
 import os
 import platform
 import pty
@@ -96,7 +104,8 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        if self.path == "/health":
+        parsed_path = self.path.split("?", 1)[0]
+        if parsed_path == "/health":
             if not self._check_auth():
                 return self._send_json(401, {"error": "Invalid X-DroidPy-Token"})
             return self._send_json(200, {
@@ -110,7 +119,7 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
                 "hasFfmpeg": shutil.which("ffmpeg") is not None,
                 "workspaceDir": WORKSPACE,
             })
-        if self.path == "/files":
+        if parsed_path == "/files":
             if not self._check_auth():
                 return self._send_json(401, {"error": "Invalid X-DroidPy-Token"})
             allowed_ext = (
@@ -167,6 +176,7 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
         os.close(slave_fd)
         _set_active(proc.pid, proc.pid, master_fd)
 
+        decoder = codecs.getincrementaldecoder("utf-8")("replace")
         try:
             while True:
                 rlist, _, _ = select.select([master_fd], [], [], 0.1)
@@ -177,10 +187,10 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
                         chunk = b""
                     if not chunk:
                         break
-                    text = chunk.decode("utf-8", errors="replace")
-                    self._write_ndjson({"type": "stdout", "data": text})
+                    text = decoder.decode(chunk, False)
+                    if text:
+                        self._write_ndjson({"type": "stdout", "data": text})
                 if proc.poll() is not None:
-                    # Drain any remaining bytes after process exits
                     while True:
                         r2, _, _ = select.select([master_fd], [], [], 0.02)
                         if master_fd not in r2:
@@ -191,11 +201,13 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
                             chunk = b""
                         if not chunk:
                             break
-                        self._write_ndjson({
-                            "type": "stdout",
-                            "data": chunk.decode("utf-8", errors="replace"),
-                        })
+                        text = decoder.decode(chunk, False)
+                        if text:
+                            self._write_ndjson({"type": "stdout", "data": text})
                     break
+            tail = decoder.decode(b"", True)
+            if tail:
+                self._write_ndjson({"type": "stdout", "data": tail})
             code = proc.wait()
         except BrokenPipeError:
             try:
@@ -248,7 +260,7 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
 
         if self.path in ("/run", "/run-stream"):
             files = data.get("files", [])
-            entry = os.path.basename(data.get("entry", "main.py"))
+            entry = os.path.basename(data.get("entry", "main.py")) or "main.py"
             for f in files:
                 name = os.path.basename(f.get("name", ""))
                 if not name:
@@ -314,8 +326,8 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
 
         if self.path == "/probe-url":
             target_url = str(data.get("url", "")).strip()
-            if not target_url:
-                return self._send_json(400, {"error": "Missing URL"})
+            if not target_url or not (target_url.startswith("http://") or target_url.startswith("https://")):
+                return self._send_json(400, {"error": "Invalid or missing http(s) URL"})
             ua = str(data.get("userAgent", "")).strip() or "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36"
             cookie_hdr = str(data.get("cookieHeader", "")).strip()
             req_headers = {"User-Agent": ua, "Accept": "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8"}
@@ -415,6 +427,15 @@ async function termuxFetch<T>(
   }
 }
 
+let activeStreamController: AbortController | null = null;
+
+export function abortActiveTermuxStream(): void {
+  if (activeStreamController) {
+    activeStreamController.abort();
+    activeStreamController = null;
+  }
+}
+
 async function termuxStreamRequest(
   config: TermuxConfig,
   path: string,
@@ -422,10 +443,15 @@ async function termuxStreamRequest(
   callbacks: TermuxStreamCallbacks
 ): Promise<{ exitCode: number; durationMs: number }> {
   const base = config.endpointUrl.replace(/\/+$/, '');
+  abortActiveTermuxStream();
+  const controller = new AbortController();
+  activeStreamController = controller;
+
   let res: Response;
   try {
     res = await fetch(`${base}${path}`, {
       method: 'POST',
+      signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
         'X-DroidPy-Token': config.token,
@@ -433,6 +459,12 @@ async function termuxStreamRequest(
       body: JSON.stringify(payload),
     });
   } catch (err) {
+    if (activeStreamController === controller) {
+      activeStreamController = null;
+    }
+    if (err instanceof Error && err.name === 'AbortError') {
+      return { exitCode: 130, durationMs: 0 };
+    }
     if (err instanceof TypeError) {
       throw new Error(`無法連線至 Termux 橋接服務 (${base})，請先在 Termux 啟動新版橋接腳本`);
     }
@@ -440,6 +472,9 @@ async function termuxStreamRequest(
   }
 
   if (!res.ok) {
+    if (activeStreamController === controller) {
+      activeStreamController = null;
+    }
     let msg = `Termux 橋接回應錯誤 (${res.status})`;
     try {
       const errJson = (await res.json()) as { error?: string };
@@ -451,6 +486,9 @@ async function termuxStreamRequest(
   }
 
   if (!res.body) {
+    if (activeStreamController === controller) {
+      activeStreamController = null;
+    }
     throw new Error('Termux 串流回應為空，請重新複製新版啟動指令啟動橋接');
   }
 
@@ -459,37 +497,50 @@ async function termuxStreamRequest(
   let buffer = '';
   let exitCode = 0;
   let durationMs = 0;
+  let sawDone = false;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() ?? '';
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
 
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      try {
-        const evt = JSON.parse(trimmed) as {
-          type?: string;
-          data?: string;
-          exitCode?: number;
-          durationMs?: number;
-        };
-        if (evt.type === 'stdout' && typeof evt.data === 'string') {
-          callbacks.onChunk(evt.data);
-        } else if (evt.type === 'done') {
-          exitCode = evt.exitCode ?? 0;
-          durationMs = evt.durationMs ?? 0;
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const evt = JSON.parse(trimmed) as {
+            type?: string;
+            data?: string;
+            exitCode?: number;
+            durationMs?: number;
+          };
+          if (evt.type === 'stdout' && typeof evt.data === 'string') {
+            callbacks.onChunk(evt.data);
+          } else if (evt.type === 'done') {
+            sawDone = true;
+            exitCode = evt.exitCode ?? 0;
+            durationMs = evt.durationMs ?? 0;
+          }
+        } catch {
+          // ignore malformed partial line
         }
-      } catch {
-        // ignore malformed partial line
       }
+    }
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      return { exitCode: 130, durationMs };
+    }
+    throw err;
+  } finally {
+    if (activeStreamController === controller) {
+      activeStreamController = null;
     }
   }
 
-  return { exitCode, durationMs };
+  return { exitCode: sawDone ? exitCode : 1, durationMs };
 }
 
 export async function checkTermuxHealth(config: TermuxConfig): Promise<TermuxHealthInfo> {
@@ -644,3 +695,89 @@ export async function probeUrlViaTermux(
     22000
   );
 }
+
+export async function getSdcardStatus(config: TermuxConfig): Promise<SdcardStatusInfo> {
+  return termuxFetch<SdcardStatusInfo>(config, '/sdcard/status', { method: 'GET' }, 5000);
+}
+
+export async function listSdcardDirectory(
+  config: TermuxConfig,
+  relPath = ''
+): Promise<{
+  granted: boolean;
+  rootPath: string;
+  currentPath: string;
+  entries: SdcardEntry[];
+}> {
+  const qs = `?path=${encodeURIComponent(relPath)}`;
+  return termuxFetch(config, `/sdcard/list${qs}`, { method: 'GET' }, 8000);
+}
+
+export async function readSdcardFile(
+  config: TermuxConfig,
+  relPath: string
+): Promise<{ name: string; relPath: string; content: string }> {
+  return termuxFetch(
+    config,
+    '/sdcard/read',
+    { method: 'POST', body: JSON.stringify({ path: relPath }) },
+    8000
+  );
+}
+
+export async function writeSdcardFile(
+  config: TermuxConfig,
+  relPath: string,
+  content: string
+): Promise<{ ok: boolean; path: string }> {
+  return termuxFetch(
+    config,
+    '/sdcard/write',
+    { method: 'POST', body: JSON.stringify({ path: relPath, content }) },
+    8000
+  );
+}
+
+export async function backupWorkspaceToSdcard(
+  config: TermuxConfig,
+  files: PythonFile[],
+  dir = 'DroidPy'
+): Promise<{ ok: boolean; count: number; dir: string }> {
+  return termuxFetch(
+    config,
+    '/sdcard/write',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        dir,
+        files: files.map((f) => ({ name: f.name, content: f.content })),
+      }),
+    },
+    10000
+  );
+}
+
+export async function createSdcardFolder(
+  config: TermuxConfig,
+  relPath: string
+): Promise<{ ok: boolean }> {
+  return termuxFetch(
+    config,
+    '/sdcard/mkdir',
+    { method: 'POST', body: JSON.stringify({ path: relPath }) },
+    6000
+  );
+}
+
+export async function deleteSdcardPath(
+  config: TermuxConfig,
+  relPath: string
+): Promise<{ ok: boolean }> {
+  return termuxFetch(
+    config,
+    '/sdcard/delete',
+    { method: 'POST', body: JSON.stringify({ path: relPath }) },
+    8000
+  );
+}
+

@@ -63,6 +63,8 @@ import {
 } from './services/i18n';
 import {
   DEFAULT_TERMUX_CONFIG,
+  abortActiveTermuxStream,
+  backupWorkspaceToSdcard,
   checkTermuxHealth,
   fetchTermuxWorkspaceFiles,
   sendTermuxStdin,
@@ -103,6 +105,31 @@ const DEFAULT_SETTINGS: EditorSettings = {
   androidStoragePermission: true,
 };
 
+interface PersistedIdeSnapshot {
+  files?: PythonFile[];
+  activeFileId?: string;
+  settings?: Partial<EditorSettings>;
+  executionEngine?: ExecutionEngine;
+  termuxConfig?: Partial<TermuxConfig>;
+  crawlerSession?: Partial<CrawlerSessionData>;
+}
+
+let cachedNativeSnapshot: PersistedIdeSnapshot | null | undefined;
+function getInitialNativeSnapshot(): PersistedIdeSnapshot | null {
+  if (cachedNativeSnapshot !== undefined) return cachedNativeSnapshot;
+  try {
+    const raw = window.DroidPyNative?.readPersistedState?.();
+    if (raw && raw.trim()) {
+      cachedNativeSnapshot = JSON.parse(raw) as PersistedIdeSnapshot;
+      return cachedNativeSnapshot;
+    }
+  } catch {
+    // ignore corrupted native JSON
+  }
+  cachedNativeSnapshot = null;
+  return null;
+}
+
 function formatTime(): string {
   const now = new Date();
   return now.toTimeString().slice(0, 8);
@@ -110,6 +137,12 @@ function formatTime(): string {
 
 function makeId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function sanitizeFileName(raw: string): string {
+  const stripped = raw.replace(/[/\\]/g, '').trim();
+  if (!stripped || stripped === '.' || stripped === '..') return '';
+  return stripped;
 }
 
 function mergeTerminalChunk(prev: string, chunk: string): string {
@@ -146,6 +179,10 @@ function useIsDesktop(): boolean {
 export default function App() {
   const isDesktop = useIsDesktop();
   const [files, setFiles] = useState<PythonFile[]>(() => {
+    const nativeSnap = getInitialNativeSnapshot();
+    if (nativeSnap?.files && Array.isArray(nativeSnap.files) && nativeSnap.files.length > 0) {
+      return nativeSnap.files;
+    }
     try {
       const saved = localStorage.getItem(STORAGE_FILES_KEY);
       if (saved) {
@@ -159,16 +196,24 @@ export default function App() {
   });
 
   const [activeFileId, setActiveFileId] = useState<string>(() => {
+    const nativeSnap = getInitialNativeSnapshot();
+    if (nativeSnap?.activeFileId && files.some((f) => f.id === nativeSnap.activeFileId)) {
+      return nativeSnap.activeFileId;
+    }
     try {
       const saved = localStorage.getItem(STORAGE_ACTIVE_ID_KEY);
-      if (saved) return saved;
+      if (saved && files.some((f) => f.id === saved)) return saved;
     } catch {
       // ignore
     }
-    return DEFAULT_FILES[0].id;
+    return files[0]?.id ?? DEFAULT_FILES[0].id;
   });
 
   const [settings, setSettings] = useState<EditorSettings>(() => {
+    const nativeSnap = getInitialNativeSnapshot();
+    if (nativeSnap?.settings) {
+      return { ...DEFAULT_SETTINGS, ...nativeSnap.settings };
+    }
     try {
       const saved = localStorage.getItem(STORAGE_SETTINGS_KEY);
       if (saved) {
@@ -185,6 +230,10 @@ export default function App() {
   const [desktopRightPane, setDesktopRightPane] = useState<DesktopRightPane>('terminal');
   const [browserWide, setBrowserWide] = useState<boolean>(false);
   const [crawlerSession, setCrawlerSession] = useState<CrawlerSessionData>(() => {
+    const nativeSnap = getInitialNativeSnapshot();
+    if (nativeSnap?.crawlerSession) {
+      return { ...DEFAULT_CRAWLER_SESSION, ...nativeSnap.crawlerSession };
+    }
     try {
       const saved = localStorage.getItem(STORAGE_CRAWLER_SESSION_KEY);
       if (saved) {
@@ -209,6 +258,10 @@ export default function App() {
   const [mobileNewFileName, setMobileNewFileName] = useState('');
   const [linkedDirHandle, setLinkedDirHandle] = useState<DirectoryHandleLike | null>(null);
   const [executionEngine, setExecutionEngine] = useState<ExecutionEngine>(() => {
+    const nativeSnap = getInitialNativeSnapshot();
+    if (nativeSnap?.executionEngine === 'termux' || nativeSnap?.executionEngine === 'pyodide') {
+      return nativeSnap.executionEngine;
+    }
     try {
       const saved = localStorage.getItem(STORAGE_ENGINE_KEY);
       if (saved === 'termux' || saved === 'pyodide') return saved;
@@ -218,6 +271,10 @@ export default function App() {
     return 'pyodide';
   });
   const [termuxConfig, setTermuxConfig] = useState<TermuxConfig>(() => {
+    const nativeSnap = getInitialNativeSnapshot();
+    if (nativeSnap?.termuxConfig) {
+      return { ...DEFAULT_TERMUX_CONFIG, ...nativeSnap.termuxConfig };
+    }
     try {
       const saved = localStorage.getItem(STORAGE_TERMUX_CFG_KEY);
       if (saved) {
@@ -235,6 +292,20 @@ export default function App() {
   const [termuxRunning, setTermuxRunning] = useState(false);
 
   const editorRef = useRef<CodeEditorHandle | null>(null);
+  const filesRef = useRef(files);
+  filesRef.current = files;
+  const activeFileIdRef = useRef(activeFileId);
+  activeFileIdRef.current = activeFileId;
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  const executionEngineRef = useRef(executionEngine);
+  executionEngineRef.current = executionEngine;
+  const termuxConfigRef = useRef(termuxConfig);
+  termuxConfigRef.current = termuxConfig;
+  const crawlerSessionRef = useRef(crawlerSession);
+  crawlerSessionRef.current = crawlerSession;
+  const pyodideStatusRef = useRef(pyodideStatus);
+  pyodideStatusRef.current = pyodideStatus;
   const inputResolverRef = useRef<{
     resolve: (val: string) => void;
     reject: (err: Error) => void;
@@ -310,10 +381,58 @@ export default function App() {
     }
   }, [crawlerSession]);
 
+  const flushNativeStateNow = useCallback(() => {
+    const writer = window.DroidPyNative?.writePersistedState;
+    if (!writer) return;
+    try {
+      writer(
+        JSON.stringify({
+          files: filesRef.current,
+          activeFileId: activeFileIdRef.current,
+          settings: settingsRef.current,
+          executionEngine: executionEngineRef.current,
+          termuxConfig: termuxConfigRef.current,
+          crawlerSession: crawlerSessionRef.current,
+        })
+      );
+    } catch {
+      // ignore bridge errors
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      flushNativeStateNow();
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [files, activeFileId, settings, executionEngine, termuxConfig, crawlerSession, flushNativeStateNow]);
+
+  useEffect(() => {
+    const onPauseOrHide = () => {
+      if (document.visibilityState === 'hidden') {
+        flushNativeStateNow();
+      }
+    };
+    window.addEventListener('pagehide', flushNativeStateNow);
+    window.addEventListener('beforeunload', flushNativeStateNow);
+    window.addEventListener('droidpy-flush-state', flushNativeStateNow);
+    document.addEventListener('visibilitychange', onPauseOrHide);
+    return () => {
+      window.removeEventListener('pagehide', flushNativeStateNow);
+      window.removeEventListener('beforeunload', flushNativeStateNow);
+      window.removeEventListener('droidpy-flush-state', flushNativeStateNow);
+      document.removeEventListener('visibilitychange', onPauseOrHide);
+    };
+  }, [flushNativeStateNow]);
+
   const activeFile = useMemo(
     () => files.find((f) => f.id === activeFileId) ?? files[0],
     [files, activeFileId]
   );
+
+  useEffect(() => {
+    setCursorPos({ line: 1, col: 1 });
+  }, [activeFile?.id]);
 
   const t = useCallback(
     (key: TranslationKey, vars?: Record<string, string | number>) =>
@@ -399,6 +518,7 @@ export default function App() {
 
   useEffect(() => {
     if (executionEngine === 'termux') return;
+    if (pyodideStatusRef.current === 'ready' || pyodideStatusRef.current === 'loading') return;
     let cancelled = false;
     const timer = window.setTimeout(async () => {
       if (cancelled) return;
@@ -424,8 +544,7 @@ export default function App() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appendEntry]);
+  }, [appendEntry, executionEngine]);
 
   const handleLinkDirectory = useCallback(async () => {
     try {
@@ -580,40 +699,68 @@ export default function App() {
   }, [activeFile, files, showToast, t]);
 
   const handleRunInTermux = useCallback(async () => {
+    if (termuxRunning) {
+      showToast(t('cta_running'));
+      return;
+    }
     const entryFile = resolveRunnableEntry();
-    if (!entryFile || termuxRunning) return;
+    if (!entryFile) return;
     setDesktopSection('workspace');
     setDesktopRightPane('terminal');
     setMobileTab('console');
     setTermuxRunning(true);
     setTermuxError(null);
-    appendEntry('system', t('log_termux_run', { name: entryFile.name }));
-    const streamId = makeId();
 
     try {
+      let currentHealth = termuxHealth;
+      if (currentHealth?.embedded && currentHealth.hasPython === false) {
+        try {
+          currentHealth = await checkTermuxHealth(termuxConfig);
+          setTermuxHealth(currentHealth);
+        } catch {
+          // proceed to run so server error message or connection check catches it
+        }
+      }
+      if (currentHealth?.embedded && currentHealth.hasPython === false) {
+        appendEntry('stderr', t('tmx_need_init_hint'));
+        showToast(t('tmx_need_init_hint'));
+        return;
+      }
+
+      appendEntry('system', t('log_termux_run', { name: entryFile.name }));
+      const streamId = makeId();
+
       const res = await streamRunInTermux(termuxConfig, entryFile, files, {
         onChunk: (chunk) => appendStreamChunk(streamId, chunk),
       });
       setTermuxConnectionState('connected');
       setLastDurationMs(res.durationMs);
-      if (res.exitCode !== 0) {
+      if (res.exitCode !== 0 && res.exitCode !== -1) {
         appendEntry('stderr', t('log_termux_exit', { code: res.exitCode }));
       }
       await syncFilesFromTermux(false);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      setTermuxConnectionState('error');
-      setTermuxError(msg);
-      appendEntry('stderr', msg);
+      const isAborted = /abort|中止/i.test(msg);
+      if (!isAborted) {
+        setTermuxConnectionState('error');
+        setTermuxError(msg);
+        appendEntry('stderr', msg);
+      }
     } finally {
       setTermuxRunning(false);
     }
-  }, [resolveRunnableEntry, files, termuxConfig, termuxRunning, appendEntry, appendStreamChunk, syncFilesFromTermux, t]);
+  }, [resolveRunnableEntry, files, termuxConfig, termuxHealth, termuxRunning, appendEntry, appendStreamChunk, syncFilesFromTermux, showToast, t]);
 
   const handleInstallInTermux = useCallback(
     async (mode: 'pip' | 'pkg', target: string) => {
+      if (termuxRunning) {
+        showToast(t('cta_running'));
+        return;
+      }
       const label = mode === 'pkg' ? `pkg install -y ${target}` : `pip install ${target}`;
       setDesktopSection('workspace');
+      setDesktopRightPane('terminal');
       setMobileTab('console');
       setTermuxRunning(true);
       setTermuxError(null);
@@ -628,6 +775,7 @@ export default function App() {
         if (res.exitCode === 0) {
           showToast(t('toast_termux_install_ok', { pkg: target }));
         } else {
+          appendEntry('stderr', t('log_termux_exit', { code: res.exitCode }));
           showToast(t('toast_termux_install_err', { pkg: target, code: res.exitCode }));
         }
       } catch (err) {
@@ -640,12 +788,17 @@ export default function App() {
         setTermuxRunning(false);
       }
     },
-    [termuxConfig, appendEntry, appendStreamChunk, showToast, t]
+    [termuxConfig, termuxRunning, appendEntry, appendStreamChunk, showToast, t]
   );
 
   const handleRunShellInTermux = useCallback(
     async (command: string) => {
+      if (termuxRunning) {
+        showToast(t('cta_running'));
+        return;
+      }
       setDesktopSection('workspace');
+      setDesktopRightPane('terminal');
       setMobileTab('console');
       setTermuxRunning(true);
       setTermuxError(null);
@@ -657,6 +810,9 @@ export default function App() {
         });
         setTermuxConnectionState('connected');
         setLastDurationMs(res.durationMs);
+        if (res.exitCode !== 0) {
+          appendEntry('stderr', t('log_termux_exit', { code: res.exitCode }));
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         setTermuxConnectionState('error');
@@ -666,16 +822,21 @@ export default function App() {
         setTermuxRunning(false);
       }
     },
-    [termuxConfig, appendEntry, appendStreamChunk]
+    [termuxConfig, termuxRunning, appendEntry, appendStreamChunk, showToast, t]
   );
 
   const handleInitializeEmbeddedEnv = useCallback(
     async (includeBaseSystem: boolean) => {
+      if (termuxRunning) {
+        showToast(t('cta_running'));
+        return;
+      }
       const cmd = includeBaseSystem
         ? 'pkg update -y && pkg install -y python clang libxml2 libxslt && pip install requests beautifulsoup4 lxml httpx'
         : 'pip install requests beautifulsoup4 lxml httpx';
       setExecutionEngine('termux');
       setDesktopSection('workspace');
+      setDesktopRightPane('terminal');
       setMobileTab('console');
       setTermuxRunning(true);
       setTermuxError(null);
@@ -696,6 +857,7 @@ export default function App() {
             // ignore background health refresh error
           }
         } else {
+          appendEntry('stderr', t('log_termux_exit', { code: res.exitCode }));
           showToast(t('toast_termux_init_err', { code: res.exitCode }));
         }
       } catch (err) {
@@ -708,7 +870,7 @@ export default function App() {
         setTermuxRunning(false);
       }
     },
-    [termuxConfig, appendEntry, appendStreamChunk, showToast, t]
+    [termuxConfig, termuxRunning, appendEntry, appendStreamChunk, showToast, t]
   );
 
   const handleSendTermuxStdin = useCallback(
@@ -723,14 +885,30 @@ export default function App() {
   );
 
   const handleStopTermux = useCallback(async () => {
+    abortActiveTermuxStream();
     try {
       await stopTermuxProcess(termuxConfig);
       appendEntry('system', t('log_termux_stop'));
       showToast(t('toast_termux_stopped'));
     } catch (err) {
       showToast(err instanceof Error ? err.message : t('toast_termux_disconnected'));
+    } finally {
+      setTermuxRunning(false);
     }
   }, [termuxConfig, appendEntry, showToast, t]);
+
+  const handleBackupToSdcard = useCallback(async () => {
+    try {
+      const res = await backupWorkspaceToSdcard(termuxConfig, files, 'DroidPy');
+      showToast(t('sd_toast_exported', { count: res.count, path: res.dir }));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast(msg);
+      if (msg.includes('權限')) {
+        window.DroidPyNative?.requestStoragePermission?.();
+      }
+    }
+  }, [termuxConfig, files, showToast, t]);
 
   const handleRunCode = useCallback(async () => {
     if (!activeFile || pyodideStatus === 'running' || termuxRunning) return;
@@ -800,21 +978,36 @@ export default function App() {
         await handleRunShellInTermux(statement);
         return;
       }
-      appendEntry('repl-in', statement);
-      const result = await executeReplLine(statement, files, callbacksRef.current);
-      if (result !== null) {
-        appendEntry('repl-out', result);
+      if (pyodideStatus === 'running') {
+        showToast(t('cta_running'));
+        return;
       }
-      if (/^[!%]?\s*pip\s+install\b/i.test(statement.trim())) {
-        try {
-          const list = await listPyPackages(callbacksRef.current);
-          setInstalledPackages(list);
-        } catch {
-          // ignore refresh errors
+      if (pyodideStatus !== 'ready') {
+        showToast(t('toast_core_loading'));
+        return;
+      }
+      appendEntry('repl-in', statement);
+      setPyodideStatus('running');
+      try {
+        const result = await executeReplLine(statement, files, callbacksRef.current);
+        if (result !== null) {
+          appendEntry('repl-out', result);
         }
+        if (/^[!%]?\s*pip\s+install\b/i.test(statement.trim())) {
+          try {
+            const list = await listPyPackages(callbacksRef.current);
+            setInstalledPackages(list);
+          } catch {
+            // ignore refresh errors
+          }
+        }
+      } finally {
+        setPyodideStatus('ready');
+        setPendingInputPrompt(null);
+        inputResolverRef.current = null;
       }
     },
-    [executionEngine, handleRunShellInTermux, files, appendEntry]
+    [executionEngine, handleRunShellInTermux, pyodideStatus, files, appendEntry, showToast, t]
   );
 
   const handleCodeChange = useCallback(
@@ -829,9 +1022,11 @@ export default function App() {
   );
 
   const handleCreateFile = useCallback((name: string, content = '') => {
+    const clean = sanitizeFileName(name);
+    if (!clean) return;
     const newFile: PythonFile = {
       id: makeId(),
-      name,
+      name: clean,
       content,
       updatedAt: Date.now(),
     };
@@ -842,8 +1037,10 @@ export default function App() {
   }, []);
 
   const handleRenameFile = useCallback((id: string, nextName: string) => {
+    const clean = sanitizeFileName(nextName);
+    if (!clean) return;
     setFiles((prev) =>
-      prev.map((f) => (f.id === id ? { ...f, name: nextName, updatedAt: Date.now() } : f))
+      prev.map((f) => (f.id === id ? { ...f, name: clean, updatedAt: Date.now() } : f))
     );
   }, []);
 
@@ -863,16 +1060,20 @@ export default function App() {
 
   const handleSaveWorkspaceFile = useCallback(
     (filename: string, content: string, openInEditor = false) => {
-      const existing = files.find((f) => f.name.toLowerCase() === filename.toLowerCase());
+      const cleanName = sanitizeFileName(filename);
+      if (!cleanName) return;
+      const existing = filesRef.current.find(
+        (f) => f.name.toLowerCase() === cleanName.toLowerCase()
+      );
       const targetId = existing?.id ?? makeId();
       setFiles((prev) => {
-        const idx = prev.findIndex((f) => f.name.toLowerCase() === filename.toLowerCase());
+        const idx = prev.findIndex((f) => f.name.toLowerCase() === cleanName.toLowerCase());
         if (idx >= 0) {
           const next = [...prev];
           next[idx] = { ...next[idx], content, updatedAt: Date.now() };
           return next;
         }
-        return [...prev, { id: targetId, name: filename, content, updatedAt: Date.now() }];
+        return [...prev, { id: targetId, name: cleanName, content, updatedAt: Date.now() }];
       });
       if (openInEditor) {
         setActiveFileId(targetId);
@@ -880,7 +1081,7 @@ export default function App() {
         setMobileTab('editor');
       }
     },
-    [files]
+    []
   );
 
   useEffect(() => {
@@ -893,17 +1094,16 @@ export default function App() {
       }>).detail;
       if (!detail) return;
       const incomingCookies = detail.cookieHeader ? parseCookieHeaderPairs(detail.cookieHeader) : [];
-      setCrawlerSession((prev) => {
-        const nextSession: CrawlerSessionData = {
-          url: detail.url || prev.url,
-          userAgent: detail.userAgent || prev.userAgent,
-          cookies: mergeCookieLists(prev.cookies, incomingCookies),
-          extraHeaders: prev.extraHeaders,
-          capturedAt: detail.capturedAt || Date.now(),
-        };
-        handleSaveWorkspaceFile('cookies.json', buildCookiesJsonContent(nextSession), false);
-        return nextSession;
-      });
+      const prev = crawlerSessionRef.current;
+      const nextSession: CrawlerSessionData = {
+        url: detail.url || prev.url,
+        userAgent: detail.userAgent || prev.userAgent,
+        cookies: mergeCookieLists(prev.cookies, incomingCookies),
+        extraHeaders: prev.extraHeaders,
+        capturedAt: detail.capturedAt || Date.now(),
+      };
+      setCrawlerSession(nextSession);
+      handleSaveWorkspaceFile('cookies.json', buildCookiesJsonContent(nextSession), false);
       showToast(t('brw_toast_native_captured', { count: incomingCookies.length }));
     };
 
@@ -1219,6 +1419,9 @@ export default function App() {
                     activeFileId={activeFile.id}
                     linkedDirName={linkedDirHandle?.name ?? null}
                     termuxConnected={termuxConnectionState === 'connected'}
+                    termuxEmbedded={Boolean(termuxHealth?.embedded)}
+                    onOpenSdcardManager={() => setDesktopSection('android')}
+                    onBackupToSdcard={handleBackupToSdcard}
                     onPullFromTermux={() => syncFilesFromTermux(true)}
                     onLinkDirectory={handleLinkDirectory}
                     onSaveToDirectory={handleSaveToDirectory}
@@ -1323,6 +1526,7 @@ export default function App() {
                   {/* CodeMirror Canvas */}
                   <div className="flex-1 min-h-0 overflow-hidden">
                     <CodeEditor
+                      key={activeFile.id}
                       ref={editorRef}
                       value={activeFile.content}
                       filename={activeFile.name}
@@ -1333,6 +1537,7 @@ export default function App() {
                       tabSize={settings.tabSize}
                       wordWrap={settings.wordWrap}
                       theme={settings.theme}
+                      pyodideReady={pyodideStatus === 'ready'}
                     />
                   </div>
 
@@ -1412,13 +1617,15 @@ export default function App() {
                   </div>
 
                   <div className="flex-1 min-h-0 overflow-hidden">
-                    {desktopRightPane === 'terminal' ? (
+                    <div className={desktopRightPane === 'terminal' ? 'h-full' : 'hidden'}>
                       <TerminalPanel
                         entries={entries}
                         status={termuxRunning ? 'running' : pyodideStatus}
                         engine={executionEngine}
                         onChangeEngine={setExecutionEngine}
                         termuxConnected={termuxConnectionState === 'connected'}
+                        embeddedMissingPython={Boolean(termuxHealth?.embedded && termuxHealth.hasPython === false)}
+                        onQuickInitEmbedded={() => void handleInitializeEmbeddedEnv(true)}
                         lastDurationMs={lastDurationMs}
                         pendingInputPrompt={pendingInputPrompt}
                         onSubmitInput={handleSubmitInput}
@@ -1427,7 +1634,8 @@ export default function App() {
                         onStopTermux={handleStopTermux}
                         onClear={() => setEntries([])}
                       />
-                    ) : (
+                    </div>
+                    <div className={desktopRightPane === 'browser' ? 'h-full' : 'hidden'}>
                       <CrawlerBrowserPanel
                         session={crawlerSession}
                         onChangeSession={setCrawlerSession}
@@ -1436,7 +1644,7 @@ export default function App() {
                         onSaveWorkspaceFile={handleSaveWorkspaceFile}
                         onNotify={showToast}
                       />
-                    )}
+                    </div>
                   </div>
                 </aside>
               </>
@@ -1471,6 +1679,7 @@ export default function App() {
                   onInitializeEmbeddedEnv={handleInitializeEmbeddedEnv}
                   onGenerateRequirements={handleGenerateRequirements}
                   onInstallRequirements={handleInstallRequirements}
+                  onSaveWorkspaceFile={handleSaveWorkspaceFile}
                   onOpenHelp={() => setShowHelpModal(true)}
                   onNotify={showToast}
                 />
@@ -1479,8 +1688,13 @@ export default function App() {
           </div>
         ) : (
           <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-            {mobileTab === 'editor' && (
-              <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-[var(--ide-surface)]">
+            <div
+              className={
+                mobileTab === 'editor'
+                  ? 'flex-1 min-h-0 flex flex-col overflow-hidden bg-[var(--ide-surface)]'
+                  : 'hidden'
+              }
+            >
                 {/* Mobile Quick File Switcher + Quick Actions */}
                 <div className="flex items-center justify-between gap-1.5 px-2 py-1.5 border-b border-[var(--ide-border)] bg-[var(--ide-surface-alt)] shrink-0">
                   <div className="flex items-center gap-1 overflow-x-auto no-scrollbar min-w-0">
@@ -1550,7 +1764,7 @@ export default function App() {
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
-                      let name = mobileNewFileName.trim();
+                      let name = sanitizeFileName(mobileNewFileName);
                       if (!name) return;
                       if (!name.includes('.')) name += '.py';
                       if (files.some((f) => f.name.toLowerCase() === name.toLowerCase())) {
@@ -1596,6 +1810,7 @@ export default function App() {
 
                 <div className="flex-1 min-h-0 overflow-hidden">
                   <CodeEditor
+                    key={activeFile.id}
                     ref={editorRef}
                     value={activeFile.content}
                     filename={activeFile.name}
@@ -1606,6 +1821,7 @@ export default function App() {
                     tabSize={settings.tabSize}
                     wordWrap={settings.wordWrap}
                     theme={settings.theme}
+                    pyodideReady={pyodideStatus === 'ready'}
                   />
                 </div>
 
@@ -1618,8 +1834,7 @@ export default function App() {
                     onRedo={() => editorRef.current?.redo()}
                   />
                 )}
-              </div>
-            )}
+            </div>
 
             {mobileTab === 'console' && (
               <div className="flex-1 min-h-0 overflow-hidden">
@@ -1629,6 +1844,8 @@ export default function App() {
                   engine={executionEngine}
                   onChangeEngine={setExecutionEngine}
                   termuxConnected={termuxConnectionState === 'connected'}
+                  embeddedMissingPython={Boolean(termuxHealth?.embedded && termuxHealth.hasPython === false)}
+                  onQuickInitEmbedded={() => void handleInitializeEmbeddedEnv(true)}
                   lastDurationMs={lastDurationMs}
                   pendingInputPrompt={pendingInputPrompt}
                   onSubmitInput={handleSubmitInput}
@@ -1640,18 +1857,16 @@ export default function App() {
               </div>
             )}
 
-            {mobileTab === 'browser' && (
-              <div className="flex-1 min-h-0 overflow-hidden">
-                <CrawlerBrowserPanel
-                  session={crawlerSession}
-                  onChangeSession={setCrawlerSession}
-                  termuxConfig={termuxConfig}
-                  termuxConnected={termuxConnectionState === 'connected'}
-                  onSaveWorkspaceFile={handleSaveWorkspaceFile}
-                  onNotify={showToast}
-                />
-              </div>
-            )}
+            <div className={mobileTab === 'browser' ? 'flex-1 min-h-0 overflow-hidden' : 'hidden'}>
+              <CrawlerBrowserPanel
+                session={crawlerSession}
+                onChangeSession={setCrawlerSession}
+                termuxConfig={termuxConfig}
+                termuxConnected={termuxConnectionState === 'connected'}
+                onSaveWorkspaceFile={handleSaveWorkspaceFile}
+                onNotify={showToast}
+              />
+            </div>
 
             {mobileTab === 'files' && (
               <div className="flex-1 min-h-0 overflow-hidden">
@@ -1660,6 +1875,9 @@ export default function App() {
                   activeFileId={activeFile.id}
                   linkedDirName={linkedDirHandle?.name ?? null}
                   termuxConnected={termuxConnectionState === 'connected'}
+                  termuxEmbedded={Boolean(termuxHealth?.embedded)}
+                  onOpenSdcardManager={() => setMobileTab('tools')}
+                  onBackupToSdcard={handleBackupToSdcard}
                   onPullFromTermux={() => syncFilesFromTermux(true)}
                   onLinkDirectory={handleLinkDirectory}
                   onSaveToDirectory={handleSaveToDirectory}
@@ -1706,6 +1924,7 @@ export default function App() {
                   onInitializeEmbeddedEnv={handleInitializeEmbeddedEnv}
                   onGenerateRequirements={handleGenerateRequirements}
                   onInstallRequirements={handleInstallRequirements}
+                  onSaveWorkspaceFile={handleSaveWorkspaceFile}
                   onOpenHelp={() => setShowHelpModal(true)}
                   onNotify={showToast}
                 />

@@ -30,7 +30,7 @@ import { closeBrackets, closeBracketsKeymap, autocompletion, completionKeymap } 
 import { searchKeymap, highlightSelectionMatches, openSearchPanel } from '@codemirror/search';
 import { python } from '@codemirror/lang-python';
 import { json } from '@codemirror/lang-json';
-import { linter, lintGutter, Diagnostic } from '@codemirror/lint';
+import { linter, lintGutter, Diagnostic, forceLinting } from '@codemirror/lint';
 import { tags } from '@lezer/highlight';
 import { ThemeId, getThemeMeta } from '../services/themes';
 import { checkPythonSyntax } from '../services/pyodideRuntime';
@@ -55,6 +55,7 @@ interface CodeEditorProps {
   tabSize: number;
   wordWrap: boolean;
   theme: ThemeId;
+  pyodideReady?: boolean;
 }
 
 const HIGHLIGHT_PRESETS: Record<ThemeId, HighlightStyle> = {
@@ -454,7 +455,7 @@ function buildSyntaxLinter(filenameRef: React.MutableRefObject<string | undefine
 }
 
 export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
-  ({ value, filename, onChange, onRunShortcut, onCursorChange, fontSize, tabSize, wordWrap, theme }, ref) => {
+  ({ value, filename, onChange, onRunShortcut, onCursorChange, fontSize, tabSize, wordWrap, theme, pyodideReady }, ref) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const viewRef = useRef<EditorView | null>(null);
     const onChangeRef = useRef(onChange);
@@ -596,7 +597,14 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
           mode === 'json' ? json() : mode === 'python' ? python() : []
         ),
       });
+      forceLinting(view);
     }, [filename, langCompartment]);
+
+    useEffect(() => {
+      if (pyodideReady && viewRef.current) {
+        forceLinting(viewRef.current);
+      }
+    }, [pyodideReady]);
 
     useImperativeHandle(ref, () => ({
       insertText: (text: string, cursorOffset = 0) => {

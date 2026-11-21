@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   FileCode2,
   Plus,
@@ -12,6 +12,7 @@ import {
   BookOpen,
   FolderSync,
   RefreshCw,
+  HardDrive,
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { PythonFile } from '../types/ide';
@@ -25,6 +26,9 @@ interface FileExplorerProps {
   activeFileId: string;
   linkedDirName: string | null;
   termuxConnected?: boolean;
+  termuxEmbedded?: boolean;
+  onOpenSdcardManager?: () => void;
+  onBackupToSdcard?: () => Promise<void>;
   onPullFromTermux?: () => Promise<void>;
   onLinkDirectory: () => Promise<void>;
   onSaveToDirectory: () => Promise<void>;
@@ -35,11 +39,22 @@ interface FileExplorerProps {
   onNotify: (msg: string) => void;
 }
 
+const MAX_IMPORT_BYTES = 512 * 1024;
+
+function sanitizeFileName(raw: string): string {
+  const stripped = raw.replace(/[/\\]/g, '').trim();
+  if (!stripped || stripped === '.' || stripped === '..') return '';
+  return stripped;
+}
+
 export const FileExplorer: React.FC<FileExplorerProps> = ({
   files,
   activeFileId,
   linkedDirName,
   termuxConnected,
+  termuxEmbedded,
+  onOpenSdcardManager,
+  onBackupToSdcard,
   onPullFromTermux,
   onLinkDirectory,
   onSaveToDirectory,
@@ -57,10 +72,28 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   const [renameValue, setRenameValue] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [showTemplates, setShowTemplates] = useState(false);
+  const isNativeApk = Boolean(termuxEmbedded || window.DroidPyNative?.isNativeApp?.());
+  const [nativeStorageGranted, setNativeStorageGranted] = useState<boolean>(() =>
+    Boolean(window.DroidPyNative?.hasStoragePermission?.())
+  );
+
+  useEffect(() => {
+    if (!isNativeApk) return;
+    const syncPerm = () => {
+      setNativeStorageGranted(Boolean(window.DroidPyNative?.hasStoragePermission?.()));
+    };
+    syncPerm();
+    window.addEventListener('focus', syncPerm);
+    document.addEventListener('visibilitychange', syncPerm);
+    return () => {
+      window.removeEventListener('focus', syncPerm);
+      document.removeEventListener('visibilitychange', syncPerm);
+    };
+  }, [isNativeApk]);
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    let trimmed = newFileName.trim();
+    let trimmed = sanitizeFileName(newFileName);
     if (!trimmed) return;
     if (!trimmed.includes('.')) {
       trimmed += '.py';
@@ -82,7 +115,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
 
   const handleRenameSubmit = (e: React.FormEvent, id: string) => {
     e.preventDefault();
-    let trimmed = renameValue.trim();
+    let trimmed = sanitizeFileName(renameValue);
     if (!trimmed) return;
     if (!trimmed.includes('.')) {
       trimmed += '.py';
@@ -98,18 +131,28 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = e.target.files;
     if (!fileList || fileList.length === 0) return;
-    const picked = fileList[0];
-    const text = await picked.text();
-    let name = picked.name;
-    if (!name.includes('.')) {
-      name = `${name}.py`;
+    try {
+      for (const picked of Array.from(fileList)) {
+        if (picked.size > MAX_IMPORT_BYTES) {
+          onNotify(`${picked.name} (> 512 KB)`);
+          continue;
+        }
+        const text = await picked.text();
+        let name = sanitizeFileName(picked.name) || `imported_${Date.now().toString().slice(-4)}.py`;
+        if (!name.includes('.')) {
+          name = `${name}.py`;
+        }
+        if (files.some((f) => f.name.toLowerCase() === name.toLowerCase())) {
+          name = `imported_${Date.now().toString().slice(-4)}_${name}`;
+        }
+        onCreateFile(name, text);
+        onNotify(t('files_imported', { name }));
+      }
+    } catch (err) {
+      onNotify(err instanceof Error ? err.message : t('files_clipboard_err'));
+    } finally {
+      e.target.value = '';
     }
-    if (files.some((f) => f.name.toLowerCase() === name.toLowerCase())) {
-      name = `imported_${Date.now().toString().slice(-4)}_${name}`;
-    }
-    onCreateFile(name, text);
-    onNotify(t('files_imported', { name }));
-    e.target.value = '';
   };
 
   const handleExportZip = async () => {
@@ -206,6 +249,54 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
               <span>{t('files_dir_auth')}</span>
             </button>
           )}
+        </div>
+      )}
+
+      {/* Android APK /sdcard Quick Bar */}
+      {isNativeApk && (
+        <div className="px-3 py-2 border-b border-[var(--ide-border)] bg-[var(--ide-surface)] space-y-1.5 shrink-0">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <HardDrive className="w-3.5 h-3.5 text-[var(--ide-accent)] shrink-0" />
+              <span className="text-[11px] font-medium truncate">
+                {nativeStorageGranted ? t('sd_quick_granted') : t('sd_quick_denied')}
+              </span>
+            </div>
+            {!nativeStorageGranted && (
+              <button
+                type="button"
+                onClick={() => {
+                  window.DroidPyNative?.requestStoragePermission?.();
+                  window.setTimeout(() => {
+                    setNativeStorageGranted(Boolean(window.DroidPyNative?.hasStoragePermission?.()));
+                  }, 1000);
+                }}
+                className="min-h-[28px] px-2 rounded-lg bg-amber-600 text-white text-[11px] font-semibold whitespace-nowrap shrink-0"
+              >
+                {t('sd_grant_btn')}
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5">
+            {onOpenSdcardManager && (
+              <button
+                type="button"
+                onClick={onOpenSdcardManager}
+                className="flex-1 min-h-[30px] px-2 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-bg)] text-[11px] font-medium hover:border-[var(--ide-accent)] truncate"
+              >
+                {t('sd_quick_manage')}
+              </button>
+            )}
+            {onBackupToSdcard && (
+              <button
+                type="button"
+                onClick={() => void onBackupToSdcard()}
+                className="flex-1 min-h-[30px] px-2 rounded-lg bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] text-[11px] font-medium truncate"
+              >
+                {t('sd_quick_backup')}
+              </button>
+            )}
+          </div>
         </div>
       )}
 

@@ -2,6 +2,48 @@
 
 All notable changes to **DroidPy** are documented in this file.
 
+## [1.2.5] - 2026-11-21
+
+### Added (Android APK Icon & Navigation Polish)
+- **為 Android APK 加上專屬應用程式圖徽（Logo）**：
+  - 使用 DroidPy 內建的翡翠綠＋琥珀橘交錯蛇形圖示產生 Android Adaptive Icon 向量資源（`drawable/ic_launcher_background.xml`、`drawable/ic_launcher_foreground.xml`、`mipmap-anydpi-v26/ic_launcher*.xml`）與全密度 `mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}` PNG 回退圖檔，並於 `AndroidManifest.xml` 指定 `android:icon="@mipmap/ic_launcher"` 與 `android:roundIcon="@mipmap/ic_launcher_round"`。
+- **加入「返回兩次退出 App」防誤觸保護**：
+  - 更新 `MainActivity.kt` 的 `OnBackPressedCallback`：先優先處理內嵌爬蟲瀏覽器關閉與網頁返回；回到 IDE 主畫面時首次按下返回鍵（或側滑返回）彈出「再按一次返回鍵退出 DroidPy」提示，於 2 秒內再次返回才會立即刷寫儲存狀態並退出程式。
+
+---
+
+## [1.2.4] - 2026-11-21
+
+### Fixed (Real-Device Android APK Testing)
+- **修復「app 退出重開資料保留」問題**：
+  - `MainActivity.kt` 啟用 WebView `databaseEnabled`，新增 `DroidPyNative.readPersistedState()` / `writePersistedState()` 以原子 `.tmp` + `renameTo` 將工作區所有檔案、作用中檔案 ID、字體與主題設定、語言、執行引擎及爬蟲 Cookie 備份至 App 私有檔案 `filesDir/droidpy_ide_state.json`，並在 `onPause()` / `visibilitychange` / `pagehide` 即時寫入，確保滑掉 App 或系統回收後重開 100% 保留資料。
+- **修復「拿到儲存權限卻沒有真正存取與管理內部儲存空間」問題**：
+  - `AndroidManifest.xml` 補上 `android:requestLegacyExternalStorage="true"`，並修正 `MainActivity.kt` 在 Android 11+ 同時檢查 `Environment.isExternalStorageManager()` 與執行期 `WRITE_EXTERNAL_STORAGE` 權限。
+  - `EmbeddedTermuxBridge.kt` 新增原生 `/sdcard/status`、`/sdcard/list`、`/sdcard/read`、`/sdcard/write`、`/sdcard/mkdir`、`/sdcard/delete` API，並在工作區建立 `./sdcard -> /storage/emulated/0` 符號連結。
+  - 前端新增 `InternalStoragePanel` 與檔案總管 `/sdcard` 快捷列，支援在手機上直接瀏覽 `/storage/emulated/0`、建立資料夾、開啟 `/sdcard` 檔案編輯、一鍵寫入或備份整個專案至 `/sdcard/DroidPy`，並在系統設定授權返回後自動重新偵測權限狀態。
+- **修復「點擊執行只顯示正在執行 main.py、沒有下一步動作」問題**：
+  - `EmbeddedTermuxBridge.kt` 補齊 `PYTHONHOME=$usrDir` 與 `PYTHONPATH="$HOME/.droidpy_lib:$workspaceDir"`（修正重定位 Termux Python 3.12 找不到標準庫 `encodings` 而無輸出退出的問題），並於 `$HOME/.droidpy_lib/droid.py` 實作完整原生 `droid` 模組（`vibrate`、`toast`、`device_info`、`storage_info`、`sdcard_path`、`battery`）轉接 `/droid-action`，讓內建 `main.py` 在 APK 原生 Termux 模式不再因 `ModuleNotFoundError: No module named 'droid'` 失敗。
+  - 新增 `python` / `python3` 存在檢查：若尚未完成首次「一鍵初始化 Python」，於終端機即時提示並提供一鍵初始化按鈕，不再靜默卡住。
+- **修復「點擊執行變成停止執行後無法恢復執行按鈕」問題**：
+  - `EmbeddedTermuxBridge.kt` 的 `POST /stop` 改以遍歷 `/proc` 子樹 PID 強制終止整棵程序樹並關閉 I/O 串流，立即解除串流讀取阻塞並送出 `done` 結束事件。
+  - 前端 `termuxBridge.ts` 加入 `AbortController` (`abortActiveTermuxStream()`) 與 `sawDone` 保護，`App.tsx` 的 `handleStopTermux()` 立即中斷 HTTP 串流並以 `finally { setTermuxRunning(false); }` 確保按鈕永遠恢復為「執行程式」。
+
+---
+
+## [1.2.3] - 2026-11-21
+
+### Fixed (Android APK, Runtime, Crawler & Mobile IDE)
+- **修復獨立 APK 執行含中文字元腳本時永久卡死 Bug**：`EmbeddedTermuxBridge.kt` 的 HTTP Server 原本以 `BufferedReader` 字元數比對位元組長度 `Content-Length`，導致任何包含中文註解或字串的程式碼在 `POST /run-stream` 時永遠等待剩餘字元而卡住；現已改為 `BufferedInputStream` 精確位元組長度讀取與 UTF-8 解碼。
+- **修復 APK 與 Termux 終端機中文串流亂碼 Bug**：將 `EmbeddedTermuxBridge.kt` 與 `droidpy_bridge.py` 串流輸出改為 UTF-8 增量字元解碼（`InputStreamReader` / `codecs.getincrementaldecoder`），避免多位元組中文字在讀取邊界被切斷顯示 ``。
+- **修復 APK WebView 外部連結劫持 IDE 與下載檔名跳脫 Bug**：`MainActivity.kt` 改以精確比對 `appOriginHost` 區分站內與外部 `https://` 連結（點擊外部網站時由系統瀏覽器開啟，不再覆蓋整個 DroidPy 介面），並對 `setDownloadListener` 注入 JS 參數使用 `JSONObject.quote` 安全跳脫，同時強化 Bootstrap `bin/sh` 完整性檢查與 `pkg` 倉庫金鑰信任參數。
+- **修復爬蟲瀏覽器匯入 / 同步 Bug**：修正 `parseRawCrawlerInput` 無法正確解析 DroidPy 自匯出 `cookies.json` 物件格式（先前會誤將 `url`、`headers`、`cookies` 當作 Cookie 名稱），改善 DevTools `cURL` 解析容錯，並確保 `CrawlerBrowserPanel` 在手機切換分頁或 APK 原生擷取 Cookie 後保留網址與探測結果不重置。
+- **修復編輯器與 Python REPL Bug**：
+  - 為桌面與手機版 `CodeEditor` 加上檔案 `key`，修復切換檔案後按下「復原 (Undo)」誤將上一個檔案內容覆蓋到新檔案的問題，並於 Pyodide 載入完成後立即觸發語法檢查。
+  - 修復互動式 REPL 輸入 `input()` 時未使用非同步提示、以及從 Termux 切換回 Pyodide 時核心未自動初始化、狀態標籤將未就緒顯示為「核心就緒」的問題。
+  - 為檔案建立／重新命名／匯入加上路徑分隔符消毒與 512 KB 上傳大小防護，避免破壞沙盒路徑或超出儲存空間上限。
+
+---
+
 ## [1.2.2] - 2026-11-21
 
 ### Fixed (GitHub Release Automation)

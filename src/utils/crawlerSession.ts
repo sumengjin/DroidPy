@@ -122,18 +122,31 @@ export function parseRawCrawlerInput(rawInput: string): {
         if (cookies.length > 0) return { cookies, extraHeaders };
       } else if (parsed && typeof parsed === 'object') {
         const obj = parsed as Record<string, unknown>;
-        if (typeof obj.cookieHeader === 'string' || Array.isArray(obj.cookies)) {
+        const hasCookieObj =
+          typeof obj.cookieHeader === 'string' ||
+          typeof obj.cookie_header === 'string' ||
+          Array.isArray(obj.cookies) ||
+          (Boolean(obj.cookies) && typeof obj.cookies === 'object');
+        if (hasCookieObj) {
           const url = typeof obj.url === 'string' ? obj.url : undefined;
           const userAgent =
             typeof obj.userAgent === 'string'
               ? obj.userAgent
               : typeof obj.user_agent === 'string'
               ? obj.user_agent
+              : obj.headers &&
+                typeof obj.headers === 'object' &&
+                typeof (obj.headers as Record<string, unknown>)['User-Agent'] === 'string'
+              ? String((obj.headers as Record<string, unknown>)['User-Agent'])
               : undefined;
           let cookies: CapturedCookieItem[] = [];
-          if (typeof obj.cookieHeader === 'string') {
-            cookies = parseCookieHeaderPairs(obj.cookieHeader);
-          } else if (Array.isArray(obj.cookies)) {
+          const rawHeader =
+            typeof obj.cookieHeader === 'string'
+              ? obj.cookieHeader
+              : typeof obj.cookie_header === 'string'
+              ? obj.cookie_header
+              : null;
+          if (Array.isArray(obj.cookies)) {
             cookies = (obj.cookies as Record<string, unknown>[])
               .filter((c) => typeof c?.name === 'string')
               .map((c) => ({
@@ -150,6 +163,16 @@ export function parseRawCrawlerInput(rawInput: string): {
               value: String(v ?? ''),
               enabled: true,
             }));
+          } else if (rawHeader) {
+            cookies = parseCookieHeaderPairs(rawHeader);
+          }
+          if (obj.headers && typeof obj.headers === 'object') {
+            for (const [hk, hv] of Object.entries(obj.headers as Record<string, unknown>)) {
+              const low = hk.toLowerCase();
+              if (low !== 'user-agent' && low !== 'cookie' && typeof hv === 'string') {
+                extraHeaders[hk] = hv;
+              }
+            }
           }
           return { url, userAgent, cookies, extraHeaders };
         }
@@ -168,15 +191,14 @@ export function parseRawCrawlerInput(rawInput: string): {
 
   // 2. Try cURL command (from Chrome / Edge / Safari DevTools "Copy as cURL")
   if (/^curl\s+/i.test(text)) {
-    const normalized = text.replace(/\\\r?\n/g, ' ');
+    const normalized = text.replace(/\\\r?\n/g, ' ').replace(/\s\$'/g, " '");
     let url: string | undefined;
     let userAgent: string | undefined;
     let cookies: CapturedCookieItem[] = [];
 
-    const urlMatch = normalized.match(/^curl\s+(?:--location\s+|-[A-Za-z]+\s+)*['"](https?:\/\/[^'"]+)['"]/i)
-      ?? normalized.match(/\s['"](https?:\/\/[^'"]+)['"]/i);
+    const urlMatch = normalized.match(/\s(['"])(https?:\/\/[^'"]+)\1/i);
     if (urlMatch) {
-      url = urlMatch[1];
+      url = urlMatch[2];
     }
 
     const headerRegex = /(?:-H|--header)\s+(['"])(.*?)\1/g;

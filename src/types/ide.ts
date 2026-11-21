@@ -91,3 +91,39 @@ export interface UrlProbeResult {
   headers: Record<string, string>;
   bodyPreview: string;
 }
+
+export interface SdcardEntry {
+  name: string;
+  relPath: string;
+  isDir: boolean;
+  size: number;
+  updatedAt: number;
+}
+
+export interface SdcardStatusInfo {
+  granted: boolean;
+  manageAllFiles: boolean;
+  runtimeWrite: boolean;
+  rootPath: string;
+  droidpyDir: string;
+}
+
+export interface DroidPyNativeBridge {
+  isNativeApp?: () => boolean;
+  readPersistedState?: () => string;
+  writePersistedState?: (json: string) => void;
+  getInternalStoragePath?: () => string;
+  hasStoragePermission?: () => boolean;
+  requestStoragePermission?: () => void;
+  openCrawlerBrowser?: (url: string, desktopUa: boolean) => void;
+  closeCrawlerBrowser?: () => void;
+  saveBase64File?: (base64Data: string, fileName: string, mimeType: string) => void;
+}
+
+declare global {
+  interface Window {
+    DroidPyNative?: DroidPyNativeBridge;
+  }
+}
+
+

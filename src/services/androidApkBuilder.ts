@@ -1,5 +1,11 @@
 import JSZip from 'jszip';
 import { PythonFile } from '../types/ide';
+import {
+  ANDROID_ADAPTIVE_ICON_XML,
+  ANDROID_ICON_BACKGROUND_XML,
+  ANDROID_ICON_FOREGROUND_XML,
+  ANDROID_MIPMAP_PNG_BASE64,
+} from './androidIconAssets';
 
 export interface GitHubApkBundleOptions {
   appTitle: string;
@@ -12,6 +18,7 @@ export interface GitHubApkBundleOptions {
 export async function generateGitHubApkProjectZip(opts: GitHubApkBundleOptions): Promise<Blob> {
   const zip = new JSZip();
   const safeTitle = opts.appTitle.trim() || 'DroidPy';
+  const safeKotlinTitle = safeTitle.replace(/["\\]/g, '');
   const safePkg = opts.packageId.trim() || 'org.droidpy.app';
   const pkgPath = safePkg.replace(/\./g, '/');
   const safeToken = opts.bridgeToken.replace(/["'\\]/g, '') || 'droidpy-local';
@@ -209,8 +216,11 @@ ${storagePerms}
 
     <application
         android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="${safeTitle}"
         android:usesCleartextTraffic="true"
+        android:requestLegacyExternalStorage="true"
         android:theme="@style/Theme.AppCompat.DayNight.NoActionBar">
         <activity
             android:name=".MainActivity"
@@ -243,6 +253,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.SystemClock
 import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Base64
@@ -280,6 +291,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var crawlerUaBtn: Button
     private var crawlerDesktopUa: Boolean = false
     private var localBridge: EmbeddedTermuxBridge? = null
+    private var appOriginHost: String? = null
+    private var lastBackPressedAt: Long = 0L
+    private var exitToast: Toast? = null
 
     private val mobileUaString =
         "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
@@ -289,6 +303,58 @@ class MainActivity : AppCompatActivity() {
     inner class NativeDownloadBridge {
         @JavascriptInterface
         fun isNativeApp(): Boolean = true
+
+        @JavascriptInterface
+        fun readPersistedState(): String {
+            return try {
+                val f = File(filesDir, "droidpy_ide_state.json")
+                if (f.exists()) f.readText(Charsets.UTF_8) else ""
+            } catch (_: Exception) {
+                ""
+            }
+        }
+
+        @JavascriptInterface
+        fun writePersistedState(json: String) {
+            try {
+                val target = File(filesDir, "droidpy_ide_state.json")
+                val tmp = File(filesDir, "droidpy_ide_state.json.tmp")
+                tmp.writeText(json, Charsets.UTF_8)
+                if (!tmp.renameTo(target)) {
+                    target.writeText(json, Charsets.UTF_8)
+                    tmp.delete()
+                }
+            } catch (_: Exception) {
+            }
+        }
+
+        @JavascriptInterface
+        fun getInternalStoragePath(): String = Environment.getExternalStorageDirectory().absolutePath
+
+        @JavascriptInterface
+        fun hasStoragePermission(): Boolean {
+            val manageOk = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                Environment.isExternalStorageManager()
+            } else {
+                true
+            }
+            val writeOk = ContextCompat.checkSelfPermission(
+                this@MainActivity,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED
+            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                manageOk
+            } else {
+                writeOk
+            }
+        }
+
+        @JavascriptInterface
+        fun requestStoragePermission() {
+            runOnUiThread {
+                requestExternalStoragePermissionIfNeeded(force = true)
+            }
+        }
 
         @JavascriptInterface
         fun openCrawlerBrowser(url: String, desktopUa: Boolean) {
@@ -533,6 +599,7 @@ class MainActivity : AppCompatActivity() {
         val settings: WebSettings = webView.settings
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
+        settings.databaseEnabled = true
         settings.allowFileAccess = true
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
 
@@ -540,15 +607,20 @@ class MainActivity : AppCompatActivity() {
         webView.webChromeClient = WebChromeClient()
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                val url = request?.url?.toString() ?: return false
+                val uri = request?.url ?: return false
+                val url = uri.toString()
+                val host = uri.host
                 if (url.startsWith("http://127.0.0.1") || url.startsWith("http://localhost") || url.startsWith("file://")) {
                     return false
                 }
-                if (url.startsWith("https://") && url.contains(request.url?.host ?: "")) {
+                val originHost = appOriginHost
+                if (originHost != null && host != null && host.equals(originHost, ignoreCase = true) &&
+                    (url.startsWith("https://") || url.startsWith("http://"))
+                ) {
                     return false
                 }
                 return try {
-                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    startActivity(Intent(Intent.ACTION_VIEW, uri))
                     true
                 } catch (_: Exception) {
                     true
@@ -558,18 +630,25 @@ class MainActivity : AppCompatActivity() {
         webView.setDownloadListener { url, _, contentDisposition, mimeType, _ ->
             val fileName = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimeType)
             if (url.startsWith("blob:") || url.startsWith("data:")) {
+                val qUrl = JSONObject.quote(url)
+                val qName = JSONObject.quote(fileName)
                 val js = """
                     (function() {
-                      fetch('$url').then(r => r.blob()).then(blob => {
+                      fetch($qUrl).then(r => r.blob()).then(blob => {
                         const reader = new FileReader();
                         reader.onloadend = function() {
-                          window.DroidPyNative.saveBase64File(reader.result, '$fileName', blob.type || 'application/octet-stream');
+                          window.DroidPyNative.saveBase64File(reader.result, $qName, blob.type || 'application/octet-stream');
                         };
                         reader.readAsDataURL(blob);
-                      });
+                      }).catch(() => {});
                     })();
                 """.trimIndent()
                 webView.evaluateJavascript(js, null)
+            } else {
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                } catch (_: Exception) {
+                }
             }
         }
 
@@ -581,11 +660,29 @@ class MainActivity : AppCompatActivity() {
                     } else {
                         crawlerOverlay.visibility = View.GONE
                     }
-                } else if (webView.canGoBack()) {
+                    return
+                }
+                if (webView.canGoBack()) {
                     webView.goBack()
+                    return
+                }
+                val now = SystemClock.elapsedRealtime()
+                if (now - lastBackPressedAt <= 2000L) {
+                    exitToast?.cancel()
+                    try {
+                        CookieManager.getInstance().flush()
+                        webView.evaluateJavascript("window.dispatchEvent(new Event('droidpy-flush-state'));", null)
+                    } catch (_: Exception) {
+                    }
+                    finish()
                 } else {
-                    isEnabled = false
-                    onBackPressedDispatcher.onBackPressed()
+                    lastBackPressedAt = now
+                    exitToast?.cancel()
+                    exitToast = Toast.makeText(
+                        this@MainActivity,
+                        "再按一次返回鍵退出 ${safeKotlinTitle}",
+                        Toast.LENGTH_SHORT
+                    ).also { it.show() }
                 }
             }
         })
@@ -605,6 +702,7 @@ class MainActivity : AppCompatActivity() {
             seedDefaultWorkspaceFiles(workspaceDir)
 
             localBridge = EmbeddedTermuxBridge(
+                appContext = applicationContext,
                 usrDir = usrDir,
                 workspaceDir = workspaceDir,
                 token = "${safeToken}",
@@ -613,36 +711,59 @@ class MainActivity : AppCompatActivity() {
 
             runOnUiThread {
                 if (hasBundledWww) {
+                    appOriginHost = "127.0.0.1"
                     webView.loadUrl("http://127.0.0.1:8765/")
                 } else if (localWeb.exists()) {
+                    appOriginHost = null
                     webView.loadUrl("file://" + localWeb.absolutePath)
                 } else {
-                    webView.loadUrl("${typeof window !== 'undefined' ? window.location.origin : 'https://localhost'}")
+                    val remoteUrl = "${typeof window !== 'undefined' ? window.location.origin : 'https://localhost'}"
+                    appOriginHost = Uri.parse(remoteUrl).host
+                    webView.loadUrl(remoteUrl)
                 }
             }
 
-            if (!usrDir.exists()) {
-                extractTermuxBootstrap(usrDir)
+            if (!File(usrDir, "bin/sh").exists()) {
+                try {
+                    extractTermuxBootstrap(usrDir)
+                } catch (e: Exception) {
+                    runOnUiThread {
+                        Toast.makeText(this@MainActivity, "Bootstrap 解壓失敗: \${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
             }
         }
     }
 
-    private fun requestExternalStoragePermissionIfNeeded() {
-        ${
-          opts.includeStoragePermission
-            ? `if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (!Environment.isExternalStorageManager()) {
+    private fun requestExternalStoragePermissionIfNeeded(force: Boolean = false) {
+        val enabledByConfig = ${opts.includeStoragePermission ? 'true' : 'false'}
+        if (!force && !enabledByConfig) return
+
+        val permsToAsk = mutableListOf<String>()
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            permsToAsk.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            permsToAsk.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
+        if (permsToAsk.isNotEmpty() && Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            ActivityCompat.requestPermissions(this, permsToAsk.toTypedArray(), 1001)
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
+            try {
+                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                    data = Uri.parse("package:\$packageName")
+                }
+                startActivity(intent)
+            } catch (_: Exception) {
                 try {
-                    val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-                    intent.data = Uri.parse("package:\$packageName")
-                    startActivity(intent)
+                    startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
                 } catch (_: Exception) {
                 }
             }
-        } else if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE), 1001)
-        }`
-            : '// Storage permission prompt disabled by export settings'
+        } else if (permsToAsk.isNotEmpty() && force && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ActivityCompat.requestPermissions(this, permsToAsk.toTypedArray(), 1001)
         }
     }
 
@@ -651,6 +772,7 @@ class MainActivity : AppCompatActivity() {
             deleteRecursively()
             mkdirs()
         }
+        val tempCanonical = tempDir.canonicalPath
         assets.open("bootstrap-aarch64.zip").use { input ->
             ZipInputStream(input).use { zis ->
                 var entry = zis.nextEntry
@@ -664,12 +786,17 @@ class MainActivity : AppCompatActivity() {
                         }
                     } else {
                         val outFile = File(tempDir, entry.name)
+                        if (!outFile.canonicalPath.startsWith(tempCanonical)) {
+                            zis.closeEntry()
+                            entry = zis.nextEntry
+                            continue
+                        }
                         if (entry.isDirectory) {
                             outFile.mkdirs()
                         } else {
                             outFile.parentFile?.mkdirs()
                             outFile.outputStream().use { zis.copyTo(it) }
-                            if (entry.name.startsWith("bin/") || entry.name.startsWith("libexec/")) {
+                            if (entry.name.startsWith("bin/") || entry.name.startsWith("libexec/") || entry.name.startsWith("lib/")) {
                                 outFile.setExecutable(true, false)
                             }
                         }
@@ -687,7 +814,13 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        tempDir.renameTo(usrDir)
+        if (usrDir.exists()) {
+            usrDir.deleteRecursively()
+        }
+        if (!tempDir.renameTo(usrDir)) {
+            tempDir.copyRecursively(usrDir, overwrite = true)
+            tempDir.deleteRecursively()
+        }
     }
 
     private fun seedDefaultWorkspaceFiles(workspaceDir: File) {
@@ -705,6 +838,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onPause() {
+        try {
+            CookieManager.getInstance().flush()
+            webView.evaluateJavascript("window.dispatchEvent(new Event('droidpy-flush-state'));", null)
+        } catch (_: Exception) {
+        }
+        super.onPause()
+    }
+
     override fun onDestroy() {
         localBridge?.stop()
         super.onDestroy()
@@ -718,10 +860,23 @@ class MainActivity : AppCompatActivity() {
     `android/app/src/main/java/${pkgPath}/EmbeddedTermuxBridge.kt`,
     `package ${safePkg}
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
 import android.content.res.AssetManager
+import android.os.Build
+import android.os.Environment
+import android.os.Handler
+import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.widget.Toast
+import androidx.core.content.ContextCompat
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.BufferedReader
+import java.io.BufferedInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStreamReader
 import java.io.OutputStream
@@ -730,9 +885,11 @@ import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.URL
+import java.net.URLDecoder
 import java.util.concurrent.Executors
 
 class EmbeddedTermuxBridge(
+    private val appContext: Context,
     private val usrDir: File,
     private val workspaceDir: File,
     private val token: String,
@@ -777,7 +934,7 @@ class EmbeddedTermuxBridge(
             "#!/system/bin/sh",
             "PREFIX=\\"$prefix\\"",
             "export PREFIX",
-            "APT_OPTS=\\"-o Dir=\${d}PREFIX -o Dir::State=\${d}PREFIX/var/lib/apt -o Dir::State::status=\${d}PREFIX/var/lib/dpkg/status -o Dir::Cache=\${d}PREFIX/var/cache/apt -o Dir::Etc=\${d}PREFIX/etc/apt -o Dir::Etc::sourcelist=\${d}PREFIX/etc/apt/sources.list -o Dir::Etc::sourceparts=\${d}PREFIX/etc/apt/sources.list.d -o Dir::Bin::methods=\${d}PREFIX/lib/apt/methods -o Dir::Bin::dpkg=\${d}PREFIX/bin/dpkg -o DPkg::Options::=--admindir=\${d}PREFIX/var/lib/dpkg -o Acquire::AllowInsecureRepositories=true -o Acquire::https::CaInfo=$cert\\"",
+            "APT_OPTS=\\"-o Dir=\${d}PREFIX -o Dir::State=\${d}PREFIX/var/lib/apt -o Dir::State::status=\${d}PREFIX/var/lib/dpkg/status -o Dir::Cache=\${d}PREFIX/var/cache/apt -o Dir::Etc=\${d}PREFIX/etc/apt -o Dir::Etc::sourcelist=\${d}PREFIX/etc/apt/sources.list -o Dir::Etc::sourceparts=\${d}PREFIX/etc/apt/sources.list.d -o Dir::Etc::Trusted=\${d}PREFIX/etc/apt/trusted.gpg -o Dir::Etc::TrustedParts=\${d}PREFIX/etc/apt/trusted.gpg.d -o Dir::Bin::methods=\${d}PREFIX/lib/apt/methods -o Dir::Bin::dpkg=\${d}PREFIX/bin/dpkg -o DPkg::Options::=--admindir=\${d}PREFIX/var/lib/dpkg -o Acquire::AllowInsecureRepositories=true -o APT::Get::AllowUnauthenticated=true -o Acquire::https::CaInfo=$cert\\"",
             "mkdir -p \\"\${d}PREFIX/var/lib/apt/lists/partial\\" \\"\${d}PREFIX/var/cache/apt/archives/partial\\" \\"\${d}PREFIX/var/lib/dpkg/updates\\" \\"\${d}PREFIX/var/lib/dpkg/info\\"",
             "touch \\"\${d}PREFIX/var/lib/dpkg/status\\"",
             "SUB=\\"\${d}1\\"",
@@ -799,7 +956,7 @@ class EmbeddedTermuxBridge(
             "  for f in \\"\${d}PREFIX/bin/\\"*; do",
             "    [ -f \\"\${d}f\\" ] || continue",
             "    chmod 755 \\"\${d}f\\" 2>/dev/null || true",
-            "    if head -c 40 \\"\${d}f\\" 2>/dev/null | grep -q \\"#!/data/data/com.termux/files/usr/bin/\\"; then",
+            "    if head -c 120 \\"\${d}f\\" 2>/dev/null | grep -q \\"#!/data/data/com.termux/files/usr/bin/\\"; then",
             "      sed -i \\"1s|^#!/data/data/com.termux/files/usr/bin/|#!\${d}PREFIX/bin/|\\" \\"\${d}f\\" 2>/dev/null || true",
             "    fi",
             "  done",
@@ -838,20 +995,185 @@ class EmbeddedTermuxBridge(
             writeText(pipScript)
             setExecutable(true, false)
         }
+
+        // Write native droid.py bridge module for Embedded Termux Python scripts
+        val droidLibDir = File(homeDir, ".droidpy_lib").apply { mkdirs() }
+        val sdcardPath = Environment.getExternalStorageDirectory().absolutePath
+        val droidPy = """
+import json
+import os
+import platform
+import shutil
+import urllib.request
+
+_BRIDGE = "http://127.0.0.1:$port"
+_TOKEN = "$token"
+
+def _call(path, payload=None):
+    data = json.dumps(payload or {}).encode("utf-8")
+    req = urllib.request.Request(
+        _BRIDGE + path,
+        data=data,
+        headers={"Content-Type": "application/json", "X-DroidPy-Token": _TOKEN},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+class _AwaitableDict(dict):
+    def __await__(self):
+        async def _coro():
+            return self
+        return _coro().__await__()
+
+def vibrate(pattern=50):
+    try:
+        res = _call("/droid-action", {"action": "vibrate", "pattern": pattern})
+        return bool(res.get("ok"))
+    except Exception:
+        return False
+
+def toast(message):
+    try:
+        _call("/droid-action", {"action": "toast", "message": str(message)})
+    except Exception:
+        pass
+
+def device_info():
+    try:
+        return _call("/droid-action", {"action": "device_info"})
+    except Exception:
+        return {
+            "platform": platform.platform(),
+            "screen": "Native Android",
+            "maxTouchPoints": 5,
+            "online": True,
+        }
+
+def sdcard_path():
+    return os.environ.get("SDCARD", "$sdcardPath")
+
+def storage_info():
+    root = sdcard_path()
+    try:
+        du = shutil.disk_usage(root)
+        return _AwaitableDict({
+            "root": root,
+            "totalBytes": du.total,
+            "usedBytes": du.used,
+            "freeBytes": du.free,
+            "usageBytes": du.used,
+            "quotaBytes": du.total,
+            "persisted": True,
+        })
+    except Exception:
+        return _AwaitableDict({
+            "root": root,
+            "usageBytes": 0,
+            "quotaBytes": 0,
+            "persisted": False,
+        })
+
+def battery():
+    return _AwaitableDict({"supported": False, "level": 1.0, "charging": True})
+
+def clipboard_set(text):
+    return False
+""".trimIndent()
+        File(droidLibDir, "droid.py").writeText(droidPy)
+
+        // Ensure ./sdcard symlink inside workspace points to real internal storage
+        try {
+            val sdLink = File(workspaceDir, "sdcard")
+            if (!sdLink.exists()) {
+                android.system.Os.symlink(sdcardPath, sdLink.absolutePath)
+            }
+        } catch (_: Exception) {
+        }
+
         return wrapperDir
     }
 
+    private fun hasStorageAccess(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Environment.isExternalStorageManager()
+        } else {
+            ContextCompat.checkSelfPermission(
+                appContext,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    private fun resolveSdcardTarget(relPath: String): File? {
+        val root = Environment.getExternalStorageDirectory()
+        val rootCanonical = root.canonicalPath
+        val cleaned = relPath.trim().trimStart('/')
+        val candidate = if (cleaned.isEmpty()) root else File(root, cleaned)
+        val candCanonical = candidate.canonicalPath
+        if (candCanonical != rootCanonical && !candCanonical.startsWith(rootCanonical + File.separator)) {
+            return null
+        }
+        return candidate
+    }
+
+    private fun killProcessTree(proc: Process) {
+        try {
+            val pidField = proc.javaClass.getDeclaredField("pid").apply { isAccessible = true }
+            val rootPid = (pidField.get(proc) as? Int) ?: -1
+            if (rootPid > 0) {
+                fun collectDescendants(parentPid: Int, out: MutableList<Int>) {
+                    File("/proc").listFiles()?.forEach { entry ->
+                        val childPid = entry.name.toIntOrNull() ?: return@forEach
+                        try {
+                            val stat = File(entry, "stat").readText()
+                            val rp = stat.lastIndexOf(')')
+                            if (rp > 0) {
+                                val fields = stat.substring(rp + 2).split(' ')
+                                val ppid = fields.getOrNull(1)?.toIntOrNull()
+                                if (ppid == parentPid && childPid !in out) {
+                                    collectDescendants(childPid, out)
+                                    out.add(childPid)
+                                }
+                            }
+                        } catch (_: Exception) {
+                        }
+                    }
+                }
+                val pids = mutableListOf<Int>()
+                collectDescendants(rootPid, pids)
+                pids.add(rootPid)
+                pids.forEach { p ->
+                    try { android.os.Process.killProcess(p) } catch (_: Exception) {}
+                }
+            }
+        } catch (_: Exception) {
+        }
+        try { proc.inputStream.close() } catch (_: Exception) {}
+        try { proc.errorStream.close() } catch (_: Exception) {}
+        try { proc.outputStream.close() } catch (_: Exception) {}
+        try { proc.destroyForcibly() } catch (_: Exception) {}
+    }
+
     private fun buildEnv(): Map<String, String> {
+        val homeDir = workspaceDir.parentFile!!
         val wrapperBin = ensurePrefixWrappers().absolutePath
+        val droidLib = File(homeDir, ".droidpy_lib").absolutePath
         val bin = File(usrDir, "bin").absolutePath
         val lib = File(usrDir, "lib").absolutePath
         val cert = File(usrDir, "etc/tls/cert.pem").absolutePath
+        val sdcard = Environment.getExternalStorageDirectory().absolutePath
         return mapOf(
             "PREFIX" to usrDir.absolutePath,
-            "HOME" to workspaceDir.parentFile!!.absolutePath,
+            "PYTHONHOME" to usrDir.absolutePath,
+            "PYTHONPATH" to "$droidLib:\${workspaceDir.absolutePath}",
+            "HOME" to homeDir.absolutePath,
+            "EXTERNAL_STORAGE" to sdcard,
+            "SDCARD" to sdcard,
             "PATH" to "$wrapperBin:$bin:/system/bin",
             "LD_LIBRARY_PATH" to lib,
-            "TMPDIR" to File(workspaceDir.parentFile, "tmp").apply { mkdirs() }.absolutePath,
+            "TERMINFO" to File(usrDir, "share/terminfo").absolutePath,
+            "TMPDIR" to File(homeDir, "tmp").apply { mkdirs() }.absolutePath,
             "PYTHONUNBUFFERED" to "1",
             "TERM" to "xterm-256color",
             "LANG" to "en_US.UTF-8",
@@ -864,19 +1186,36 @@ class EmbeddedTermuxBridge(
 
     private fun handleClient(socket: Socket) {
         socket.use { sock ->
-            val reader = BufferedReader(InputStreamReader(sock.getInputStream()))
-            val requestLine = reader.readLine() ?: return
+            val bis = BufferedInputStream(sock.getInputStream())
+            val headerBuf = ByteArrayOutputStream()
+            var p3 = 0
+            var p2 = 0
+            var p1 = 0
+            while (true) {
+                val b = bis.read()
+                if (b == -1) return
+                headerBuf.write(b)
+                if (p3 == 13 && p2 == 10 && p1 == 13 && b == 10) break
+                p3 = p2
+                p2 = p1
+                p1 = b
+                if (headerBuf.size() > 65536) return
+            }
+            val headerLines = headerBuf.toString("ISO-8859-1").split("\\r\\n")
+            val requestLine = headerLines.firstOrNull()?.trim() ?: return
             val parts = requestLine.split(" ")
             if (parts.size < 2) return
             val method = parts[0]
-            val path = parts[1].substringBefore("?")
+            val rawTarget = parts[1]
+            val path = rawTarget.substringBefore("?")
+            val queryStr = rawTarget.substringAfter("?", "")
 
             val headers = mutableMapOf<String, String>()
-            var line: String?
-            while (reader.readLine().also { line = it } != null && line!!.isNotEmpty()) {
-                val idx = line!!.indexOf(":")
+            for (hLine in headerLines.drop(1)) {
+                if (hLine.isEmpty()) continue
+                val idx = hLine.indexOf(':')
                 if (idx > 0) {
-                    headers[line!!.substring(0, idx).trim().lowercase()] = line!!.substring(idx + 1).trim()
+                    headers[hLine.substring(0, idx).trim().lowercase()] = hLine.substring(idx + 1).trim()
                 }
             }
 
@@ -894,9 +1233,16 @@ class EmbeddedTermuxBridge(
                 "/install-stream",
                 "/shell-stream",
                 "/files",
-                "/probe-url"
+                "/probe-url",
+                "/droid-action",
+                "/sdcard/status",
+                "/sdcard/list",
+                "/sdcard/read",
+                "/sdcard/write",
+                "/sdcard/mkdir",
+                "/sdcard/delete"
             )
-            if (method == "GET" && path !in apiRoutes && serveBundledWebAsset(out, path)) {
+            if (method == "GET" && path !in apiRoutes && !path.startsWith("/sdcard/") && serveBundledWebAsset(out, path)) {
                 return
             }
 
@@ -905,19 +1251,20 @@ class EmbeddedTermuxBridge(
                 return
             }
 
-            val len = headers["content-length"]?.toIntOrNull() ?: 0
-            val bodyChars = CharArray(len)
+            val len = headers["content-length"]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+            val bodyBytes = ByteArray(len)
             var readTotal = 0
             while (readTotal < len) {
-                val r = reader.read(bodyChars, readTotal, len - readTotal)
+                val r = bis.read(bodyBytes, readTotal, len - readTotal)
                 if (r < 0) break
                 readTotal += r
             }
-            val bodyJson = if (len > 0) JSONObject(String(bodyChars, 0, readTotal)) else JSONObject()
+            val bodyStr = if (readTotal > 0) String(bodyBytes, 0, readTotal, Charsets.UTF_8).trim() else ""
+            val bodyJson = if (bodyStr.startsWith("{")) JSONObject(bodyStr) else JSONObject()
 
             when {
                 method == "GET" && path == "/health" -> {
-                    val hasPython = File(usrDir, "bin/python").exists()
+                    val hasPython = File(usrDir, "bin/python").exists() || File(usrDir, "bin/python3").exists()
                     val res = JSONObject()
                         .put("ok", true)
                         .put("streaming", true)
@@ -937,15 +1284,215 @@ class EmbeddedTermuxBridge(
                     if (proc == null) {
                         writeJson(out, 409, JSONObject().put("error", "No active process"))
                     } else {
-                        proc.outputStream.write(data.toByteArray())
-                        proc.outputStream.flush()
-                        writeJson(out, 200, JSONObject().put("ok", true))
+                        try {
+                            proc.outputStream.write(data.toByteArray())
+                            proc.outputStream.flush()
+                            writeJson(out, 200, JSONObject().put("ok", true))
+                        } catch (e: Exception) {
+                            writeJson(out, 500, JSONObject().put("error", e.message ?: "Write failed"))
+                        }
                     }
                 }
 
                 method == "POST" && path == "/stop" -> {
-                    activeProcess?.destroyForcibly()
+                    val proc = activeProcess
+                    if (proc != null) {
+                        killProcessTree(proc)
+                    }
                     writeJson(out, 200, JSONObject().put("ok", true))
+                }
+
+                method == "POST" && path == "/droid-action" -> {
+                    when (bodyJson.optString("action")) {
+                        "toast" -> {
+                            val msg = bodyJson.optString("message", "")
+                            Handler(Looper.getMainLooper()).post {
+                                Toast.makeText(appContext, msg, Toast.LENGTH_SHORT).show()
+                            }
+                            writeJson(out, 200, JSONObject().put("ok", true))
+                        }
+                        "vibrate" -> {
+                            val ms = bodyJson.optLong("pattern", 45L).coerceIn(10L, 2000L)
+                            try {
+                                val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                    (appContext.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
+                                } else {
+                                    @Suppress("DEPRECATION")
+                                    appContext.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                                }
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    vibrator.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
+                                } else {
+                                    @Suppress("DEPRECATION")
+                                    vibrator.vibrate(ms)
+                                }
+                                writeJson(out, 200, JSONObject().put("ok", true))
+                            } catch (_: Exception) {
+                                writeJson(out, 200, JSONObject().put("ok", false))
+                            }
+                        }
+                        "device_info" -> {
+                            val dm = appContext.resources.displayMetrics
+                            writeJson(
+                                out,
+                                200,
+                                JSONObject()
+                                    .put("platform", "Android \${Build.VERSION.RELEASE} (\${Build.MODEL})")
+                                    .put("screen", "\${dm.widthPixels}x\${dm.heightPixels}")
+                                    .put("pixelRatio", dm.density.toDouble())
+                                    .put("maxTouchPoints", 5)
+                                    .put("online", true)
+                            )
+                        }
+                        else -> writeJson(out, 400, JSONObject().put("error", "Unknown action"))
+                    }
+                }
+
+                method == "GET" && path == "/sdcard/status" -> {
+                    val root = Environment.getExternalStorageDirectory()
+                    val manageAll = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Environment.isExternalStorageManager() else true
+                    val runtimeWrite = ContextCompat.checkSelfPermission(appContext, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+                    val droidpyDir = File(root, "DroidPy").absolutePath
+                    writeJson(
+                        out,
+                        200,
+                        JSONObject()
+                            .put("granted", hasStorageAccess())
+                            .put("manageAllFiles", manageAll)
+                            .put("runtimeWrite", runtimeWrite)
+                            .put("rootPath", root.absolutePath)
+                            .put("droidpyDir", droidpyDir)
+                    )
+                }
+
+                method == "GET" && path == "/sdcard/list" -> {
+                    val relParam = queryStr.split("&")
+                        .firstOrNull { it.startsWith("path=") }
+                        ?.substringAfter("=")
+                        ?.let { URLDecoder.decode(it, "UTF-8") } ?: ""
+                    val dir = resolveSdcardTarget(relParam)
+                    if (dir == null) {
+                        writeJson(out, 400, JSONObject().put("error", "Invalid path"))
+                    } else if (!hasStorageAccess() && !dir.canRead()) {
+                        writeJson(out, 403, JSONObject().put("error", "尚未取得手機內部儲存空間存取權限"))
+                    } else {
+                        val rootCanonical = Environment.getExternalStorageDirectory().canonicalPath
+                        val arr = JSONArray()
+                        val children = dir.listFiles()?.sortedWith(compareBy<File>({ !it.isDirectory }, { it.name.lowercase() })) ?: emptyList()
+                        for (child in children) {
+                            if (child.name.startsWith(".")) continue
+                            val childRel = child.canonicalPath.removePrefix(rootCanonical).trimStart('/')
+                            arr.put(
+                                JSONObject()
+                                    .put("name", child.name)
+                                    .put("relPath", childRel)
+                                    .put("isDir", child.isDirectory)
+                                    .put("size", if (child.isFile) child.length() else 0L)
+                                    .put("updatedAt", child.lastModified())
+                            )
+                        }
+                        val currentRel = dir.canonicalPath.removePrefix(rootCanonical).trimStart('/')
+                        writeJson(
+                            out,
+                            200,
+                            JSONObject()
+                                .put("granted", hasStorageAccess())
+                                .put("rootPath", rootCanonical)
+                                .put("currentPath", currentRel)
+                                .put("entries", arr)
+                        )
+                    }
+                }
+
+                method == "POST" && path == "/sdcard/read" -> {
+                    val relPath = bodyJson.optString("path", "")
+                    val target = resolveSdcardTarget(relPath)
+                    if (target == null || !target.exists() || !target.isFile) {
+                        writeJson(out, 404, JSONObject().put("error", "找不到目標檔案"))
+                    } else if (target.length() > 512 * 1024) {
+                        writeJson(out, 413, JSONObject().put("error", "檔案超過 512 KB 上限"))
+                    } else {
+                        try {
+                            writeJson(
+                                out,
+                                200,
+                                JSONObject()
+                                    .put("name", target.name)
+                                    .put("relPath", relPath)
+                                    .put("content", target.readText(Charsets.UTF_8))
+                            )
+                        } catch (e: Exception) {
+                            writeJson(out, 403, JSONObject().put("error", e.message ?: "讀取失敗"))
+                        }
+                    }
+                }
+
+                method == "POST" && path == "/sdcard/write" -> {
+                    if (!hasStorageAccess()) {
+                        writeJson(out, 403, JSONObject().put("error", "尚未授予內部儲存空間權限"))
+                    } else {
+                        try {
+                            val batch = bodyJson.optJSONArray("files")
+                            if (batch != null) {
+                                val folderRel = bodyJson.optString("dir", "DroidPy").ifBlank { "DroidPy" }
+                                val destDir = resolveSdcardTarget(folderRel)
+                                if (destDir == null) {
+                                    writeJson(out, 400, JSONObject().put("error", "Invalid folder"))
+                                } else {
+                                    destDir.mkdirs()
+                                    var count = 0
+                                    for (i in 0 until batch.length()) {
+                                        val item = batch.getJSONObject(i)
+                                        val name = File(item.optString("name", "")).name
+                                        if (name.isNotBlank()) {
+                                            File(destDir, name).writeText(item.optString("content", ""), Charsets.UTF_8)
+                                            count++
+                                        }
+                                    }
+                                    writeJson(out, 200, JSONObject().put("ok", true).put("count", count).put("dir", destDir.absolutePath))
+                                }
+                            } else {
+                                val relPath = bodyJson.optString("path", "")
+                                val target = resolveSdcardTarget(relPath)
+                                if (target == null) {
+                                    writeJson(out, 400, JSONObject().put("error", "Invalid path"))
+                                } else {
+                                    target.parentFile?.mkdirs()
+                                    target.writeText(bodyJson.optString("content", ""), Charsets.UTF_8)
+                                    writeJson(out, 200, JSONObject().put("ok", true).put("path", target.absolutePath))
+                                }
+                            }
+                        } catch (e: Exception) {
+                            writeJson(out, 403, JSONObject().put("error", e.message ?: "寫入失敗"))
+                        }
+                    }
+                }
+
+                method == "POST" && path == "/sdcard/mkdir" -> {
+                    val relPath = bodyJson.optString("path", "")
+                    val target = resolveSdcardTarget(relPath)
+                    if (target == null) {
+                        writeJson(out, 400, JSONObject().put("error", "Invalid path"))
+                    } else if (!hasStorageAccess()) {
+                        writeJson(out, 403, JSONObject().put("error", "尚未授予內部儲存空間權限"))
+                    } else {
+                        val created = target.exists() || target.mkdirs()
+                        writeJson(out, if (created) 200 else 500, JSONObject().put("ok", created))
+                    }
+                }
+
+                method == "POST" && path == "/sdcard/delete" -> {
+                    val relPath = bodyJson.optString("path", "")
+                    val rootCanonical = Environment.getExternalStorageDirectory().canonicalPath
+                    val target = resolveSdcardTarget(relPath)
+                    if (target == null || target.canonicalPath == rootCanonical) {
+                        writeJson(out, 400, JSONObject().put("error", "Invalid path"))
+                    } else if (!hasStorageAccess()) {
+                        writeJson(out, 403, JSONObject().put("error", "尚未授予內部儲存空間權限"))
+                    } else {
+                        val deleted = if (target.isDirectory) target.deleteRecursively() else target.delete()
+                        writeJson(out, if (deleted) 200 else 500, JSONObject().put("ok", deleted))
+                    }
                 }
 
                 method == "POST" && (path == "/run-stream" || path == "/install-stream" || path == "/shell-stream") -> {
@@ -954,12 +1501,16 @@ class EmbeddedTermuxBridge(
                             val arr = bodyJson.optJSONArray("files") ?: JSONArray()
                             for (i in 0 until arr.length()) {
                                 val f = arr.getJSONObject(i)
-                                val name = File(f.getString("name")).name
-                                File(workspaceDir, name).writeText(f.getString("content"))
+                                val name = File(f.optString("name", "")).name
+                                if (name.isNotBlank()) {
+                                    File(workspaceDir, name).writeText(f.optString("content", ""))
+                                }
                             }
-                            val entry = File(bodyJson.optString("entry", "main.py")).name
+                            val entry = File(bodyJson.optString("entry", "main.py")).name.ifBlank { "main.py" }
+                            val safeEntrySh = entry.replace("'", "'\\\\''")
                             val pyPath = File(usrDir, "bin/python").absolutePath
-                            "if [ ! -x \\"$pyPath\\" ]; then echo \\"[DroidPy] Python not initialized yet. Tap One-Tap Init in Termux Bridge.\\"; exit 127; fi; exec \\"$pyPath\\" -u \\"$entry\\""
+                            val py3Path = File(usrDir, "bin/python3").absolutePath
+                            "PY_BIN=\\"$pyPath\\"; [ -x \\"\${'$'}PY_BIN\\" ] || PY_BIN=\\"$py3Path\\"; if [ ! -x \\"\${'$'}PY_BIN\\" ]; then echo \\"[DroidPy] 尚未安裝 Termux 原生 Python！請至「Termux 橋接」點擊「一鍵初始化 Python + 爬蟲環境」，或先將終端機切換為「沙盒」執行。\\"; exit 127; fi; exec \\"\${'$'}PY_BIN\\" -u '$safeEntrySh'"
                         }
                         "/install-stream" -> {
                             val mode = bodyJson.optString("mode", "pip")
@@ -1082,9 +1633,13 @@ class EmbeddedTermuxBridge(
         }
 
         if (!shFile.exists()) {
-            sendStdout("[DroidPy] Waiting for Termux bootstrap extraction...\\n")
+            try {
+                sendStdout("[DroidPy] Waiting for Termux bootstrap extraction...\\n")
+            } catch (_: Exception) {
+                return
+            }
             var waited = 0
-            while (!shFile.exists() && waited < 25000) {
+            while (!shFile.exists() && waited < 45000) {
                 try { Thread.sleep(250) } catch (_: InterruptedException) { break }
                 waited += 250
             }
@@ -1092,7 +1647,10 @@ class EmbeddedTermuxBridge(
 
         var code = 1
         if (!shFile.exists()) {
-            sendStdout("[DroidPy] Bootstrap not ready at \${shFile.absolutePath}\\n")
+            try {
+                sendStdout("[DroidPy] Bootstrap not ready at \${shFile.absolutePath}\\n")
+            } catch (_: Exception) {
+            }
         } else {
             try {
                 val pb = ProcessBuilder(shFile.absolutePath, "-c", command)
@@ -1102,16 +1660,26 @@ class EmbeddedTermuxBridge(
 
                 val proc = pb.start()
                 activeProcess = proc
-                val buf = ByteArray(2048)
-                val inp = proc.inputStream
+                val charBuf = CharArray(1024)
+                val inpReader = InputStreamReader(proc.inputStream, Charsets.UTF_8)
                 while (true) {
-                    val n = inp.read(buf)
-                    if (n <= 0) break
-                    sendStdout(String(buf, 0, n, Charsets.UTF_8))
+                    val n = inpReader.read(charBuf)
+                    if (n < 0) break
+                    if (n > 0) {
+                        try {
+                            sendStdout(String(charBuf, 0, n))
+                        } catch (_: Exception) {
+                            proc.destroyForcibly()
+                            break
+                        }
+                    }
                 }
                 code = proc.waitFor()
             } catch (e: Exception) {
-                sendStdout("[DroidPy] Exec error: \${e.message}\\n")
+                try {
+                    sendStdout("[DroidPy] Exec error: \${e.message}\\n")
+                } catch (_: Exception) {
+                }
             } finally {
                 activeProcess = null
             }
@@ -1122,8 +1690,11 @@ class EmbeddedTermuxBridge(
             .put("exitCode", code)
             .put("durationMs", System.currentTimeMillis() - t0)
             .toString() + "\\n"
-        out.write(doneLine.toByteArray(Charsets.UTF_8))
-        out.flush()
+        try {
+            out.write(doneLine.toByteArray(Charsets.UTF_8))
+            out.flush()
+        } catch (_: Exception) {
+        }
     }
 
     private fun corsHeaders(): String =
@@ -1208,12 +1779,22 @@ class EmbeddedTermuxBridge(
 `
   );
 
-  // 6. Seed user's current Python workspace files into android/app/src/main/assets/workspace/
+  // 6. Launcher icon resources (Adaptive Vector Icons API 26+ & PNG mipmap fallbacks)
+  zip.file('android/app/src/main/res/drawable/ic_launcher_background.xml', ANDROID_ICON_BACKGROUND_XML);
+  zip.file('android/app/src/main/res/drawable/ic_launcher_foreground.xml', ANDROID_ICON_FOREGROUND_XML);
+  zip.file('android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml', ANDROID_ADAPTIVE_ICON_XML);
+  zip.file('android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml', ANDROID_ADAPTIVE_ICON_XML);
+  for (const [density, b64] of Object.entries(ANDROID_MIPMAP_PNG_BASE64)) {
+    zip.file(`android/app/src/main/res/mipmap-${density}/ic_launcher.png`, b64, { base64: true });
+    zip.file(`android/app/src/main/res/mipmap-${density}/ic_launcher_round.png`, b64, { base64: true });
+  }
+
+  // 7. Seed user's current Python workspace files into android/app/src/main/assets/workspace/
   for (const file of opts.files) {
     zip.file(`android/app/src/main/assets/workspace/${file.name}`, file.content);
   }
 
-  // 7. README.md (rendered automatically by GitHub) + README_GITHUB_APK.md
+  // 8. README.md (rendered automatically by GitHub) + README_GITHUB_APK.md
   const githubApkReadme = `# ${safeTitle} 獨立 Android APK（GitHub 自動打包專案）
 
 本專案已預先配置好 **GitHub Actions 自動編譯流程**、**內嵌 Termux Bootstrap 環境** 與 **原生爬蟲瀏覽器（Cookie 擷取）**：
@@ -1237,10 +1818,19 @@ class EmbeddedTermuxBridge(
 
   const changelogContent = `# Changelog / 更新日誌
 
-## [1.2.0] - 2026-11-21
-- 新增 \`.droidpy_bin\` 跨包名 Termux 前綴轉接層（\`pkg\` / \`pip\`），讓獨立 APK 可於自有沙盒目錄安裝 \`python\`、\`clang\`、\`libxml2\`、\`libxslt\`、\`ffmpeg\` 與 pip 套件。
-- 修正 APK 離線前端靜態伺服（\`http://127.0.0.1:8765/\`）、Android \`adjustResize\` 虛擬鍵盤避讓與零孤兒進程停止（\`exec python -u\`）。
-- 修正 GitHub Actions Workflow（支援 \`v*\` Tag 觸發、指定 Gradle 8.7、彈性 \`npm ci / npm install\`）並自動附帶本更新日誌發佈 GitHub Releases。
+## [1.2.5] - 2026-11-21
+- 為 Android 獨立 APK 加上 DroidPy 專屬應用程式圖徽（Adaptive Vector Icon + 全解析度 \`mipmap-*\` PNG 回退），於系統桌面、多工視圖與安裝畫面顯示標誌性翡翠綠＋琥珀橘 Logo。
+- 在 \`MainActivity.kt\` 加入「返回兩次退出 App」防誤觸保護：於主畫面首次按下返回鍵（或全面屏側滑返回）顯示 2 秒「再按一次返回鍵退出 DroidPy」提示，2 秒內再次返回即立即寫盤儲存並安全退出。
+
+## [1.2.4] - 2026-11-21
+- 新增 App 私有原生狀態檔 \`droidpy_ide_state.json\` 雙重持久化與 \`onPause()\` 即時刷寫，確保退出或滑掉重開完整保留所有檔案與設定。
+- 新增 \`android:requestLegacyExternalStorage="true"\`、完整 \`/sdcard\` 權限偵測、\`/sdcard/*\` API 與「Android 手機內部儲存空間管理」介面，可實際瀏覽、建立資料夾與讀寫 \`/storage/emulated/0\`。
+- 修正 Termux Python \`PYTHONHOME\` 與內建原生 \`droid.py\`（支援 \`import droid\` 與 \`/droid-action\`），並強化 \`POST /stop\` 程序樹終止與前端 \`AbortController\`，確保「停止執行」立即解除並恢復「執行程式」按鈕。
+
+## [1.2.3] - 2026-11-21
+- 修復獨立 APK \`EmbeddedTermuxBridge.kt\` HTTP \`Content-Length\` 位元組長度錯判導致含中文註解的腳本永久卡死的問題（改用位元組流讀取並正確解碼 UTF-8）。
+- 修復 APK 串流輸出在雙位元組/三位元組 UTF-8 邊界截斷產生亂碼的問題（改用 \`InputStreamReader\` 字元串流解碼）。
+- 修復 \`MainActivity.kt\` 外部 \`https://\` 連結誤在 IDE WebView 內開啟及下載檔名未跳脫之異常，並補強 Bootstrap 完整解壓檢查與 \`pkg\` 金鑰信任選項。
 `;
 
   zip.file('README.md', githubApkReadme);

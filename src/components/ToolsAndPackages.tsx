@@ -29,6 +29,7 @@ import {
 } from '../types/ide';
 import { PWAInstallButton } from './PWAInstallButton';
 import { TermuxIntegrationPanel } from './TermuxIntegrationPanel';
+import { InternalStoragePanel } from './InternalStoragePanel';
 import { IDE_THEMES } from '../services/themes';
 import { LOCALE_OPTIONS, getLocalizedThemeText, useI18n } from '../services/i18n';
 import { generateGitHubApkProjectZip } from '../services/androidApkBuilder';
@@ -70,6 +71,7 @@ interface ToolsAndPackagesProps {
   onInitializeEmbeddedEnv: (includeBaseSystem: boolean) => Promise<void>;
   onGenerateRequirements: () => void;
   onInstallRequirements: () => Promise<void>;
+  onSaveWorkspaceFile: (filename: string, content: string, openInEditor?: boolean) => void;
   onOpenHelp?: () => void;
   onNotify: (msg: string) => void;
 }
@@ -115,6 +117,7 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
   onInitializeEmbeddedEnv,
   onGenerateRequirements,
   onInstallRequirements,
+  onSaveWorkspaceFile,
   onOpenHelp,
   onNotify,
 }) => {
@@ -597,6 +600,16 @@ python ${entryFile}
                 </div>
               </div>
             </div>
+            {/* Android Internal Storage (/sdcard) Full Manager when running in APK */}
+            {(Boolean(termuxHealth?.embedded) || Boolean(window.DroidPyNative?.isNativeApp?.())) && (
+              <InternalStoragePanel
+                termuxConfig={termuxConfig}
+                files={files}
+                activeFile={activeFile}
+                onOpenSdcardFile={(filename, content) => onSaveWorkspaceFile(filename, content, true)}
+                onNotify={onNotify}
+              />
+            )}
           </section>
         )}
 

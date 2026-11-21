@@ -458,8 +458,10 @@ import ast as _ast
 import inspect as _inspect
 _stmt_src = str(__droidpy_repl_stmt__).strip()
 _repl_out = None
+__droidpy_repl_ns__["__droidpy_async_input__"] = __droidpy_async_input__
 if _stmt_src:
-    _parsed = _ast.parse(_stmt_src, mode="exec")
+    _transformed_src, _was_input = __droidpy_transform_input_ast__(_stmt_src)
+    _parsed = _ast.parse(_transformed_src, mode="exec")
     if len(_parsed.body) == 1 and isinstance(_parsed.body[0], _ast.Expr):
         _val = eval(compile(_ast.Expression(_parsed.body[0].value), "<repl>", "eval", flags=_ast.PyCF_ALLOW_TOP_LEVEL_AWAIT), __droidpy_repl_ns__)
         if _inspect.isawaitable(_val):
