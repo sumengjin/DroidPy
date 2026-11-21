@@ -67,6 +67,7 @@ import {
   backupWorkspaceToSdcard,
   checkTermuxHealth,
   fetchTermuxWorkspaceFiles,
+  getSdcardStatus,
   sendTermuxStdin,
   stopTermuxProcess,
   streamInstallInTermux,
@@ -75,8 +76,10 @@ import {
 } from './services/termuxBridge';
 import {
   DirectoryHandleLike,
+  pickDirectoryFilesViaInput,
   readPythonFilesFromDirectory,
   requestLinkedDirectory,
+  supportsDirectoryAccess,
   writeFilesToDirectory,
 } from './services/storageManager';
 import {
@@ -547,19 +550,87 @@ export default function App() {
   }, [appendEntry, executionEngine]);
 
   const handleLinkDirectory = useCallback(async () => {
-    try {
-      const handle = await requestLinkedDirectory();
-      if (!handle) {
-        showToast(t('toast_dir_unsupported'));
+    const isNativeApk = Boolean(termuxHealth?.embedded || window.DroidPyNative?.isNativeApp?.());
+    if (isNativeApk) {
+      const granted = Boolean(window.DroidPyNative?.hasStoragePermission?.());
+      if (!granted && window.DroidPyNative?.requestStoragePermission) {
+        window.DroidPyNative.requestStoragePermission();
+        showToast(t('toast_dir_opening_sys'));
         return;
       }
-      setLinkedDirHandle(handle);
-      showToast(t('toast_dir_linked', { name: handle.name }));
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') return;
-      showToast(err instanceof Error ? err.message : t('toast_dir_unsupported'));
+      try {
+        const status = await getSdcardStatus(termuxConfig);
+        if (!status.granted && window.DroidPyNative?.requestStoragePermission) {
+          window.DroidPyNative.requestStoragePermission();
+          showToast(t('toast_dir_opening_sys'));
+          return;
+        }
+        showToast(`${t('sd_status_ok')} (${status.rootPath})`);
+      } catch {
+        const root = window.DroidPyNative?.getInternalStoragePath?.() || '/storage/emulated/0';
+        showToast(granted ? `${t('sd_status_ok')} (${root})` : t('toast_dir_opening_sys'));
+        if (!granted) {
+          window.DroidPyNative?.requestStoragePermission?.();
+        }
+      }
+      return;
     }
-  }, [showToast, t]);
+
+    const importFromFallbackPicker = async () => {
+      const picked = await pickDirectoryFilesViaInput();
+      if (!picked) {
+        showToast(t('toast_dir_cancelled'));
+        return;
+      }
+      if (picked.files.length === 0) {
+        showToast(t('toast_dir_no_py'));
+        return;
+      }
+      setFiles((prev) => {
+        const next = [...prev];
+        for (const incoming of picked.files) {
+          const idx = next.findIndex((f) => f.name.toLowerCase() === incoming.name.toLowerCase());
+          if (idx === -1) {
+            next.push(incoming);
+          } else {
+            next[idx] = { ...next[idx], content: incoming.content, updatedAt: incoming.updatedAt };
+          }
+        }
+        return next;
+      });
+      const firstPy = picked.files.find((f) => f.name.toLowerCase().endsWith('.py')) ?? picked.files[0];
+      if (firstPy) {
+        setActiveFileId(firstPy.id);
+      }
+      showToast(t('toast_dir_loaded', { name: picked.folderName, count: picked.files.length }));
+    };
+
+    try {
+      if (supportsDirectoryAccess()) {
+        const handle = await requestLinkedDirectory();
+        if (handle) {
+          setLinkedDirHandle(handle);
+          showToast(t('toast_dir_linked', { name: handle.name }));
+          return;
+        }
+      }
+      await importFromFallbackPicker();
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        showToast(t('toast_dir_cancelled'));
+        return;
+      }
+      const msg = err instanceof Error ? err.message : '';
+      if (
+        err instanceof DOMException ||
+        /security|frame|gesture|not allowed|unsupported|not a function/i.test(msg)
+      ) {
+        await importFromFallbackPicker();
+        return;
+      }
+      showToast(msg || t('toast_dir_unsupported'));
+    }
+  }, [termuxHealth, termuxConfig, showToast, t]);
 
   const handleImportFromDirectory = useCallback(async () => {
     if (!linkedDirHandle) return;
@@ -832,8 +903,8 @@ export default function App() {
         return;
       }
       const cmd = includeBaseSystem
-        ? 'pkg update -y && pkg install -y python clang libxml2 libxslt && pip install requests beautifulsoup4 lxml httpx'
-        : 'pip install requests beautifulsoup4 lxml httpx';
+        ? '(pkg update -y || true) && pkg install -y python python-pip python-lxml libxml2 libxslt clang && pip install --no-cache-dir requests beautifulsoup4 httpx'
+        : 'pip install --no-cache-dir requests beautifulsoup4 httpx';
       setExecutionEngine('termux');
       setDesktopSection('workspace');
       setDesktopRightPane('terminal');
@@ -850,12 +921,6 @@ export default function App() {
         setLastDurationMs(res.durationMs);
         if (res.exitCode === 0) {
           showToast(t('toast_termux_init_ok'));
-          try {
-            const health = await checkTermuxHealth(termuxConfig);
-            setTermuxHealth(health);
-          } catch {
-            // ignore background health refresh error
-          }
         } else {
           appendEntry('stderr', t('log_termux_exit', { code: res.exitCode }));
           showToast(t('toast_termux_init_err', { code: res.exitCode }));
@@ -867,6 +932,12 @@ export default function App() {
         appendEntry('stderr', msg);
         showToast(t('toast_termux_install_fail'));
       } finally {
+        try {
+          const health = await checkTermuxHealth(termuxConfig);
+          setTermuxHealth(health);
+        } catch {
+          // ignore background health refresh error
+        }
         setTermuxRunning(false);
       }
     },

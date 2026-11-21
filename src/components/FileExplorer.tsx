@@ -17,7 +17,6 @@ import {
 import JSZip from 'jszip';
 import { PythonFile } from '../types/ide';
 import { SNIPPET_TEMPLATES } from '../data/defaultFiles';
-import { supportsDirectoryAccess } from '../services/storageManager';
 import { useI18n } from '../services/i18n';
 import { downloadBlob } from '../utils/downloadBlob';
 
@@ -187,8 +186,6 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     }
   };
 
-  const canUseFolderPicker = supportsDirectoryAccess();
-
   return (
     <div className="flex flex-col h-full bg-[var(--ide-surface-alt)] text-[var(--ide-text)]">
       {/* Header */}
@@ -223,8 +220,8 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
         </div>
       </div>
 
-      {/* Linked Device Folder Quick Bar */}
-      {canUseFolderPicker && (
+      {/* Linked Device Folder Quick Bar (always interactive on Web/PWA via FS Access or webkitdirectory fallback) */}
+      {!isNativeApk && (
         <div className="px-3 py-2 border-b border-[var(--ide-border)] bg-[var(--ide-surface)] flex items-center justify-between gap-2 shrink-0">
           <div className="min-w-0">
             <div className="text-[11px] font-medium text-[var(--ide-text)] truncate">
@@ -234,7 +231,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           {linkedDirName ? (
             <button
               type="button"
-              onClick={onSaveToDirectory}
+              onClick={() => void onSaveToDirectory()}
               className="min-h-[32px] px-2.5 rounded-lg bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] text-[11px] font-medium whitespace-nowrap shrink-0"
             >
               {t('files_dir_write')}
@@ -242,7 +239,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           ) : (
             <button
               type="button"
-              onClick={onLinkDirectory}
+              onClick={() => void onLinkDirectory()}
               className="min-h-[32px] px-2.5 rounded-lg border border-[var(--ide-border)] text-[11px] font-medium inline-flex items-center gap-1 hover:bg-[var(--ide-accent-soft)] whitespace-nowrap shrink-0"
             >
               <FolderSync className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
@@ -262,20 +259,22 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                 {nativeStorageGranted ? t('sd_quick_granted') : t('sd_quick_denied')}
               </span>
             </div>
-            {!nativeStorageGranted && (
-              <button
-                type="button"
-                onClick={() => {
-                  window.DroidPyNative?.requestStoragePermission?.();
-                  window.setTimeout(() => {
-                    setNativeStorageGranted(Boolean(window.DroidPyNative?.hasStoragePermission?.()));
-                  }, 1000);
-                }}
-                className="min-h-[28px] px-2 rounded-lg bg-amber-600 text-white text-[11px] font-semibold whitespace-nowrap shrink-0"
-              >
-                {t('sd_grant_btn')}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => {
+                void onLinkDirectory();
+                window.setTimeout(() => {
+                  setNativeStorageGranted(Boolean(window.DroidPyNative?.hasStoragePermission?.()));
+                }, 800);
+              }}
+              className={`min-h-[28px] px-2 rounded-lg text-[11px] font-semibold whitespace-nowrap shrink-0 ${
+                nativeStorageGranted
+                  ? 'border border-[var(--ide-border)] bg-[var(--ide-bg)] text-[var(--ide-text)] hover:border-[var(--ide-accent)]'
+                  : 'bg-amber-600 text-white'
+              }`}
+            >
+              {nativeStorageGranted ? t('files_dir_auth') : t('sd_grant_btn')}
+            </button>
           </div>
           <div className="flex items-center gap-1.5">
             {onOpenSdcardManager && (

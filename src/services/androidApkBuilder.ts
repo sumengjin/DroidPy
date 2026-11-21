@@ -6,6 +6,7 @@ import {
   ANDROID_ICON_FOREGROUND_XML,
   ANDROID_MIPMAP_PNG_BASE64,
 } from './androidIconAssets';
+import { ANDROID_SHARED_KEYSTORE_BASE64 } from './androidSigningAsset';
 
 export interface GitHubApkBundleOptions {
   appTitle: string;
@@ -82,9 +83,50 @@ jobs:
           curl -fL "https://github.com/termux/termux-packages/releases/latest/download/bootstrap-aarch64.zip" \\
             -o android/app/src/main/assets/bootstrap-aarch64.zip
 
+      - name: Configure Consistent APK Signing & Version
+        env:
+          CUSTOM_KS_B64: \${{ secrets.DROIDPY_KEYSTORE_BASE64 }}
+          CUSTOM_STORE_PASS: \${{ secrets.DROIDPY_STORE_PASSWORD }}
+          CUSTOM_KEY_ALIAS: \${{ secrets.DROIDPY_KEY_ALIAS }}
+          CUSTOM_KEY_PASS: \${{ secrets.DROIDPY_KEY_PASSWORD }}
+        run: |
+          VER=\$(grep -m1 -oE '\\[[0-9]+\\.[0-9]+\\.[0-9]+' CHANGELOG.md 2>/dev/null | tr -d '[' || true)
+          if [ -n "\$VER" ]; then
+            IFS='.' read -r MAJ MIN PAT <<< "\$VER"
+            VCODE=\$(( \${MAJ:-1} * 10000 + \${MIN:-0} * 100 + \${PAT:-0} ))
+            VNAME="\$VER"
+          else
+            VCODE=\$(( 10200 + \${GITHUB_RUN_NUMBER:-1} ))
+            VNAME="1.2.\${GITHUB_RUN_NUMBER:-1}"
+          fi
+          echo "DROIDPY_VERSION_CODE=\${VCODE}" >> "\$GITHUB_ENV"
+          echo "DROIDPY_VERSION_NAME=\${VNAME}" >> "\$GITHUB_ENV"
+
+          if [ -n "\$CUSTOM_KS_B64" ]; then
+            printf '%s' "\$CUSTOM_KS_B64" | base64 -d > android/app/droidpy-custom.keystore
+            echo "DROIDPY_KEYSTORE_FILE=droidpy-custom.keystore" >> "\$GITHUB_ENV"
+            printf 'DROIDPY_STORE_PASSWORD=%s\\n' "\$CUSTOM_STORE_PASS" >> "\$GITHUB_ENV"
+            printf 'DROIDPY_KEY_ALIAS=%s\\n' "\$CUSTOM_KEY_ALIAS" >> "\$GITHUB_ENV"
+            printf 'DROIDPY_KEY_PASSWORD=%s\\n' "\$CUSTOM_KEY_PASS" >> "\$GITHUB_ENV"
+          else
+            mkdir -p ~/.android
+            cp android/app/droidpy-debug.p12 ~/.android/debug.keystore
+            echo "DROIDPY_KEYSTORE_FILE=droidpy-debug.p12" >> "\$GITHUB_ENV"
+          fi
+
       - name: Build Debug APK (Arm64)
         working-directory: android
         run: gradle assembleDebug --no-daemon
+
+      - name: Verify APK Signature Fingerprint
+        run: |
+          APK_PATH=\$(ls android/app/build/outputs/apk/debug/*.apk | head -n1)
+          APKSIGNER=\$(find "\${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/build-tools" -name apksigner 2>/dev/null | sort -V | tail -n1 || true)
+          if [ -n "\$APKSIGNER" ]; then
+            "\$APKSIGNER" verify --print-certs "\$APK_PATH"
+          else
+            keytool -printcert -jarfile "\$APK_PATH" || true
+          fi
 
       - name: Prepare Release APK Filename
         run: |
@@ -164,17 +206,40 @@ android {
         minSdk = 24
         // targetSdk = 28 讓內嵌 Termux bootstrap 能在 App 私有目錄自由執行 pkg / python / clang（GitHub 發佈專用）
         targetSdk = 28
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 10207
+        versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.7"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
     }
 
+    signingConfigs {
+        create("droidpy") {
+            val customPath = System.getenv("DROIDPY_KEYSTORE_FILE")?.takeIf { it.isNotBlank() }
+            val ksFile = if (customPath != null) file(customPath) else file("droidpy-debug.p12")
+            if (ksFile.exists()) {
+                storeFile = ksFile
+                storePassword = System.getenv("DROIDPY_STORE_PASSWORD")?.takeIf { it.isNotBlank() } ?: "android"
+                keyAlias = System.getenv("DROIDPY_KEY_ALIAS")?.takeIf { it.isNotBlank() } ?: "androiddebugkey"
+                keyPassword = System.getenv("DROIDPY_KEY_PASSWORD")?.takeIf { it.isNotBlank() } ?: "android"
+            }
+        }
+    }
+
     buildTypes {
-        release {
+        getByName("debug") {
+            val cfg = signingConfigs.findByName("droidpy")
+            if (cfg?.storeFile?.exists() == true) {
+                signingConfig = cfg
+            }
+        }
+        getByName("release") {
             isMinifyEnabled = false
+            val cfg = signingConfigs.findByName("droidpy")
+            if (cfg?.storeFile?.exists() == true) {
+                signingConfig = cfg
+            }
         }
     }
 
@@ -806,9 +871,16 @@ class MainActivity : AppCompatActivity() {
                 }
                 symlinks.forEach { (target, linkPath) ->
                     try {
+                        val fixedTarget = when {
+                            target.startsWith("/data/data/com.termux/files/usr/") ->
+                                usrDir.absolutePath + target.removePrefix("/data/data/com.termux/files/usr")
+                            target == "/data/data/com.termux/files/usr" ->
+                                usrDir.absolutePath
+                            else -> target
+                        }
                         val link = File(tempDir, linkPath)
                         link.parentFile?.mkdirs()
-                        android.system.Os.symlink(target, link.absolutePath)
+                        android.system.Os.symlink(fixedTarget, link.absolutePath)
                     } catch (_: Exception) {
                     }
                 }
@@ -868,6 +940,7 @@ import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.os.StatFs
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -928,31 +1001,79 @@ class EmbeddedTermuxBridge(
         val wrapperDir = File(homeDir, ".droidpy_bin").apply { mkdirs() }
         val prefix = usrDir.absolutePath
         val cert = File(usrDir, "etc/tls/cert.pem").absolutePath
+        val aptConfFile = File(usrDir, "etc/apt/apt.conf").apply {
+            parentFile?.mkdirs()
+            if (!exists()) {
+                writeText("APT::Sandbox::User \\"root\\";\\n")
+            }
+        }
+        File(usrDir, "etc/apt/apt.conf.d").mkdirs()
+        File(usrDir, "etc/apt/preferences").apply { if (!exists()) writeText("") }
+        File(usrDir, "etc/apt/preferences.d").mkdirs()
+        File(usrDir, "var/log/apt").mkdirs()
         val d = '$'
 
         val pkgLines = listOf(
             "#!/system/bin/sh",
             "PREFIX=\\"$prefix\\"",
-            "export PREFIX",
-            "APT_OPTS=\\"-o Dir=\${d}PREFIX -o Dir::State=\${d}PREFIX/var/lib/apt -o Dir::State::status=\${d}PREFIX/var/lib/dpkg/status -o Dir::Cache=\${d}PREFIX/var/cache/apt -o Dir::Etc=\${d}PREFIX/etc/apt -o Dir::Etc::sourcelist=\${d}PREFIX/etc/apt/sources.list -o Dir::Etc::sourceparts=\${d}PREFIX/etc/apt/sources.list.d -o Dir::Etc::Trusted=\${d}PREFIX/etc/apt/trusted.gpg -o Dir::Etc::TrustedParts=\${d}PREFIX/etc/apt/trusted.gpg.d -o Dir::Bin::methods=\${d}PREFIX/lib/apt/methods -o Dir::Bin::dpkg=\${d}PREFIX/bin/dpkg -o DPkg::Options::=--admindir=\${d}PREFIX/var/lib/dpkg -o Acquire::AllowInsecureRepositories=true -o APT::Get::AllowUnauthenticated=true -o Acquire::https::CaInfo=$cert\\"",
-            "mkdir -p \\"\${d}PREFIX/var/lib/apt/lists/partial\\" \\"\${d}PREFIX/var/cache/apt/archives/partial\\" \\"\${d}PREFIX/var/lib/dpkg/updates\\" \\"\${d}PREFIX/var/lib/dpkg/info\\"",
-            "touch \\"\${d}PREFIX/var/lib/dpkg/status\\"",
+            "APT_CONFIG=\\"\${aptConfFile.absolutePath}\\"",
+            "export PREFIX APT_CONFIG",
+            "APT_OPTS=\\"-o Dir=\${d}PREFIX -o Dir::State=\${d}PREFIX/var/lib/apt -o Dir::State::status=\${d}PREFIX/var/lib/dpkg/status -o Dir::Cache=\${d}PREFIX/var/cache/apt -o Dir::Etc=\${d}PREFIX/etc/apt -o Dir::Etc::parts=\${d}PREFIX/etc/apt/apt.conf.d -o Dir::Etc::main=\${d}PREFIX/etc/apt/apt.conf -o Dir::Etc::preferences=\${d}PREFIX/etc/apt/preferences -o Dir::Etc::preferencesparts=\${d}PREFIX/etc/apt/preferences.d -o Dir::Etc::sourcelist=\${d}PREFIX/etc/apt/sources.list -o Dir::Etc::sourceparts=\${d}PREFIX/etc/apt/sources.list.d -o Dir::Etc::Trusted=\${d}PREFIX/etc/apt/trusted.gpg -o Dir::Etc::TrustedParts=\${d}PREFIX/etc/apt/trusted.gpg.d -o Dir::Log=\${d}PREFIX/var/log/apt -o Dir::Bin::methods=\${d}PREFIX/lib/apt/methods -o Dir::Bin::dpkg=\${d}PREFIX/bin/dpkg -o DPkg::Options::=--admindir=\${d}PREFIX/var/lib/dpkg -o Acquire::AllowInsecureRepositories=true -o APT::Get::AllowUnauthenticated=true -o APT::Sandbox::User=root -o Acquire::https::CaInfo=$cert\\"",
+            "mkdir -p \\"\${d}PREFIX/var/lib/apt/lists/partial\\" \\"\${d}PREFIX/var/cache/apt/archives/partial\\" \\"\${d}PREFIX/var/lib/dpkg/updates\\" \\"\${d}PREFIX/var/lib/dpkg/info\\" \\"\${d}PREFIX/etc/apt/apt.conf.d\\" \\"\${d}PREFIX/etc/apt/preferences.d\\" \\"\${d}PREFIX/var/log/apt\\"",
+            "touch \\"\${d}PREFIX/var/lib/dpkg/status\\" \\"\${d}PREFIX/etc/apt/apt.conf\\" \\"\${d}PREFIX/etc/apt/preferences\\"",
             "SUB=\\"\${d}1\\"",
             "[ -z \\"\${d}SUB\\" ] && exit 1",
             "shift",
+            "fix_prefix_symlinks() {",
+            "  for linkdir in \\"\${d}PREFIX/bin\\" \\"\${d}PREFIX/etc/apt/trusted.gpg.d\\" \\"\${d}PREFIX/lib\\"; do",
+            "    [ -d \\"\${d}linkdir\\" ] || continue",
+            "    for item in \\"\${d}linkdir\\"/*; do",
+            "      [ -L \\"\${d}item\\" ] || continue",
+            "      tgt=\\"\${d}(readlink \\"\${d}item\\" 2>/dev/null)\\"",
+            "      case \\"\${d}tgt\\" in",
+            "        /data/data/com.termux/files/usr/*)",
+            "          ln -sf \\"\${d}PREFIX/\${d}{tgt#/data/data/com.termux/files/usr/}\\" \\"\${d}item\\" 2>/dev/null || true",
+            "          ;;",
+            "      esac",
+            "    done",
+            "  done",
+            "}",
+            "ensure_python_links() {",
+            "  if [ ! -e \\"\${d}PREFIX/bin/python3\\" ]; then",
+            "    for pycand in \\"\${d}PREFIX/bin/python3.\\"*; do",
+            "      [ -f \\"\${d}pycand\\" ] || continue",
+            "      case \\"\${d}pycand\\" in *-config) continue ;; esac",
+            "      chmod 755 \\"\${d}pycand\\" 2>/dev/null || true",
+            "      ln -sf \\"\${d}(basename \\"\${d}pycand\\")\\" \\"\${d}PREFIX/bin/python3\\" 2>/dev/null || true",
+            "      break",
+            "    done",
+            "  fi",
+            "  if [ -e \\"\${d}PREFIX/bin/python3\\" ] && [ ! -e \\"\${d}PREFIX/bin/python\\" ]; then",
+            "    ln -sf python3 \\"\${d}PREFIX/bin/python\\" 2>/dev/null || true",
+            "  fi",
+            "}",
             "relocate_debs() {",
             "  STAGE=\\"\${d}PREFIX/tmp_pkg_stage\\"",
             "  for deb in \\"\${d}PREFIX/var/cache/apt/archives/\\"*.deb; do",
             "    [ -f \\"\${d}deb\\" ] || continue",
+            "    echo \\"[DroidPy pkg] 解壓安裝 \${d}(basename \\"\${d}deb\\")...\\"",
             "    rm -rf \\"\${d}STAGE\\" && mkdir -p \\"\${d}STAGE\\"",
-            "    \\"\${d}PREFIX/bin/dpkg-deb\\" -x \\"\${d}deb\\" \\"\${d}STAGE\\" || continue",
+            "    if ! \\"\${d}PREFIX/bin/dpkg-deb\\" -x \\"\${d}deb\\" \\"\${d}STAGE\\"; then",
+            "      echo \\"[DroidPy pkg] 警告: 無法解壓 \${d}(basename \\"\${d}deb\\")\\"",
+            "      continue",
+            "    fi",
             "    if [ -d \\"\${d}STAGE/data/data/com.termux/files/usr\\" ]; then",
-            "      (\\"\${d}PREFIX/bin/cp\\" -af \\"\${d}STAGE/data/data/com.termux/files/usr/.\\" \\"\${d}PREFIX/\\" 2>/dev/null || cp -rf \\"\${d}STAGE/data/data/com.termux/files/usr/.\\" \\"\${d}PREFIX/\\")",
+            "      if [ -x \\"\${d}PREFIX/bin/tar\\" ]; then",
+            "        \\"\${d}PREFIX/bin/tar\\" -C \\"\${d}STAGE/data/data/com.termux/files/usr\\" -cf - . | \\"\${d}PREFIX/bin/tar\\" -C \\"\${d}PREFIX\\" -xpf - --no-same-owner --overwrite || \\"\${d}PREFIX/bin/cp\\" -af \\"\${d}STAGE/data/data/com.termux/files/usr/.\\" \\"\${d}PREFIX/\\"",
+            "      else",
+            "        \\"\${d}PREFIX/bin/cp\\" -af \\"\${d}STAGE/data/data/com.termux/files/usr/.\\" \\"\${d}PREFIX/\\" 2>/dev/null || cp -rf \\"\${d}STAGE/data/data/com.termux/files/usr/.\\" \\"\${d}PREFIX/\\"",
+            "      fi",
             "    fi",
             "    rm -f \\"\${d}deb\\"",
             "  done",
             "  rm -rf \\"\${d}STAGE\\"",
             "  chmod -R 755 \\"\${d}PREFIX/libexec\\" 2>/dev/null || true",
+            "  fix_prefix_symlinks",
             "  for f in \\"\${d}PREFIX/bin/\\"*; do",
             "    [ -f \\"\${d}f\\" ] || continue",
             "    chmod 755 \\"\${d}f\\" 2>/dev/null || true",
@@ -960,6 +1081,9 @@ class EmbeddedTermuxBridge(
             "      sed -i \\"1s|^#!/data/data/com.termux/files/usr/bin/|#!\${d}PREFIX/bin/|\\" \\"\${d}f\\" 2>/dev/null || true",
             "    fi",
             "  done",
+            "  ensure_python_links",
+            "  echo \\"[DroidPy pkg] 套件配置完成。\\"",
+            "  return 0",
             "}",
             "case \\"\${d}SUB\\" in",
             "  update)",
@@ -986,7 +1110,20 @@ class EmbeddedTermuxBridge(
             writeText(pkgLines.joinToString("\\n") + "\\n")
             setExecutable(true, false)
         }
-        val pipScript = "#!/system/bin/sh\\nexec \\"$prefix/bin/python\\" -m pip \\"\${d}@\\"\\n"
+        val pipScript = listOf(
+            "#!/system/bin/sh",
+            "PY_BIN=\\"$prefix/bin/python\\"",
+            "[ -x \\"\${d}PY_BIN\\" ] || PY_BIN=\\"$prefix/bin/python3\\"",
+            "if [ ! -x \\"\${d}PY_BIN\\" ]; then",
+            "  for c in \\"$prefix/bin/python3.\\"*; do",
+            "    [ -f \\"\${d}c\\" ] || continue",
+            "    case \\"\${d}c\\" in *-config) continue ;; esac",
+            "    chmod 755 \\"\${d}c\\" 2>/dev/null || true",
+            "    PY_BIN=\\"\${d}c\\"; break",
+            "  done",
+            "fi",
+            "exec \\"\${d}PY_BIN\\" -m pip \\"\${d}@\\""
+        ).joinToString("\\n") + "\\n"
         File(wrapperDir, "pip").apply {
             writeText(pipScript)
             setExecutable(true, false)
@@ -1180,7 +1317,8 @@ def clipboard_set(text):
             "SSL_CERT_FILE" to cert,
             "CURL_CA_BUNDLE" to cert,
             "REQUESTS_CA_BUNDLE" to cert,
-            "PIP_CERT" to cert
+            "PIP_CERT" to cert,
+            "APT_CONFIG" to File(usrDir, "etc/apt/apt.conf").absolutePath
         )
     }
 
@@ -1264,7 +1402,12 @@ def clipboard_set(text):
 
             when {
                 method == "GET" && path == "/health" -> {
-                    val hasPython = File(usrDir, "bin/python").exists() || File(usrDir, "bin/python3").exists()
+                    val binDir = File(usrDir, "bin")
+                    val pyBin = listOf(File(binDir, "python"), File(binDir, "python3")).firstOrNull { it.exists() }
+                        ?: binDir.listFiles()?.firstOrNull {
+                            it.name.startsWith("python3.") && !it.name.endsWith("-config") && it.isFile
+                        }
+                    val hasPython = pyBin != null
                     val res = JSONObject()
                         .put("ok", true)
                         .put("streaming", true)
@@ -1353,6 +1496,16 @@ def clipboard_set(text):
                     val manageAll = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Environment.isExternalStorageManager() else true
                     val runtimeWrite = ContextCompat.checkSelfPermission(appContext, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
                     val droidpyDir = File(root, "DroidPy").absolutePath
+                    var totalBytes = 0L
+                    var freeBytes = 0L
+                    var usedBytes = 0L
+                    try {
+                        val st = StatFs(root.path)
+                        totalBytes = st.totalBytes
+                        freeBytes = st.availableBytes
+                        usedBytes = (totalBytes - freeBytes).coerceAtLeast(0L)
+                    } catch (_: Exception) {
+                    }
                     writeJson(
                         out,
                         200,
@@ -1362,6 +1515,9 @@ def clipboard_set(text):
                             .put("runtimeWrite", runtimeWrite)
                             .put("rootPath", root.absolutePath)
                             .put("droidpyDir", droidpyDir)
+                            .put("totalBytes", totalBytes)
+                            .put("freeBytes", freeBytes)
+                            .put("usedBytes", usedBytes)
                     )
                 }
 
@@ -1510,7 +1666,8 @@ def clipboard_set(text):
                             val safeEntrySh = entry.replace("'", "'\\\\''")
                             val pyPath = File(usrDir, "bin/python").absolutePath
                             val py3Path = File(usrDir, "bin/python3").absolutePath
-                            "PY_BIN=\\"$pyPath\\"; [ -x \\"\${'$'}PY_BIN\\" ] || PY_BIN=\\"$py3Path\\"; if [ ! -x \\"\${'$'}PY_BIN\\" ]; then echo \\"[DroidPy] 尚未安裝 Termux 原生 Python！請至「Termux 橋接」點擊「一鍵初始化 Python + 爬蟲環境」，或先將終端機切換為「沙盒」執行。\\"; exit 127; fi; exec \\"\${'$'}PY_BIN\\" -u '$safeEntrySh'"
+                            val binDirPath = File(usrDir, "bin").absolutePath
+                            "PY_BIN=\\"$pyPath\\"; [ -x \\"\${'$'}PY_BIN\\" ] || PY_BIN=\\"$py3Path\\"; if [ ! -x \\"\${'$'}PY_BIN\\" ]; then for c in \\"$binDirPath/python3.\\"*; do [ -f \\"\${'$'}c\\" ] || continue; case \\"\${'$'}c\\" in *-config) continue ;; esac; chmod 755 \\"\${'$'}c\\" 2>/dev/null || true; PY_BIN=\\"\${'$'}c\\"; break; done; fi; if [ ! -x \\"\${'$'}PY_BIN\\" ]; then echo \\"[DroidPy] 尚未安裝 Termux 原生 Python！請至「Termux 橋接」點擊「一鍵初始化 Python + 爬蟲環境」，或先將終端機切換為「沙盒」執行。\\"; exit 127; fi; exec \\"\${'$'}PY_BIN\\" -u '$safeEntrySh'"
                         }
                         "/install-stream" -> {
                             val mode = bodyJson.optString("mode", "pip")
@@ -1779,7 +1936,8 @@ def clipboard_set(text):
 `
   );
 
-  // 6. Launcher icon resources (Adaptive Vector Icons API 26+ & PNG mipmap fallbacks)
+  // 6. Launcher icon resources & deterministic APK signing keystore
+  zip.file('android/app/droidpy-debug.p12', ANDROID_SHARED_KEYSTORE_BASE64, { base64: true });
   zip.file('android/app/src/main/res/drawable/ic_launcher_background.xml', ANDROID_ICON_BACKGROUND_XML);
   zip.file('android/app/src/main/res/drawable/ic_launcher_foreground.xml', ANDROID_ICON_FOREGROUND_XML);
   zip.file('android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml', ANDROID_ADAPTIVE_ICON_XML);
@@ -1797,7 +1955,7 @@ def clipboard_set(text):
   // 8. README.md (rendered automatically by GitHub) + README_GITHUB_APK.md
   const githubApkReadme = `# ${safeTitle} 獨立 Android APK（GitHub 自動打包專案）
 
-本專案已預先配置好 **GitHub Actions 自動編譯流程**、**內嵌 Termux Bootstrap 環境** 與 **原生爬蟲瀏覽器（Cookie 擷取）**：
+本專案已預先配置好 **GitHub Actions 自動編譯流程**、**內嵌 Termux Bootstrap 環境**、**一致性 APK 簽名金鑰** 與 **原生爬蟲瀏覽器（Cookie 擷取）**：
 打包成 APK 安裝至手機後，**無須另外安裝 Termux App**，也不受瀏覽器 CORS 限制，可直接執行 Python 網路爬蟲（\`requests\`、\`beautifulsoup4\`、\`lxml\`、\`yt-dlp\`）、\`ffmpeg\` 與 \`clang\` 原生套件。
 
 ## 發布與自動打包步驟
@@ -1805,18 +1963,25 @@ def clipboard_set(text):
 1. 在 GitHub 建立一個新的公開或私人倉庫（Repository）。
 2. 將本壓縮檔解壓縮後的所有檔案（包含 \`.github/\` 與 \`android/\`）上傳／Push 到該倉庫的 \`main\` 分支。
    - 若倉庫同時包含前端原始碼（\`package.json\`），Workflow 會自動執行 \`npm ci && npm run build\` 並複製進 \`android/app/src/main/assets/www/\` 打包為完全離線 APK。
-3. 點擊 GitHub 倉庫上方的 **Actions** 頁籤，等待 **Build DroidPy Android APK** 工作流程跑完（雲端會自動下載最新版 \`bootstrap-aarch64.zip\` 並編譯出 ARM64 APK）。
-4. 在 Actions 執行結果頁面最下方的 **Artifacts** 下載 \`.apk\` 檔案（或推送 \`v1.0.0\` Tag 自動發佈至 **GitHub Releases**），傳到 Android 手機安裝即可。
+3. 點擊 GitHub 倉庫上方的 **Actions** 頁籤，等待 **Build DroidPy Android APK** 工作流程跑完（雲端會自動下載最新版 \`bootstrap-aarch64.zip\` 並使用固定的 \`android/app/droidpy-debug.p12\` 簽名金鑰編譯 ARM64 APK；若需改用個人正式簽名金鑰，可於 Repository Secrets 設定 \`DROIDPY_KEYSTORE_BASE64\`、\`DROIDPY_STORE_PASSWORD\`、\`DROIDPY_KEY_ALIAS\` 與 \`DROIDPY_KEY_PASSWORD\`）。
+4. 在 Actions 執行結果頁面最下方的 **Artifacts** 下載 \`.apk\` 檔案（或推送 \`v1.0.0\` Tag 自動發佈至 **GitHub Releases**），傳到 Android 手機即可直接覆蓋升級安裝、保留所有工作區程式碼。
 
 ## 首次開啟 App 初始化說明
 
 1. APK 首次啟動時會自動將內嵌 Termux Bootstrap 解壓至 App 私有目錄並啟動 \`127.0.0.1:8765\` 橋接服務。
 2. 開啟 DroidPy 後進入 **「Termux 橋接」**，點擊 **「一鍵初始化 Python + 爬蟲環境」**，系統將自動安裝：
-   \`pkg update -y && pkg install -y python clang libxml2 libxslt && pip install requests beautifulsoup4 lxml httpx\`
+   \`(pkg update -y || true) && pkg install -y python python-pip python-lxml libxml2 libxslt clang && pip install --no-cache-dir requests beautifulsoup4 httpx\`
 3. 如需抓取需登入的網站資料，開啟 **「爬蟲瀏覽器」** → 點擊 **「APK 原生瀏覽器登入抓 Cookie」** 完成登入並點右上角 **「擷取 Cookie」**，即可直接讀取包含 \`HttpOnly\` 的認證 Cookie 並寫入工作區 \`cookies.json\`。
 `;
 
   const changelogContent = `# Changelog / 更新日誌
+
+## [1.2.7] - 2026-11-21
+- **確保以後每次打包的 APK 簽名永久一致**：於倉庫與匯出專案加入固定的 30 年效期簽名金鑰 \`droidpy-debug.p12\`（SHA-256 指紋固定），\`build.gradle.kts\` 明確綁定統一 \`signingConfigs\` 並依版本號自動遞增 \`versionCode\`，同時支援選填 GitHub Secrets 自訂憑證（\`DROIDPY_KEYSTORE_BASE64\` 等）；後續每次 GitHub Actions 產出的新版本 APK 皆可直接覆蓋升級安裝，無須移除舊版、完整保留程式碼與環境。
+
+## [1.2.6] - 2026-11-21
+- 修復「授權資料夾」、「授權本機資料夾」與「更新容量」三個按鈕點擊無響應問題：移除裝置目錄按鈕的 \`disabled\` 鎖死，在 APK 環境直接串接 Android 內部儲存權限設定與 \`StatFs\` 真實裝置容量並即時跳出更新提示；在一般瀏覽器／iframe 環境自動退回原生資料夾檔案選擇器 (\`webkitdirectory\`)。
+- 修復獨立 APK 內嵌 Termux 初始化失敗（截圖中 \`apt.conf.d Permission denied\`、\`InRelease\` 金鑰失效、\`relocate_debs\` 解壓靜默中止與 Python 3.14 編譯 \`lxml\` 失敗問題）：改以 \`tar --overwrite\` 精準搬移 \`.deb\` 檔案並顯示即時解壓進度、補齊 \`Dir::Etc::parts\` / \`APT_CONFIG\` / 金鑰符號連結修正、改用預編譯 \`python-lxml\`，並確保完成後立即刷新 Python 偵測狀態。
 
 ## [1.2.5] - 2026-11-21
 - 為 Android 獨立 APK 加上 DroidPy 專屬應用程式圖徽（Adaptive Vector Icon + 全解析度 \`mipmap-*\` PNG 回退），於系統桌面、多工視圖與安裝畫面顯示標誌性翡翠綠＋琥珀橘 Logo。

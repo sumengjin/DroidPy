@@ -2,6 +2,30 @@
 
 All notable changes to **DroidPy** are documented in this file.
 
+## [1.2.7] - 2026-11-21
+
+### Fixed & Improved (Consistent APK Signing & Seamless In-Place Upgrades)
+- **確保以後所有 GitHub Actions 打包的 APK 簽名永久一致**：
+  - 預置固定 30 年效期（2026–2056）的標準簽名金鑰 `signing/droidpy-debug.p12`（SHA-256 指紋：`29:C5:49:F0:2A:B1:78:1D:42:D9:4A:6D:80:53:0E:C8:EF:86:67:0C:82:60:5F:92:55:FD:D9:5D:5D:54:5E:BA`），並同步內嵌至匯出專案 `android/app/droidpy-debug.p12`，徹底解決雲端 Runner 每次重產生隨機 debug keystore 導致無法覆蓋升級安裝的問題。
+  - 更新 `android/app/build.gradle.kts` 明確綁定 `signingConfigs.droidpy` 至 `debug` 與 `release` 建置類型，並從環境變數自動讀取與版本號對應的遞增 `versionCode`（如 `v1.2.7` → `10207`）與 `versionName`。
+  - `.github/workflows/droidpy.yml` 與匯出的 `.github/workflows/build-apk.yml` 亦支援選填 GitHub Repository Secrets（`DROIDPY_KEYSTORE_BASE64`、`DROIDPY_STORE_PASSWORD`、`DROIDPY_KEY_ALIAS`、`DROIDPY_KEY_PASSWORD`）切換為個人正式發佈憑證，並在建置日誌輸出 `apksigner verify --print-certs` 驗證指紋。
+
+---
+
+## [1.2.6] - 2026-11-21
+
+### Fixed (Storage Permissions UI & Embedded Termux `pkg` Initialization)
+- **修復「授權資料夾」、「授權本機資料夾」與「更新容量」三個按鈕點擊無響應問題**：
+  - **更新容量**：`EmbeddedTermuxBridge.kt` 的 `GET /sdcard/status` 新增 `StatFs` 讀取裝置真實內部儲存空間（`totalBytes` / `usedBytes` / `freeBytes`）；前端 `ToolsAndPackages.tsx` 加入整理旋轉動畫與即時通知 Toast，顯示實際裝置／快取容量。
+  - **授權本機資料夾／授權資料夾**：移除 `!supportsDirectoryAccess()` 時按鈕的 `disabled` 禁用狀態。在 Android APK 模式下直接串接 `DroidPyNative.requestStoragePermission()` 與 `/sdcard/status` 授權檢查並顯示明確通知；在一般瀏覽器／iFrame 環境遇到不支援或被封鎖的 `showDirectoryPicker` 時，自動退回 `<input webkitdirectory>` 原生資料夾選擇器載入專案檔案，並於檔案總管常駐可點擊狀態。
+- **修復獨立 APK「一鍵初始化 Python + 爬蟲環境」卡住與報錯問題**：
+  - 修正 `MainActivity.kt` Bootstrap 解壓及 `relocate_debs()` 遇到絕對路徑 `/data/data/com.termux/files/usr/...` 符號連結失效問題（修復 `etc/apt/trusted.gpg.d/*.gpg` 造成 `apt-get update` 顯示 `Ign: InRelease` 的異常）。
+  - 補強 `pkg` 包裝腳本的 `APT_CONFIG` 與 `APT_OPTS`（補上 `Dir::Etc::parts`、`Dir::Etc::main`、`Dir::Etc::preferences`、`Dir::Log`、`APT::Sandbox::User=root`），消除 `W: Unable to read /data/data/com.termux/files/usr/etc/apt/apt.conf.d/ - DirectoryExists (13: Permission denied)` 警告。
+  - 將 `relocate_debs()` 改用 GNU `tar --overwrite` 管線精準搬移 `.deb` 內容、印出逐個套件解壓進度、自動建立 `python` / `python3`（支援 Python 3.14）與 `pip` 符號連結並修正可執行權限與 `/health` 偵測。
+  - 一鍵初始化改用 Termux 預編譯 `python-lxml`（搭配 `python-pip`、`libxml2`、`libxslt`、`clang` 與 `pip install --no-cache-dir requests beautifulsoup4 httpx`），避免在手機端從原始碼編譯 `lxml` 失敗，並於初始化 `finally` 階段強制刷新 `checkTermuxHealth`，確保黃色提醒橫幅即時消退。
+
+---
+
 ## [1.2.5] - 2026-11-21
 
 ### Added (Android APK Icon & Navigation Polish)

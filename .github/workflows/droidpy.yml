@@ -116,9 +116,56 @@ jobs:
         with:
           gradle-version: "8.7"
 
+      - name: 設定一致性 APK 簽名與遞增版號
+        env:
+          CUSTOM_KS_B64: ${{ secrets.DROIDPY_KEYSTORE_BASE64 }}
+          CUSTOM_STORE_PASS: ${{ secrets.DROIDPY_STORE_PASSWORD }}
+          CUSTOM_KEY_ALIAS: ${{ secrets.DROIDPY_KEY_ALIAS }}
+          CUSTOM_KEY_PASS: ${{ secrets.DROIDPY_KEY_PASSWORD }}
+        run: |
+          VER=$(grep -m1 -oE '\[[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md 2>/dev/null | tr -d '[' || true)
+          if [ -n "$VER" ]; then
+            IFS='.' read -r MAJ MIN PAT <<< "$VER"
+            VCODE=$(( ${MAJ:-1} * 10000 + ${MIN:-0} * 100 + ${PAT:-0} ))
+            VNAME="$VER"
+          else
+            VCODE=$(( 10200 + ${GITHUB_RUN_NUMBER:-1} ))
+            VNAME="1.2.${GITHUB_RUN_NUMBER:-1}"
+          fi
+          echo "DROIDPY_VERSION_CODE=${VCODE}" >> "$GITHUB_ENV"
+          echo "DROIDPY_VERSION_NAME=${VNAME}" >> "$GITHUB_ENV"
+          echo "Android versionCode=${VCODE}, versionName=${VNAME}"
+
+          if [ -n "$CUSTOM_KS_B64" ]; then
+            printf '%s' "$CUSTOM_KS_B64" | base64 -d > android/app/droidpy-custom.keystore
+            echo "DROIDPY_KEYSTORE_FILE=droidpy-custom.keystore" >> "$GITHUB_ENV"
+            printf 'DROIDPY_STORE_PASSWORD=%s\n' "$CUSTOM_STORE_PASS" >> "$GITHUB_ENV"
+            printf 'DROIDPY_KEY_ALIAS=%s\n' "$CUSTOM_KEY_ALIAS" >> "$GITHUB_ENV"
+            printf 'DROIDPY_KEY_PASSWORD=%s\n' "$CUSTOM_KEY_PASS" >> "$GITHUB_ENV"
+            echo "使用 GitHub Secrets 自訂簽名金鑰 (droidpy-custom.keystore)"
+          else
+            if [ ! -f "android/app/droidpy-debug.p12" ] && [ -f "signing/droidpy-debug.p12" ]; then
+              cp signing/droidpy-debug.p12 android/app/droidpy-debug.p12
+            fi
+            mkdir -p ~/.android
+            cp android/app/droidpy-debug.p12 ~/.android/debug.keystore
+            echo "DROIDPY_KEYSTORE_FILE=droidpy-debug.p12" >> "$GITHUB_ENV"
+            echo "使用固定 DroidPy 一致性簽名金鑰 (SHA-256: 29:C5:49:F0:2A:B1:78:1D:...)"
+          fi
+
       - name: 編譯 Debug APK (arm64-v8a)
         working-directory: android
         run: gradle assembleDebug --no-daemon
+
+      - name: 驗證 APK 簽名指紋
+        run: |
+          APK_PATH=$(ls android/app/build/outputs/apk/debug/*.apk | head -n1)
+          APKSIGNER=$(find "${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/build-tools" -name apksigner 2>/dev/null | sort -V | tail -n1 || true)
+          if [ -n "$APKSIGNER" ]; then
+            "$APKSIGNER" verify --print-certs "$APK_PATH"
+          else
+            keytool -printcert -jarfile "$APK_PATH" || true
+          fi
 
       - name: 解析發佈版本並整理 APK 檔名
         id: resolve_tag

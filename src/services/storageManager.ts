@@ -106,6 +106,87 @@ function isSupportedWorkspaceFilename(name: string): boolean {
   return lower === 'requirements.txt' || WORKSPACE_TEXT_EXTENSIONS.some((ext) => lower.endsWith(ext));
 }
 
+export async function pickDirectoryFilesViaInput(): Promise<{
+  folderName: string;
+  files: PythonFile[];
+} | null> {
+  if (typeof document === 'undefined') return null;
+
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.setAttribute('webkitdirectory', '');
+    input.setAttribute('directory', '');
+    input.style.position = 'fixed';
+    input.style.left = '-9999px';
+    input.style.opacity = '0';
+
+    let settled = false;
+    const cleanup = () => {
+      window.removeEventListener('focus', onWindowFocus);
+      input.remove();
+    };
+
+    const finish = (result: { folderName: string; files: PythonFile[] } | null) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(result);
+    };
+
+    const onWindowFocus = () => {
+      window.setTimeout(() => {
+        if (!settled && (!input.files || input.files.length === 0)) {
+          finish(null);
+        }
+      }, 600);
+    };
+
+    input.addEventListener('cancel', () => finish(null), { once: true });
+    input.addEventListener(
+      'change',
+      async () => {
+        const list = input.files;
+        if (!list || list.length === 0) {
+          finish(null);
+          return;
+        }
+        const imported: PythonFile[] = [];
+        let folderName = 'local-folder';
+        for (const file of Array.from(list)) {
+          const rel = (file as File & { webkitRelativePath?: string }).webkitRelativePath || '';
+          if (rel.includes('/')) {
+            folderName = rel.split('/')[0] || folderName;
+          }
+          const basename = file.name;
+          if (!basename || basename.startsWith('.') || !isSupportedWorkspaceFilename(basename)) {
+            continue;
+          }
+          if (file.size > 512 * 1024) continue;
+          try {
+            const text = await file.text();
+            imported.push({
+              id: `dir-${basename}-${file.lastModified}-${Math.random().toString(36).slice(2, 6)}`,
+              name: basename,
+              content: text,
+              updatedAt: file.lastModified || Date.now(),
+            });
+          } catch {
+            // Skip unreadable entry
+          }
+        }
+        finish({ folderName, files: imported });
+      },
+      { once: true }
+    );
+
+    document.body.appendChild(input);
+    window.addEventListener('focus', onWindowFocus, { once: true });
+    input.click();
+  });
+}
+
 export async function readPythonFilesFromDirectory(handle: DirectoryHandleLike): Promise<PythonFile[]> {
   const imported: PythonFile[] = [];
   for await (const entry of handle.values()) {

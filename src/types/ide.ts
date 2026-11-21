@@ -106,6 +106,9 @@ export interface SdcardStatusInfo {
   runtimeWrite: boolean;
   rootPath: string;
   droidpyDir: string;
+  totalBytes?: number;
+  freeBytes?: number;
+  usedBytes?: number;
 }
 
 export interface DroidPyNativeBridge {

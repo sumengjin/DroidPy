@@ -23,6 +23,7 @@ import {
   InstalledPackage,
   PythonFile,
   PyodideStatus,
+  SdcardStatusInfo,
   TermuxConfig,
   TermuxConnectionState,
   TermuxHealthInfo,
@@ -34,6 +35,7 @@ import { IDE_THEMES } from '../services/themes';
 import { LOCALE_OPTIONS, getLocalizedThemeText, useI18n } from '../services/i18n';
 import { generateGitHubApkProjectZip } from '../services/androidApkBuilder';
 import { downloadBlob } from '../utils/downloadBlob';
+import { getSdcardStatus } from '../services/termuxBridge';
 import {
   StorageEstimateInfo,
   formatStorageBytes,
@@ -134,21 +136,67 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
     persisted: false,
   });
   const [requestingPersist, setRequestingPersist] = useState(false);
+  const [refreshingStorage, setRefreshingStorage] = useState(false);
+  const [sdcardStatus, setSdcardStatus] = useState<SdcardStatusInfo | null>(null);
+  const isNativeApk = Boolean(termuxHealth?.embedded || window.DroidPyNative?.isNativeApp?.());
+  const [nativeStorageGranted, setNativeStorageGranted] = useState<boolean>(() =>
+    Boolean(window.DroidPyNative?.hasStoragePermission?.())
+  );
 
-  const refreshStorage = async () => {
-    const info = await getStorageStatus();
-    setStorageInfo(info);
+  const refreshStorage = async (showNotice = false) => {
+    setRefreshingStorage(true);
+    try {
+      const info = await getStorageStatus();
+      setStorageInfo(info);
+      let nextSd: SdcardStatusInfo | null = null;
+      if (isNativeApk) {
+        try {
+          nextSd = await getSdcardStatus(termuxConfig);
+          setSdcardStatus(nextSd);
+          setNativeStorageGranted(nextSd.granted);
+        } catch {
+          setNativeStorageGranted(Boolean(window.DroidPyNative?.hasStoragePermission?.()));
+        }
+      }
+      if (showNotice) {
+        const displayUsed =
+          isNativeApk && nextSd?.totalBytes ? (nextSd.usedBytes ?? 0) : info.usageBytes;
+        const displayQuota =
+          isNativeApk && nextSd?.totalBytes ? nextSd.totalBytes : info.quotaBytes;
+        onNotify(
+          t('set_quota_refreshed', {
+            used: formatStorageBytes(displayUsed),
+            quota: formatStorageBytes(displayQuota),
+          })
+        );
+      }
+    } finally {
+      setRefreshingStorage(false);
+    }
   };
 
   useEffect(() => {
-    void refreshStorage();
-  }, []);
+    void refreshStorage(false);
+    if (!isNativeApk) return;
+    const onFocusOrVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshStorage(false);
+      }
+    };
+    window.addEventListener('focus', onFocusOrVisible);
+    document.addEventListener('visibilitychange', onFocusOrVisible);
+    return () => {
+      window.removeEventListener('focus', onFocusOrVisible);
+      document.removeEventListener('visibilitychange', onFocusOrVisible);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNativeApk]);
 
   const handleRequestPersist = async () => {
     setRequestingPersist(true);
     try {
       const granted = await requestPersistentStorage();
-      await refreshStorage();
+      await refreshStorage(false);
       onNotify(granted ? t('set_persist_toast_ok') : t('set_persist_toast_auto'));
     } finally {
       setRequestingPersist(false);
@@ -321,9 +369,13 @@ python ${entryFile}
   const showAndroid = activeSubView === 'all' || activeSubView === 'android';
   const showSettings = activeSubView === 'all' || activeSubView === 'settings';
   const canPickFolder = supportsDirectoryAccess();
+  const displayUsedBytes =
+    isNativeApk && sdcardStatus?.totalBytes ? (sdcardStatus.usedBytes ?? 0) : storageInfo.usageBytes;
+  const displayQuotaBytes =
+    isNativeApk && sdcardStatus?.totalBytes ? sdcardStatus.totalBytes : storageInfo.quotaBytes;
   const usagePercent =
-    storageInfo.quotaBytes > 0
-      ? Math.min(100, Math.round((storageInfo.usageBytes / storageInfo.quotaBytes) * 100))
+    displayQuotaBytes > 0
+      ? Math.min(100, Math.round((displayUsedBytes / displayQuotaBytes) * 100))
       : 0;
 
   return (
@@ -496,10 +548,11 @@ python ${entryFile}
               </div>
               <button
                 type="button"
-                onClick={refreshStorage}
-                className="min-h-[40px] px-3.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium flex items-center gap-2 hover:border-[var(--ide-accent)] transition-colors"
+                disabled={refreshingStorage}
+                onClick={() => void refreshStorage(true)}
+                className="min-h-[40px] px-3.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium flex items-center gap-2 hover:border-[var(--ide-accent)] disabled:opacity-60 transition-colors"
               >
-                <RefreshCw className="w-3.5 h-3.5" />
+                <RefreshCw className={`w-3.5 h-3.5 ${refreshingStorage ? 'animate-spin text-[var(--ide-accent)]' : ''}`} />
                 <span>{t('set_refresh_quota')}</span>
               </button>
             </div>
@@ -518,14 +571,14 @@ python ${entryFile}
                     </p>
                   </div>
                   <span className="text-xs font-medium text-[var(--ide-accent-text)] whitespace-nowrap shrink-0">
-                    {storageInfo.persisted ? t('set_persist_ok') : t('set_persist_std')}
+                    {storageInfo.persisted || isNativeApk ? t('set_persist_ok') : t('set_persist_std')}
                   </span>
                 </div>
 
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-xs text-[var(--ide-text-muted)] tabular-nums">
-                    <span>{t('set_persist_used', { val: formatStorageBytes(storageInfo.usageBytes) })}</span>
-                    <span>{t('set_persist_quota', { val: formatStorageBytes(storageInfo.quotaBytes) })}</span>
+                    <span>{t('set_persist_used', { val: formatStorageBytes(displayUsedBytes) })}</span>
+                    <span>{t('set_persist_quota', { val: formatStorageBytes(displayQuotaBytes) })}</span>
                   </div>
                   <div className="h-2 rounded-full bg-[var(--ide-surface-alt)] overflow-hidden">
                     <div
@@ -558,39 +611,62 @@ python ${entryFile}
                     <span>{t('set_dir_title')}</span>
                   </h3>
                   <p className="text-xs text-[var(--ide-text-muted)] mt-1 leading-relaxed">
-                    {canPickFolder ? t('set_dir_desc_ok') : t('set_dir_desc_no')}
+                    {isNativeApk
+                      ? nativeStorageGranted
+                        ? t('set_dir_apk_ok', { path: sdcardStatus?.rootPath || '/storage/emulated/0' })
+                        : t('set_dir_apk_need')
+                      : canPickFolder
+                      ? t('set_dir_desc_ok')
+                      : t('set_dir_desc_no')}
                   </p>
                 </div>
 
                 <div className="text-xs text-[var(--ide-text-muted)]">
                   {t('set_dir_current')}
                   <span className="font-mono font-semibold text-[var(--ide-text)] ml-1">
-                    {linkedDirName ?? t('set_dir_none')}
+                    {isNativeApk
+                      ? nativeStorageGranted
+                        ? sdcardStatus?.rootPath || '/storage/emulated/0'
+                        : t('set_dir_none')
+                      : linkedDirName ?? t('set_dir_none')}
                   </span>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    disabled={!canPickFolder}
-                    onClick={onLinkDirectory}
-                    className="min-h-[42px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-40 text-white text-xs font-medium inline-flex items-center gap-2 transition-colors"
+                    onClick={() => {
+                      void onLinkDirectory().then(() => {
+                        if (isNativeApk) {
+                          window.setTimeout(() => void refreshStorage(false), 700);
+                        }
+                      });
+                    }}
+                    className="min-h-[42px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium inline-flex items-center gap-2 transition-colors"
                   >
                     <FolderSync className="w-4 h-4" />
-                    <span>{linkedDirName ? t('set_dir_change') : t('set_dir_grant')}</span>
+                    <span>
+                      {isNativeApk
+                        ? nativeStorageGranted
+                          ? t('sd_status_ok')
+                          : t('set_dir_grant')
+                        : linkedDirName
+                        ? t('set_dir_change')
+                        : t('set_dir_grant')}
+                    </span>
                   </button>
                   {linkedDirName && (
                     <>
                       <button
                         type="button"
-                        onClick={onImportFromDirectory}
+                        onClick={() => void onImportFromDirectory()}
                         className="min-h-[42px] px-3.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium hover:border-[var(--ide-accent)]"
                       >
                         {t('set_dir_load')}
                       </button>
                       <button
                         type="button"
-                        onClick={onSaveToDirectory}
+                        onClick={() => void onSaveToDirectory()}
                         className="min-h-[42px] px-3.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium hover:border-[var(--ide-accent)]"
                       >
                         {t('set_dir_save')}
@@ -601,7 +677,7 @@ python ${entryFile}
               </div>
             </div>
             {/* Android Internal Storage (/sdcard) Full Manager when running in APK */}
-            {(Boolean(termuxHealth?.embedded) || Boolean(window.DroidPyNative?.isNativeApp?.())) && (
+            {isNativeApk && (
               <InternalStoragePanel
                 termuxConfig={termuxConfig}
                 files={files}
