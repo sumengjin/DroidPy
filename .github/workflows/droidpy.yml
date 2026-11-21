@@ -7,13 +7,19 @@ on:
       - "v*"
   pull_request:
     branches: ["main", "master"]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "選填：手動發布 GitHub Release 標籤（例如 v1.2.1，留空則僅產出 APK Artifact）"
+        required: false
+        default: ""
 
 permissions:
   contents: write
 
 jobs:
   test:
-    name: 執行 Python 測試
+    name: 測試與網頁建置
     runs-on: ubuntu-latest
     steps:
       - name: 檢出程式碼
@@ -24,95 +30,128 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: 安裝依賴與測試工具
+      - name: Python 語法與單元測試
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install pytest
-
-      - name: 檢查是否具備 Buildozer 設定
-        id: check_spec
-        run: |
-          if [ -f buildozer.spec ]; then
-            echo "has_spec=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_spec=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: 執行單元測試
-        run: |
           if [ -d tests ] || ls test_*.py *_test.py 1> /dev/null 2>&1; then
+            pip install pytest
             pytest -v
           else
-            echo "尚未偵測到測試檔案，先執行語法檢查"
-            python -m compileall -q .
+            echo "執行 Python 語法檢查"
+            python -m compileall -q -x "node_modules|dist|android|.git" .
           fi
-    outputs:
-      has_spec: ${{ steps.check_spec.outputs.has_spec }}
+
+      - name: 設定 Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: 安裝依賴並建置前端 PWA
+        run: |
+          if [ -f "package-lock.json" ]; then
+            npm ci || npm install --legacy-peer-deps --no-audit --no-fund
+          else
+            npm install --legacy-peer-deps --no-audit --no-fund
+          fi
+          npm run lint
+          npm run build
+
+      - name: 上傳離線前端建置產物
+        uses: actions/upload-artifact@v4
+        with:
+          name: droidpy-web-dist
+          path: dist/
 
   build-apk:
-    name: 打包 Android APK (Buildozer)
+    name: 打包 Android APK (ARM64)
     needs: test
-    if: needs.test.outputs.has_spec == 'true' && (github.event_name == 'push' || startsWith(github.ref, 'refs/tags/v'))
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - name: 檢出程式碼
         uses: actions/checkout@v4
 
-      - name: 設定 JDK 17 與 Python
+      - name: 下載前端建置產物
+        uses: actions/download-artifact@v4
+        with:
+          name: droidpy-web-dist
+          path: dist
+
+      - name: 設定 Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: 產生 Android Gradle 專案與離線資源
+        run: |
+          if [ ! -f "android/settings.gradle.kts" ]; then
+            if [ -f "package-lock.json" ]; then
+              npm ci || npm install --legacy-peer-deps --no-audit --no-fund
+            else
+              npm install --legacy-peer-deps --no-audit --no-fund
+            fi
+            npx tsx scripts/prepare-android.ts
+          fi
+          rm -rf android/app/src/main/assets/www
+          mkdir -p android/app/src/main/assets/www
+          cp -r dist/* android/app/src/main/assets/www/
+
+      - name: 下載內嵌 Termux ARM64 Bootstrap
+        run: |
+          mkdir -p android/app/src/main/assets
+          curl -fL "https://github.com/termux/termux-packages/releases/latest/download/bootstrap-aarch64.zip" \
+            -o android/app/src/main/assets/bootstrap-aarch64.zip
+
+      - name: 設定 JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: "temurin"
           java-version: "17"
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
 
-      - name: 安裝 Android 打包工具依賴
+      - name: 設定 Gradle 8.7
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      - name: 編譯 Debug APK (arm64-v8a)
+        working-directory: android
+        run: gradle assembleDebug --no-daemon
+
+      - name: 整理 APK 輸出檔名
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git zip unzip openjdk-17-jdk python3-pip autoconf libtool pkg-config \
-            zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo6 cmake libffi-dev libssl-dev
-          pip install --upgrade pip buildozer cython==0.29.36 virtualenv
+          mkdir -p release-apk
+          TAG_NAME="${{ inputs.release_tag || github.ref_name }}"
+          TAG_NAME="${TAG_NAME:-dev}"
+          TAG_NAME="${TAG_NAME//\//-}"
+          cp android/app/build/outputs/apk/debug/*.apk "release-apk/DroidPy-arm64-${TAG_NAME}.apk"
 
-      - name: 快取 Buildozer 下載與建置檔
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.buildozer
-            .buildozer
-          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec', 'requirements.txt') }}
-          restore-keys: |
-            buildozer-${{ runner.os }}-
-
-      - name: 建置 APK
-        run: buildozer android debug
-
-      - name: 上傳 APK 建置產物
+      - name: 上傳 APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: droidpy-buildozer-apk-${{ github.run_number }}
-          path: bin/*.apk
+          name: DroidPy-arm64-apk
+          path: release-apk/*.apk
 
   release:
-    name: 建立 GitHub Release (Buildozer)
+    name: 建立 GitHub Release
     needs: build-apk
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
     runs-on: ubuntu-latest
     steps:
       - name: 檢出程式碼
         uses: actions/checkout@v4
 
-      - name: 下載剛打包的 APK
+      - name: 下載 APK 建置產物
         uses: actions/download-artifact@v4
         with:
-          pattern: droidpy-buildozer-apk-*
-          merge-multiple: true
-          path: release_assets
+          name: DroidPy-arm64-apk
+          path: release-apk
 
-      - name: 發布 Release 並附加 APK
+      - name: 發布 GitHub Release 並附加 APK
         uses: softprops/action-gh-release@v2
         with:
-          files: release_assets/*.apk
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
+          body_path: CHANGELOG.md
           generate_release_notes: true
+          files: |
+            release-apk/*.apk

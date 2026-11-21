@@ -2,6 +2,15 @@
 
 All notable changes to **DroidPy** are documented in this file.
 
+## [1.2.1] - 2026-11-21
+
+### Fixed (GitHub Actions CI & Auto Android APK Build)
+- **修復 GitHub Actions 工作流程被跳過問題**：整合並更新 `.github/workflows/droidpy.yml`，移除依賴不存在 `buildozer.spec` 的跳過條件；新增 `scripts/prepare-android.ts` 於雲端 Runner 自動由 `src/services/androidApkBuilder.ts` 產生完整 `android/` Gradle + Kotlin + 內嵌 Termux 專案，即使倉庫尚未手動匯出 `android/` 資料夾也能於每次 Push / 手動觸發執行測試、網頁建置與 ARM64 APK 打包（不再被跳過）。
+- **修復 `npm ci` `ERESOLVE` 相依性衝突**：針對 `vite@8` 與 `esbuild@0.25` 的 `peerOptional` 版本差異，於 CI 與匯出流程加入 `--legacy-peer-deps` 安全退回。
+- **支援手動觸發發布 Release**：`droidpy.yml` 新增 `workflow_dispatch` 的 `release_tag` 選填輸入，除推送 `v*` 標籤自動發布外，也可直接從 GitHub Actions 手動觸發打包並建立 Release。
+
+---
+
 ## [1.2.0] - 2026-11-21
 
 ### Fixed (Mobile Execution & Standalone APK)

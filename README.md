@@ -37,7 +37,7 @@
 ### 啟動與編譯指令
 ```bash
 # 1. 安裝相依套件
-npm install
+npm install --legacy-peer-deps
 
 # 2. 啟動開發伺服器 (預設連接埠 3000)
 npm run dev
@@ -53,14 +53,17 @@ npm run build
 
 ## 打包為獨立 Android APK（GitHub Actions 自動編譯）
 
-不需在本機安裝 Android Studio，只要透過 DroidPy 匯出或直接使用本倉庫的自動建置流程即可產出可發佈於 GitHub Releases 的 ARM64 APK：
+不需在本機安裝 Android Studio，只要直接將本倉庫推送至 GitHub（或於 DroidPy 匯出獨立 ZIP），即可由 GitHub Actions 自動產出可安裝與發佈的 ARM64 APK：
 
+### 方式一：本倉庫直接推送自動化（`.github/workflows/droidpy.yml`）
+1. 直接 Push 至 `main` / `master` 分支（或進入 GitHub **Actions** 手動觸發 `DroidPy CI / APK / Release`）。
+2. 工作流程會自動完成 **Python 語法檢查 + 前端編譯** → 呼叫 `scripts/prepare-android.ts` 自動產生 `android/` Gradle 專案並嵌入離線 `dist/` → 下載 Termux `bootstrap-aarch64.zip` → 編譯出 `DroidPy-arm64-*.apk` 並上傳至 **Actions → Artifacts**。
+3. 若需建立公開的 **GitHub Releases**，請推送 `v*` 版本標籤（例如 `git tag v1.2.1 && git push origin --tags`），或在 Actions 手動觸發時填入 `release_tag`，第 3 階段 `建立 GitHub Release` 即會自動附加 APK 與 `CHANGELOG.md` 發布。
+
+### 方式二：從 App 內客製包名匯出獨立專案
 1. 在 DroidPy 切換至 **「Android 部署」** 分頁，填寫應用程式名稱與 `Package ID`（例如 `org.droidpy.app`）。
 2. 點擊 **「匯出 GitHub 獨立 APK 專案（內嵌 Termux）」** 下載專案 ZIP。
-3. 解壓縮並將全部檔案（包含 `.github/workflows/build-apk.yml`、`android/` 與 `CHANGELOG.md`）上傳／Push 到你的 GitHub 倉庫 `main` 分支：
-   - 若倉庫根目錄同時包含前端 `package.json`，Workflow 會自動安裝相依套件（`npm ci` / `npm install`）、編譯 `dist/` 並複製進 `android/app/src/main/assets/www/` 打包為完全離線 APK（由內建 `127.0.0.1:8765` 靜態伺服器載入，無 `file://` CORS 限制）。
-   - Workflow 會使用 Gradle 8.7 + JDK 17 自動下載最新版 Termux `bootstrap-aarch64.zip` 並編譯出 `arm64-v8a` APK。
-4. 前往 GitHub 倉庫的 **Actions** 頁籤等待工作流程完成，即可在 **Artifacts** 下載 `.apk` 安裝至 Android 手機（推送 `v*` Tag 如 `v1.2.0` 亦會自動附帶 `CHANGELOG.md` 發佈至 **GitHub Releases**）。
+3. 解壓縮並將全部檔案（包含 `.github/workflows/build-apk.yml`、`android/` 與 `CHANGELOG.md`）上傳／Push 到獨立 GitHub 倉庫 `main` 分支即可自動編譯。
 
 ### 首次安裝 APK 後初始化爬蟲環境
 1. 開啟安裝好的 DroidPy APK（會自動偵測並切換至內建原生引擎）。
