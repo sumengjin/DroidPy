@@ -39,6 +39,12 @@ if __name__ == "__main__":
         f"網路連線 : {'線上' if info.get('online') else '離線模式'}",
     ]
     return "\\n".join(lines)
+
+
+if __name__ == "__main__":
+    import droid
+    print("[utils.py 獨立測試] 裝置報表輸出：")
+    print(format_device_report(droid.device_info()))
 `,
   },
   {

@@ -70,6 +70,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release_tag: ${{ steps.resolve_tag.outputs.release_tag }}
+      safe_tag: ${{ steps.resolve_tag.outputs.safe_tag }}
+      artifact_name: ${{ steps.resolve_tag.outputs.artifact_name }}
     steps:
       - name: 檢出程式碼
         uses: actions/checkout@v4
@@ -85,16 +87,15 @@ jobs:
         with:
           node-version: "20"
 
-      - name: 產生 Android Gradle 專案與離線資源
+      - name: 安裝依賴並產生 Android Gradle 專案與離線資源
         run: |
-          if [ ! -f "android/settings.gradle.kts" ]; then
-            if [ -f "package-lock.json" ]; then
-              npm ci || npm install --legacy-peer-deps --no-audit --no-fund
-            else
-              npm install --legacy-peer-deps --no-audit --no-fund
-            fi
-            npx tsx scripts/prepare-android.ts
+          if [ -f "package-lock.json" ]; then
+            npm ci || npm install --legacy-peer-deps --no-audit --no-fund
+          else
+            npm install --legacy-peer-deps --no-audit --no-fund
           fi
+          rm -rf android
+          npx tsx scripts/prepare-android.ts
           rm -rf android/app/src/main/assets/www
           mkdir -p android/app/src/main/assets/www
           cp -r dist/* android/app/src/main/assets/www/
@@ -185,17 +186,21 @@ jobs:
             fi
           fi
           SAFE_TAG="${REL_TAG//\//-}"
+          ART_NAME="DroidPy-arm64-apk-${SAFE_TAG}-r${GITHUB_RUN_NUMBER}"
           cp android/app/build/outputs/apk/debug/*.apk "release-apk/DroidPy-arm64-${SAFE_TAG}.apk"
           echo "release_tag=${REL_TAG}" >> "$GITHUB_OUTPUT"
+          echo "safe_tag=${SAFE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=${ART_NAME}" >> "$GITHUB_OUTPUT"
 
-      - name: 上傳 APK Artifact
+      - name: 上傳保留版本 APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DroidPy-arm64-apk
+          name: ${{ steps.resolve_tag.outputs.artifact_name }}
           path: release-apk/*.apk
+          retention-days: 90
 
   release:
-    name: 建立 GitHub Release
+    name: 建立 GitHub Release（保留歷史版本 APK）
     needs: build-apk
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
@@ -206,30 +211,52 @@ jobs:
       - name: 下載 APK 建置產物
         uses: actions/download-artifact@v4
         with:
-          name: DroidPy-arm64-apk
+          name: ${{ needs.build-apk.outputs.artifact_name }}
           path: release-apk
 
-      - name: 發布 GitHub Release 並附加 APK
+      - name: 發布 GitHub Release 並保留所有歷史版本 APK
         env:
           GH_TOKEN: ${{ github.token }}
           REL_TAG: ${{ needs.build-apk.outputs.release_tag }}
+          SAFE_TAG: ${{ needs.build-apk.outputs.safe_tag }}
         run: |
           APK_FILE=$(ls release-apk/*.apk | head -n1)
-          if gh release view "$REL_TAG" >/dev/null 2>&1; then
-            gh release upload "$REL_TAG" "$APK_FILE" --clobber
+          APK_BASE=$(basename "$APK_FILE")
+
+          # 產生包含歷史版本 APK 下載清單的發佈說明（不刪除既有歷史 Release 與 APK）
+          {
             if [ -f CHANGELOG.md ]; then
-              gh release edit "$REL_TAG" --notes-file CHANGELOG.md
-            fi
-          else
-            if [ -f CHANGELOG.md ]; then
-              gh release create "$REL_TAG" "$APK_FILE" \
-                --title "DroidPy ${REL_TAG}" \
-                --notes-file CHANGELOG.md \
-                --target "${GITHUB_SHA}"
+              cat CHANGELOG.md
             else
-              gh release create "$REL_TAG" "$APK_FILE" \
-                --title "DroidPy ${REL_TAG}" \
-                --generate-notes \
-                --target "${GITHUB_SHA}"
+              echo "# DroidPy ${REL_TAG}"
             fi
+            echo ""
+            echo "---"
+            echo "## 歷史版本 APK 下載清單 (Historical Releases)"
+            echo ""
+            echo "所有歷史版本 Release 與對應簽名一致之 ARM64 APK 皆永久保留於此清單，可直接點擊下載回溯："
+            echo ""
+            HIST_LIST=$(gh release list --limit 30 --json tagName,publishedAt --jq '.[] | "- [\(.tagName)](https://github.com/'"${GITHUB_REPOSITORY}"'/releases/tag/\(.tagName)) · [下載 DroidPy-arm64-\(.tagName).apk](https://github.com/'"${GITHUB_REPOSITORY}"'/releases/download/\(.tagName)/DroidPy-arm64-\(.tagName).apk) (\(.publishedAt | split("T")[0]))"' 2>/dev/null || true)
+            if [ -n "$HIST_LIST" ]; then
+              echo "$HIST_LIST"
+            else
+              echo "- [${REL_TAG}](https://github.com/${GITHUB_REPOSITORY}/releases/tag/${REL_TAG}) · [下載 ${APK_BASE}](https://github.com/${GITHUB_REPOSITORY}/releases/download/${REL_TAG}/${APK_BASE})"
+            fi
+          } > RELEASE_NOTES.md
+
+          if gh release view "$REL_TAG" >/dev/null 2>&1; then
+            EXISTING_ASSETS=$(gh release view "$REL_TAG" --json assets --jq '.assets[].name' 2>/dev/null || true)
+            if echo "$EXISTING_ASSETS" | grep -Fxq "$APK_BASE"; then
+              UPLOAD_PATH="release-apk/DroidPy-arm64-${SAFE_TAG}-b${GITHUB_RUN_NUMBER}.apk"
+              cp "$APK_FILE" "$UPLOAD_PATH"
+              gh release upload "$REL_TAG" "$UPLOAD_PATH"
+            else
+              gh release upload "$REL_TAG" "$APK_FILE"
+            fi
+            gh release edit "$REL_TAG" --notes-file RELEASE_NOTES.md
+          else
+            gh release create "$REL_TAG" "$APK_FILE" \
+              --title "DroidPy ${REL_TAG}" \
+              --notes-file RELEASE_NOTES.md \
+              --target "${GITHUB_SHA}"
           fi

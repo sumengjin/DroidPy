@@ -15,6 +15,9 @@ import {
   Palette,
   Languages,
   BookOpen,
+  ChevronDown,
+  ChevronRight,
+  FileText,
 } from 'lucide-react';
 import JSZip from 'jszip';
 import {
@@ -46,6 +49,7 @@ import {
 
 interface ToolsAndPackagesProps {
   activeSubView?: 'termux' | 'packages' | 'android' | 'settings' | 'all';
+  compactDrawer?: boolean;
   files: PythonFile[];
   activeFile: PythonFile;
   settings: EditorSettings;
@@ -75,6 +79,7 @@ interface ToolsAndPackagesProps {
   onInstallRequirements: () => Promise<void>;
   onSaveWorkspaceFile: (filename: string, content: string, openInEditor?: boolean) => void;
   onOpenHelp?: () => void;
+  onOpenLogs?: () => void;
   onNotify: (msg: string) => void;
 }
 
@@ -92,6 +97,7 @@ const POPULAR_PACKAGES = [
 
 export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
   activeSubView = 'all',
+  compactDrawer = false,
   files,
   activeFile,
   settings,
@@ -121,6 +127,7 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
   onInstallRequirements,
   onSaveWorkspaceFile,
   onOpenHelp,
+  onOpenLogs,
   onNotify,
 }) => {
   const { locale, t } = useI18n();
@@ -138,6 +145,7 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
   const [requestingPersist, setRequestingPersist] = useState(false);
   const [refreshingStorage, setRefreshingStorage] = useState(false);
   const [sdcardStatus, setSdcardStatus] = useState<SdcardStatusInfo | null>(null);
+  const [showAdvancedExport, setShowAdvancedExport] = useState(!compactDrawer);
   const isNativeApk = Boolean(termuxHealth?.embedded || window.DroidPyNative?.isNativeApp?.());
   const [nativeStorageGranted, setNativeStorageGranted] = useState<boolean>(() =>
     Boolean(window.DroidPyNative?.hasStoragePermission?.())
@@ -380,8 +388,8 @@ python ${entryFile}
 
   return (
     <div className="h-full overflow-y-auto ide-scroll bg-[var(--ide-bg)] text-[var(--ide-text)]">
-      <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-8">
-        {onOpenHelp && (
+      <div className={`${compactDrawer ? 'p-4 space-y-6' : 'max-w-5xl mx-auto p-4 sm:p-6 space-y-8'}`}>
+        {(onOpenHelp || onOpenLogs) && (!compactDrawer || showSettings) && (
           <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-4 flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
               <div className="text-sm font-semibold flex items-center gap-2">
@@ -390,14 +398,28 @@ python ${entryFile}
               </div>
               <p className="text-xs text-[var(--ide-text-muted)] mt-0.5">{t('help_subtitle')}</p>
             </div>
-            <button
-              type="button"
-              onClick={onOpenHelp}
-              className="min-h-[40px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-semibold inline-flex items-center gap-2 whitespace-nowrap shrink-0 transition-colors"
-            >
-              <BookOpen className="w-4 h-4" />
-              <span>{t('toolbar_help_title')}</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {onOpenLogs && (
+                <button
+                  type="button"
+                  onClick={onOpenLogs}
+                  className="min-h-[40px] px-3.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] text-xs font-semibold inline-flex items-center gap-2 whitespace-nowrap transition-colors"
+                >
+                  <FileText className="w-4 h-4 text-[var(--ide-accent)]" />
+                  <span>{t('logs_view_btn')}</span>
+                </button>
+              )}
+              {onOpenHelp && (
+                <button
+                  type="button"
+                  onClick={onOpenHelp}
+                  className="min-h-[40px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-semibold inline-flex items-center gap-2 whitespace-nowrap transition-colors"
+                >
+                  <BookOpen className="w-4 h-4" />
+                  <span>{t('toolbar_help_title')}</span>
+                </button>
+              )}
+            </div>
           </div>
         )}
 
@@ -534,7 +556,7 @@ python ${entryFile}
         )}
 
         {/* Storage Management & Permissions */}
-        {(showSettings || showAndroid) && (
+        {(showSettings && !compactDrawer || showAndroid) && (
           <section className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
@@ -837,19 +859,39 @@ python ${entryFile}
           </section>
         )}
 
-        {/* Android Deployment & Hardware Bridge */}
-        {showAndroid && (
+        {/* Android Deployment & Hardware Bridge (collapsible inside drawer so high-frequency storage stays prominent) */}
+        {(showAndroid && !compactDrawer || (showSettings && compactDrawer)) && (
           <section className="space-y-4">
-            <div>
-              <h2 className="text-lg font-semibold flex items-center gap-2">
-                <Smartphone className="w-5 h-5 text-[var(--ide-accent)]" />
-                <span>{t('and_title')}</span>
-              </h2>
-              <p className="text-xs text-[var(--ide-text-muted)] mt-0.5">
-                {t('and_desc')}
-              </p>
-            </div>
+            {compactDrawer ? (
+              <button
+                type="button"
+                onClick={() => setShowAdvancedExport((v) => !v)}
+                className="w-full min-h-[46px] px-4 rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] flex items-center justify-between gap-3 text-left hover:border-[var(--ide-accent)] transition-colors"
+              >
+                <span className="text-xs font-semibold flex items-center gap-2">
+                  <Smartphone className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
+                  <span>{t('and_adv_export_toggle')}</span>
+                </span>
+                {showAdvancedExport ? (
+                  <ChevronDown className="w-4 h-4 text-[var(--ide-text-muted)] shrink-0" />
+                ) : (
+                  <ChevronRight className="w-4 h-4 text-[var(--ide-text-muted)] shrink-0" />
+                )}
+              </button>
+            ) : (
+              <div>
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <Smartphone className="w-5 h-5 text-[var(--ide-accent)]" />
+                  <span>{t('and_title')}</span>
+                </h2>
+                <p className="text-xs text-[var(--ide-text-muted)] mt-0.5">
+                  {t('and_desc')}
+                </p>
+              </div>
+            )}
 
+            {(!compactDrawer || showAdvancedExport) && (
+            <>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* PWA Install Card */}
               <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-5 flex flex-col justify-between gap-4">
@@ -998,6 +1040,8 @@ python ${entryFile}
                 </div>
               </div>
             </div>
+            </>
+            )}
           </section>
         )}
 

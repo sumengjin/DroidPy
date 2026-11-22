@@ -1,0 +1,241 @@
+import React from 'react';
+import { HardDrive, Package, Sliders, Terminal, X } from 'lucide-react';
+import {
+  EditorSettings,
+  ExecutionEngine,
+  InstalledPackage,
+  NegativeScreenSection,
+  PyodideStatus,
+  PythonFile,
+  TermuxConfig,
+  TermuxConnectionState,
+  TermuxHealthInfo,
+} from '../types/ide';
+import { ToolsAndPackages } from './ToolsAndPackages';
+import { useI18n } from '../services/i18n';
+
+interface NegativeScreenDrawerProps {
+  open: boolean;
+  section: NegativeScreenSection;
+  onChangeSection: (section: NegativeScreenSection) => void;
+  onClose: () => void;
+  files: PythonFile[];
+  activeFile: PythonFile;
+  settings: EditorSettings;
+  onUpdateSettings: (patch: Partial<EditorSettings>) => void;
+  onResetWorkspace: () => void;
+  pyodideStatus: PyodideStatus;
+  installedPackages: InstalledPackage[];
+  onInstallPackage: (pkg: string) => Promise<void>;
+  onRefreshPackages: () => Promise<void>;
+  linkedDirName: string | null;
+  onLinkDirectory: () => Promise<void>;
+  onImportFromDirectory: () => Promise<void>;
+  onSaveToDirectory: () => Promise<void>;
+  engine: ExecutionEngine;
+  onChangeEngine: (engine: ExecutionEngine) => void;
+  termuxConfig: TermuxConfig;
+  onUpdateTermuxConfig: (patch: Partial<TermuxConfig>) => void;
+  termuxConnectionState: TermuxConnectionState;
+  termuxError: string | null;
+  termuxHealth: TermuxHealthInfo | null;
+  onTestTermuxConnection: () => Promise<void>;
+  onInstallInTermux: (mode: 'pip' | 'pkg', target: string) => Promise<void>;
+  onRunInTermux: () => Promise<void>;
+  onRunShellInTermux: (cmd: string) => Promise<void>;
+  onInitializeEmbeddedEnv: (includeBaseSystem: boolean) => Promise<void>;
+  onGenerateRequirements: () => void;
+  onInstallRequirements: () => Promise<void>;
+  onSaveWorkspaceFile: (filename: string, content: string, openInEditor?: boolean) => void;
+  onOpenHelp: () => void;
+  onOpenLogs: () => void;
+  onNotify: (msg: string) => void;
+}
+
+export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
+  open,
+  section,
+  onChangeSection,
+  onClose,
+  files,
+  activeFile,
+  settings,
+  onUpdateSettings,
+  onResetWorkspace,
+  pyodideStatus,
+  installedPackages,
+  onInstallPackage,
+  onRefreshPackages,
+  linkedDirName,
+  onLinkDirectory,
+  onImportFromDirectory,
+  onSaveToDirectory,
+  engine,
+  onChangeEngine,
+  termuxConfig,
+  onUpdateTermuxConfig,
+  termuxConnectionState,
+  termuxError,
+  termuxHealth,
+  onTestTermuxConnection,
+  onInstallInTermux,
+  onRunInTermux,
+  onRunShellInTermux,
+  onInitializeEmbeddedEnv,
+  onGenerateRequirements,
+  onInstallRequirements,
+  onSaveWorkspaceFile,
+  onOpenHelp,
+  onOpenLogs,
+  onNotify,
+}) => {
+  const { t } = useI18n();
+  const touchStartX = React.useRef<number | null>(null);
+  const touchStartY = React.useRef<number | null>(null);
+
+  if (!open) return null;
+
+  const tabs: { id: NegativeScreenSection; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
+    { id: 'termux', label: t('neg_tab_termux'), Icon: Terminal },
+    { id: 'packages', label: t('neg_tab_packages'), Icon: Package },
+    { id: 'android', label: t('neg_tab_storage'), Icon: HardDrive },
+    { id: 'settings', label: t('neg_tab_system'), Icon: Sliders },
+  ];
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex bg-black/50 backdrop-blur-xs"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={t('neg_title')}
+    >
+      <aside
+        onClick={(e) => e.stopPropagation()}
+        onTouchStart={(e) => {
+          const touch = e.touches[0];
+          touchStartX.current = touch.clientX;
+          touchStartY.current = touch.clientY;
+        }}
+        onTouchEnd={(e) => {
+          if (touchStartX.current === null || touchStartY.current === null) return;
+          const touch = e.changedTouches[0];
+          const dx = touch.clientX - touchStartX.current;
+          const dy = Math.abs(touch.clientY - touchStartY.current);
+          touchStartX.current = null;
+          touchStartY.current = null;
+          // Swipe left on drawer to dismiss
+          if (dx < -64 && dy < 60) {
+            onClose();
+          }
+        }}
+        className="w-[90vw] max-w-[460px] h-full bg-[var(--ide-bg)] text-[var(--ide-text)] border-r border-[var(--ide-border)] shadow-2xl flex flex-col overflow-hidden"
+      >
+        {/* Drawer Header */}
+        <div className="px-4 py-3 pt-safe border-b border-[var(--ide-border)] bg-[var(--ide-surface)] flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <img
+              src="/icon.svg"
+              alt="DroidPy"
+              className="w-7 h-7 rounded-lg shrink-0"
+              referrerPolicy="no-referrer"
+            />
+            <div className="min-w-0">
+              <h2 className="text-sm font-bold truncate">{t('neg_title')}</h2>
+              <p className="text-[11px] text-[var(--ide-text-muted)] truncate">{t('neg_subtitle')}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t('btn_done')}
+            className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Segmented Drawer Tabs */}
+        <div className="px-3 py-2 border-b border-[var(--ide-border)] bg-[var(--ide-surface-alt)] shrink-0">
+          <div className="grid grid-cols-4 gap-1 p-1 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)]">
+            {tabs.map(({ id, label, Icon }) => {
+              const active = section === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => onChangeSection(id)}
+                  className={`min-h-[38px] px-2 rounded-lg text-[11px] font-medium flex items-center justify-center gap-1 whitespace-nowrap transition-colors ${
+                    active
+                      ? 'bg-[var(--ide-accent)] text-white font-semibold shadow-xs'
+                      : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Drawer Content */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <ToolsAndPackages
+            activeSubView={section}
+            compactDrawer
+            files={files}
+            activeFile={activeFile}
+            settings={settings}
+            onUpdateSettings={onUpdateSettings}
+            onResetWorkspace={onResetWorkspace}
+            pyodideStatus={pyodideStatus}
+            installedPackages={installedPackages}
+            onInstallPackage={onInstallPackage}
+            onRefreshPackages={onRefreshPackages}
+            linkedDirName={linkedDirName}
+            onLinkDirectory={onLinkDirectory}
+            onImportFromDirectory={onImportFromDirectory}
+            onSaveToDirectory={onSaveToDirectory}
+            engine={engine}
+            onChangeEngine={onChangeEngine}
+            termuxConfig={termuxConfig}
+            onUpdateTermuxConfig={onUpdateTermuxConfig}
+            termuxConnectionState={termuxConnectionState}
+            termuxError={termuxError}
+            termuxHealth={termuxHealth}
+            onTestTermuxConnection={onTestTermuxConnection}
+            onInstallInTermux={onInstallInTermux}
+            onRunInTermux={async () => {
+              onClose();
+              await onRunInTermux();
+            }}
+            onRunShellInTermux={async (cmd) => {
+              onClose();
+              await onRunShellInTermux(cmd);
+            }}
+            onInitializeEmbeddedEnv={async (includeBase) => {
+              onClose();
+              await onInitializeEmbeddedEnv(includeBase);
+            }}
+            onGenerateRequirements={onGenerateRequirements}
+            onInstallRequirements={async () => {
+              onClose();
+              await onInstallRequirements();
+            }}
+            onSaveWorkspaceFile={onSaveWorkspaceFile}
+            onOpenHelp={() => {
+              onClose();
+              onOpenHelp();
+            }}
+            onOpenLogs={() => {
+              onClose();
+              onOpenLogs();
+            }}
+            onNotify={onNotify}
+          />
+        </div>
+      </aside>
+    </div>
+  );
+};

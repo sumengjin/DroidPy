@@ -6,7 +6,6 @@ import {
   Code2,
   Terminal as TerminalIcon,
   FolderOpen,
-  Wrench,
   Search,
   WifiOff,
   Keyboard,
@@ -20,6 +19,9 @@ import {
   Maximize2,
   Minimize2,
   BookOpen,
+  PanelLeft,
+  Columns2,
+  Menu,
 } from 'lucide-react';
 import { registerSW } from 'virtual:pwa-register';
 import { DEFAULT_FILES } from './data/defaultFiles';
@@ -31,8 +33,10 @@ import {
   ExecutionEngine,
   InstalledPackage,
   MobileTab,
+  NegativeScreenSection,
   PyodideStatus,
   PythonFile,
+  TabletPaneTab,
   TerminalEntry,
   TermuxConfig,
   TermuxConnectionState,
@@ -43,9 +47,12 @@ import { AndroidSymbolBar } from './components/AndroidSymbolBar';
 import { TerminalPanel } from './components/TerminalPanel';
 import { FileExplorer } from './components/FileExplorer';
 import { ToolsAndPackages } from './components/ToolsAndPackages';
+import { NegativeScreenDrawer } from './components/NegativeScreenDrawer';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { CrawlerBrowserPanel } from './components/CrawlerBrowserPanel';
 import { HelpTutorialModal } from './components/HelpTutorialModal';
+import { AppExecutionLogModal } from './components/AppExecutionLogModal';
+import { appLog } from './services/appLogger';
 import {
   DEFAULT_CRAWLER_SESSION,
   buildCookiesJsonContent,
@@ -53,6 +60,7 @@ import {
   parseCookieHeaderPairs,
 } from './utils/crawlerSession';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
+import { useDeviceLayout } from './hooks/useDeviceLayout';
 import { IDE_THEMES, getThemeMeta } from './services/themes';
 import {
   I18nProvider,
@@ -97,6 +105,7 @@ const STORAGE_SETTINGS_KEY = 'droidpy_settings_v2';
 const STORAGE_ENGINE_KEY = 'droidpy_engine_v1';
 const STORAGE_TERMUX_CFG_KEY = 'droidpy_termux_cfg_v1';
 const STORAGE_CRAWLER_SESSION_KEY = 'droidpy_crawler_session_v1';
+const STORAGE_PY_PKGS_KEY = 'droidpy_sandbox_pkgs_v1';
 
 const DEFAULT_SETTINGS: EditorSettings = {
   fontSize: 14,
@@ -115,6 +124,32 @@ interface PersistedIdeSnapshot {
   executionEngine?: ExecutionEngine;
   termuxConfig?: Partial<TermuxConfig>;
   crawlerSession?: Partial<CrawlerSessionData>;
+  sandboxPackages?: string[];
+}
+
+declare global {
+  interface Window {
+    __droidpyHandleBack?: () => boolean;
+  }
+}
+
+function upgradeLegacyDefaultFiles(list: PythonFile[]): PythonFile[] {
+  const defaultUtils = DEFAULT_FILES.find((f) => f.id === 'utils-py');
+  if (!defaultUtils) return list;
+  let changed = false;
+  const next = list.map((f) => {
+    if (
+      (f.id === 'utils-py' || f.name === 'utils.py') &&
+      f.content.includes('def format_device_report') &&
+      !f.content.includes('__name__') &&
+      !f.content.includes('print(')
+    ) {
+      changed = true;
+      return { ...f, content: defaultUtils.content };
+    }
+    return f;
+  });
+  return changed ? next : list;
 }
 
 let cachedNativeSnapshot: PersistedIdeSnapshot | null | undefined;
@@ -163,34 +198,21 @@ function mergeTerminalChunk(prev: string, chunk: string): string {
   return out;
 }
 
-function useIsDesktop(): boolean {
-  const [isDesktop, setIsDesktop] = useState(() =>
-    typeof window !== 'undefined' ? window.matchMedia('(min-width: 1024px)').matches : true
-  );
-
-  useEffect(() => {
-    const mq = window.matchMedia('(min-width: 1024px)');
-    const onChange = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
-    setIsDesktop(mq.matches);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
-
-  return isDesktop;
-}
-
 export default function App() {
-  const isDesktop = useIsDesktop();
+  const { deviceClass, isLandscape } = useDeviceLayout();
+  const isDesktop = deviceClass === 'desktop';
   const [files, setFiles] = useState<PythonFile[]>(() => {
     const nativeSnap = getInitialNativeSnapshot();
     if (nativeSnap?.files && Array.isArray(nativeSnap.files) && nativeSnap.files.length > 0) {
-      return nativeSnap.files;
+      return upgradeLegacyDefaultFiles(nativeSnap.files);
     }
     try {
       const saved = localStorage.getItem(STORAGE_FILES_KEY);
       if (saved) {
         const parsed = JSON.parse(saved) as PythonFile[];
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return upgradeLegacyDefaultFiles(parsed);
+        }
       }
     } catch {
       // ignore storage errors
@@ -229,6 +251,10 @@ export default function App() {
   });
 
   const [mobileTab, setMobileTab] = useState<MobileTab>('editor');
+  const [negativeOpen, setNegativeOpen] = useState(false);
+  const [negativeSection, setNegativeSection] = useState<NegativeScreenSection>('termux');
+  const [tabletSplit, setTabletSplit] = useState(true);
+  const [tabletPaneTab, setTabletPaneTab] = useState<TabletPaneTab>('terminal');
   const [desktopSection, setDesktopSection] = useState<DesktopSection>('workspace');
   const [desktopRightPane, setDesktopRightPane] = useState<DesktopRightPane>('terminal');
   const [browserWide, setBrowserWide] = useState<boolean>(false);
@@ -247,6 +273,24 @@ export default function App() {
     }
     return DEFAULT_CRAWLER_SESSION;
   });
+  const [sandboxPackages, setSandboxPackages] = useState<string[]>(() => {
+    const nativeSnap = getInitialNativeSnapshot();
+    if (nativeSnap?.sandboxPackages && Array.isArray(nativeSnap.sandboxPackages)) {
+      return nativeSnap.sandboxPackages.filter((p): p is string => typeof p === 'string');
+    }
+    try {
+      const saved = localStorage.getItem(STORAGE_PY_PKGS_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((p): p is string => typeof p === 'string');
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
   const [pyodideStatus, setPyodideStatus] = useState<PyodideStatus>('idle');
   const [lastDurationMs, setLastDurationMs] = useState<number | null>(null);
   const [entries, setEntries] = useState<TerminalEntry[]>([]);
@@ -257,6 +301,7 @@ export default function App() {
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [showLangPicker, setShowLangPicker] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [showLogsModal, setShowLogsModal] = useState(false);
   const [mobileNewFileOpen, setMobileNewFileOpen] = useState(false);
   const [mobileNewFileName, setMobileNewFileName] = useState('');
   const [linkedDirHandle, setLinkedDirHandle] = useState<DirectoryHandleLike | null>(null);
@@ -307,8 +352,27 @@ export default function App() {
   termuxConfigRef.current = termuxConfig;
   const crawlerSessionRef = useRef(crawlerSession);
   crawlerSessionRef.current = crawlerSession;
+  const sandboxPackagesRef = useRef(sandboxPackages);
+  sandboxPackagesRef.current = sandboxPackages;
   const pyodideStatusRef = useRef(pyodideStatus);
   pyodideStatusRef.current = pyodideStatus;
+  const edgeSwipeStartRef = useRef<{ x: number; y: number } | null>(null);
+  const overlayStateRef = useRef({
+    showHelpModal,
+    showLogsModal,
+    showThemePicker,
+    showLangPicker,
+    negativeOpen,
+    mobileNewFileOpen,
+  });
+  overlayStateRef.current = {
+    showHelpModal,
+    showLogsModal,
+    showThemePicker,
+    showLangPicker,
+    negativeOpen,
+    mobileNewFileOpen,
+  };
   const inputResolverRef = useRef<{
     resolve: (val: string) => void;
     reject: (err: Error) => void;
@@ -318,6 +382,27 @@ export default function App() {
 
   useEffect(() => {
     registerSW({ immediate: true });
+    appLog(
+      'lifecycle',
+      `DroidPy started (layout=${deviceClass}, engine=${executionEngineRef.current}, files=${filesRef.current.length}, sandboxPkgs=${sandboxPackagesRef.current.length})`
+    );
+    const onWinErr = (ev: ErrorEvent) => {
+      appLog('lifecycle', `Uncaught error: ${ev.message}`, {
+        level: 'error',
+        detail: ev.filename ? `${ev.filename}:${ev.lineno}:${ev.colno}` : undefined,
+      });
+    };
+    const onUnhandled = (ev: PromiseRejectionEvent) => {
+      const msg = ev.reason instanceof Error ? ev.reason.message : String(ev.reason);
+      appLog('lifecycle', `Unhandled rejection: ${msg}`, { level: 'error' });
+    };
+    window.addEventListener('error', onWinErr);
+    window.addEventListener('unhandledrejection', onUnhandled);
+    return () => {
+      window.removeEventListener('error', onWinErr);
+      window.removeEventListener('unhandledrejection', onUnhandled);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -384,6 +469,14 @@ export default function App() {
     }
   }, [crawlerSession]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_PY_PKGS_KEY, JSON.stringify(sandboxPackages));
+    } catch {
+      // ignore
+    }
+  }, [sandboxPackages]);
+
   const flushNativeStateNow = useCallback(() => {
     const writer = window.DroidPyNative?.writePersistedState;
     if (!writer) return;
@@ -396,6 +489,7 @@ export default function App() {
           executionEngine: executionEngineRef.current,
           termuxConfig: termuxConfigRef.current,
           crawlerSession: crawlerSessionRef.current,
+          sandboxPackages: sandboxPackagesRef.current,
         })
       );
     } catch {
@@ -408,7 +502,50 @@ export default function App() {
       flushNativeStateNow();
     }, 200);
     return () => window.clearTimeout(timer);
-  }, [files, activeFileId, settings, executionEngine, termuxConfig, crawlerSession, flushNativeStateNow]);
+  }, [
+    files,
+    activeFileId,
+    settings,
+    executionEngine,
+    termuxConfig,
+    crawlerSession,
+    sandboxPackages,
+    flushNativeStateNow,
+  ]);
+
+  useEffect(() => {
+    window.__droidpyHandleBack = () => {
+      const ov = overlayStateRef.current;
+      if (ov.showLogsModal) {
+        setShowLogsModal(false);
+        return true;
+      }
+      if (ov.showHelpModal) {
+        setShowHelpModal(false);
+        return true;
+      }
+      if (ov.showThemePicker) {
+        setShowThemePicker(false);
+        return true;
+      }
+      if (ov.showLangPicker) {
+        setShowLangPicker(false);
+        return true;
+      }
+      if (ov.negativeOpen) {
+        setNegativeOpen(false);
+        return true;
+      }
+      if (ov.mobileNewFileOpen) {
+        setMobileNewFileOpen(false);
+        return true;
+      }
+      return false;
+    };
+    return () => {
+      delete window.__droidpyHandleBack;
+    };
+  }, []);
 
   useEffect(() => {
     const onPauseOrHide = () => {
@@ -528,8 +665,34 @@ export default function App() {
       setPyodideStatus('loading');
       try {
         await initPyodide(callbacksRef.current);
-        if (!cancelled) {
-          setPyodideStatus('ready');
+        if (cancelled) return;
+        setPyodideStatus('ready');
+        appLog('python', 'Pyodide WASM runtime initialized');
+
+        const savedPkgs = sandboxPackagesRef.current;
+        if (savedPkgs.length > 0) {
+          try {
+            const currentList = await listPyPackages(callbacksRef.current);
+            if (cancelled) return;
+            setInstalledPackages(currentList);
+            const installedNames = new Set(currentList.map((p) => p.name.toLowerCase()));
+            const missing = savedPkgs.filter((p) => !installedNames.has(p.toLowerCase()));
+            if (missing.length > 0) {
+              appendEntry('system', translate(settingsRef.current.locale, 'pkg_restoring', { count: missing.length }));
+              appLog('package', `Auto-restoring ${missing.length} sandbox package(s): ${missing.join(', ')}`);
+              for (const pkg of missing) {
+                if (cancelled) break;
+                try {
+                  const updated = await installPyPackage(pkg, callbacksRef.current);
+                  if (!cancelled) setInstalledPackages(updated);
+                } catch {
+                  // ignore individual restore failures
+                }
+              }
+            }
+          } catch {
+            // ignore restore list failures
+          }
         }
       } catch (err) {
         if (!cancelled) {
@@ -538,8 +701,10 @@ export default function App() {
             setPyodideStatus('idle');
             return;
           }
+          const msg = err instanceof Error ? err.message : String(err);
           setPyodideStatus('error');
-          appendEntry('stderr', err instanceof Error ? err.message : String(err));
+          appendEntry('stderr', msg);
+          appLog('python', `Pyodide init failed: ${msg}`, { level: 'error' });
         }
       }
     }, 500);
@@ -671,6 +836,10 @@ export default function App() {
         if (cancelled) return true;
         setTermuxHealth(health);
         setTermuxConnectionState('connected');
+        appLog(
+          'bridge',
+          `Termux bridge connected (${health.embedded ? 'embedded' : 'external'}, python=${health.hasPython}, pipPkgs=${health.installedPipPackages?.length ?? 0}, pkgPkgs=${health.installedPkgPackages?.length ?? 0})`
+        );
         if (health.embedded) {
           setExecutionEngine('termux');
           showToast(t('toast_termux_auto_embedded'));
@@ -709,11 +878,15 @@ export default function App() {
       const health = await checkTermuxHealth(termuxConfig);
       setTermuxHealth(health);
       setTermuxConnectionState('connected');
+      appLog('bridge', `Manual health check OK: ${health.pythonVersion}`, {
+        detail: `embedded=${Boolean(health.embedded)}, hasPython=${health.hasPython}, pip=${(health.installedPipPackages ?? []).join(', ')}`,
+      });
       showToast(t('toast_termux_connected', { ver: health.pythonVersion }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : t('toast_termux_disconnected');
       setTermuxError(msg);
       setTermuxConnectionState('error');
+      appLog('bridge', `Manual health check failed: ${msg}`, { level: 'warn' });
       showToast(t('toast_termux_disconnected'));
     }
   }, [termuxConfig, showToast, t]);
@@ -769,6 +942,17 @@ export default function App() {
     return fallback;
   }, [activeFile, files, showToast, t]);
 
+  const focusOutputPane = useCallback(
+    (pane: 'terminal' | 'browser' = 'terminal') => {
+      setDesktopSection('workspace');
+      setDesktopRightPane(pane);
+      setTabletSplit(true);
+      setTabletPaneTab(pane);
+      setMobileTab(pane === 'browser' ? 'browser' : 'console');
+    },
+    []
+  );
+
   const handleRunInTermux = useCallback(async () => {
     if (termuxRunning) {
       showToast(t('cta_running'));
@@ -776,9 +960,7 @@ export default function App() {
     }
     const entryFile = resolveRunnableEntry();
     if (!entryFile) return;
-    setDesktopSection('workspace');
-    setDesktopRightPane('terminal');
-    setMobileTab('console');
+    focusOutputPane('terminal');
     setTermuxRunning(true);
     setTermuxError(null);
 
@@ -799,15 +981,39 @@ export default function App() {
       }
 
       appendEntry('system', t('log_termux_run', { name: entryFile.name }));
+      appLog('termux', `Run script in Termux: ${entryFile.name}`);
       const streamId = makeId();
+      let hasOutput = false;
+      let outputTail = '';
 
       const res = await streamRunInTermux(termuxConfig, entryFile, files, {
-        onChunk: (chunk) => appendStreamChunk(streamId, chunk),
+        onChunk: (chunk) => {
+          if (chunk.length > 0) {
+            hasOutput = true;
+            outputTail = (outputTail + chunk).slice(-500);
+          }
+          appendStreamChunk(streamId, chunk);
+        },
       });
       setTermuxConnectionState('connected');
       setLastDurationMs(res.durationMs);
-      if (res.exitCode !== 0 && res.exitCode !== -1) {
+      if (res.exitCode === 0) {
+        appendEntry(
+          'system',
+          t(hasOutput ? 'log_run_done_output' : 'log_run_done_empty', {
+            name: entryFile.name,
+            ms: res.durationMs,
+          })
+        );
+        appLog('termux', `Finished ${entryFile.name} (exit=0, ${res.durationMs} ms)`, {
+          detail: outputTail.trim() || '(no stdout)',
+        });
+      } else if (res.exitCode !== -1) {
         appendEntry('stderr', t('log_termux_exit', { code: res.exitCode }));
+        appLog('termux', `${entryFile.name} exited with code ${res.exitCode}`, {
+          level: 'error',
+          detail: outputTail.trim() || undefined,
+        });
       }
       await syncFilesFromTermux(false);
     } catch (err) {
@@ -817,11 +1023,26 @@ export default function App() {
         setTermuxConnectionState('error');
         setTermuxError(msg);
         appendEntry('stderr', msg);
+        appLog('termux', `Termux run failed (${entryFile.name}): ${msg}`, { level: 'error' });
+      } else {
+        appLog('termux', `Aborted execution of ${entryFile.name}`, { level: 'warn' });
       }
     } finally {
       setTermuxRunning(false);
     }
-  }, [resolveRunnableEntry, files, termuxConfig, termuxHealth, termuxRunning, appendEntry, appendStreamChunk, syncFilesFromTermux, showToast, t]);
+  }, [
+    resolveRunnableEntry,
+    focusOutputPane,
+    files,
+    termuxConfig,
+    termuxHealth,
+    termuxRunning,
+    appendEntry,
+    appendStreamChunk,
+    syncFilesFromTermux,
+    showToast,
+    t,
+  ]);
 
   const handleInstallInTermux = useCallback(
     async (mode: 'pip' | 'pkg', target: string) => {
@@ -830,12 +1051,11 @@ export default function App() {
         return;
       }
       const label = mode === 'pkg' ? `pkg install -y ${target}` : `pip install ${target}`;
-      setDesktopSection('workspace');
-      setDesktopRightPane('terminal');
-      setMobileTab('console');
+      focusOutputPane('terminal');
       setTermuxRunning(true);
       setTermuxError(null);
       appendEntry('system', t('log_termux_install', { cmd: label }));
+      appLog('package', `Termux install start: ${label}`);
       const streamId = makeId();
       try {
         const res = await streamInstallInTermux(termuxConfig, mode, target, {
@@ -844,9 +1064,11 @@ export default function App() {
         setTermuxConnectionState('connected');
         setLastDurationMs(res.durationMs);
         if (res.exitCode === 0) {
+          appLog('package', `Termux install succeeded: ${label} (${res.durationMs} ms)`);
           showToast(t('toast_termux_install_ok', { pkg: target }));
         } else {
           appendEntry('stderr', t('log_termux_exit', { code: res.exitCode }));
+          appLog('package', `Termux install failed: ${label} (exit=${res.exitCode})`, { level: 'error' });
           showToast(t('toast_termux_install_err', { pkg: target, code: res.exitCode }));
         }
       } catch (err) {
@@ -854,12 +1076,19 @@ export default function App() {
         setTermuxConnectionState('error');
         setTermuxError(msg);
         appendEntry('stderr', msg);
+        appLog('package', `Termux install exception (${label}): ${msg}`, { level: 'error' });
         showToast(t('toast_termux_install_fail'));
       } finally {
+        try {
+          const health = await checkTermuxHealth(termuxConfig);
+          setTermuxHealth(health);
+        } catch {
+          // ignore health refresh failure
+        }
         setTermuxRunning(false);
       }
     },
-    [termuxConfig, termuxRunning, appendEntry, appendStreamChunk, showToast, t]
+    [termuxConfig, termuxRunning, focusOutputPane, appendEntry, appendStreamChunk, showToast, t]
   );
 
   const handleRunShellInTermux = useCallback(
@@ -868,12 +1097,11 @@ export default function App() {
         showToast(t('cta_running'));
         return;
       }
-      setDesktopSection('workspace');
-      setDesktopRightPane('terminal');
-      setMobileTab('console');
+      focusOutputPane('terminal');
       setTermuxRunning(true);
       setTermuxError(null);
       appendEntry('repl-in', `$ ${command}`);
+      appLog('termux', `Shell command: ${command}`);
       const streamId = makeId();
       try {
         const res = await streamShellInTermux(termuxConfig, command, {
@@ -883,17 +1111,29 @@ export default function App() {
         setLastDurationMs(res.durationMs);
         if (res.exitCode !== 0) {
           appendEntry('stderr', t('log_termux_exit', { code: res.exitCode }));
+          appLog('termux', `Shell exited with code ${res.exitCode}`, { level: 'warn', detail: command });
+        } else {
+          appLog('termux', `Shell finished (${res.durationMs} ms)`);
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         setTermuxConnectionState('error');
         setTermuxError(msg);
         appendEntry('stderr', msg);
+        appLog('termux', `Shell exception: ${msg}`, { level: 'error', detail: command });
       } finally {
+        if (/\b(pkg|apt|apt-get|pip|pip3)\b/i.test(command)) {
+          try {
+            const health = await checkTermuxHealth(termuxConfig);
+            setTermuxHealth(health);
+          } catch {
+            // ignore
+          }
+        }
         setTermuxRunning(false);
       }
     },
-    [termuxConfig, termuxRunning, appendEntry, appendStreamChunk, showToast, t]
+    [termuxConfig, termuxRunning, focusOutputPane, appendEntry, appendStreamChunk, showToast, t]
   );
 
   const handleInitializeEmbeddedEnv = useCallback(
@@ -906,12 +1146,11 @@ export default function App() {
         ? '(pkg update -y || true) && pkg install -y python python-pip python-lxml libxml2 libxslt clang && pip install --no-cache-dir requests beautifulsoup4 httpx'
         : 'pip install --no-cache-dir requests beautifulsoup4 httpx';
       setExecutionEngine('termux');
-      setDesktopSection('workspace');
-      setDesktopRightPane('terminal');
-      setMobileTab('console');
+      focusOutputPane('terminal');
       setTermuxRunning(true);
       setTermuxError(null);
       appendEntry('system', t('log_termux_init', { cmd }));
+      appLog('termux', `One-tap env initialization started (includeBaseSystem=${includeBaseSystem})`);
       const streamId = makeId();
       try {
         const res = await streamShellInTermux(termuxConfig, cmd, {
@@ -920,9 +1159,11 @@ export default function App() {
         setTermuxConnectionState('connected');
         setLastDurationMs(res.durationMs);
         if (res.exitCode === 0) {
+          appLog('termux', `One-tap env initialization completed (${res.durationMs} ms)`);
           showToast(t('toast_termux_init_ok'));
         } else {
           appendEntry('stderr', t('log_termux_exit', { code: res.exitCode }));
+          appLog('termux', `One-tap env initialization exited ${res.exitCode}`, { level: 'error' });
           showToast(t('toast_termux_init_err', { code: res.exitCode }));
         }
       } catch (err) {
@@ -930,6 +1171,7 @@ export default function App() {
         setTermuxConnectionState('error');
         setTermuxError(msg);
         appendEntry('stderr', msg);
+        appLog('termux', `One-tap env initialization error: ${msg}`, { level: 'error' });
         showToast(t('toast_termux_install_fail'));
       } finally {
         try {
@@ -938,10 +1180,11 @@ export default function App() {
         } catch {
           // ignore background health refresh error
         }
+        flushNativeStateNow();
         setTermuxRunning(false);
       }
     },
-    [termuxConfig, termuxRunning, appendEntry, appendStreamChunk, showToast, t]
+    [termuxConfig, termuxRunning, focusOutputPane, appendEntry, appendStreamChunk, flushNativeStateNow, showToast, t]
   );
 
   const handleSendTermuxStdin = useCallback(
@@ -957,6 +1200,7 @@ export default function App() {
 
   const handleStopTermux = useCallback(async () => {
     abortActiveTermuxStream();
+    appLog('termux', 'User stopped running Termux process', { level: 'warn' });
     try {
       await stopTermuxProcess(termuxConfig);
       appendEntry('system', t('log_termux_stop'));
@@ -971,9 +1215,11 @@ export default function App() {
   const handleBackupToSdcard = useCallback(async () => {
     try {
       const res = await backupWorkspaceToSdcard(termuxConfig, files, 'DroidPy');
+      appLog('storage', `Backed up ${res.count} file(s) to ${res.dir}`);
       showToast(t('sd_toast_exported', { count: res.count, path: res.dir }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      appLog('storage', `Backup to /sdcard failed: ${msg}`, { level: 'error' });
       showToast(msg);
       if (msg.includes('權限')) {
         window.DroidPyNative?.requestStoragePermission?.();
@@ -997,19 +1243,55 @@ export default function App() {
       return;
     }
 
-    setDesktopSection('workspace');
-    setDesktopRightPane('terminal');
-    setMobileTab('console');
+    focusOutputPane('terminal');
     setPyodideStatus('running');
     appendEntry('system', t('log_exec_py', { name: entryFile.name }));
+    appLog('python', `Run script in Pyodide sandbox: ${entryFile.name}`);
+
+    let hasOutput = false;
+    let outputTail = '';
+    const baseCallbacks = callbacksRef.current;
+    const trackedCallbacks: RuntimeCallbacks = {
+      ...baseCallbacks,
+      onStdout: (text) => {
+        if (text.length > 0) {
+          hasOutput = true;
+          outputTail = (outputTail + text).slice(-500);
+        }
+        baseCallbacks.onStdout(text);
+      },
+      onStderr: (text) => {
+        if (text.length > 0) {
+          hasOutput = true;
+          outputTail = (outputTail + text).slice(-500);
+        }
+        baseCallbacks.onStderr(text);
+      },
+      onPlot: (dataUrl) => {
+        hasOutput = true;
+        baseCallbacks.onPlot(dataUrl);
+      },
+    };
 
     try {
-      const result = await executePythonFile(entryFile, files, callbacksRef.current);
+      const result = await executePythonFile(entryFile, files, trackedCallbacks);
       setLastDurationMs(result.durationMs);
       setPyodideStatus('ready');
+      appendEntry(
+        'system',
+        t(hasOutput ? 'log_run_done_output' : 'log_run_done_empty', {
+          name: entryFile.name,
+          ms: result.durationMs,
+        })
+      );
+      appLog('python', `Pyodide finished ${entryFile.name} (${result.durationMs} ms)`, {
+        detail: outputTail.trim() || '(no stdout)',
+      });
     } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
       setPyodideStatus('ready');
-      appendEntry('stderr', err instanceof Error ? err.message : String(err));
+      appendEntry('stderr', errMsg);
+      appLog('python', `Pyodide execution error (${entryFile.name}): ${errMsg}`, { level: 'error' });
     } finally {
       setPendingInputPrompt(null);
       inputResolverRef.current = null;
@@ -1017,6 +1299,7 @@ export default function App() {
   }, [
     activeFile,
     resolveRunnableEntry,
+    focusOutputPane,
     files,
     pyodideStatus,
     termuxRunning,
@@ -1065,6 +1348,16 @@ export default function App() {
           appendEntry('repl-out', result);
         }
         if (/^[!%]?\s*pip\s+install\b/i.test(statement.trim())) {
+          const tokens = statement
+            .trim()
+            .replace(/^[!%]?\s*pip\s+install\s+/i, '')
+            .split(/\s+/)
+            .filter((tok) => tok && !tok.startsWith('-'))
+            .map((tok) => tok.split(/[=<>!~]/)[0].trim())
+            .filter(Boolean);
+          if (tokens.length > 0) {
+            setSandboxPackages((prev) => Array.from(new Set([...prev, ...tokens])));
+          }
           try {
             const list = await listPyPackages(callbacksRef.current);
             setInstalledPackages(list);
@@ -1194,13 +1487,20 @@ export default function App() {
 
   const handleInstallPackage = useCallback(
     async (pkgName: string) => {
+      appLog('package', `Installing Pyodide package: ${pkgName}`);
       try {
         const list = await installPyPackage(pkgName, callbacksRef.current);
         setInstalledPackages(list);
+        const cleanPkg = pkgName.split(/[=<>!~]/)[0].trim();
+        if (cleanPkg) {
+          setSandboxPackages((prev) => (prev.includes(cleanPkg) ? prev : [...prev, cleanPkg]));
+        }
+        appLog('package', `Installed Pyodide package: ${pkgName}`);
         showToast(t('toast_pkg_ok', { pkg: pkgName }));
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         appendEntry('stderr', `${t('toast_pkg_fail', { pkg: pkgName })}: ${msg}`);
+        appLog('package', `Failed installing Pyodide package ${pkgName}: ${msg}`, { level: 'error' });
         showToast(t('toast_pkg_fail', { pkg: pkgName }));
       }
     },
@@ -1290,27 +1590,54 @@ export default function App() {
 
   useEffect(() => {
     if (
-      (desktopSection === 'packages' || mobileTab === 'tools') &&
+      (desktopSection === 'packages' || (negativeOpen && negativeSection === 'packages')) &&
       pyodideStatus === 'ready' &&
       installedPackages.length === 0
     ) {
       void handleRefreshPackages();
     }
-  }, [desktopSection, mobileTab, pyodideStatus, installedPackages.length, handleRefreshPackages]);
+  }, [desktopSection, negativeOpen, negativeSection, pyodideStatus, installedPackages.length, handleRefreshPackages]);
 
   const isRunning = pyodideStatus === 'running' || termuxRunning;
   const isCoreLoading = executionEngine === 'pyodide' && pyodideStatus === 'loading';
   const activeThemeLabel = getLocalizedThemeText(settings.theme, settings.locale);
   const activeLocaleMeta = LOCALE_OPTIONS.find((item) => item.id === settings.locale) ?? LOCALE_OPTIONS[0];
 
+  const openNegativeDrawer = useCallback((sec: NegativeScreenSection = 'termux') => {
+    setNegativeSection(sec);
+    setNegativeOpen(true);
+  }, []);
+
   return (
     <I18nProvider
       locale={settings.locale}
       onChangeLocale={(loc) => handleUpdateSettings({ locale: loc })}
     >
-      <div className="h-dvh flex flex-col bg-[var(--ide-bg)] text-[var(--ide-text)] overflow-hidden">
+      <div
+        onTouchStart={(e) => {
+          if (isDesktop || e.touches.length !== 1) return;
+          const touch = e.touches[0];
+          if (touch.clientX <= 28) {
+            edgeSwipeStartRef.current = { x: touch.clientX, y: touch.clientY };
+          } else {
+            edgeSwipeStartRef.current = null;
+          }
+        }}
+        onTouchEnd={(e) => {
+          if (!edgeSwipeStartRef.current || isDesktop) return;
+          const touch = e.changedTouches[0];
+          const dx = touch.clientX - edgeSwipeStartRef.current.x;
+          const dy = Math.abs(touch.clientY - edgeSwipeStartRef.current.y);
+          edgeSwipeStartRef.current = null;
+          if (dx > 52 && dy < 50) {
+            setNegativeOpen(true);
+          }
+        }}
+        className="h-dvh flex flex-col bg-[var(--ide-bg)] text-[var(--ide-text)] overflow-hidden"
+      >
       {/* Desktop Top Bar (3-zone contract: Brand — Nav Links — Primary CTA) */}
-      <header className="hidden lg:flex items-center justify-between gap-8 h-[52px] px-5 border-b border-[var(--ide-border)] bg-[var(--ide-surface)] shrink-0">
+      {deviceClass === 'desktop' && (
+      <header className="flex items-center justify-between gap-8 h-[52px] px-5 border-b border-[var(--ide-border)] bg-[var(--ide-surface)] shrink-0">
         {/* Zone 1: Brand Wordmark */}
         <a
           href="#workspace"
@@ -1397,10 +1724,121 @@ export default function App() {
           )}
         </div>
       </header>
+      )}
 
-      {/* Mobile Compact Top App Bar (<= 48px to obey 15% sticky cap) */}
-      <header className="lg:hidden flex items-center justify-between gap-3 h-12 px-3 pt-safe border-b border-[var(--ide-border)] bg-[var(--ide-surface)] shrink-0">
+      {/* Tablet Top Bar: Negative Screen Trigger + File Tabs + Split Toggle + Primary CTA */}
+      {deviceClass === 'tablet' && (
+      <header className="flex items-center justify-between gap-3 h-12 px-3 pt-safe border-b border-[var(--ide-border)] bg-[var(--ide-surface)] shrink-0">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <button
+            type="button"
+            onClick={() => setNegativeOpen(true)}
+            aria-label={t('neg_open_aria')}
+            className="min-h-[40px] px-2.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-[var(--ide-text)] hover:border-[var(--ide-accent)] inline-flex items-center gap-1.5 text-xs font-medium whitespace-nowrap shrink-0"
+          >
+            <PanelLeft className="w-4 h-4 text-[var(--ide-accent)]" />
+            <span>{t('neg_title')}</span>
+          </button>
+          <img
+            src="/icon.svg"
+            alt="DroidPy"
+            className="w-6 h-6 rounded-md shrink-0"
+            referrerPolicy="no-referrer"
+          />
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar min-w-0">
+            {files.map((file) => {
+              const isActive = file.id === activeFile.id;
+              return (
+                <button
+                  key={file.id}
+                  type="button"
+                  onClick={() => setActiveFileId(file.id)}
+                  className={`min-h-[34px] px-2.5 rounded-lg font-mono text-xs transition-colors whitespace-nowrap shrink-0 ${
+                    isActive
+                      ? 'bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] font-semibold border border-[var(--ide-accent)]/30'
+                      : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
+                  }`}
+                >
+                  {file.name}
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => setMobileNewFileOpen((v) => !v)}
+              aria-label={t('files_new_btn')}
+              className="min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-accent)] shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setTabletSplit((v) => !v)}
+            className={`min-h-[40px] px-3 rounded-xl border text-xs font-medium inline-flex items-center gap-1.5 whitespace-nowrap transition-colors ${
+              tabletSplit
+                ? 'border-[var(--ide-accent)]/50 bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)]'
+                : 'border-[var(--ide-border)] bg-[var(--ide-bg)] text-[var(--ide-text-muted)]'
+            }`}
+          >
+            {tabletSplit ? <Maximize2 className="w-3.5 h-3.5" /> : <Columns2 className="w-3.5 h-3.5" />}
+            <span>{tabletSplit ? t('tab_focus_editor') : t('tab_split_view')}</span>
+          </button>
+
+          {pendingInputPrompt !== null ? (
+            <button
+              type="button"
+              onClick={handleCancelInput}
+              className="min-h-[40px] px-4 rounded-xl bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
+            >
+              <Square className="w-3.5 h-3.5 fill-current" />
+              <span>{t('cta_abort_input')}</span>
+            </button>
+          ) : termuxRunning ? (
+            <button
+              type="button"
+              onClick={() => void handleStopTermux()}
+              className="min-h-[40px] px-4 rounded-xl bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
+            >
+              <Square className="w-3.5 h-3.5 fill-current" />
+              <span>{t('cta_stop_run')}</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleRunCode}
+              disabled={isRunning || isCoreLoading}
+              className="min-h-[40px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-colors"
+            >
+              {isRunning || isCoreLoading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Play className="w-3.5 h-3.5 fill-current" />
+              )}
+              <span>
+                {isCoreLoading ? t('cta_loading_core') : isRunning ? t('cta_running') : t('cta_run_program')}
+              </span>
+            </button>
+          )}
+        </div>
+      </header>
+      )}
+
+      {/* Phone Compact Top App Bar (Negative Screen button + Title/File + Primary Run CTA only) */}
+      {deviceClass === 'phone' && (
+      <header className="flex items-center justify-between gap-2 h-12 px-2.5 pt-safe border-b border-[var(--ide-border)] bg-[var(--ide-surface)] shrink-0">
         <div className="flex items-center gap-2 min-w-0">
+          <button
+            type="button"
+            onClick={() => setNegativeOpen(true)}
+            aria-label={t('neg_open_aria')}
+            className="min-h-[42px] min-w-[42px] flex items-center justify-center rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-[var(--ide-text)] active:scale-95 transition-transform shrink-0"
+          >
+            <Menu className="w-4.5 h-4.5" />
+          </button>
           <img
             src="/icon.svg"
             alt="DroidPy"
@@ -1415,35 +1853,11 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            type="button"
-            onClick={() => setShowHelpModal(true)}
-            aria-label={t('toolbar_help_title')}
-            className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl border border-[var(--ide-border)] text-[var(--ide-text-muted)] hover:text-[var(--ide-accent)]"
-          >
-            <BookOpen className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowLangPicker(true)}
-            aria-label={t('toolbar_choose_lang')}
-            className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl border border-[var(--ide-border)] text-[var(--ide-text-muted)] hover:text-[var(--ide-accent)]"
-          >
-            <Languages className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowThemePicker(true)}
-            aria-label={t('toolbar_choose_theme')}
-            className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl border border-[var(--ide-border)] text-[var(--ide-accent)]"
-          >
-            <Palette className="w-4 h-4" />
-          </button>
           {pendingInputPrompt !== null ? (
             <button
               type="button"
               onClick={handleCancelInput}
-              className="min-h-[38px] px-3.5 rounded-xl bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
+              className="min-h-[40px] px-4 rounded-xl bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
             >
               <Square className="w-3.5 h-3.5 fill-current" />
               <span>{t('cta_abort_short')}</span>
@@ -1452,7 +1866,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => void handleStopTermux()}
-              className="min-h-[38px] px-3.5 rounded-xl bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
+              className="min-h-[40px] px-4 rounded-xl bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
             >
               <Square className="w-3.5 h-3.5 fill-current" />
               <span>{t('cta_stop_short')}</span>
@@ -1462,7 +1876,7 @@ export default function App() {
               type="button"
               onClick={handleRunCode}
               disabled={isRunning || isCoreLoading}
-              className="min-h-[38px] px-3.5 rounded-xl bg-[var(--ide-accent)] active:scale-[0.98] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-transform"
+              className="min-h-[40px] px-4 rounded-xl bg-[var(--ide-accent)] active:scale-[0.98] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-transform"
             >
               {isRunning || isCoreLoading ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -1476,10 +1890,11 @@ export default function App() {
           )}
         </div>
       </header>
+      )}
 
       {/* Main Content Area */}
       <main className="flex-1 min-h-0 flex overflow-hidden">
-        {isDesktop ? (
+        {deviceClass === 'desktop' ? (
           <div className="flex flex-1 min-h-0 overflow-hidden">
             {desktopSection === 'workspace' ? (
               <>
@@ -1703,6 +2118,7 @@ export default function App() {
                         onRunRepl={handleRunRepl}
                         onSendTermuxStdin={handleSendTermuxStdin}
                         onStopTermux={handleStopTermux}
+                        onOpenLogs={() => setShowLogsModal(true)}
                         onClear={() => setEntries([])}
                       />
                     </div>
@@ -1752,9 +2168,223 @@ export default function App() {
                   onInstallRequirements={handleInstallRequirements}
                   onSaveWorkspaceFile={handleSaveWorkspaceFile}
                   onOpenHelp={() => setShowHelpModal(true)}
+                  onOpenLogs={() => setShowLogsModal(true)}
                   onNotify={showToast}
                 />
               </div>
+            )}
+          </div>
+        ) : deviceClass === 'tablet' ? (
+          <div className={`flex-1 min-h-0 flex ${isLandscape ? 'flex-row' : 'flex-col'} overflow-hidden`}>
+            {/* Tablet Primary Editor Pane */}
+            <section
+              className={`${
+                tabletSplit
+                  ? isLandscape
+                    ? 'w-[56%] border-r border-[var(--ide-border)]'
+                    : 'h-[56%] border-b border-[var(--ide-border)]'
+                  : 'flex-1'
+              } min-w-0 min-h-0 flex flex-col overflow-hidden bg-[var(--ide-surface)]`}
+            >
+              <div className="flex items-center justify-between gap-2 px-3 h-10 border-b border-[var(--ide-border)] bg-[var(--ide-surface-alt)] shrink-0">
+                <div className="flex items-center gap-2 text-xs text-[var(--ide-text-muted)] font-mono truncate">
+                  <span className="font-semibold text-[var(--ide-text)]">{activeFile.name}</span>
+                  <span aria-hidden="true">·</span>
+                  <span className="tabular-nums">
+                    {t('status_cursor', { line: cursorPos.line, col: cursorPos.col })}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleFormatActiveFile}
+                    aria-label={t('toolbar_format_title')}
+                    className="min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]"
+                  >
+                    <AlignLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => editorRef.current?.openSearch()}
+                    aria-label={t('toolbar_search_title')}
+                    className="min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]"
+                  >
+                    <Search className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateSettings({ showSymbolBar: !settings.showSymbolBar })}
+                    aria-label={t('toolbar_symbol_bar_title')}
+                    className={`min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg ${
+                      settings.showSymbolBar
+                        ? 'text-[var(--ide-accent-text)] bg-[var(--ide-accent-soft)]'
+                        : 'text-[var(--ide-text-muted)]'
+                    }`}
+                  >
+                    <Keyboard className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {mobileNewFileOpen && (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    let name = sanitizeFileName(mobileNewFileName);
+                    if (!name) return;
+                    if (!name.includes('.')) name += '.py';
+                    if (files.some((f) => f.name.toLowerCase() === name.toLowerCase())) {
+                      showToast(t('files_exists', { name }));
+                      return;
+                    }
+                    const starter = name.toLowerCase().endsWith('.json')
+                      ? '{\n  "app": "DroidPy"\n}\n'
+                      : name.toLowerCase().endsWith('.py')
+                      ? `# ${name}\n\ndef main():\n    print("Hello from ${name}")\n\nif __name__ == "__main__":\n    main()\n`
+                      : '';
+                    handleCreateFile(name, starter);
+                    setMobileNewFileName('');
+                    setMobileNewFileOpen(false);
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-2 border-b border-[var(--ide-border)] bg-[var(--ide-surface)] shrink-0"
+                >
+                  <input
+                    type="text"
+                    autoFocus
+                    value={mobileNewFileName}
+                    onChange={(e) => setMobileNewFileName(e.target.value)}
+                    placeholder={t('files_new_placeholder')}
+                    className="flex-1 min-w-0 min-h-[38px] px-3 rounded-lg bg-[var(--ide-bg)] border border-[var(--ide-border)] text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
+                  />
+                  <button
+                    type="submit"
+                    className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg bg-[var(--ide-accent)] text-white"
+                    aria-label={t('files_new_btn')}
+                  >
+                    <Check className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMobileNewFileOpen(false)}
+                    className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg border border-[var(--ide-border)] text-[var(--ide-text-muted)]"
+                    aria-label={t('files_cancel')}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </form>
+              )}
+
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <CodeEditor
+                  key={activeFile.id}
+                  ref={editorRef}
+                  value={activeFile.content}
+                  filename={activeFile.name}
+                  onChange={handleCodeChange}
+                  onRunShortcut={handleRunCode}
+                  onCursorChange={(line, col) => setCursorPos({ line, col })}
+                  fontSize={settings.fontSize}
+                  tabSize={settings.tabSize}
+                  wordWrap={settings.wordWrap}
+                  theme={settings.theme}
+                  pyodideReady={pyodideStatus === 'ready'}
+                />
+              </div>
+
+              {settings.showSymbolBar && (
+                <AndroidSymbolBar
+                  tabSize={settings.tabSize}
+                  onInsert={(txt, offset) => editorRef.current?.insertText(txt, offset)}
+                  onMoveCursor={(delta) => editorRef.current?.moveCursor(delta)}
+                  onUndo={() => editorRef.current?.undo()}
+                  onRedo={() => editorRef.current?.redo()}
+                />
+              )}
+            </section>
+
+            {/* Tablet Secondary Output / Files / Browser Split Pane */}
+            {tabletSplit && (
+              <aside className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-[var(--ide-bg)]">
+                <div className="flex items-center justify-between gap-2 px-3 h-10 border-b border-[var(--ide-border)] bg-[var(--ide-surface-alt)] shrink-0">
+                  <div className="flex items-center gap-1 p-0.5 rounded-lg bg-[var(--ide-bg)] border border-[var(--ide-border)]">
+                    {(
+                      [
+                        { id: 'terminal', label: t('mob_console'), Icon: TerminalIcon },
+                        { id: 'files', label: t('mob_files'), Icon: FolderOpen },
+                        { id: 'browser', label: t('mob_browser'), Icon: Globe },
+                      ] as const
+                    ).map(({ id, label, Icon }) => {
+                      const active = tabletPaneTab === id;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => setTabletPaneTab(id)}
+                          className={`min-h-[30px] px-3 rounded-md text-xs font-medium inline-flex items-center gap-1.5 whitespace-nowrap transition-colors ${
+                            active
+                              ? 'bg-[var(--ide-surface)] text-[var(--ide-accent-text)] font-semibold shadow-xs'
+                              : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
+                          }`}
+                        >
+                          <Icon className="w-3.5 h-3.5" />
+                          <span>{label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  <div className={tabletPaneTab === 'terminal' ? 'h-full' : 'hidden'}>
+                    <TerminalPanel
+                      entries={entries}
+                      status={termuxRunning ? 'running' : pyodideStatus}
+                      engine={executionEngine}
+                      onChangeEngine={setExecutionEngine}
+                      termuxConnected={termuxConnectionState === 'connected'}
+                      embeddedMissingPython={Boolean(termuxHealth?.embedded && termuxHealth.hasPython === false)}
+                      onQuickInitEmbedded={() => void handleInitializeEmbeddedEnv(true)}
+                      lastDurationMs={lastDurationMs}
+                      pendingInputPrompt={pendingInputPrompt}
+                      onSubmitInput={handleSubmitInput}
+                      onRunRepl={handleRunRepl}
+                      onSendTermuxStdin={handleSendTermuxStdin}
+                      onStopTermux={handleStopTermux}
+                      onOpenLogs={() => setShowLogsModal(true)}
+                      onClear={() => setEntries([])}
+                    />
+                  </div>
+                  <div className={tabletPaneTab === 'files' ? 'h-full' : 'hidden'}>
+                    <FileExplorer
+                      files={files}
+                      activeFileId={activeFile.id}
+                      linkedDirName={linkedDirHandle?.name ?? null}
+                      termuxConnected={termuxConnectionState === 'connected'}
+                      termuxEmbedded={Boolean(termuxHealth?.embedded)}
+                      onOpenSdcardManager={() => openNegativeDrawer('android')}
+                      onBackupToSdcard={handleBackupToSdcard}
+                      onPullFromTermux={() => syncFilesFromTermux(true)}
+                      onLinkDirectory={handleLinkDirectory}
+                      onSaveToDirectory={handleSaveToDirectory}
+                      onSelectFile={(id) => setActiveFileId(id)}
+                      onCreateFile={handleCreateFile}
+                      onRenameFile={handleRenameFile}
+                      onDeleteFile={handleDeleteFile}
+                      onNotify={showToast}
+                    />
+                  </div>
+                  <div className={tabletPaneTab === 'browser' ? 'h-full' : 'hidden'}>
+                    <CrawlerBrowserPanel
+                      session={crawlerSession}
+                      onChangeSession={setCrawlerSession}
+                      termuxConfig={termuxConfig}
+                      termuxConnected={termuxConnectionState === 'connected'}
+                      onSaveWorkspaceFile={handleSaveWorkspaceFile}
+                      onNotify={showToast}
+                    />
+                  </div>
+                </div>
+              </aside>
             )}
           </div>
         ) : (
@@ -1923,6 +2553,7 @@ export default function App() {
                   onRunRepl={handleRunRepl}
                   onSendTermuxStdin={handleSendTermuxStdin}
                   onStopTermux={handleStopTermux}
+                  onOpenLogs={() => setShowLogsModal(true)}
                   onClear={() => setEntries([])}
                 />
               </div>
@@ -1947,7 +2578,7 @@ export default function App() {
                   linkedDirName={linkedDirHandle?.name ?? null}
                   termuxConnected={termuxConnectionState === 'connected'}
                   termuxEmbedded={Boolean(termuxHealth?.embedded)}
-                  onOpenSdcardManager={() => setMobileTab('tools')}
+                  onOpenSdcardManager={() => openNegativeDrawer('android')}
                   onBackupToSdcard={handleBackupToSdcard}
                   onPullFromTermux={() => syncFilesFromTermux(true)}
                   onLinkDirectory={handleLinkDirectory}
@@ -1963,60 +2594,22 @@ export default function App() {
                 />
               </div>
             )}
-
-            {mobileTab === 'tools' && (
-              <div className="flex-1 min-h-0 overflow-hidden">
-                <ToolsAndPackages
-                  activeSubView="all"
-                  files={files}
-                  activeFile={activeFile}
-                  settings={settings}
-                  onUpdateSettings={handleUpdateSettings}
-                  onResetWorkspace={handleResetWorkspace}
-                  pyodideStatus={pyodideStatus}
-                  installedPackages={installedPackages}
-                  onInstallPackage={handleInstallPackage}
-                  onRefreshPackages={handleRefreshPackages}
-                  linkedDirName={linkedDirHandle?.name ?? null}
-                  onLinkDirectory={handleLinkDirectory}
-                  onImportFromDirectory={handleImportFromDirectory}
-                  onSaveToDirectory={handleSaveToDirectory}
-                  engine={executionEngine}
-                  onChangeEngine={setExecutionEngine}
-                  termuxConfig={termuxConfig}
-                  onUpdateTermuxConfig={handleUpdateTermuxConfig}
-                  termuxConnectionState={termuxConnectionState}
-                  termuxError={termuxError}
-                  termuxHealth={termuxHealth}
-                  onTestTermuxConnection={handleTestTermuxConnection}
-                  onInstallInTermux={handleInstallInTermux}
-                  onRunInTermux={handleRunInTermux}
-                  onRunShellInTermux={handleRunShellInTermux}
-                  onInitializeEmbeddedEnv={handleInitializeEmbeddedEnv}
-                  onGenerateRequirements={handleGenerateRequirements}
-                  onInstallRequirements={handleInstallRequirements}
-                  onSaveWorkspaceFile={handleSaveWorkspaceFile}
-                  onOpenHelp={() => setShowHelpModal(true)}
-                  onNotify={showToast}
-                />
-              </div>
-            )}
           </div>
         )}
       </main>
 
-      {/* Mobile Thumb-Zone Bottom Navigation Bar (56px flex footer so keyboard never overlaps) */}
+      {/* Phone Thumb-Zone Bottom Navigation Bar (4 focused workspace tabs; low-frequency tools live in Negative Screen) */}
+      {deviceClass === 'phone' && (
       <nav
         aria-label={t('nav_workspace')}
-        className="lg:hidden shrink-0 h-14 pb-safe bg-[var(--ide-surface)]/95 backdrop-blur-md border-t border-[var(--ide-border)] grid grid-cols-5"
+        className="shrink-0 h-14 pb-safe bg-[var(--ide-surface)]/95 backdrop-blur-md border-t border-[var(--ide-border)] grid grid-cols-4"
       >
         {(
           [
             { id: 'editor', label: t('mob_editor'), Icon: Code2 },
             { id: 'console', label: t('mob_console'), Icon: TerminalIcon },
-            { id: 'browser', label: t('mob_browser'), Icon: Globe },
             { id: 'files', label: t('mob_files'), Icon: FolderOpen },
-            { id: 'tools', label: t('mob_tools'), Icon: Wrench },
+            { id: 'browser', label: t('mob_browser'), Icon: Globe },
           ] as const
         ).map(({ id, label, Icon }) => {
           const active = mobileTab === id;
@@ -2035,6 +2628,48 @@ export default function App() {
           );
         })}
       </nav>
+      )}
+
+      {/* Negative Screen Slide-Over Drawer for Phone & Tablet (Termux, Packages, Storage, System & Export) */}
+      {!isDesktop && (
+        <NegativeScreenDrawer
+          open={negativeOpen}
+          section={negativeSection}
+          onChangeSection={setNegativeSection}
+          onClose={() => setNegativeOpen(false)}
+          files={files}
+          activeFile={activeFile}
+          settings={settings}
+          onUpdateSettings={handleUpdateSettings}
+          onResetWorkspace={handleResetWorkspace}
+          pyodideStatus={pyodideStatus}
+          installedPackages={installedPackages}
+          onInstallPackage={handleInstallPackage}
+          onRefreshPackages={handleRefreshPackages}
+          linkedDirName={linkedDirHandle?.name ?? null}
+          onLinkDirectory={handleLinkDirectory}
+          onImportFromDirectory={handleImportFromDirectory}
+          onSaveToDirectory={handleSaveToDirectory}
+          engine={executionEngine}
+          onChangeEngine={setExecutionEngine}
+          termuxConfig={termuxConfig}
+          onUpdateTermuxConfig={handleUpdateTermuxConfig}
+          termuxConnectionState={termuxConnectionState}
+          termuxError={termuxError}
+          termuxHealth={termuxHealth}
+          onTestTermuxConnection={handleTestTermuxConnection}
+          onInstallInTermux={handleInstallInTermux}
+          onRunInTermux={handleRunInTermux}
+          onRunShellInTermux={handleRunShellInTermux}
+          onInitializeEmbeddedEnv={handleInitializeEmbeddedEnv}
+          onGenerateRequirements={handleGenerateRequirements}
+          onInstallRequirements={handleInstallRequirements}
+          onSaveWorkspaceFile={handleSaveWorkspaceFile}
+          onOpenHelp={() => setShowHelpModal(true)}
+          onOpenLogs={() => setShowLogsModal(true)}
+          onNotify={showToast}
+        />
+      )}
 
       {/* Quick Theme Picker Modal (accessible from Toolbar / Mobile Header) */}
       {showThemePicker && (
@@ -2170,12 +2805,26 @@ export default function App() {
         onNavigateBrowser={() => {
           setDesktopSection('workspace');
           setDesktopRightPane('browser');
+          setTabletSplit(true);
+          setTabletPaneTab('browser');
           setMobileTab('browser');
         }}
         onNavigateAndroid={() => {
-          setDesktopSection('android');
-          setMobileTab('tools');
+          if (isDesktop) {
+            setDesktopSection('android');
+          } else {
+            openNegativeDrawer('android');
+          }
         }}
+        onNotify={showToast}
+      />
+
+      {/* Full Application & Native Android Execution Logs Modal */}
+      <AppExecutionLogModal
+        open={showLogsModal}
+        onClose={() => setShowLogsModal(false)}
+        termuxConfig={termuxConfig}
+        termuxConnected={termuxConnectionState === 'connected'}
         onNotify={showToast}
       />
 

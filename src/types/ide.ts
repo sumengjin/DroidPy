@@ -42,7 +42,10 @@ export interface EditorSettings {
   androidStoragePermission: boolean;
 }
 
-export type MobileTab = 'editor' | 'console' | 'browser' | 'files' | 'tools';
+export type MobileTab = 'editor' | 'console' | 'browser' | 'files';
+export type NegativeScreenSection = 'termux' | 'packages' | 'android' | 'settings';
+export type DeviceClass = 'phone' | 'tablet' | 'desktop';
+export type TabletPaneTab = 'terminal' | 'browser' | 'files';
 export type DesktopSection = 'workspace' | 'termux' | 'packages' | 'android' | 'settings';
 export type DesktopRightPane = 'terminal' | 'browser';
 
@@ -62,6 +65,8 @@ export interface TermuxHealthInfo {
   workspaceDir: string;
   embedded?: boolean;
   hasPython?: boolean;
+  installedPipPackages?: string[];
+  installedPkgPackages?: string[];
 }
 
 export interface CapturedCookieItem {

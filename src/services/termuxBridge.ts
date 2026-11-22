@@ -553,6 +553,8 @@ export async function checkTermuxHealth(config: TermuxConfig): Promise<TermuxHea
     workspaceDir: res.workspaceDir,
     embedded: Boolean(res.embedded),
     hasPython: res.hasPython ?? true,
+    installedPipPackages: Array.isArray(res.installedPipPackages) ? res.installedPipPackages : undefined,
+    installedPkgPackages: Array.isArray(res.installedPkgPackages) ? res.installedPkgPackages : undefined,
   };
 }
 
@@ -780,4 +782,22 @@ export async function deleteSdcardPath(
     8000
   );
 }
+
+export interface TermuxNativeLogsResponse {
+  ok: boolean;
+  logPath?: string;
+  nativeLines: string[];
+  logcatLines: string[];
+}
+
+export async function fetchTermuxNativeLogs(
+  config: TermuxConfig
+): Promise<TermuxNativeLogsResponse> {
+  return termuxFetch<TermuxNativeLogsResponse>(config, '/logs', { method: 'GET' }, 6000);
+}
+
+export async function clearTermuxNativeLogs(config: TermuxConfig): Promise<{ ok: boolean }> {
+  return termuxFetch<{ ok: boolean }>(config, '/logs/clear', { method: 'POST', body: '{}' }, 5000);
+}
+
 

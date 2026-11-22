@@ -137,17 +137,33 @@ jobs:
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${appSlug}-arm64-apk
+          name: ${appSlug}-arm64-apk-\${{ github.run_number }}
+          retention-days: 90
           path: release-apk/*.apk
 
       - name: Publish GitHub Release on Tag
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          body_path: CHANGELOG.md
-          files: |
-            release-apk/*.apk
+        env:
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+        run: |
+          APK_FILE=\$(ls release-apk/*.apk | head -n1)
+          BASE_NAME=\$(basename "\$APK_FILE")
+          REL_TAG="\${GITHUB_REF_NAME}"
+          if gh release view "\$REL_TAG" >/dev/null 2>&1; then
+            EXISTING=\$(gh release view "\$REL_TAG" --json assets --jq '.assets[].name' || true)
+            if echo "\$EXISTING" | grep -qx "\$BASE_NAME"; then
+              ALT_FILE="release-apk/\${BASE_NAME%.apk}-b\${GITHUB_RUN_NUMBER}.apk"
+              cp "\$APK_FILE" "\$ALT_FILE"
+              gh release upload "\$REL_TAG" "\$ALT_FILE"
+            else
+              gh release upload "\$REL_TAG" "\$APK_FILE"
+            fi
+          else
+            gh release create "\$REL_TAG" "\$APK_FILE" \
+              --title "${appSlug} \${REL_TAG}" \
+              --notes-file CHANGELOG.md \
+              --target "\${GITHUB_SHA}"
+          fi
 `
   );
 
@@ -206,8 +222,8 @@ android {
         minSdk = 24
         // targetSdk = 28 讓內嵌 Termux bootstrap 能在 App 私有目錄自由執行 pkg / python / clang（GitHub 發佈專用）
         targetSdk = 28
-        versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 10207
-        versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.7"
+        versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 10208
+        versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.8"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -727,27 +743,45 @@ class MainActivity : AppCompatActivity() {
                     }
                     return
                 }
-                if (webView.canGoBack()) {
-                    webView.goBack()
-                    return
-                }
-                val now = SystemClock.elapsedRealtime()
-                if (now - lastBackPressedAt <= 2000L) {
-                    exitToast?.cancel()
-                    try {
-                        CookieManager.getInstance().flush()
-                        webView.evaluateJavascript("window.dispatchEvent(new Event('droidpy-flush-state'));", null)
-                    } catch (_: Exception) {
+                webView.evaluateJavascript(
+                    "(function(){ return window.__droidpyHandleBack ? Boolean(window.__droidpyHandleBack()) : false; })()"
+                ) { handled ->
+                    if (handled == "true") return@evaluateJavascript
+                    if (webView.canGoBack()) {
+                        webView.goBack()
+                        return@evaluateJavascript
                     }
-                    finish()
-                } else {
-                    lastBackPressedAt = now
-                    exitToast?.cancel()
-                    exitToast = Toast.makeText(
-                        this@MainActivity,
-                        "再按一次返回鍵退出 ${safeKotlinTitle}",
-                        Toast.LENGTH_SHORT
-                    ).also { it.show() }
+                    val now = SystemClock.elapsedRealtime()
+                    if (now - lastBackPressedAt <= 2000L) {
+                        exitToast?.cancel()
+                        try {
+                            CookieManager.getInstance().flush()
+                        } catch (_: Exception) {
+                        }
+                        var finished = false
+                        val finishNow = {
+                            if (!finished) {
+                                finished = true
+                                finish()
+                            }
+                        }
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(finishNow, 180L)
+                        try {
+                            webView.evaluateJavascript("window.dispatchEvent(new Event('droidpy-flush-state'));") {
+                                finishNow()
+                            }
+                        } catch (_: Exception) {
+                            finishNow()
+                        }
+                    } else {
+                        lastBackPressedAt = now
+                        exitToast?.cancel()
+                        exitToast = Toast.makeText(
+                            this@MainActivity,
+                            "再按一次返回鍵退出 ${safeKotlinTitle}",
+                            Toast.LENGTH_SHORT
+                        ).also { it.show() }
+                    }
                 }
             }
         })
@@ -765,6 +799,48 @@ class MainActivity : AppCompatActivity() {
             val usrDir = File(filesDir, "usr")
             val workspaceDir = File(filesDir, "droidpy_workspace").apply { mkdirs() }
             seedDefaultWorkspaceFiles(workspaceDir)
+
+            val bootstrapMarker = File(usrDir, ".droidpy_bootstrap_ok")
+            val hasExistingInstall = bootstrapMarker.exists() ||
+                File(usrDir, "bin/apt-get").exists() ||
+                File(usrDir, "bin/python").exists() ||
+                File(usrDir, "bin/python3").exists() ||
+                File(usrDir, "bin/dash").exists() ||
+                File(usrDir, "bin/bash").exists()
+
+            fun appendStartupLog(tag: String, msg: String) {
+                try {
+                    val lf = File(filesDir, "droidpy_native.log")
+                    val ts = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
+                    lf.appendText("[$ts] [$tag] $msg\\n")
+                } catch (_: Exception) {
+                }
+            }
+
+            appendStartupLog("MainActivity", "onCreate startup: hasExistingInstall=$hasExistingInstall")
+
+            if (!hasExistingInstall) {
+                try {
+                    appendStartupLog("Bootstrap", "Extracting bootstrap-aarch64.zip into \${usrDir.absolutePath}")
+                    extractTermuxBootstrap(usrDir)
+                    appendStartupLog("Bootstrap", "Bootstrap extraction completed successfully")
+                } catch (e: Exception) {
+                    appendStartupLog("Bootstrap", "Bootstrap extraction FAILED: \${e.message}")
+                    runOnUiThread {
+                        Toast.makeText(this@MainActivity, "Bootstrap 解壓失敗: \${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            } else {
+                try {
+                    repairTermuxRuntime(usrDir)
+                    if (!bootstrapMarker.exists()) {
+                        bootstrapMarker.writeText("1")
+                    }
+                    appendStartupLog("Bootstrap", "Preserved existing usr/ environment and repaired runtime symlinks")
+                } catch (e: Exception) {
+                    appendStartupLog("Bootstrap", "repairTermuxRuntime warning: \${e.message}")
+                }
+            }
 
             localBridge = EmbeddedTermuxBridge(
                 appContext = applicationContext,
@@ -785,16 +861,6 @@ class MainActivity : AppCompatActivity() {
                     val remoteUrl = "${typeof window !== 'undefined' ? window.location.origin : 'https://localhost'}"
                     appOriginHost = Uri.parse(remoteUrl).host
                     webView.loadUrl(remoteUrl)
-                }
-            }
-
-            if (!File(usrDir, "bin/sh").exists()) {
-                try {
-                    extractTermuxBootstrap(usrDir)
-                } catch (e: Exception) {
-                    runOnUiThread {
-                        Toast.makeText(this@MainActivity, "Bootstrap 解壓失敗: \${e.message}", Toast.LENGTH_LONG).show()
-                    }
                 }
             }
         }
@@ -893,6 +959,77 @@ class MainActivity : AppCompatActivity() {
             tempDir.copyRecursively(usrDir, overwrite = true)
             tempDir.deleteRecursively()
         }
+        repairTermuxRuntime(usrDir)
+        try {
+            File(usrDir, ".droidpy_bootstrap_ok").writeText("1")
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun repairTermuxRuntime(usrDir: File) {
+        val binDir = File(usrDir, "bin").apply { mkdirs() }
+        val shFile = File(binDir, "sh")
+        if (!shFile.exists()) {
+            val shTarget = listOf("dash", "bash", "mksh", "busybox")
+                .map { File(binDir, it) }
+                .firstOrNull { it.exists() }
+            if (shTarget != null) {
+                try {
+                    if (shFile.exists() || java.nio.file.Files.isSymbolicLink(shFile.toPath())) {
+                        shFile.delete()
+                    }
+                    android.system.Os.symlink(shTarget.name, shFile.absolutePath)
+                } catch (_: Exception) {
+                }
+            }
+        }
+        val legacyPrefix = "/data/data/com.termux/files/usr"
+        listOf(
+            binDir,
+            File(usrDir, "etc/apt/trusted.gpg.d"),
+            File(usrDir, "lib")
+        ).forEach { dir ->
+            if (!dir.isDirectory) return@forEach
+            dir.listFiles()?.forEach { f ->
+                try {
+                    val p = f.toPath()
+                    if (java.nio.file.Files.isSymbolicLink(p)) {
+                        val target = android.system.Os.readlink(f.absolutePath)
+                        if (target.startsWith("$legacyPrefix/")) {
+                            val fixed = usrDir.absolutePath + target.removePrefix(legacyPrefix)
+                            f.delete()
+                            android.system.Os.symlink(fixed, f.absolutePath)
+                        } else if (target == legacyPrefix) {
+                            f.delete()
+                            android.system.Os.symlink(usrDir.absolutePath, f.absolutePath)
+                        }
+                    }
+                } catch (_: Exception) {
+                }
+            }
+        }
+        val pyCand = binDir.listFiles()?.firstOrNull {
+            it.name.startsWith("python3.") && !it.name.endsWith("-config") && it.isFile
+        }
+        if (pyCand != null) {
+            pyCand.setExecutable(true, false)
+            val py3 = File(binDir, "python3")
+            if (!py3.exists()) {
+                try {
+                    if (java.nio.file.Files.isSymbolicLink(py3.toPath())) py3.delete()
+                    android.system.Os.symlink(pyCand.name, py3.absolutePath)
+                } catch (_: Exception) {
+                }
+            }
+            val py = File(binDir, "python")
+            if (!py.exists()) {
+                try {
+                    if (java.nio.file.Files.isSymbolicLink(py.toPath())) py.delete()
+                    android.system.Os.symlink("python3", py.absolutePath)
+                } catch (_: Exception) {
+                }
+            }
+        }
     }
 
     private fun seedDefaultWorkspaceFiles(workspaceDir: File) {
@@ -973,18 +1110,41 @@ class EmbeddedTermuxBridge(
     private val executor = Executors.newCachedThreadPool()
     @Volatile private var running = false
     @Volatile private var activeProcess: Process? = null
+    private val logLock = Any()
+    private val nativeLogFile: File
+        get() = File(appContext.filesDir, "droidpy_native.log")
+
+    private fun appendNativeLog(tag: String, msg: String) {
+        try {
+            android.util.Log.i("DroidPy", "[$tag] $msg")
+            val ts = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
+            val line = "[$ts] [$tag] $msg\\n"
+            synchronized(logLock) {
+                val f = nativeLogFile
+                f.parentFile?.mkdirs()
+                if (f.exists() && f.length() > 220 * 1024L) {
+                    val lines = f.readLines(Charsets.UTF_8)
+                    f.writeText(lines.takeLast((lines.size / 2).coerceAtLeast(100)).joinToString("\\n") + "\\n", Charsets.UTF_8)
+                }
+                f.appendText(line, Charsets.UTF_8)
+            }
+        } catch (_: Exception) {
+        }
+    }
 
     fun start() {
         if (running) return
         running = true
         serverSocket = ServerSocket(port, 32, InetAddress.getByName("127.0.0.1"))
+        appendNativeLog("Bridge", "EmbeddedTermuxBridge started on 127.0.0.1:$port (usr=\${usrDir.absolutePath})")
         executor.execute {
             while (running) {
                 try {
                     val client = serverSocket?.accept() ?: break
                     executor.execute { handleClient(client) }
-                } catch (_: Exception) {
+                } catch (e: Exception) {
                     if (!running) break
+                    appendNativeLog("Bridge", "Accept loop error: \${e.message}")
                 }
             }
         }
@@ -992,6 +1152,7 @@ class EmbeddedTermuxBridge(
 
     fun stop() {
         running = false
+        appendNativeLog("Bridge", "EmbeddedTermuxBridge stopping")
         activeProcess?.destroyForcibly()
         try { serverSocket?.close() } catch (_: Exception) {}
     }
@@ -1000,17 +1161,117 @@ class EmbeddedTermuxBridge(
         val homeDir = workspaceDir.parentFile!!
         val wrapperDir = File(homeDir, ".droidpy_bin").apply { mkdirs() }
         val prefix = usrDir.absolutePath
+        val legacyPrefix = "/data/data/com.termux/files/usr"
         val cert = File(usrDir, "etc/tls/cert.pem").absolutePath
-        val aptConfFile = File(usrDir, "etc/apt/apt.conf").apply {
-            parentFile?.mkdirs()
-            if (!exists()) {
-                writeText("APT::Sandbox::User \\"root\\";\\n")
+
+        // Ensure essential APT/dpkg directories exist cleanly inside app filesDir/usr
+        listOf(
+            "etc/apt/apt.conf.d",
+            "etc/apt/sources.list.d",
+            "etc/apt/preferences.d",
+            "etc/apt/trusted.gpg.d",
+            "var/lib/apt/lists/partial",
+            "var/cache/apt/archives/partial",
+            "var/lib/dpkg/updates",
+            "var/lib/dpkg/info",
+            "var/log/apt"
+        ).forEach { rel ->
+            File(usrDir, rel).apply {
+                mkdirs()
+                setReadable(true, false)
+                setExecutable(true, false)
             }
         }
-        File(usrDir, "etc/apt/apt.conf.d").mkdirs()
+        File(usrDir, "var/lib/dpkg/status").apply { if (!exists()) writeText("") }
         File(usrDir, "etc/apt/preferences").apply { if (!exists()) writeText("") }
-        File(usrDir, "etc/apt/preferences.d").mkdirs()
-        File(usrDir, "var/log/apt").mkdirs()
+
+        // Unconditionally write full APT config so libapt-pkg redirects Dir/Dir::Etc/Dir::Etc::parts
+        // BEFORE it ever tries reading compiled-in /data/data/com.termux/files/usr/etc/apt/apt.conf.d/
+        val aptConfFile = File(usrDir, "etc/apt/apt.conf").apply {
+            parentFile?.mkdirs()
+            writeText(
+                listOf(
+                    "Dir \\"$prefix/\\";",
+                    "Dir::State \\"$prefix/var/lib/apt\\";",
+                    "Dir::State::status \\"$prefix/var/lib/dpkg/status\\";",
+                    "Dir::Cache \\"$prefix/var/cache/apt\\";",
+                    "Dir::Etc \\"$prefix/etc/apt\\";",
+                    "Dir::Etc::parts \\"$prefix/etc/apt/apt.conf.d\\";",
+                    "Dir::Etc::main \\"$prefix/etc/apt/apt.conf\\";",
+                    "Dir::Etc::preferences \\"$prefix/etc/apt/preferences\\";",
+                    "Dir::Etc::preferencesparts \\"$prefix/etc/apt/preferences.d\\";",
+                    "Dir::Etc::sourcelist \\"$prefix/etc/apt/sources.list\\";",
+                    "Dir::Etc::sourceparts \\"$prefix/etc/apt/sources.list.d\\";",
+                    "Dir::Etc::Trusted \\"$prefix/etc/apt/trusted.gpg\\";",
+                    "Dir::Etc::TrustedParts \\"$prefix/etc/apt/trusted.gpg.d\\";",
+                    "Dir::Log \\"$prefix/var/log/apt\\";",
+                    "Dir::Bin::methods \\"$prefix/lib/apt/methods\\";",
+                    "Dir::Bin::dpkg \\"$prefix/bin/dpkg\\";",
+                    "APT::Sandbox::User \\"root\\";",
+                    "Acquire::AllowInsecureRepositories \\"true\\";",
+                    "APT::Get::AllowUnauthenticated \\"true\\";",
+                    "Acquire::https::CaInfo \\"$cert\\";"
+                ).joinToString("\\n") + "\\n"
+            )
+        }
+
+        // Rewrite any legacy /data/data/com.termux/files/usr paths in sources.list / apt.conf.d
+        listOf(
+            File(usrDir, "etc/apt/sources.list"),
+            File(usrDir, "etc/apt/sources.list.d"),
+            File(usrDir, "etc/apt/apt.conf.d")
+        ).forEach { target ->
+            val targets = if (target.isDirectory) target.listFiles()?.toList() ?: emptyList() else listOf(target)
+            targets.forEach { cfg ->
+                if (cfg.isFile) {
+                    try {
+                        val txt = cfg.readText()
+                        if (txt.contains(legacyPrefix)) {
+                            cfg.writeText(txt.replace(legacyPrefix, prefix))
+                        }
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+        }
+
+        // Keep bin/sh, trusted.gpg.d/*.gpg, python/python3 symlinks healed on every invocation
+        val binDir = File(usrDir, "bin")
+        listOf(binDir, File(usrDir, "etc/apt/trusted.gpg.d"), File(usrDir, "lib")).forEach { dir ->
+            dir.listFiles()?.forEach { f ->
+                try {
+                    if (java.nio.file.Files.isSymbolicLink(f.toPath())) {
+                        val target = android.system.Os.readlink(f.absolutePath)
+                        if (target.startsWith("$legacyPrefix/")) {
+                            f.delete()
+                            android.system.Os.symlink(prefix + target.removePrefix(legacyPrefix), f.absolutePath)
+                        }
+                    }
+                } catch (_: Exception) {
+                }
+            }
+        }
+        val pyCand = binDir.listFiles()?.firstOrNull {
+            it.name.startsWith("python3.") && !it.name.endsWith("-config") && it.isFile
+        }
+        if (pyCand != null) {
+            pyCand.setExecutable(true, false)
+            val py3 = File(binDir, "python3")
+            if (!py3.exists()) {
+                try {
+                    if (java.nio.file.Files.isSymbolicLink(py3.toPath())) py3.delete()
+                    android.system.Os.symlink(pyCand.name, py3.absolutePath)
+                } catch (_: Exception) {}
+            }
+            val py = File(binDir, "python")
+            if (!py.exists()) {
+                try {
+                    if (java.nio.file.Files.isSymbolicLink(py.toPath())) py.delete()
+                    android.system.Os.symlink("python3", py.absolutePath)
+                } catch (_: Exception) {}
+            }
+        }
+
         val d = '$'
 
         val pkgLines = listOf(
@@ -1018,7 +1279,7 @@ class EmbeddedTermuxBridge(
             "PREFIX=\\"$prefix\\"",
             "APT_CONFIG=\\"\${aptConfFile.absolutePath}\\"",
             "export PREFIX APT_CONFIG",
-            "APT_OPTS=\\"-o Dir=\${d}PREFIX -o Dir::State=\${d}PREFIX/var/lib/apt -o Dir::State::status=\${d}PREFIX/var/lib/dpkg/status -o Dir::Cache=\${d}PREFIX/var/cache/apt -o Dir::Etc=\${d}PREFIX/etc/apt -o Dir::Etc::parts=\${d}PREFIX/etc/apt/apt.conf.d -o Dir::Etc::main=\${d}PREFIX/etc/apt/apt.conf -o Dir::Etc::preferences=\${d}PREFIX/etc/apt/preferences -o Dir::Etc::preferencesparts=\${d}PREFIX/etc/apt/preferences.d -o Dir::Etc::sourcelist=\${d}PREFIX/etc/apt/sources.list -o Dir::Etc::sourceparts=\${d}PREFIX/etc/apt/sources.list.d -o Dir::Etc::Trusted=\${d}PREFIX/etc/apt/trusted.gpg -o Dir::Etc::TrustedParts=\${d}PREFIX/etc/apt/trusted.gpg.d -o Dir::Log=\${d}PREFIX/var/log/apt -o Dir::Bin::methods=\${d}PREFIX/lib/apt/methods -o Dir::Bin::dpkg=\${d}PREFIX/bin/dpkg -o DPkg::Options::=--admindir=\${d}PREFIX/var/lib/dpkg -o Acquire::AllowInsecureRepositories=true -o APT::Get::AllowUnauthenticated=true -o APT::Sandbox::User=root -o Acquire::https::CaInfo=$cert\\"",
+            "APT_OPTS=\\"-c \${d}APT_CONFIG -o Dir=\${d}PREFIX/ -o Dir::State=\${d}PREFIX/var/lib/apt -o Dir::State::status=\${d}PREFIX/var/lib/dpkg/status -o Dir::Cache=\${d}PREFIX/var/cache/apt -o Dir::Etc=\${d}PREFIX/etc/apt -o Dir::Etc::parts=\${d}PREFIX/etc/apt/apt.conf.d -o Dir::Etc::main=\${d}PREFIX/etc/apt/apt.conf -o Dir::Etc::preferences=\${d}PREFIX/etc/apt/preferences -o Dir::Etc::preferencesparts=\${d}PREFIX/etc/apt/preferences.d -o Dir::Etc::sourcelist=\${d}PREFIX/etc/apt/sources.list -o Dir::Etc::sourceparts=\${d}PREFIX/etc/apt/sources.list.d -o Dir::Etc::Trusted=\${d}PREFIX/etc/apt/trusted.gpg -o Dir::Etc::TrustedParts=\${d}PREFIX/etc/apt/trusted.gpg.d -o Dir::Log=\${d}PREFIX/var/log/apt -o Dir::Bin::methods=\${d}PREFIX/lib/apt/methods -o Dir::Bin::dpkg=\${d}PREFIX/bin/dpkg -o DPkg::Options::=--admindir=\${d}PREFIX/var/lib/dpkg -o Acquire::AllowInsecureRepositories=true -o APT::Get::AllowUnauthenticated=true -o APT::Sandbox::User=root -o Acquire::https::CaInfo=$cert\\"",
             "mkdir -p \\"\${d}PREFIX/var/lib/apt/lists/partial\\" \\"\${d}PREFIX/var/cache/apt/archives/partial\\" \\"\${d}PREFIX/var/lib/dpkg/updates\\" \\"\${d}PREFIX/var/lib/dpkg/info\\" \\"\${d}PREFIX/etc/apt/apt.conf.d\\" \\"\${d}PREFIX/etc/apt/preferences.d\\" \\"\${d}PREFIX/var/log/apt\\"",
             "touch \\"\${d}PREFIX/var/lib/dpkg/status\\" \\"\${d}PREFIX/etc/apt/apt.conf\\" \\"\${d}PREFIX/etc/apt/preferences\\"",
             "SUB=\\"\${d}1\\"",
@@ -1052,6 +1313,15 @@ class EmbeddedTermuxBridge(
             "    ln -sf python3 \\"\${d}PREFIX/bin/python\\" 2>/dev/null || true",
             "  fi",
             "}",
+            "record_dpkg_status() {",
+            "  deb_file=\\"\${d}1\\"",
+            "  CTRL=\\"\${d}(\\"\${d}PREFIX/bin/dpkg-deb\\" -f \\"\${d}deb_file\\" 2>/dev/null)\\"",
+            "  PKG_NAME=\\"\${d}(printf '%s\\\\n' \\"\${d}CTRL\\" | sed -n 's/^Package: *//p' | head -n1)\\"",
+            "  [ -z \\"\${d}PKG_NAME\\" ] && return 0",
+            "  if ! grep -Fxq \\"Package: \${d}PKG_NAME\\" \\"\${d}PREFIX/var/lib/dpkg/status\\" 2>/dev/null; then",
+            "    printf '%s\\\\nStatus: install ok installed\\\\n\\\\n' \\"\${d}CTRL\\" >> \\"\${d}PREFIX/var/lib/dpkg/status\\"",
+            "  fi",
+            "}",
             "relocate_debs() {",
             "  STAGE=\\"\${d}PREFIX/tmp_pkg_stage\\"",
             "  for deb in \\"\${d}PREFIX/var/cache/apt/archives/\\"*.deb; do",
@@ -1069,6 +1339,7 @@ class EmbeddedTermuxBridge(
             "        \\"\${d}PREFIX/bin/cp\\" -af \\"\${d}STAGE/data/data/com.termux/files/usr/.\\" \\"\${d}PREFIX/\\" 2>/dev/null || cp -rf \\"\${d}STAGE/data/data/com.termux/files/usr/.\\" \\"\${d}PREFIX/\\"",
             "      fi",
             "    fi",
+            "    record_dpkg_status \\"\${d}deb\\"",
             "    rm -f \\"\${d}deb\\"",
             "  done",
             "  rm -rf \\"\${d}STAGE\\"",
@@ -1085,6 +1356,7 @@ class EmbeddedTermuxBridge(
             "  echo \\"[DroidPy pkg] 套件配置完成。\\"",
             "  return 0",
             "}",
+            "fix_prefix_symlinks",
             "case \\"\${d}SUB\\" in",
             "  update)",
             "    \\"\${d}PREFIX/bin/apt-get\\" \${d}APT_OPTS update \\"\${d}@\\"",
@@ -1365,6 +1637,8 @@ def clipboard_set(text):
 
             val apiRoutes = setOf(
                 "/health",
+                "/logs",
+                "/logs/clear",
                 "/stdin",
                 "/stop",
                 "/run-stream",
@@ -1408,6 +1682,36 @@ def clipboard_set(text):
                             it.name.startsWith("python3.") && !it.name.endsWith("-config") && it.isFile
                         }
                     val hasPython = pyBin != null
+
+                    val pipArr = JSONArray()
+                    try {
+                        val pipNames = mutableSetOf<String>()
+                        File(usrDir, "lib").listFiles()?.filter { it.isDirectory && it.name.startsWith("python3.") }?.forEach { pyLib ->
+                            File(pyLib, "site-packages").listFiles()?.filter { it.isDirectory && it.name.endsWith(".dist-info") }?.forEach { distInfo ->
+                                val pkgName = distInfo.name.substringBefore("-").replace("_", "-")
+                                if (pkgName.isNotBlank()) pipNames.add(pkgName)
+                            }
+                        }
+                        pipNames.sorted().forEach { pipArr.put(it) }
+                    } catch (_: Exception) {
+                    }
+
+                    val pkgArr = JSONArray()
+                    try {
+                        val statusFile = File(usrDir, "var/lib/dpkg/status")
+                        if (statusFile.isFile) {
+                            val pkgSet = mutableSetOf<String>()
+                            statusFile.forEachLine { line ->
+                                if (line.startsWith("Package:")) {
+                                    val p = line.substringAfter("Package:").trim()
+                                    if (p.isNotBlank()) pkgSet.add(p)
+                                }
+                            }
+                            pkgSet.sorted().forEach { pkgArr.put(it) }
+                        }
+                    } catch (_: Exception) {
+                    }
+
                     val res = JSONObject()
                         .put("ok", true)
                         .put("streaming", true)
@@ -1418,7 +1722,51 @@ def clipboard_set(text):
                         .put("hasClang", File(usrDir, "bin/clang").exists())
                         .put("hasFfmpeg", File(usrDir, "bin/ffmpeg").exists())
                         .put("workspaceDir", workspaceDir.absolutePath)
+                        .put("installedPipPackages", pipArr)
+                        .put("installedPkgPackages", pkgArr)
                     writeJson(out, 200, res)
+                }
+
+                method == "GET" && path == "/logs" -> {
+                    val nativeLines = JSONArray()
+                    try {
+                        synchronized(logLock) {
+                            val f = nativeLogFile
+                            if (f.isFile) {
+                                f.readLines(Charsets.UTF_8).takeLast(450).forEach { nativeLines.put(it) }
+                            }
+                        }
+                    } catch (_: Exception) {
+                    }
+                    val logcatLines = JSONArray()
+                    try {
+                        val pid = android.os.Process.myPid()
+                        val p = ProcessBuilder("logcat", "-d", "-t", "80", "--pid=$pid").redirectErrorStream(true).start()
+                        val txt = p.inputStream.bufferedReader(Charsets.UTF_8).readText()
+                        p.waitFor()
+                        txt.lines().filter { it.isNotBlank() }.takeLast(80).forEach { logcatLines.put(it) }
+                    } catch (_: Exception) {
+                    }
+                    writeJson(
+                        out,
+                        200,
+                        JSONObject()
+                            .put("ok", true)
+                            .put("logPath", nativeLogFile.absolutePath)
+                            .put("nativeLines", nativeLines)
+                            .put("logcatLines", logcatLines)
+                    )
+                }
+
+                method == "POST" && path == "/logs/clear" -> {
+                    try {
+                        synchronized(logLock) {
+                            nativeLogFile.writeText("", Charsets.UTF_8)
+                        }
+                    } catch (_: Exception) {
+                    }
+                    appendNativeLog("Logs", "Native log cleared by user")
+                    writeJson(out, 200, JSONObject().put("ok", true))
                 }
 
                 method == "POST" && path == "/stdin" -> {
@@ -1440,6 +1788,7 @@ def clipboard_set(text):
                 method == "POST" && path == "/stop" -> {
                     val proc = activeProcess
                     if (proc != null) {
+                        appendNativeLog("Exec", "Force stopping active process tree")
                         killProcessTree(proc)
                     }
                     writeJson(out, 200, JSONObject().put("ok", true))
@@ -1774,6 +2123,7 @@ def clipboard_set(text):
     private fun streamShellCommand(out: OutputStream, command: String) {
         val t0 = System.currentTimeMillis()
         val shFile = File(usrDir, "bin/sh")
+        appendNativeLog("Exec", "Stream shell start: \${command.take(180)}")
 
         out.write((
             "HTTP/1.1 200 OK\\r\\n" +
@@ -1804,6 +2154,7 @@ def clipboard_set(text):
 
         var code = 1
         if (!shFile.exists()) {
+            appendNativeLog("Exec", "Bootstrap missing sh at \${shFile.absolutePath}")
             try {
                 sendStdout("[DroidPy] Bootstrap not ready at \${shFile.absolutePath}\\n")
             } catch (_: Exception) {
@@ -1833,6 +2184,7 @@ def clipboard_set(text):
                 }
                 code = proc.waitFor()
             } catch (e: Exception) {
+                appendNativeLog("Exec", "Exec exception: \${e.message}")
                 try {
                     sendStdout("[DroidPy] Exec error: \${e.message}\\n")
                 } catch (_: Exception) {
@@ -1842,10 +2194,13 @@ def clipboard_set(text):
             }
         }
 
+        val elapsed = System.currentTimeMillis() - t0
+        appendNativeLog("Exec", "Stream shell finished: exitCode=$code, durationMs=$elapsed")
+
         val doneLine = JSONObject()
             .put("type", "done")
             .put("exitCode", code)
-            .put("durationMs", System.currentTimeMillis() - t0)
+            .put("durationMs", elapsed)
             .toString() + "\\n"
         try {
             out.write(doneLine.toByteArray(Charsets.UTF_8))
@@ -1975,6 +2330,14 @@ def clipboard_set(text):
 `;
 
   const changelogContent = `# Changelog / 更新日誌
+
+## [1.2.8] - 2026-11-21
+- **徹底修復 Termux Python / 套件重開機恢復預設與 \`apt.conf.d\` Permission denied**：
+  - \`MainActivity.kt\` 改以 \`.droidpy_bootstrap_ok\` 標記與多路徑檢查保護 \`filesDir/usr\`，並於啟動時自動修復 \`bin/sh\` 與符號連結，永不再因 symlink 異常而重設清空已安裝的 Python 與爬蟲套件。
+  - \`EmbeddedTermuxBridge.kt\` 每次執行皆無條件寫入完整 \`etc/apt/apt.conf\`（含 \`Dir::Etc::parts\` 等核心路徑）並改寫殘留路徑與更新 \`dpkg/status\`，同時於 \`/health\` 回傳已保留的 pip / pkg 套件清單。
+  - 沙盒模式（Pyodide）同步持久化已安裝套件清單並於重啟時自動恢復；執行 \`utils.py\` 等模組檔新增 \`__main__\` 輸出與明確執行完成提示。
+- **適配手機與平板操作差異、將低頻功能移入負屏抽屜、保留歷史版本 APK 並加入「程式執行所有日誌」**：
+  - 新增應用程式全生命週期日誌記錄器與 Android 原生 \`/logs\`（含 \`droidpy_native.log\` 與 \`logcat\`）檢視匯出面板。
 
 ## [1.2.7] - 2026-11-21
 - **確保以後每次打包的 APK 簽名永久一致**：於倉庫與匯出專案加入固定的 30 年效期簽名金鑰 \`droidpy-debug.p12\`（SHA-256 指紋固定），\`build.gradle.kts\` 明確綁定統一 \`signingConfigs\` 並依版本號自動遞增 \`versionCode\`，同時支援選填 GitHub Secrets 自訂憑證（\`DROIDPY_KEYSTORE_BASE64\` 等）；後續每次 GitHub Actions 產出的新版本 APK 皆可直接覆蓋升級安裝，無須移除舊版、完整保留程式碼與環境。

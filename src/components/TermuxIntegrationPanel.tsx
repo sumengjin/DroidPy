@@ -257,6 +257,16 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
               <div>Clang  : {healthInfo.hasClang ? t('tmx_ready') : t('tmx_not_installed')}</div>
               <div>FFmpeg : {healthInfo.hasFfmpeg ? t('tmx_ready') : t('tmx_not_installed')}</div>
               <div className="truncate">{t('tmx_dir')} : {healthInfo.workspaceDir}</div>
+              {healthInfo.installedPipPackages && healthInfo.installedPipPackages.length > 0 && (
+                <div className="pt-1.5 mt-1.5 border-t border-[var(--ide-border)] font-sans">
+                  <div className="text-[11px] font-medium text-[var(--ide-text-muted)]">
+                    {t('tmx_installed_pkgs')}
+                  </div>
+                  <div className="mt-1 font-mono text-[11px] text-[var(--ide-text)] leading-relaxed break-words">
+                    {healthInfo.installedPipPackages.join(' · ')}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -443,19 +453,44 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
           {TERMUX_QUICK_ITEMS.map((item) => {
             const isBusy = busyAction === `install:${item.target}`;
+            const pipInstalled =
+              item.mode === 'pip' &&
+              Boolean(
+                healthInfo?.installedPipPackages?.some(
+                  (p) => p.toLowerCase().replace(/_/g, '-') === item.target.toLowerCase().replace(/_/g, '-')
+                )
+              );
+            const pkgInstalled =
+              item.mode === 'pkg' &&
+              ((item.target === 'clang' && Boolean(healthInfo?.hasClang)) ||
+                (item.target === 'ffmpeg' && Boolean(healthInfo?.hasFfmpeg)) ||
+                Boolean(
+                  healthInfo?.installedPkgPackages?.some(
+                    (p) => p.toLowerCase() === item.target.toLowerCase()
+                  )
+                ));
+            const alreadyInstalled = pipInstalled || pkgInstalled;
             return (
               <button
                 key={`${item.mode}-${item.target}`}
                 type="button"
                 disabled={!!busyAction}
                 onClick={() => handleQuickInstall(item.mode, item.target)}
-                className="p-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] text-left transition-colors disabled:opacity-50"
+                className={`p-3 rounded-xl border text-left transition-colors disabled:opacity-50 ${
+                  alreadyInstalled
+                    ? 'border-[var(--ide-accent)]/50 bg-[var(--ide-accent-soft)]/50'
+                    : 'border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)]'
+                }`}
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-mono text-xs font-semibold text-[var(--ide-text)]">
                     {item.mode} {item.target}
                   </span>
-                  {isBusy && <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--ide-accent)]" />}
+                  {isBusy ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--ide-accent)]" />
+                  ) : alreadyInstalled ? (
+                    <Check className="w-3.5 h-3.5 text-[var(--ide-accent)] shrink-0" />
+                  ) : null}
                 </div>
                 <div className="text-[11px] text-[var(--ide-text-muted)] mt-1 truncate">
                   {item.desc}

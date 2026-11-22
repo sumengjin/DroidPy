@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Trash2, Copy, Check, AlertCircle, CornerDownLeft, Download, Maximize2, X, Square } from 'lucide-react';
+import { Trash2, Copy, Check, AlertCircle, CornerDownLeft, Download, Maximize2, X, Square, FileText } from 'lucide-react';
 import { ExecutionEngine, PyodideStatus, TerminalEntry } from '../types/ide';
 import { renderAnsiText, stripAnsi } from '../utils/ansiParser';
 import { useI18n } from '../services/i18n';
@@ -19,6 +19,7 @@ interface TerminalPanelProps {
   onRunRepl: (statement: string) => Promise<void>;
   onSendTermuxStdin?: (text: string) => Promise<void>;
   onStopTermux?: () => Promise<void>;
+  onOpenLogs?: () => void;
   onClear: () => void;
 }
 
@@ -36,6 +37,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   onRunRepl,
   onSendTermuxStdin,
   onStopTermux,
+  onOpenLogs,
   onClear,
 }) => {
   const { t } = useI18n();
@@ -175,6 +177,16 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
+          {onOpenLogs && (
+            <button
+              type="button"
+              onClick={onOpenLogs}
+              className="min-h-[36px] px-2 flex items-center gap-1 rounded-lg text-xs font-medium text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-accent-soft)] transition-colors whitespace-nowrap"
+            >
+              <FileText className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
+              <span>{t('logs_btn')}</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={handleCopyAll}

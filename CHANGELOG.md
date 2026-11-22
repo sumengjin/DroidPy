@@ -2,6 +2,28 @@
 
 All notable changes to **DroidPy** are documented in this file.
 
+## [1.2.8] - 2026-11-21
+
+### Fixed & Improved (Persistence, APT Prefix, Script Feedback, Phone/Tablet UX & Historical Releases)
+- **修復退出程式重新進入後套件／Termux Python 恢復預設的問題**：
+  - 修正 `MainActivity.kt` 原本僅檢查 `bin/sh` 是否存在而誤判損壞符號連結並刪除整個 `usr/` 的 Bug：改以 `.droidpy_bootstrap_ok` 與真實執行檔（`python`/`python3`/`apt-get`/`dash`/`bash`）判斷是否已完成解壓；重開 App 時僅執行 `repairTermuxRuntime(usrDir)` 修復 `sh`、`python`/`python3` 與路徑符號連結，絕不覆蓋或清空已安裝套件。
+  - `EmbeddedTermuxBridge.kt` 安裝 `.deb` 套件時同步寫入 `var/lib/dpkg/status` 套件紀錄，並於 `/health` 回傳真實 `installedPipPackages` 與 `installedPkgPackages`，重新進入 App 後仍可正確辨識已安裝環境。
+  - 硬體返回鍵雙擊退出改為等待 `droidpy-flush-state` 狀態刷寫回呼完成（附超時保護）再 `finish()`；Pyodide 沙盒已安裝套件亦持久化保存並於重啟時自動恢復。
+- **修復 `/data/data/com.termux/files/usr/etc/apt/apt.conf.d/ - DirectoryExists (13: Permission denied)` 問題**：
+  - `EmbeddedTermuxBridge.kt` 的 `ensurePrefixWrappers()` 改為無條件強制寫入完整 `etc/apt/apt.conf`（包含 `Dir`、`Dir::State`、`Dir::Cache`、`Dir::Etc`、`Dir::Etc::parts`、`Dir::Etc::main`、`Dir::Etc::preferences*`、`Dir::Etc::source*`、`Dir::Etc::Trusted*`、`Dir::Log` 與 `Dir::Bin::*`），並覆寫來源設定與 `apt.conf.d/*` 內殘留的硬編碼路徑、以 `apt-get -c "$APT_CONFIG"` 啟動，徹底根除權限拒絕警告。
+- **修復執行 `utils.py` 沒有下一步動作／無回饋問題**：
+  - 為內建 `utils.py` 加入 `if __name__ == "__main__":` 獨立測試進入點，保留 `from utils import format_device_report` 匯入相容性，同時支援對既有工作區舊版 `utils.py` 自動升級。
+  - 終端機於任何檔案正常執行結束後皆顯示明確完成提示（含耗時與「無標準輸出」輔助說明），不再只停留於「正在執行」。
+- **適配手機／平板／桌面操作差異並將低頻功能轉移至負屏（Negative Screen）**：
+  - 新增 `useDeviceLayout` 三階段自適應介面與左滑側欄「負屏工具箱」(`NegativeScreenDrawer`)：手機版頂欄極簡化（左上負屏鈕 + 執行按鈕）與底部 4 分頁專注工作區；平板版提供頂部檔案分頁、`雙欄分屏 / 純編輯` 切換與橫直向自動佈局；低頻的 Termux 連線調校、套件管理、儲存授權與 APK 匯出皆收納於負屏工具箱，支援左側邊緣右滑喚出與硬體返回鍵優先關閉。
+- **版本發布保留所有歷史版本 APK**：
+  - 更新 `.github/workflows/droidpy.yml` 與匯出 CI 範本：每次建置採用獨立版號 Artifact（保留 90 天）、GitHub Release 永不 `--clobber` 覆蓋既有 `.apk` 資產，並於 Release 頁面自動附上歷史版本 APK 下載索引。
+- **加入「程式執行所有日誌」檢視與匯出面板**：
+  - 新增 `appLogger.ts` 全域日誌收集器（自動持久化於 `localStorage`）與 `AppExecutionLogModal` 日誌面板，完整記錄 App 啟動、檔案同步、Pyodide／Termux 初始化與執行、套件安裝及未捕捉錯誤。
+  - Android 原生 `EmbeddedTermuxBridge.kt` 與 `MainActivity.kt` 同步將啟動與橋接事件寫入 `droidpy_native.log`，並開放 `GET /logs`（整合 `droidpy_native.log` 與 `logcat`）與 `POST /logs/clear` 供手機端一鍵檢視、搜尋、複製與匯出 `.log`。
+
+---
+
 ## [1.2.7] - 2026-11-21
 
 ### Fixed & Improved (Consistent APK Signing & Seamless In-Place Upgrades)
