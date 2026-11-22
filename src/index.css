@@ -152,6 +152,24 @@
   .font-mono {
     font-family: var(--font-mono);
   }
+
+  button,
+  [role="button"],
+  [role="switch"],
+  header,
+  nav {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+}
+
+.selectable-text,
+.terminal-selectable,
+.terminal-selectable * {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
 .tabular-nums {

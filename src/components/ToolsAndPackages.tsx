@@ -22,6 +22,7 @@ import {
   Search,
   Sparkles,
   PackageCheck,
+  Trash2,
 } from 'lucide-react';
 import JSZip from 'jszip';
 import {
@@ -42,7 +43,7 @@ import { IDE_THEMES } from '../services/themes';
 import { LOCALE_OPTIONS, TranslationKey, getLocalizedThemeText, useI18n } from '../services/i18n';
 import { generateGitHubApkProjectZip } from '../services/androidApkBuilder';
 import { downloadBlob } from '../utils/downloadBlob';
-import { getSdcardStatus } from '../services/termuxBridge';
+import { getSdcardStatus, TermuxOutdatedPipItem } from '../services/termuxBridge';
 import {
   StorageEstimateInfo,
   formatStorageBytes,
@@ -57,7 +58,11 @@ import {
   PackageTier,
   fuzzyMatchPackages,
 } from '../data/packageCatalog';
-import { OutdatedPackageInfo } from '../services/pyodideRuntime';
+import {
+  OutdatedPackageInfo,
+  PYODIDE_CORE_PACKAGES,
+  normalizePyPkgName,
+} from '../services/pyodideRuntime';
 import { AppUpdateCheckResult, getInstalledAppVersion } from '../services/appUpdater';
 
 interface ToolsAndPackagesProps {
@@ -76,9 +81,15 @@ interface ToolsAndPackagesProps {
   checkingOutdated?: boolean;
   upgradingPackages?: boolean;
   onUpgradePackage?: (pkg: string) => Promise<void>;
+  onUninstallPackage?: (pkg: string) => Promise<void>;
   onCheckAndUpgradeAll?: () => Promise<void>;
+  onUpgradeAllPackages?: () => Promise<void>;
   onUpgradeAllTermux?: (kind: 'pip' | 'pkg') => Promise<void>;
   onUpgradeSingleTermuxPip?: (pkg: string) => Promise<void>;
+  outdatedTermuxPips?: TermuxOutdatedPipItem[];
+  checkingTermuxOutdated?: boolean;
+  onCheckTermuxOutdated?: () => Promise<void>;
+  onUninstallInTermux?: (mode: 'pip' | 'pkg', target: string) => Promise<void>;
   upgradingTermux?: boolean;
   appUpdateResult?: AppUpdateCheckResult | null;
   checkingAppUpdate?: boolean;
@@ -123,9 +134,15 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
   checkingOutdated = false,
   upgradingPackages = false,
   onUpgradePackage,
+  onUninstallPackage,
   onCheckAndUpgradeAll,
+  onUpgradeAllPackages,
   onUpgradeAllTermux,
   onUpgradeSingleTermuxPip,
+  outdatedTermuxPips = [],
+  checkingTermuxOutdated = false,
+  onCheckTermuxOutdated,
+  onUninstallInTermux,
   upgradingTermux = false,
   appUpdateResult,
   checkingAppUpdate = false,
@@ -156,6 +173,7 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
   const { locale, t } = useI18n();
   const [pkgQuery, setPkgQuery] = useState('');
   const [installingPkg, setInstallingPkg] = useState<string | null>(null);
+  const [uninstallingPkg, setUninstallingPkg] = useState<string | null>(null);
   const [tierFilter, setTierFilter] = useState<'all' | PackageTier>('all');
   const [catFilter, setCatFilter] = useState<PackageCategoryId>('all');
   const [appPackageName, setAppPackageName] = useState('org.droidpy.app');
@@ -200,7 +218,7 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
   const outdatedMap = useMemo(() => {
     const map = new Map<string, OutdatedPackageInfo>();
     for (const item of outdatedPackages) {
-      map.set(item.name.toLowerCase(), item);
+      map.set(normalizePyPkgName(item.name), item);
     }
     return map;
   }, [outdatedPackages]);
@@ -267,13 +285,24 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
 
   const handleInstall = async (target: string) => {
     const clean = target.trim();
-    if (!clean || installingPkg) return;
+    if (!clean || installingPkg || uninstallingPkg) return;
     setInstallingPkg(clean);
     try {
       await onInstallPackage(clean);
       setPkgQuery('');
     } finally {
       setInstallingPkg(null);
+    }
+  };
+
+  const handleUninstall = async (target: string) => {
+    const clean = target.trim();
+    if (!clean || !onUninstallPackage || installingPkg || uninstallingPkg) return;
+    setUninstallingPkg(clean);
+    try {
+      await onUninstallPackage(clean);
+    } finally {
+      setUninstallingPkg(null);
     }
   };
 
@@ -529,6 +558,11 @@ python ${entryFile}
             onInitializeEmbeddedEnv={onInitializeEmbeddedEnv}
             onUpgradeAllTermux={onUpgradeAllTermux}
             onUpgradeSinglePip={onUpgradeSingleTermuxPip}
+            onUpgradeAllPackages={onUpgradeAllPackages}
+            outdatedTermuxPips={outdatedTermuxPips}
+            checkingTermuxOutdated={checkingTermuxOutdated}
+            onCheckTermuxOutdated={onCheckTermuxOutdated}
+            onUninstallInTermux={onUninstallInTermux}
             upgradingTermux={upgradingTermux}
             onNotify={onNotify}
           />
@@ -816,14 +850,14 @@ python ${entryFile}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                {onCheckAndUpgradeAll && (
+                {(onUpgradeAllPackages || onCheckAndUpgradeAll) && (
                   <button
                     type="button"
-                    onClick={() => void onCheckAndUpgradeAll()}
-                    disabled={checkingOutdated || upgradingPackages || pyodideStatus === 'loading'}
+                    onClick={() => void (onUpgradeAllPackages ?? onCheckAndUpgradeAll)!()}
+                    disabled={checkingOutdated || upgradingPackages || upgradingTermux || pyodideStatus === 'loading'}
                     className="min-h-[40px] px-3.5 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-40 text-white text-xs font-medium flex items-center gap-2 transition-colors whitespace-nowrap"
                   >
-                    {checkingOutdated || upgradingPackages ? (
+                    {checkingOutdated || upgradingPackages || upgradingTermux ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     ) : (
                       <ArrowUpCircle className="w-3.5 h-3.5" />
@@ -842,7 +876,7 @@ python ${entryFile}
                 <button
                   type="button"
                   onClick={() => void onInstallRequirements()}
-                  disabled={!!installingPkg}
+                  disabled={!!installingPkg || !!uninstallingPkg}
                   className="min-h-[40px] px-3.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium flex items-center gap-2 hover:border-[var(--ide-accent)] disabled:opacity-40 transition-colors whitespace-nowrap"
                 >
                   <Download className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
@@ -896,10 +930,13 @@ python ${entryFile}
                   </div>
                   {fuzzyPyResults.map(({ item, matchedAlias }) => {
                     const targetPkg = item.pyodide?.packageName ?? item.name;
+                    const normTarget = normalizePyPkgName(targetPkg);
                     const isInstalled = installedPackages.some(
-                      (p) => p.name.toLowerCase() === targetPkg.toLowerCase()
+                      (p) => normalizePyPkgName(p.name) === normTarget
                     );
-                    const isBusy = installingPkg === targetPkg;
+                    const isCoreSystem = PYODIDE_CORE_PACKAGES.has(normTarget);
+                    const isBusyInstall = installingPkg === targetPkg;
+                    const isBusyUninstall = uninstallingPkg === targetPkg;
                     return (
                       <div
                         key={item.id}
@@ -922,25 +959,41 @@ python ${entryFile}
                             {item.desc}
                           </div>
                         </button>
-                        <button
-                          type="button"
-                          disabled={isInstalled || !!installingPkg}
-                          onClick={() => void handleInstall(targetPkg)}
-                          className={`min-h-[34px] px-3 rounded-lg text-xs font-medium whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 ${
-                            isInstalled
-                              ? 'bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)]'
-                              : 'bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white disabled:opacity-40'
-                          }`}
-                        >
-                          {isBusy ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : isInstalled ? (
-                            <Check className="w-3.5 h-3.5" />
-                          ) : (
-                            <Download className="w-3.5 h-3.5" />
-                          )}
-                          <span>{isInstalled ? t('pkg_installed') : t('pkg_install_short')}</span>
-                        </button>
+                        {isInstalled && !isCoreSystem && onUninstallPackage ? (
+                          <button
+                            type="button"
+                            disabled={!!installingPkg || !!uninstallingPkg}
+                            onClick={() => void handleUninstall(targetPkg)}
+                            className="min-h-[34px] px-3 rounded-lg border border-red-300 dark:border-red-900/60 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 text-xs font-medium whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 disabled:opacity-40"
+                          >
+                            {isBusyUninstall ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-3.5 h-3.5" />
+                            )}
+                            <span>{t('pkg_uninstall_btn')}</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={isInstalled || !!installingPkg || !!uninstallingPkg}
+                            onClick={() => void handleInstall(targetPkg)}
+                            className={`min-h-[34px] px-3 rounded-lg text-xs font-medium whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 ${
+                              isInstalled
+                                ? 'bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)]'
+                                : 'bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white disabled:opacity-40'
+                            }`}
+                          >
+                            {isBusyInstall ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : isInstalled ? (
+                              <Check className="w-3.5 h-3.5" />
+                            ) : (
+                              <Download className="w-3.5 h-3.5" />
+                            )}
+                            <span>{isInstalled ? t('pkg_installed') : t('pkg_install_short')}</span>
+                          </button>
+                        )}
                       </div>
                     );
                   })}
@@ -1033,18 +1086,22 @@ python ${entryFile}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[420px] overflow-y-auto ide-scroll pr-0.5">
                 {filteredPyCatalog.map((item) => {
                   const targetName = item.pyodide?.packageName ?? item.name;
+                  const normTarget = normalizePyPkgName(targetName);
                   const isInstalled = installedPackages.some(
-                    (p) => p.name.toLowerCase() === targetName.toLowerCase()
+                    (p) => normalizePyPkgName(p.name) === normTarget
                   );
-                  const isBusy = installingPkg === targetName;
+                  const isCoreSystem = PYODIDE_CORE_PACKAGES.has(normTarget);
+                  const isBusyInstall = installingPkg === targetName;
+                  const isBusyUninstall = uninstallingPkg === targetName;
                   return (
                     <div
                       key={item.id}
                       className="flex items-center justify-between gap-3 p-3.5 rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)]"
                     >
                       <div className="min-w-0">
-                        <div className="font-mono text-sm font-semibold text-[var(--ide-text)] truncate">
-                          {targetName}
+                        <div className="font-mono text-sm font-semibold text-[var(--ide-text)] truncate flex items-center gap-1.5">
+                          <span className="truncate">{targetName}</span>
+                          {isInstalled && <Check className="w-3.5 h-3.5 text-[var(--ide-accent)] shrink-0" />}
                         </div>
                         <div className="text-xs text-[var(--ide-text-muted)] line-clamp-2 mt-0.5 leading-relaxed">
                           {item.desc}
@@ -1053,32 +1110,48 @@ python ${entryFile}
                           {item.tier === 'popular' ? t('pkg_tier_popular') : t('pkg_tier_niche')} · {item.runtimeHint}
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        disabled={isInstalled || !!installingPkg}
-                        onClick={() => void handleInstall(targetName)}
-                        className={`min-h-[40px] px-3 rounded-xl text-xs font-medium whitespace-nowrap shrink-0 flex items-center gap-1.5 transition-colors ${
-                          isInstalled
-                            ? 'bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)]'
-                            : 'bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white disabled:opacity-40'
-                        }`}
-                      >
-                        {isBusy ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : isInstalled ? (
-                          <Check className="w-3.5 h-3.5" />
-                        ) : null}
-                        <span>
-                          {isInstalled ? t('pkg_installed') : isBusy ? t('pkg_installing') : t('pkg_install_short')}
-                        </span>
-                      </button>
+                      {isInstalled && !isCoreSystem && onUninstallPackage ? (
+                        <button
+                          type="button"
+                          disabled={!!installingPkg || !!uninstallingPkg}
+                          onClick={() => void handleUninstall(targetName)}
+                          className="min-h-[38px] px-3 rounded-xl border border-red-300 dark:border-red-900/60 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 text-xs font-medium whitespace-nowrap shrink-0 flex items-center gap-1.5 transition-colors disabled:opacity-40"
+                        >
+                          {isBusyUninstall ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                          <span>{t('pkg_uninstall_btn')}</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={isInstalled || !!installingPkg || !!uninstallingPkg}
+                          onClick={() => void handleInstall(targetName)}
+                          className={`min-h-[40px] px-3 rounded-xl text-xs font-medium whitespace-nowrap shrink-0 flex items-center gap-1.5 transition-colors ${
+                            isInstalled
+                              ? 'bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)]'
+                              : 'bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white disabled:opacity-40'
+                          }`}
+                        >
+                          {isBusyInstall ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : isInstalled ? (
+                            <Check className="w-3.5 h-3.5" />
+                          ) : null}
+                          <span>
+                            {isInstalled ? t('pkg_installed') : isBusyInstall ? t('pkg_installing') : t('pkg_install_short')}
+                          </span>
+                        </button>
+                      )}
                     </div>
                   );
                 })}
               </div>
             </div>
 
-            {/* Installed Packages Table with Manual Per-Package Upgrade */}
+            {/* Installed Packages Table with Accurate Outdated Upgrade & Uninstall */}
             <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] overflow-hidden">
               <div className="px-4 py-3 border-b border-[var(--ide-border)] flex items-center justify-between text-xs font-medium text-[var(--ide-text-muted)]">
                 <span>{t('pkg_loaded_title')}</span>
@@ -1091,10 +1164,10 @@ python ${entryFile}
               ) : (
                 <div className="divide-y divide-[var(--ide-border)] max-h-64 overflow-y-auto ide-scroll">
                   {installedPackages.map((pkg) => {
-                    const outdated = outdatedMap.get(pkg.name.toLowerCase());
-                    const isCoreSystem = ['micropip', 'packaging', 'pyodide-http'].includes(
-                      pkg.name.toLowerCase()
-                    );
+                    const normName = normalizePyPkgName(pkg.name);
+                    const outdated = outdatedMap.get(normName);
+                    const isCoreSystem = PYODIDE_CORE_PACKAGES.has(normName);
+                    const isBusyUninstall = uninstallingPkg === pkg.name;
                     return (
                       <div key={pkg.name} className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs">
                         <div className="min-w-0">
@@ -1105,22 +1178,38 @@ python ${entryFile}
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-2.5 shrink-0">
+                        <div className="flex items-center gap-2 shrink-0">
                           <span className="font-mono tabular-nums text-[var(--ide-text-muted)]">
                             {pkg.version}
                           </span>
-                          {onUpgradePackage && !isCoreSystem && (
+                          {outdated && onUpgradePackage ? (
                             <button
                               type="button"
-                              disabled={upgradingPackages || !!installingPkg}
+                              disabled={upgradingPackages || !!installingPkg || !!uninstallingPkg}
                               onClick={() => void onUpgradePackage(pkg.name)}
-                              className={`min-h-[30px] px-2.5 rounded-lg text-[11px] font-medium whitespace-nowrap transition-colors ${
-                                outdated
-                                  ? 'bg-[var(--ide-accent)] text-white hover:bg-[var(--ide-accent-hover)]'
-                                  : 'border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] text-[var(--ide-text)]'
-                              } disabled:opacity-40`}
+                              className="min-h-[30px] px-2.5 rounded-lg text-[11px] font-medium whitespace-nowrap transition-colors bg-[var(--ide-accent)] text-white hover:bg-[var(--ide-accent-hover)] disabled:opacity-40"
                             >
                               {t('pkg_upgrade_btn')}
+                            </button>
+                          ) : !isCoreSystem ? (
+                            <span className="text-[11px] text-[var(--ide-text-muted)] whitespace-nowrap">
+                              {t('pkg_status_latest')}
+                            </span>
+                          ) : null}
+                          {!isCoreSystem && onUninstallPackage && (
+                            <button
+                              type="button"
+                              disabled={upgradingPackages || !!installingPkg || !!uninstallingPkg}
+                              onClick={() => void handleUninstall(pkg.name)}
+                              aria-label={`${t('pkg_uninstall_btn')} ${pkg.name}`}
+                              className="min-h-[30px] px-2.5 rounded-lg border border-red-300 dark:border-red-900/60 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 text-[11px] font-medium whitespace-nowrap inline-flex items-center gap-1 transition-colors disabled:opacity-40"
+                            >
+                              {isBusyUninstall ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3 h-3" />
+                              )}
+                              <span>{t('pkg_uninstall_btn')}</span>
                             </button>
                           )}
                         </div>

@@ -78,15 +78,22 @@ import {
   getLocalizedThemeText,
   translate,
 } from './services/i18n';
+import { formatDurationHMS } from './utils/formatDuration';
 import {
   DEFAULT_TERMUX_CONFIG,
+  CORE_TERMUX_PIP_PACKAGES,
+  TermuxOutdatedPipItem,
   abortActiveTermuxStream,
   backupWorkspaceToSdcard,
   buildTermuxAptUpgradeCommand,
   buildTermuxPipUpgradeCommand,
+  buildTermuxUninstallCommand,
   checkTermuxHealth,
+  execTermuxShell,
   fetchTermuxWorkspaceFiles,
   getSdcardStatus,
+  normalizeTermuxPkgName,
+  parseOutdatedPipJson,
   sendTermuxStdin,
   stopTermuxProcess,
   streamInstallInTermux,
@@ -103,13 +110,16 @@ import {
 } from './services/storageManager';
 import {
   OutdatedPackageInfo,
+  PYODIDE_CORE_PACKAGES,
   checkOutdatedPyPackages,
   executePythonFile,
   executeReplLine,
   initPyodide,
   installPyPackage,
   listPyPackages,
+  normalizePyPkgName,
   RuntimeCallbacks,
+  uninstallPyPackage,
   upgradeAllPyPackages,
   upgradePyPackage,
 } from './services/pyodideRuntime';
@@ -319,6 +329,7 @@ export default function App() {
     return [];
   });
   const [pyodideStatus, setPyodideStatus] = useState<PyodideStatus>('idle');
+  const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
   const [lastDurationMs, setLastDurationMs] = useState<number | null>(null);
   const [entries, setEntries] = useState<TerminalEntry[]>([]);
   const [installedPackages, setInstalledPackages] = useState<InstalledPackage[]>([]);
@@ -337,6 +348,8 @@ export default function App() {
   const [outdatedPyPackages, setOutdatedPyPackages] = useState<OutdatedPackageInfo[]>([]);
   const [checkingOutdatedPkgs, setCheckingOutdatedPkgs] = useState(false);
   const [upgradingPyPackages, setUpgradingPyPackages] = useState(false);
+  const [outdatedTermuxPips, setOutdatedTermuxPips] = useState<TermuxOutdatedPipItem[]>([]);
+  const [checkingTermuxOutdated, setCheckingTermuxOutdated] = useState(false);
   const [upgradingTermux, setUpgradingTermux] = useState(false);
   const [mobileNewFileOpen, setMobileNewFileOpen] = useState(false);
   const [mobileNewFileName, setMobileNewFileName] = useState('');
@@ -394,6 +407,8 @@ export default function App() {
   pyodideStatusRef.current = pyodideStatus;
   const autoUpdatePyRanRef = useRef(false);
   const autoUpdateTermuxRanRef = useRef(false);
+  const startupAutoUpdateEnabledRef = useRef(Boolean(settings.autoUpdatePackages));
+  const appLaunchedAtRef = useRef(Date.now());
   const edgeSwipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const overlayStateRef = useRef({
     showHelpModal,
@@ -1006,6 +1021,7 @@ export default function App() {
     if (!entryFile) return;
     focusOutputPane('terminal');
     setTermuxRunning(true);
+    setRunStartedAt(Date.now());
     setTermuxError(null);
 
     try {
@@ -1046,10 +1062,10 @@ export default function App() {
           'system',
           t(hasOutput ? 'log_run_done_output' : 'log_run_done_empty', {
             name: entryFile.name,
-            ms: res.durationMs,
+            duration: formatDurationHMS(res.durationMs),
           })
         );
-        appLog('termux', `Finished ${entryFile.name} (exit=0, ${res.durationMs} ms)`, {
+        appLog('termux', `Finished ${entryFile.name} (exit=0, ${formatDurationHMS(res.durationMs)})`, {
           detail: outputTail.trim() || '(no stdout)',
         });
       } else if (res.exitCode !== -1) {
@@ -1072,6 +1088,7 @@ export default function App() {
         appLog('termux', `Aborted execution of ${entryFile.name}`, { level: 'warn' });
       }
     } finally {
+      setRunStartedAt(null);
       setTermuxRunning(false);
     }
   }, [
@@ -1097,6 +1114,7 @@ export default function App() {
       const label = mode === 'pkg' ? `pkg install -y ${target}` : `pip install ${target}`;
       focusOutputPane('terminal');
       setTermuxRunning(true);
+      setRunStartedAt(Date.now());
       setTermuxError(null);
       appendEntry('system', t('log_termux_install', { cmd: label }));
       appLog('package', `Termux install start: ${label}`);
@@ -1112,7 +1130,18 @@ export default function App() {
         setTermuxConnectionState('connected');
         setLastDurationMs(res.durationMs);
         if (res.exitCode === 0) {
-          appLog('package', `Termux install succeeded: ${label} (${res.durationMs} ms)`);
+          if (mode === 'pip') {
+            const installedNorms = new Set(
+              target
+                .split(/\s+/)
+                .map((s) => normalizeTermuxPkgName(s.split(/[=<>!~]/)[0] || ''))
+                .filter(Boolean)
+            );
+            setOutdatedTermuxPips((prev) =>
+              prev.filter((item) => !installedNorms.has(normalizeTermuxPkgName(item.name)))
+            );
+          }
+          appLog('package', `Termux install succeeded: ${label} (${formatDurationHMS(res.durationMs)})`);
           showToast(t('toast_termux_install_ok', { pkg: target }));
         } else {
           appendEntry('stderr', t('log_termux_exit', { code: res.exitCode }));
@@ -1139,6 +1168,7 @@ export default function App() {
         } catch {
           // ignore health refresh failure
         }
+        setRunStartedAt(null);
         setTermuxRunning(false);
       }
     },
@@ -1153,6 +1183,7 @@ export default function App() {
       }
       focusOutputPane('terminal');
       setTermuxRunning(true);
+      setRunStartedAt(Date.now());
       setTermuxError(null);
       appendEntry('repl-in', `$ ${command}`);
       appLog('termux', `Shell command: ${command}`);
@@ -1174,7 +1205,7 @@ export default function App() {
             detail: tailBuf.trim() ? `${command}\n\n${tailBuf.trim()}` : command,
           });
         } else {
-          appLog('termux', `Shell finished (${res.durationMs} ms)`);
+          appLog('termux', `Shell finished (${formatDurationHMS(res.durationMs)})`);
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -1194,6 +1225,7 @@ export default function App() {
             // ignore
           }
         }
+        setRunStartedAt(null);
         setTermuxRunning(false);
       }
     },
@@ -1212,6 +1244,7 @@ export default function App() {
       setExecutionEngine('termux');
       focusOutputPane('terminal');
       setTermuxRunning(true);
+      setRunStartedAt(Date.now());
       setTermuxError(null);
       appendEntry('system', t('log_termux_init', { cmd }));
       appLog('termux', `One-tap env initialization started (includeBaseSystem=${includeBaseSystem})`);
@@ -1227,7 +1260,7 @@ export default function App() {
         setTermuxConnectionState('connected');
         setLastDurationMs(res.durationMs);
         if (res.exitCode === 0) {
-          appLog('termux', `One-tap env initialization completed (${res.durationMs} ms)`);
+          appLog('termux', `One-tap env initialization completed (${formatDurationHMS(res.durationMs)})`);
           showToast(t('toast_termux_init_ok'));
         } else {
           appendEntry('stderr', t('log_termux_exit', { code: res.exitCode }));
@@ -1255,6 +1288,7 @@ export default function App() {
           // ignore background health refresh error
         }
         flushNativeStateNow();
+        setRunStartedAt(null);
         setTermuxRunning(false);
       }
     },
@@ -1319,6 +1353,7 @@ export default function App() {
 
     focusOutputPane('terminal');
     setPyodideStatus('running');
+    setRunStartedAt(Date.now());
     appendEntry('system', t('log_exec_py', { name: entryFile.name }));
     appLog('python', `Run script in Pyodide sandbox: ${entryFile.name}`);
 
@@ -1355,10 +1390,10 @@ export default function App() {
         'system',
         t(hasOutput ? 'log_run_done_output' : 'log_run_done_empty', {
           name: entryFile.name,
-          ms: result.durationMs,
+          duration: formatDurationHMS(result.durationMs),
         })
       );
-      appLog('python', `Pyodide finished ${entryFile.name} (${result.durationMs} ms)`, {
+      appLog('python', `Pyodide finished ${entryFile.name} (${formatDurationHMS(result.durationMs)})`, {
         detail: outputTail.trim() || '(no stdout)',
       });
     } catch (err) {
@@ -1367,6 +1402,7 @@ export default function App() {
       appendEntry('stderr', errMsg);
       appLog('python', `Pyodide execution error (${entryFile.name}): ${errMsg}`, { level: 'error' });
     } finally {
+      setRunStartedAt(null);
       setPendingInputPrompt(null);
       inputResolverRef.current = null;
     }
@@ -1416,6 +1452,7 @@ export default function App() {
       }
       appendEntry('repl-in', statement);
       setPyodideStatus('running');
+      setRunStartedAt(Date.now());
       try {
         const result = await executeReplLine(statement, files, callbacksRef.current);
         if (result !== null) {
@@ -1440,6 +1477,7 @@ export default function App() {
           }
         }
       } finally {
+        setRunStartedAt(null);
         setPyodideStatus('ready');
         setPendingInputPrompt(null);
         inputResolverRef.current = null;
@@ -1574,7 +1612,11 @@ export default function App() {
         setInstalledPackages(list);
         const cleanPkg = pkgName.split(/[=<>!~]/)[0].trim();
         if (cleanPkg) {
+          const normInstalled = normalizePyPkgName(cleanPkg);
           setSandboxPackages((prev) => (prev.includes(cleanPkg) ? prev : [...prev, cleanPkg]));
+          setOutdatedPyPackages((prev) =>
+            prev.filter((p) => normalizePyPkgName(p.name) !== normInstalled)
+          );
         }
         appLog('package', `Installed Pyodide package: ${pkgName}`);
         showToast(t('toast_pkg_ok', { pkg: pkgName }));
@@ -1583,6 +1625,31 @@ export default function App() {
         appendEntry('stderr', `${t('toast_pkg_fail', { pkg: pkgName })}: ${msg}`);
         appLog('package', `Failed installing Pyodide package ${pkgName}: ${msg}`, { level: 'error' });
         showToast(t('toast_pkg_fail', { pkg: pkgName }));
+      }
+    },
+    [appendEntry, showToast, t]
+  );
+
+  const handleUninstallPyPackage = useCallback(
+    async (pkgName: string) => {
+      const norm = normalizePyPkgName(pkgName);
+      if (!norm || PYODIDE_CORE_PACKAGES.has(norm)) {
+        showToast(t('pkg_uninstall_core_err'));
+        return;
+      }
+      appLog('package', `Uninstalling Pyodide package: ${pkgName}`);
+      try {
+        const list = await uninstallPyPackage(pkgName, callbacksRef.current);
+        setInstalledPackages(list);
+        setSandboxPackages((prev) => prev.filter((p) => normalizePyPkgName(p) !== norm));
+        setOutdatedPyPackages((prev) => prev.filter((p) => normalizePyPkgName(p.name) !== norm));
+        appLog('package', `Uninstalled Pyodide package: ${pkgName}`);
+        showToast(t('pkg_uninstalled_toast', { pkg: pkgName }));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        appendEntry('stderr', msg);
+        appLog('package', `Failed uninstalling Pyodide package ${pkgName}: ${msg}`, { level: 'error' });
+        showToast(msg);
       }
     },
     [appendEntry, showToast, t]
@@ -1602,13 +1669,14 @@ export default function App() {
       setUpgradingPyPackages(true);
       appLog('package', `Upgrading Pyodide package: ${pkgName}`);
       try {
+        const normPkg = normalizePyPkgName(pkgName);
         const targetInfo = outdatedPyPackages.find(
-          (p) => p.name.toLowerCase() === pkgName.toLowerCase()
+          (p) => normalizePyPkgName(p.name) === normPkg
         );
         const list = await upgradePyPackage(pkgName, callbacksRef.current, targetInfo?.latestVersion);
         setInstalledPackages(list);
         setOutdatedPyPackages((prev) =>
-          prev.filter((p) => p.name.toLowerCase() !== pkgName.toLowerCase())
+          prev.filter((p) => normalizePyPkgName(p.name) !== normPkg)
         );
         appLog('package', `Upgraded Pyodide package: ${pkgName}`);
         showToast(t('pkg_upgraded_toast', { count: 1 }));
@@ -1653,6 +1721,101 @@ export default function App() {
     }
   }, [checkingOutdatedPkgs, upgradingPyPackages, appendEntry, showToast, t]);
 
+  const handleCheckTermuxOutdated = useCallback(async () => {
+    if (
+      termuxConnectionState !== 'connected' ||
+      termuxHealth?.hasPython === false ||
+      checkingTermuxOutdated
+    ) {
+      return;
+    }
+    setCheckingTermuxOutdated(true);
+    try {
+      const res = await execTermuxShell(termuxConfigRef.current, 'pip list --outdated --format=json');
+      const outdated = parseOutdatedPipJson(res.stdout || '');
+      setOutdatedTermuxPips(outdated);
+      appLog('package', `Checked Termux pip outdated packages: ${outdated.length}`);
+      if (outdated.length === 0) {
+        showToast(t('pkg_up_to_date'));
+      }
+    } catch {
+      // ignore check error
+    } finally {
+      setCheckingTermuxOutdated(false);
+    }
+  }, [termuxConnectionState, termuxHealth?.hasPython, checkingTermuxOutdated, showToast, t]);
+
+  const handleUninstallInTermux = useCallback(
+    async (mode: 'pip' | 'pkg', target: string) => {
+      if (termuxRunning) {
+        showToast(t('cta_running'));
+        return;
+      }
+      const cmd = buildTermuxUninstallCommand(mode, target);
+      if (!cmd) {
+        showToast(t('pkg_uninstall_core_err'));
+        return;
+      }
+      focusOutputPane('terminal');
+      setTermuxRunning(true);
+      setRunStartedAt(Date.now());
+      setTermuxError(null);
+      appendEntry('repl-in', `$ ${cmd}`);
+      appLog('package', `Termux uninstall start: ${cmd}`);
+      const streamId = makeId();
+      let tailBuf = '';
+      try {
+        const res = await streamShellInTermux(termuxConfig, cmd, {
+          onChunk: (chunk) => {
+            appendStreamChunk(streamId, chunk);
+            tailBuf = (tailBuf + chunk).slice(-1200);
+          },
+        });
+        setTermuxConnectionState('connected');
+        setLastDurationMs(res.durationMs);
+        if (res.exitCode === 0) {
+          if (mode === 'pip') {
+            const removedNorms = new Set(
+              target
+                .split(/\s+/)
+                .map((s) => normalizeTermuxPkgName(s))
+                .filter(Boolean)
+            );
+            setOutdatedTermuxPips((prev) =>
+              prev.filter((item) => !removedNorms.has(normalizeTermuxPkgName(item.name)))
+            );
+          }
+          appLog('package', `Termux uninstall succeeded: ${cmd} (${formatDurationHMS(res.durationMs)})`);
+          showToast(t('pkg_uninstalled_toast', { pkg: target }));
+        } else {
+          appendEntry('stderr', t('log_termux_exit', { code: res.exitCode }));
+          appLog('package', `Termux uninstall failed: ${cmd} (exit=${res.exitCode})`, {
+            level: 'error',
+            detail: tailBuf.trim() || undefined,
+          });
+          showToast(t('toast_termux_install_err', { pkg: target, code: res.exitCode }));
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setTermuxConnectionState('error');
+        setTermuxError(msg);
+        appendEntry('stderr', msg);
+        appLog('package', `Termux uninstall error (${cmd}): ${msg}`, { level: 'error' });
+        showToast(msg);
+      } finally {
+        try {
+          const health = await checkTermuxHealth(termuxConfig);
+          setTermuxHealth(health);
+        } catch {
+          // ignore health refresh failure
+        }
+        setRunStartedAt(null);
+        setTermuxRunning(false);
+      }
+    },
+    [termuxRunning, termuxConfig, focusOutputPane, appendEntry, appendStreamChunk, showToast, t]
+  );
+
   const handleUpgradeAllTermux = useCallback(
     async (kind: 'pip' | 'pkg') => {
       if (termuxRunning || upgradingTermux) {
@@ -1661,16 +1824,37 @@ export default function App() {
       }
       setUpgradingTermux(true);
       try {
-        const cmd =
-          kind === 'pip'
-            ? buildTermuxPipUpgradeCommand(termuxHealth?.installedPipPackages ?? [])
-            : buildTermuxAptUpgradeCommand();
-        await handleRunShellInTermux(cmd);
+        if (kind === 'pip') {
+          setCheckingTermuxOutdated(true);
+          let outdatedTargets: string[] = [];
+          try {
+            const outRes = await execTermuxShell(
+              termuxConfigRef.current,
+              'pip list --outdated --format=json'
+            );
+            const outdated = parseOutdatedPipJson(outRes.stdout || '');
+            setOutdatedTermuxPips(outdated);
+            outdatedTargets = outdated
+              .map((item) => item.name)
+              .filter((n) => !CORE_TERMUX_PIP_PACKAGES.has(normalizeTermuxPkgName(n)));
+          } finally {
+            setCheckingTermuxOutdated(false);
+          }
+          if (outdatedTargets.length === 0) {
+            showToast(t('pkg_up_to_date'));
+            return;
+          }
+          await handleRunShellInTermux(buildTermuxPipUpgradeCommand(outdatedTargets));
+          setOutdatedTermuxPips([]);
+          showToast(t('pkg_upgraded_toast', { count: outdatedTargets.length }));
+          return;
+        }
+        await handleRunShellInTermux(buildTermuxAptUpgradeCommand());
       } finally {
         setUpgradingTermux(false);
       }
     },
-    [termuxRunning, upgradingTermux, termuxHealth, handleRunShellInTermux, showToast, t]
+    [termuxRunning, upgradingTermux, handleRunShellInTermux, showToast, t]
   );
 
   const handleUpgradeSingleTermuxPip = useCallback(
@@ -1684,12 +1868,102 @@ export default function App() {
       setUpgradingTermux(true);
       try {
         await handleRunShellInTermux(`pip install --upgrade ${clean}`);
+        const normClean = normalizeTermuxPkgName(clean);
+        setOutdatedTermuxPips((prev) =>
+          prev.filter((item) => normalizeTermuxPkgName(item.name) !== normClean)
+        );
       } finally {
         setUpgradingTermux(false);
       }
     },
     [termuxRunning, upgradingTermux, handleRunShellInTermux, showToast, t]
   );
+
+  const handleUpgradeAllPackages = useCallback(async () => {
+    if (checkingOutdatedPkgs || upgradingPyPackages || upgradingTermux || termuxRunning) {
+      showToast(t('cta_running'));
+      return;
+    }
+    let upgradedCount = 0;
+
+    if (pyodideStatus === 'ready') {
+      setCheckingOutdatedPkgs(true);
+      try {
+        const currentList = await listPyPackages(callbacksRef.current);
+        setInstalledPackages(currentList);
+        const outdated = await checkOutdatedPyPackages(currentList);
+        setOutdatedPyPackages(outdated);
+        if (outdated.length > 0) {
+          setUpgradingPyPackages(true);
+          appLog(
+            'package',
+            `Upgrading ${outdated.length} Pyodide package(s): ${outdated.map((o) => o.name).join(', ')}`
+          );
+          const nextList = await upgradeAllPyPackages(outdated, callbacksRef.current);
+          setInstalledPackages(nextList);
+          setOutdatedPyPackages([]);
+          upgradedCount += outdated.length;
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        appendEntry('stderr', msg);
+      } finally {
+        setCheckingOutdatedPkgs(false);
+        setUpgradingPyPackages(false);
+      }
+    }
+
+    if (termuxConnectionState === 'connected') {
+      setUpgradingTermux(true);
+      try {
+        let pipTargets: string[] = [];
+        if (termuxHealth?.hasPython !== false) {
+          setCheckingTermuxOutdated(true);
+          try {
+            const outRes = await execTermuxShell(
+              termuxConfigRef.current,
+              'pip list --outdated --format=json'
+            );
+            const outdatedPips = parseOutdatedPipJson(outRes.stdout || '');
+            setOutdatedTermuxPips(outdatedPips);
+            pipTargets = outdatedPips
+              .map((item) => item.name)
+              .filter((n) => !CORE_TERMUX_PIP_PACKAGES.has(normalizeTermuxPkgName(n)));
+          } finally {
+            setCheckingTermuxOutdated(false);
+          }
+        }
+        const cmds: string[] = [];
+        if (pipTargets.length > 0) {
+          cmds.push(buildTermuxPipUpgradeCommand(pipTargets));
+          upgradedCount += pipTargets.length;
+        }
+        cmds.push(buildTermuxAptUpgradeCommand());
+        await handleRunShellInTermux(cmds.join(' && '));
+        setOutdatedTermuxPips([]);
+      } finally {
+        setUpgradingTermux(false);
+      }
+    }
+
+    if (upgradedCount > 0) {
+      showToast(t('pkg_upgraded_toast', { count: upgradedCount }));
+    } else {
+      showToast(t('pkg_up_to_date'));
+    }
+  }, [
+    checkingOutdatedPkgs,
+    upgradingPyPackages,
+    upgradingTermux,
+    termuxRunning,
+    pyodideStatus,
+    termuxConnectionState,
+    termuxHealth?.hasPython,
+    handleRunShellInTermux,
+    appendEntry,
+    showToast,
+    t,
+  ]);
 
   const handleCheckAppUpdates = useCallback(
     async (repoOverride?: string, silent = false) => {
@@ -1734,9 +2008,10 @@ export default function App() {
   useEffect(() => {
     if (
       pyodideStatus !== 'ready' ||
-      !settings.autoUpdatePackages ||
+      !startupAutoUpdateEnabledRef.current ||
       !isOnline ||
-      autoUpdatePyRanRef.current
+      autoUpdatePyRanRef.current ||
+      Date.now() - appLaunchedAtRef.current > 90_000
     ) {
       return;
     }
@@ -1748,7 +2023,7 @@ export default function App() {
         const outdated = await checkOutdatedPyPackages(list);
         setOutdatedPyPackages(outdated);
         if (outdated.length > 0) {
-          appLog('package', `Auto-updating ${outdated.length} Pyodide package(s): ${outdated.map((o) => o.name).join(', ')}`);
+          appLog('package', `Startup auto-updating ${outdated.length} Pyodide package(s): ${outdated.map((o) => o.name).join(', ')}`);
           setUpgradingPyPackages(true);
           const next = await upgradeAllPyPackages(outdated, callbacksRef.current);
           setInstalledPackages(next);
@@ -1762,35 +2037,50 @@ export default function App() {
       }
     }, 2500);
     return () => window.clearTimeout(timer);
-  }, [pyodideStatus, settings.autoUpdatePackages, isOnline, showToast, t]);
+  }, [pyodideStatus, isOnline, showToast, t]);
 
   useEffect(() => {
     if (
       termuxConnectionState !== 'connected' ||
       termuxHealth?.hasPython === false ||
-      !settings.autoUpdatePackages ||
+      !startupAutoUpdateEnabledRef.current ||
       !isOnline ||
-      autoUpdateTermuxRanRef.current
+      autoUpdateTermuxRanRef.current ||
+      Date.now() - appLaunchedAtRef.current > 90_000
     ) {
       return;
     }
     const userPips = (termuxHealth?.installedPipPackages ?? []).filter(
-      (p) => !['pip', 'setuptools', 'wheel'].includes(p.toLowerCase())
+      (p) => !CORE_TERMUX_PIP_PACKAGES.has(normalizeTermuxPkgName(p))
     );
     if (userPips.length === 0) return;
     autoUpdateTermuxRanRef.current = true;
     const timer = window.setTimeout(async () => {
       if (termuxRunning) return;
-      const cmd = buildTermuxPipUpgradeCommand(userPips);
-      appLog('package', `Background auto-updating Termux pip packages: ${userPips.join(', ')}`);
       setUpgradingTermux(true);
       const streamId = makeId();
       try {
+        const outRes = await execTermuxShell(
+          termuxConfigRef.current,
+          'pip list --outdated --format=json'
+        );
+        const outdated = parseOutdatedPipJson(outRes.stdout || '');
+        setOutdatedTermuxPips(outdated);
+        const targetNames = outdated
+          .map((item) => item.name)
+          .filter((name) => !CORE_TERMUX_PIP_PACKAGES.has(normalizeTermuxPkgName(name)));
+        if (targetNames.length === 0) {
+          appLog('package', 'Startup Termux pip check: all packages are already latest');
+          return;
+        }
+        const cmd = buildTermuxPipUpgradeCommand(targetNames);
+        appLog('package', `Startup auto-updating Termux pip packages: ${targetNames.join(', ')}`);
         const res = await streamShellInTermux(termuxConfigRef.current, cmd, {
           onChunk: (chunk) => appendStreamChunk(streamId, chunk),
         });
         if (res.exitCode === 0) {
-          appLog('package', `Background Termux pip upgrade finished (${res.durationMs} ms)`);
+          setOutdatedTermuxPips([]);
+          appLog('package', `Startup Termux pip upgrade finished (${formatDurationHMS(res.durationMs)})`);
           const nextHealth = await checkTermuxHealth(termuxConfigRef.current).catch(() => null);
           if (nextHealth) setTermuxHealth(nextHealth);
         }
@@ -1801,7 +2091,7 @@ export default function App() {
       }
     }, 3200);
     return () => window.clearTimeout(timer);
-  }, [termuxConnectionState, termuxHealth, settings.autoUpdatePackages, isOnline, termuxRunning, appendStreamChunk]);
+  }, [termuxConnectionState, termuxHealth, isOnline, termuxRunning, appendStreamChunk]);
 
   const handleFormatActiveFile = useCallback(() => {
     const ok = editorRef.current?.formatCode();
@@ -2399,6 +2689,7 @@ export default function App() {
                         termuxConnected={termuxConnectionState === 'connected'}
                         embeddedMissingPython={Boolean(termuxHealth?.embedded && termuxHealth.hasPython === false)}
                         onQuickInitEmbedded={() => void handleInitializeEmbeddedEnv(true)}
+                        runStartedAt={runStartedAt}
                         lastDurationMs={lastDurationMs}
                         pendingInputPrompt={pendingInputPrompt}
                         onSubmitInput={handleSubmitInput}
@@ -2439,9 +2730,15 @@ export default function App() {
                   checkingOutdated={checkingOutdatedPkgs}
                   upgradingPackages={upgradingPyPackages}
                   onUpgradePackage={handleUpgradePyPackage}
+                  onUninstallPackage={handleUninstallPyPackage}
                   onCheckAndUpgradeAll={handleCheckAndUpgradeAllPy}
+                  onUpgradeAllPackages={handleUpgradeAllPackages}
                   onUpgradeAllTermux={handleUpgradeAllTermux}
                   onUpgradeSingleTermuxPip={handleUpgradeSingleTermuxPip}
+                  outdatedTermuxPips={outdatedTermuxPips}
+                  checkingTermuxOutdated={checkingTermuxOutdated}
+                  onCheckTermuxOutdated={handleCheckTermuxOutdated}
+                  onUninstallInTermux={handleUninstallInTermux}
                   upgradingTermux={upgradingTermux}
                   appUpdateResult={appUpdateResult}
                   checkingAppUpdate={checkingAppUpdate}
@@ -2647,6 +2944,7 @@ export default function App() {
                       termuxConnected={termuxConnectionState === 'connected'}
                       embeddedMissingPython={Boolean(termuxHealth?.embedded && termuxHealth.hasPython === false)}
                       onQuickInitEmbedded={() => void handleInitializeEmbeddedEnv(true)}
+                      runStartedAt={runStartedAt}
                       lastDurationMs={lastDurationMs}
                       pendingInputPrompt={pendingInputPrompt}
                       onSubmitInput={handleSubmitInput}
@@ -2850,6 +3148,7 @@ export default function App() {
                   termuxConnected={termuxConnectionState === 'connected'}
                   embeddedMissingPython={Boolean(termuxHealth?.embedded && termuxHealth.hasPython === false)}
                   onQuickInitEmbedded={() => void handleInitializeEmbeddedEnv(true)}
+                  runStartedAt={runStartedAt}
                   lastDurationMs={lastDurationMs}
                   pendingInputPrompt={pendingInputPrompt}
                   onSubmitInput={handleSubmitInput}
@@ -2953,9 +3252,15 @@ export default function App() {
           checkingOutdated={checkingOutdatedPkgs}
           upgradingPackages={upgradingPyPackages}
           onUpgradePackage={handleUpgradePyPackage}
+          onUninstallPackage={handleUninstallPyPackage}
           onCheckAndUpgradeAll={handleCheckAndUpgradeAllPy}
+          onUpgradeAllPackages={handleUpgradeAllPackages}
           onUpgradeAllTermux={handleUpgradeAllTermux}
           onUpgradeSingleTermuxPip={handleUpgradeSingleTermuxPip}
+          outdatedTermuxPips={outdatedTermuxPips}
+          checkingTermuxOutdated={checkingTermuxOutdated}
+          onCheckTermuxOutdated={handleCheckTermuxOutdated}
+          onUninstallInTermux={handleUninstallInTermux}
           upgradingTermux={upgradingTermux}
           appUpdateResult={appUpdateResult}
           checkingAppUpdate={checkingAppUpdate}

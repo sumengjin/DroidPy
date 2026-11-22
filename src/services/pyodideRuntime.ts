@@ -1,4 +1,5 @@
 import { InstalledPackage, PythonFile } from '../types/ide';
+import { copyTextReliable } from '../utils/clipboard';
 
 const PYODIDE_CDN_BASE = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/';
 
@@ -92,12 +93,7 @@ function ensureDroidBridge() {
       activeCallbacks?.onToast(String(message));
     },
     clipboardSet: async (text: string) => {
-      try {
-        await navigator.clipboard.writeText(text);
-        return true;
-      } catch {
-        return false;
-      }
+      return copyTextReliable(text);
     },
     emitPlot: (base64Png: string) => {
       activeCallbacks?.onPlot(`data:image/png;base64,${base64Png}`);
@@ -518,7 +514,15 @@ await micropip.install(__droidpy_pkg_target__)
     throw err;
   }
   callbacks.onSystem(`套件 "${cleanPkg}" 安裝完成`);
-  return listPyPackages(callbacks);
+  const list = await listPyPackages(callbacks);
+  const bare = cleanPkg.split(/[=<>!~[\s]/)[0];
+  const installedEntry = list.find(
+    (p) => normalizePyPkgName(p.name) === normalizePyPkgName(bare)
+  );
+  if (installedEntry) {
+    verifiedLatestPyPkgs.set(normalizePyPkgName(installedEntry.name), installedEntry.version);
+  }
+  return list;
 }
 
 export async function listPyPackages(callbacks: RuntimeCallbacks): Promise<InstalledPackage[]> {
@@ -546,45 +550,205 @@ export interface OutdatedPackageInfo {
   latestVersion: string;
 }
 
-const PYPI_SKIP_CORE = new Set(['micropip', 'packaging', 'pyodide-http']);
+export const PYODIDE_CORE_PACKAGES = new Set(['micropip', 'packaging', 'pyodide-http']);
 
-function compareDottedVersions(aRaw: string, bRaw: string): number {
-  const clean = (s: string) =>
-    s
-      .trim()
-      .split(/[+-]/)[0]
+export function normalizePyPkgName(name: string): string {
+  return name.trim().toLowerCase().replace(/[-_.]+/g, '-');
+}
+
+const verifiedLatestPyPkgs = new Map<string, string>();
+
+interface ParsedPep440 {
+  epoch: number;
+  release: number[];
+  preType: number; // -3=dev, -2=a, -1=b, 0=rc, 1=final
+  preNum: number;
+  postNum: number;
+  devNum: number;
+  isPrerelease: boolean;
+}
+
+function parsePep440Version(raw: string): ParsedPep440 | null {
+  const cleaned = raw.trim().toLowerCase().split('+')[0];
+  const m = cleaned.match(
+    /^(?:(\d+)!)?(\d+(?:\.\d+)*)(?:[-_.]?(a|alpha|b|beta|c|rc|pre|preview)[-_.]?(\d*))?(?:[-_.]?post[-_.]?(\d*))?(?:[-_.]?dev(\d*))?$/
+  );
+  if (!m) {
+    const fallbackNums = cleaned
+      .replace(/[^0-9.]/g, '.')
       .split('.')
+      .filter(Boolean)
       .map((n) => parseInt(n, 10) || 0);
-  const a = clean(aRaw);
-  const b = clean(bRaw);
-  const len = Math.max(a.length, b.length, 3);
-  for (let i = 0; i < len; i++) {
-    const va = a[i] ?? 0;
-    const vb = b[i] ?? 0;
-    if (va > vb) return 1;
-    if (va < vb) return -1;
+    if (fallbackNums.length === 0) return null;
+    return {
+      epoch: 0,
+      release: fallbackNums,
+      preType: 1,
+      preNum: 0,
+      postNum: -1,
+      devNum: Number.MAX_SAFE_INTEGER,
+      isPrerelease: false,
+    };
   }
+  const epoch = m[1] ? parseInt(m[1], 10) || 0 : 0;
+  const release = m[2].split('.').map((n) => parseInt(n, 10) || 0);
+  const preTag = m[3] || '';
+  const preNum = m[4] ? parseInt(m[4], 10) || 0 : 0;
+  const postNum = m[5] !== undefined ? parseInt(m[5] || '0', 10) || 0 : -1;
+  const devNum = m[6] !== undefined ? parseInt(m[6] || '0', 10) || 0 : Number.MAX_SAFE_INTEGER;
+
+  let preType = 1;
+  if (preTag === 'a' || preTag === 'alpha') preType = -2;
+  else if (preTag === 'b' || preTag === 'beta') preType = -1;
+  else if (preTag === 'c' || preTag === 'rc' || preTag === 'pre' || preTag === 'preview') preType = 0;
+
+  const isPrerelease = preType < 1 || m[6] !== undefined;
+  return { epoch, release, preType, preNum, postNum, devNum, isPrerelease };
+}
+
+export function comparePep440Versions(aRaw: string, bRaw: string): number {
+  const a = parsePep440Version(aRaw);
+  const b = parsePep440Version(bRaw);
+  if (!a || !b) {
+    return aRaw.trim().localeCompare(bRaw.trim());
+  }
+  if (a.epoch !== b.epoch) return a.epoch > b.epoch ? 1 : -1;
+
+  const len = Math.max(a.release.length, b.release.length);
+  for (let i = 0; i < len; i++) {
+    const va = a.release[i] ?? 0;
+    const vb = b.release[i] ?? 0;
+    if (va !== vb) return va > vb ? 1 : -1;
+  }
+
+  // Pure dev without pre-release sorts before alpha
+  const aKeyType = a.preType === 1 && a.devNum !== Number.MAX_SAFE_INTEGER ? -3 : a.preType;
+  const bKeyType = b.preType === 1 && b.devNum !== Number.MAX_SAFE_INTEGER ? -3 : b.preType;
+  if (aKeyType !== bKeyType) return aKeyType > bKeyType ? 1 : -1;
+  if (a.preNum !== b.preNum) return a.preNum > b.preNum ? 1 : -1;
+  if (a.postNum !== b.postNum) return a.postNum > b.postNum ? 1 : -1;
+  if (a.devNum !== b.devNum) return a.devNum > b.devNum ? 1 : -1;
   return 0;
+}
+
+function getPyodideLockfileVersions(): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!pyodideInstance) return map;
+  try {
+    const raw = pyodideInstance.runPython(`
+import json as _dp_json
+_dp_lock = {}
+try:
+    import pyodide._api as _dp_api
+    _repo = getattr(_dp_api, "repodata_packages", None) or {}
+    for _k, _v in _repo.items():
+        if isinstance(_v, dict) and _v.get("version"):
+            _dp_lock[str(_k).lower().replace("_", "-")] = str(_v["version"])
+except Exception:
+    pass
+_dp_json.dumps(_dp_lock)
+`);
+    const parsed = JSON.parse(String(raw)) as Record<string, string>;
+    for (const [k, v] of Object.entries(parsed)) {
+      map.set(normalizePyPkgName(k), v);
+    }
+  } catch {
+    // ignore if repodata introspection unavailable
+  }
+  return map;
+}
+
+interface PyPiReleaseFile {
+  packagetype?: string;
+  filename?: string;
+  yanked?: boolean;
+}
+
+interface PyPiJsonResponse {
+  info?: { version?: string };
+  releases?: Record<string, PyPiReleaseFile[]>;
+}
+
+function findLatestInstallablePyPiVersion(
+  json: PyPiJsonResponse,
+  installedVer: string,
+  lockfileVer?: string
+): string | null {
+  const installedParsed = parsePep440Version(installedVer);
+  const allowPre = Boolean(installedParsed?.isPrerelease);
+
+  let bestVersion: string | null = null;
+  const releases = json.releases ?? {};
+  for (const [ver, files] of Object.entries(releases)) {
+    if (!Array.isArray(files) || files.length === 0) continue;
+    const parsed = parsePep440Version(ver);
+    if (!parsed) continue;
+    if (!allowPre && parsed.isPrerelease) continue;
+
+    // Only pure Python wheels (none-any.whl) are installable directly from PyPI in micropip
+    const hasPureWheel = files.some(
+      (f) =>
+        !f.yanked &&
+        f.packagetype === 'bdist_wheel' &&
+        typeof f.filename === 'string' &&
+        f.filename.toLowerCase().endsWith('none-any.whl')
+    );
+    if (!hasPureWheel) continue;
+
+    if (!bestVersion || comparePep440Versions(ver, bestVersion) > 0) {
+      bestVersion = ver;
+    }
+  }
+
+  // If the package is a Pyodide WASM repodata package with no pure wheel newer than lockfile,
+  // respect the Pyodide WASM repodata ceiling so C-extension packages don't false-positive.
+  if (lockfileVer && (!bestVersion || comparePep440Versions(lockfileVer, bestVersion) >= 0)) {
+    return lockfileVer;
+  }
+
+  if (bestVersion) return bestVersion;
+
+  // Fallback to info.version only if non-WASM and non-prerelease
+  const infoVer = json.info?.version?.trim();
+  if (infoVer) {
+    const infoParsed = parsePep440Version(infoVer);
+    if (infoParsed && (allowPre || !infoParsed.isPrerelease) && !lockfileVer) {
+      return infoVer;
+    }
+  }
+  return lockfileVer ?? null;
 }
 
 export async function checkOutdatedPyPackages(
   installed: InstalledPackage[]
 ): Promise<OutdatedPackageInfo[]> {
-  const targets = installed.filter((p) => !PYPI_SKIP_CORE.has(p.name.toLowerCase()));
+  const targets = installed.filter(
+    (p) => !PYODIDE_CORE_PACKAGES.has(normalizePyPkgName(p.name))
+  );
+  const lockfileVersions = getPyodideLockfileVersions();
+
   const results = await Promise.all(
     targets.map(async (pkg) => {
+      const normName = normalizePyPkgName(pkg.name);
+      const verifiedVer = verifiedLatestPyPkgs.get(normName);
+      if (verifiedVer && verifiedVer === pkg.version) {
+        return null;
+      }
+
+      const lockVer = lockfileVersions.get(normName);
       try {
         const res = await fetch(`https://pypi.org/pypi/${encodeURIComponent(pkg.name)}/json`);
         if (!res.ok) return null;
-        const json = (await res.json()) as { info?: { version?: string } };
-        const latest = json?.info?.version?.trim();
-        if (latest && compareDottedVersions(latest, pkg.version) > 0) {
+        const json = (await res.json()) as PyPiJsonResponse;
+        const latest = findLatestInstallablePyPiVersion(json, pkg.version, lockVer);
+        if (latest && comparePep440Versions(latest, pkg.version) > 0) {
           return {
             name: pkg.name,
             currentVersion: pkg.version,
             latestVersion: latest,
           };
         }
+        verifiedLatestPyPkgs.set(normName, pkg.version);
       } catch {
         // ignore network errors for individual packages
       }
@@ -623,6 +787,42 @@ except Exception:
 await micropip.install(__droidpy_pkg_spec__)
 `);
   callbacks.onSystem(`套件 "${cleanPkg}" 更新完成`);
+  const list = await listPyPackages(callbacks);
+  const installedEntry = list.find(
+    (p) => normalizePyPkgName(p.name) === normalizePyPkgName(cleanPkg)
+  );
+  if (installedEntry) {
+    verifiedLatestPyPkgs.set(normalizePyPkgName(installedEntry.name), installedEntry.version);
+  }
+  return list;
+}
+
+export async function uninstallPyPackage(
+  packageName: string,
+  callbacks: RuntimeCallbacks
+): Promise<InstalledPackage[]> {
+  activeCallbacks = callbacks;
+  const py = await initPyodide(callbacks);
+  const cleanPkg = packageName.trim();
+  const norm = normalizePyPkgName(cleanPkg);
+  if (!cleanPkg || PYODIDE_CORE_PACKAGES.has(norm)) {
+    return listPyPackages(callbacks);
+  }
+
+  if (!micropipLoaded) {
+    callbacks.onSystem('正在載入 micropip 套件管理員...');
+    await py.loadPackage('micropip');
+    micropipLoaded = true;
+  }
+
+  callbacks.onSystem(`正在解除安裝套件 "${cleanPkg}"...`);
+  py.globals.set('__droidpy_pkg_target__', cleanPkg);
+  await py.runPythonAsync(`
+import micropip
+micropip.uninstall(__droidpy_pkg_target__)
+`);
+  verifiedLatestPyPkgs.delete(norm);
+  callbacks.onSystem(`套件 "${cleanPkg}" 已解除安裝`);
   return listPyPackages(callbacks);
 }
 

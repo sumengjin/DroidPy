@@ -23,6 +23,7 @@ import {
 } from '../services/termuxBridge';
 import { TermuxConfig } from '../types/ide';
 import { useI18n } from '../services/i18n';
+import { copyTextReliable } from '../utils/clipboard';
 import { downloadBlob } from '../utils/downloadBlob';
 
 interface AppExecutionLogModalProps {
@@ -122,13 +123,11 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
 
   const handleCopyAll = async () => {
     const text = formatAppLogsAsText(logs, nativeLogs);
-    try {
-      await navigator.clipboard.writeText(text);
+    const ok = await copyTextReliable(text);
+    if (ok) {
       setCopied(true);
       onNotify(t('logs_copied'));
       setTimeout(() => setCopied(false), 1800);
-    } catch {
-      // ignore clipboard blocked
     }
   };
 
@@ -320,11 +319,11 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
                       {entry.timestamp}
                     </span>
                   </div>
-                  <div className="text-[var(--ide-text)] break-words leading-relaxed">
+                  <div className="selectable-text text-[var(--ide-text)] break-words leading-relaxed">
                     {entry.message}
                   </div>
                   {entry.detail && (
-                    <pre className="text-[11px] text-[var(--ide-text-muted)] whitespace-pre-wrap break-words bg-[var(--ide-bg)] rounded-lg p-2 border border-[var(--ide-border)]">
+                    <pre className="selectable-text text-[11px] text-[var(--ide-text-muted)] whitespace-pre-wrap break-words bg-[var(--ide-bg)] rounded-lg p-2 border border-[var(--ide-border)]">
                       {entry.detail}
                     </pre>
                   )}
@@ -340,7 +339,7 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
               {t('logs_empty')}
             </div>
           ) : (
-            <pre className="rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-3 text-[11px] leading-relaxed whitespace-pre-wrap break-words">
+            <pre className="selectable-text rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-3 text-[11px] leading-relaxed whitespace-pre-wrap break-words">
               {filteredNativeLines.join('\n')}
             </pre>
           )}

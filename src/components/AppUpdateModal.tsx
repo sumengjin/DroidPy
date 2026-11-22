@@ -6,14 +6,15 @@ import {
   CheckCircle2,
   Sparkles,
   ExternalLink,
-  History,
   Loader2,
   PackageCheck,
 } from 'lucide-react';
 import {
   AppReleaseInfo,
   AppUpdateCheckResult,
+  BUILTIN_LOCAL_RELEASES,
   NativeApkDownloadEvent,
+  normalizeVersionStr,
   triggerInAppApkDownload,
 } from '../services/appUpdater';
 import { useI18n } from '../services/i18n';
@@ -44,7 +45,6 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
   const { t } = useI18n();
   const [repoInput, setRepoInput] = useState(repoSlug);
   const [dlState, setDlState] = useState<NativeApkDownloadEvent | null>(null);
-  const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
     setRepoInput(repoSlug);
@@ -70,6 +70,12 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
   const hasUpdate = Boolean(updateResult?.hasUpdate && latest);
   const releases = updateResult?.releases ?? [];
   const primaryApk = latest?.apkAssets[0] ?? null;
+  const currentNorm = normalizeVersionStr(currentVersion);
+  const currentRelease: AppReleaseInfo | null =
+    releases.find((r) => normalizeVersionStr(r.version) === currentNorm) ??
+    BUILTIN_LOCAL_RELEASES.find((r) => normalizeVersionStr(r.version) === currentNorm) ??
+    BUILTIN_LOCAL_RELEASES[0] ??
+    null;
 
   const handleSaveAndCheck = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -225,7 +231,7 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
                 <div className="text-[11px] font-semibold text-[var(--ide-text-muted)]">
                   {t('upd_changelog_title')}
                 </div>
-                <pre className="text-xs text-[var(--ide-text)] whitespace-pre-wrap font-sans leading-relaxed max-h-56 overflow-y-auto ide-scroll">
+                <pre className="selectable-text text-xs text-[var(--ide-text)] whitespace-pre-wrap font-sans leading-relaxed max-h-56 overflow-y-auto ide-scroll">
                   {latest.body || t('upd_no_notes')}
                 </pre>
               </div>
@@ -273,57 +279,42 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
             </div>
           )}
 
-          {/* Release Changelog & Historical Releases */}
-          <div className="space-y-2.5">
-            <button
-              type="button"
-              onClick={() => setShowHistory((v) => !v)}
-              className="w-full min-h-[42px] px-3.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] flex items-center justify-between text-xs font-semibold hover:border-[var(--ide-accent)] transition-colors"
-            >
-              <span className="flex items-center gap-2">
-                <History className="w-4 h-4 text-[var(--ide-accent)]" />
-                <span>{t('upd_history_title', { count: releases.length })}</span>
-              </span>
-              <span className="text-[var(--ide-text-muted)]">
-                {showHistory ? t('files_collapse') : t('files_expand')}
-              </span>
-            </button>
-
-            {(showHistory || !hasUpdate) && (
-              <div className="space-y-2.5">
-                {releases.slice(0, showHistory ? 15 : 2).map((rel) => (
-                  <div
-                    key={rel.tagName}
-                    className="rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] p-3.5 space-y-2"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold font-mono truncate">{rel.name || rel.tagName}</div>
-                        <div className="text-[11px] text-[var(--ide-text-muted)] tabular-nums">
-                          {rel.publishedAt ? rel.publishedAt.slice(0, 10) : ''}
-                        </div>
-                      </div>
-                      {rel.apkAssets[0] && (
-                        <button
-                          type="button"
-                          onClick={() => handleDownloadApk(rel.apkAssets[0].downloadUrl, rel.apkAssets[0].name)}
-                          className="min-h-[34px] px-3 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] text-[11px] font-semibold inline-flex items-center gap-1 whitespace-nowrap shrink-0"
-                        >
-                          <Download className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
-                          <span>APK</span>
-                        </button>
-                      )}
-                    </div>
-                    {rel.body && (
-                      <pre className="text-[11px] text-[var(--ide-text-muted)] whitespace-pre-wrap font-sans leading-relaxed max-h-40 overflow-y-auto ide-scroll">
-                        {rel.body}
-                      </pre>
-                    )}
+          {/* Current Installed Version Changelog Only (shown when already up to date) */}
+          {!hasUpdate && currentRelease && (
+            <div className="rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] p-4 space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-xs font-bold flex items-center gap-2">
+                    <span>{t('upd_current_changelog_title')}</span>
+                    <span className="font-mono text-[var(--ide-accent-text)]">v{currentVersion}</span>
                   </div>
-                ))}
+                  {currentRelease.publishedAt && (
+                    <div className="text-[11px] text-[var(--ide-text-muted)] tabular-nums mt-0.5">
+                      {currentRelease.publishedAt.slice(0, 10)}
+                    </div>
+                  )}
+                </div>
+                {currentRelease.apkAssets[0] && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleDownloadApk(
+                        currentRelease.apkAssets[0].downloadUrl,
+                        currentRelease.apkAssets[0].name
+                      )
+                    }
+                    className="min-h-[34px] px-3 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] text-[11px] font-semibold inline-flex items-center gap-1 whitespace-nowrap shrink-0"
+                  >
+                    <Download className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
+                    <span>APK</span>
+                  </button>
+                )}
               </div>
-            )}
-          </div>
+              <pre className="selectable-text text-xs text-[var(--ide-text)] whitespace-pre-wrap font-sans leading-relaxed max-h-60 overflow-y-auto ide-scroll">
+                {currentRelease.body || t('upd_no_notes')}
+              </pre>
+            </div>
+          )}
         </div>
       </div>
     </div>

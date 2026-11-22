@@ -2,6 +2,23 @@
 
 All notable changes to **DroidPy** are documented in this file.
 
+## [1.2.12] - 2026-11-22
+
+### Added & Fixed (HH:MM:SS Timer, Single-Version Changelog, Package Uninstall, Update Accuracy, Launch-Only Auto-Update & WebView Text Copy)
+- **執行耗時改為實時顯示時分秒 (`HH:MM:SS`)**：
+  - 終端機執行腳本、Termux Shell 或安裝套件期間實時顯示 `00:00:00` 計時器，執行完成與日誌紀錄統一格式化為 `HH:MM:SS`。
+- **程式更新日誌僅顯示當前目標／已安裝版本**：
+  - `AppUpdateModal` 移除冗長多版本歷史摺疊清單；偵測到新版時僅顯示新版日誌，已為最新時僅展示目前版本 (`v1.2.12`) 日誌。
+- **新增沙盒與 Termux 套件解除安裝功能**：
+  - `ToolsAndPackages` 與 `TermuxIntegrationPanel` 針對非核心套件新增「解除安裝」按鈕；`pkg` Wrapper 與 `pip uninstall -y` 支援正確清理 `dpkg/status` 並保護核心直譯器與工具不被誤刪。
+- **修復「套件已是最新版本仍提示更新」與「自動更新僅限開啟程式時執行」**：
+  - `pyodideRuntime` 加入 PEP 440 版本比較與 Lockfile 相容上限檢查，Termux 透過 `pip list --outdated --format=json` 精準比對過期項目；移除未過期項目的更新提示。
+  - 背景自動更新改以啟動當下鎖定的一次性檢查為準，開機視窗外與切換開關均不再於使用中途觸發背景更新。
+- **新增「一鍵更新所有套件」統一按鈕**：
+  - 一鍵整合檢查並升級 Pyodide 沙盒與 Termux 過期套件。
+- **修復非編輯區與終端機長按選字複製問題**：
+  - Android 原生 `WebView` 與 `MainActivity` 加入 `ClipboardManager` `copyToClipboard` 橋接與 `isLongClickable` 支援，終端機選字時自動暫停自動捲動並顯示「複製選取」按鈕。
+
 ## [1.2.11] - 2026-11-22
 
 ### Added & Fixed (Fun Snippets, Fuzzy Package Search, Auto-Update, In-App Updater & `sh` Permission Fix)

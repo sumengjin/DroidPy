@@ -224,8 +224,8 @@ android {
         minSdk = 24
         // targetSdk = 28 讓內嵌 Termux bootstrap 能在 App 私有目錄自由執行 pkg / python / clang（GitHub 發佈專用）
         targetSdk = 28
-        versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 10211
-        versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.11"
+        versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 10212
+        versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.12"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -346,7 +346,10 @@ ${storagePerms}
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.ContentValues
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -413,9 +416,20 @@ class MainActivity : AppCompatActivity() {
         fun getAppVersionName(): String {
             return try {
                 @Suppress("DEPRECATION")
-                packageManager.getPackageInfo(packageName, 0).versionName ?: "1.2.11"
+                packageManager.getPackageInfo(packageName, 0).versionName ?: "1.2.12"
             } catch (_: Exception) {
-                "1.2.11"
+                "1.2.12"
+            }
+        }
+
+        @JavascriptInterface
+        fun copyToClipboard(text: String): Boolean {
+            return try {
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                cm.setPrimaryClip(ClipData.newPlainText("DroidPy", text))
+                true
+            } catch (_: Exception) {
+                false
             }
         }
 
@@ -826,6 +840,10 @@ class MainActivity : AppCompatActivity() {
         settings.databaseEnabled = true
         settings.allowFileAccess = true
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+
+        webView.isLongClickable = true
+        webView.isHapticFeedbackEnabled = true
+        webView.setOnLongClickListener { false }
 
         webView.addJavascriptInterface(NativeDownloadBridge(), "DroidPyNative")
         webView.webChromeClient = WebChromeClient()
@@ -1597,6 +1615,47 @@ class EmbeddedTermuxBridge(
             "    ;;",
             "  install|reinstall)",
             "    \\"\${d}PREFIX/bin/apt-get\\" \${d}APT_OPTS install -y --download-only \\"\${d}@\\" && relocate_debs",
+            "    ;;",
+            "  uninstall|remove|purge)",
+            "    \\"\${d}PREFIX/bin/apt-get\\" \${d}APT_OPTS remove -y \\"\${d}@\\" 2>/dev/null || true",
+            "    ST=\\"\${d}PREFIX/var/lib/dpkg/status\\"",
+            "    for rpkg in \\"\${d}@\\"; do",
+            "      case \\"\${d}rpkg\\" in -*) continue ;; esac",
+            "      [ -z \\"\${d}rpkg\\" ] && continue",
+            "      if [ -f \\"\${d}ST\\" ]; then",
+            "        TMP_ST=\\"\${d}ST.tmp\\"",
+            "        BLK_ST=\\"\${d}ST.blk\\"",
+            "        : > \\"\${d}TMP_ST\\"",
+            "        : > \\"\${d}BLK_ST\\"",
+            "        SKIP_BLK=0",
+            "        while IFS= read -r line || [ -n \\"\${d}line\\" ]; do",
+            "          if [ -z \\"\${d}line\\" ]; then",
+            "            if [ \\"\${d}SKIP_BLK\\" -eq 0 ] && [ -s \\"\${d}BLK_ST\\" ]; then",
+            "              cat \\"\${d}BLK_ST\\" >> \\"\${d}TMP_ST\\"",
+            "              printf '\\\\n' >> \\"\${d}TMP_ST\\"",
+            "            fi",
+            "            SKIP_BLK=0",
+            "            : > \\"\${d}BLK_ST\\"",
+            "            continue",
+            "          fi",
+            "          case \\"\${d}line\\" in",
+            "            \\"Package: \${d}rpkg\\") SKIP_BLK=1 ;;",
+            "          esac",
+            "          printf '%s\\\\n' \\"\${d}line\\" >> \\"\${d}BLK_ST\\"",
+            "        done < \\"\${d}ST\\"",
+            "        if [ \\"\${d}SKIP_BLK\\" -eq 0 ] && [ -s \\"\${d}BLK_ST\\" ]; then",
+            "          cat \\"\${d}BLK_ST\\" >> \\"\${d}TMP_ST\\"",
+            "          printf '\\\\n' >> \\"\${d}TMP_ST\\"",
+            "        fi",
+            "        rm -f \\"\${d}BLK_ST\\"",
+            "        mv -f \\"\${d}TMP_ST\\" \\"\${d}ST\\"",
+            "      fi",
+            "      case \\"\${d}rpkg\\" in",
+            "        apt|dpkg|bash|dash|sh|coreutils|busybox|python|python3|python-pip|termux-tools) ;;",
+            "        *) rm -f \\"\${d}PREFIX/bin/\${d}rpkg\\" 2>/dev/null || true ;;",
+            "      esac",
+            "    done",
+            "    echo \\"[DroidPy pkg] 套件已移除。\\"",
             "    ;;",
             "  search|show|list)",
             "    \\"\${d}PREFIX/bin/apt-cache\\" \${d}APT_OPTS \\"\${d}SUB\\" \\"\${d}@\\"",
@@ -2660,6 +2719,14 @@ def clipboard_set(text):
 `;
 
   const changelogContent = `# Changelog / 更新日誌
+
+## [1.2.12] - 2026-11-22
+- **終端機實時時分秒計時（\`HH:MM:SS\`）、套件解除安裝、精準更新檢測與長按選字複製修復**：
+  - 終端機與程式執行日誌耗時由毫秒全面改為 \`HH:MM:SS\`，執行期間每秒／每 250ms 即時跳動顯示經過時間。
+  - 程式內更新視窗改為僅顯示當前安裝版本或目標新版本的更新日誌，精簡閱讀體驗。
+  - Pyodide 沙盒與 Termux 原生引擎同步新增「解除安裝」功能（\`micropip.uninstall\`／\`pip uninstall -y\`／\`pkg uninstall -y\`＋重定位 \`dpkg/status\` 清理）並保護核心系統套件；新增「一鍵更新所有套件」統一按鈕。
+  - 實作 PEP 440 版本比對與 \`cp312\`/\`emscripten\`/\`none-any.whl\` 過濾＋Termux \`pip list --outdated --format=json\` 實測檢查，徹底修正已安裝最新版套件仍誤報「可更新」的問題；並確保「啟動時自動更新套件」僅於開啟程式時執行一次。
+  - 修復手機 Android WebView 非編輯區與終端機區長按無法選字複製的問題（\`isLongClickable\`、\`.terminal-selectable\`/\`.selectable-text\`、選取時暫停自動捲底、終端機「複製選取」快捷按鈕＋原生 \`ClipboardManager\` 三重複製回退）。
 
 ## [1.2.11] - 2026-11-22
 - **新增更多趣味 Python 腳本範例、分類篩選與熱門／冷門 60+ 完整套件目錄**：

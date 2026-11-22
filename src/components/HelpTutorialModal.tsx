@@ -436,7 +436,7 @@ export const HelpTutorialModal: React.FC<HelpTutorialModalProps> = ({
         </div>
 
         {/* Scrollable Guide Body */}
-        <div className="flex-1 min-h-0 overflow-y-auto ide-scroll p-5 space-y-3 bg-[var(--ide-bg)]">
+        <div className="selectable-text flex-1 min-h-0 overflow-y-auto ide-scroll p-5 space-y-3 bg-[var(--ide-bg)]">
           {tab === 'quickstart' &&
             content.quickSteps.map((step, i) => (
               <div

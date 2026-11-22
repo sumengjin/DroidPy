@@ -18,6 +18,7 @@ import JSZip from 'jszip';
 import { PythonFile } from '../types/ide';
 import { SNIPPET_CATEGORIES, SNIPPET_TEMPLATES, SnippetCategoryId } from '../data/defaultFiles';
 import { useI18n } from '../services/i18n';
+import { copyTextReliable } from '../utils/clipboard';
 import { downloadBlob } from '../utils/downloadBlob';
 
 interface FileExplorerProps {
@@ -179,10 +180,10 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
         // Fallback to clipboard
       }
     }
-    try {
-      await navigator.clipboard.writeText(active.content);
+    const ok = await copyTextReliable(active.content);
+    if (ok) {
       onNotify(t('files_copied_code', { name: active.name }));
-    } catch {
+    } else {
       onNotify(t('files_clipboard_err'));
     }
   };

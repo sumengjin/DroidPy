@@ -130,6 +130,7 @@ export interface DroidPyNativeBridge {
   openCrawlerBrowser?: (url: string, desktopUa: boolean) => void;
   closeCrawlerBrowser?: () => void;
   saveBase64File?: (base64Data: string, fileName: string, mimeType: string) => void;
+  copyToClipboard?: (text: string) => boolean;
 }
 
 declare global {

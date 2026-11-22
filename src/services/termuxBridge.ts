@@ -108,6 +108,27 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
         if parsed_path == "/health":
             if not self._check_auth():
                 return self._send_json(401, {"error": "Invalid X-DroidPy-Token"})
+            pip_pkgs = []
+            try:
+                import importlib.metadata as _im
+                pip_pkgs = sorted({
+                    (d.metadata.get("Name") or "").replace("_", "-")
+                    for d in _im.distributions()
+                    if d.metadata.get("Name")
+                })
+            except Exception:
+                pass
+            pkg_pkgs = []
+            try:
+                out_pkg = subprocess.check_output(
+                    ["dpkg-query", "-W", "-f=\${Package}\\n"],
+                    text=True,
+                    timeout=4,
+                    stderr=subprocess.DEVNULL,
+                )
+                pkg_pkgs = sorted({line.strip() for line in out_pkg.splitlines() if line.strip()})
+            except Exception:
+                pass
             return self._send_json(200, {
                 "ok": True,
                 "streaming": True,
@@ -118,6 +139,8 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
                 "hasClang": shutil.which("clang") is not None,
                 "hasFfmpeg": shutil.which("ffmpeg") is not None,
                 "workspaceDir": WORKSPACE,
+                "installedPipPackages": pip_pkgs,
+                "installedPkgPackages": pkg_pkgs,
             })
         if parsed_path == "/files":
             if not self._check_auth():
@@ -800,12 +823,74 @@ export async function clearTermuxNativeLogs(config: TermuxConfig): Promise<{ ok:
   return termuxFetch<{ ok: boolean }>(config, '/logs/clear', { method: 'POST', body: '{}' }, 5000);
 }
 
-const TERMUX_BASE_PIP_SKIP = new Set(['pip', 'setuptools', 'wheel']);
+export const CORE_TERMUX_PIP_PACKAGES = new Set(['pip', 'setuptools', 'wheel']);
+export const CORE_TERMUX_PKG_PACKAGES = new Set([
+  'apt',
+  'dpkg',
+  'bash',
+  'dash',
+  'coreutils',
+  'python',
+  'python-pip',
+  'busybox',
+  'termux-tools',
+  'libandroid-support',
+  'libc++',
+]);
+
+export function normalizeTermuxPkgName(name: string): string {
+  return name.trim().toLowerCase().replace(/[-_.]+/g, '-');
+}
+
+export interface TermuxOutdatedPipItem {
+  name: string;
+  currentVersion: string;
+  latestVersion: string;
+}
+
+export function parseOutdatedPipJson(rawOutput: string): TermuxOutdatedPipItem[] {
+  const cleaned = rawOutput.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').trim();
+  const startIdx = cleaned.indexOf('[');
+  const endIdx = cleaned.lastIndexOf(']');
+  if (startIdx === -1 || endIdx <= startIdx) return [];
+  try {
+    const parsed = JSON.parse(cleaned.slice(startIdx, endIdx + 1)) as Array<{
+      name?: string;
+      version?: string;
+      latest_version?: string;
+    }>;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item) => item.name && item.version && item.latest_version && item.version !== item.latest_version)
+      .map((item) => ({
+        name: String(item.name),
+        currentVersion: String(item.version),
+        latestVersion: String(item.latest_version),
+      }));
+  } catch {
+    return [];
+  }
+}
+
+export function buildTermuxUninstallCommand(mode: 'pip' | 'pkg', target: string): string {
+  const cleaned = target
+    .split(/\s+/)
+    .map((p) => p.replace(/[^a-zA-Z0-9_.+-]/g, '').trim())
+    .filter((p) => {
+      if (!p) return false;
+      const lower = p.toLowerCase();
+      return mode === 'pkg' ? !CORE_TERMUX_PKG_PACKAGES.has(lower) : !CORE_TERMUX_PIP_PACKAGES.has(lower);
+    });
+  if (cleaned.length === 0) return '';
+  return mode === 'pkg'
+    ? `pkg uninstall -y ${cleaned.join(' ')}`
+    : `pip uninstall -y ${cleaned.join(' ')}`;
+}
 
 export function buildTermuxPipUpgradeCommand(installedPipPackages: string[]): string {
   const safeTargets = installedPipPackages
     .map((p) => p.replace(/[^a-zA-Z0-9_.-]/g, '').trim())
-    .filter((p) => p && !TERMUX_BASE_PIP_SKIP.has(p.toLowerCase()));
+    .filter((p) => p && !CORE_TERMUX_PIP_PACKAGES.has(p.toLowerCase()));
   if (safeTargets.length === 0) {
     return 'pip install --upgrade pip';
   }
@@ -821,4 +906,5 @@ export function buildTermuxAptUpgradeCommand(pkgNames?: string[]): string {
   }
   return '(pkg update -y || true) && pkg upgrade -y';
 }
+
 

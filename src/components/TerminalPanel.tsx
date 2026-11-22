@@ -4,6 +4,8 @@ import { ExecutionEngine, PyodideStatus, TerminalEntry } from '../types/ide';
 import { renderAnsiText, stripAnsi } from '../utils/ansiParser';
 import { useI18n } from '../services/i18n';
 import { downloadDataUrl } from '../utils/downloadBlob';
+import { formatDurationHMS } from '../utils/formatDuration';
+import { copyTextReliable, getSelectedTextWithin } from '../utils/clipboard';
 
 interface TerminalPanelProps {
   entries: TerminalEntry[];
@@ -14,6 +16,7 @@ interface TerminalPanelProps {
   embeddedMissingPython?: boolean;
   onQuickInitEmbedded?: () => void;
   lastDurationMs: number | null;
+  runStartedAt?: number | null;
   pendingInputPrompt: string | null;
   onSubmitInput: (value: string) => void;
   onRunRepl: (statement: string) => Promise<void>;
@@ -32,6 +35,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   embeddedMissingPython,
   onQuickInitEmbedded,
   lastDurationMs,
+  runStartedAt,
   pendingInputPrompt,
   onSubmitInput,
   onRunRepl,
@@ -50,10 +54,31 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   const [replHistory, setReplHistory] = useState<string[]>([]);
   const [historyIdx, setHistoryIdx] = useState<number>(-1);
   const [copied, setCopied] = useState(false);
+  const [copiedSel, setCopiedSel] = useState(false);
+  const [selectedText, setSelectedText] = useState('');
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [expandedPlot, setExpandedPlot] = useState<string | null>(null);
 
   useEffect(() => {
-    if (scrollRef.current) {
+    if (status !== 'running' || runStartedAt == null) return;
+    setNowMs(Date.now());
+    const id = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [status, runStartedAt]);
+
+  useEffect(() => {
+    const syncSelection = () => {
+      const sel = getSelectedTextWithin(scrollRef.current);
+      setSelectedText(sel);
+    };
+    document.addEventListener('selectionchange', syncSelection);
+    return () => document.removeEventListener('selectionchange', syncSelection);
+  }, []);
+
+  useEffect(() => {
+    if (scrollRef.current && !getSelectedTextWithin(scrollRef.current)) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [entries, pendingInputPrompt]);
@@ -70,12 +95,20 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       .map((e) => stripAnsi(e.content))
       .join('\n');
     if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
+    const ok = await copyTextReliable(text);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
-    } catch {
-      // Clipboard blocked
+    }
+  };
+
+  const handleCopySelection = async () => {
+    const currentSel = getSelectedTextWithin(scrollRef.current) || selectedText;
+    if (!currentSel) return;
+    const ok = await copyTextReliable(currentSel);
+    if (ok) {
+      setCopiedSel(true);
+      setTimeout(() => setCopiedSel(false), 1800);
     }
   };
 
@@ -168,15 +201,34 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             </button>
           </div>
           <span className="truncate whitespace-nowrap">{statusLabel}</span>
-          {lastDurationMs !== null && (
+          {status === 'running' && runStartedAt != null ? (
             <>
               <span aria-hidden="true">·</span>
-              <span className="font-mono tabular-nums whitespace-nowrap">{lastDurationMs} ms</span>
+              <span className="font-mono tabular-nums whitespace-nowrap text-[var(--ide-accent-text)] font-semibold">
+                {formatDurationHMS(Math.max(0, nowMs - runStartedAt))}
+              </span>
             </>
-          )}
+          ) : lastDurationMs !== null ? (
+            <>
+              <span aria-hidden="true">·</span>
+              <span className="font-mono tabular-nums whitespace-nowrap">
+                {formatDurationHMS(lastDurationMs)}
+              </span>
+            </>
+          ) : null}
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
+          {selectedText.length > 0 && (
+            <button
+              type="button"
+              onClick={handleCopySelection}
+              className="min-h-[36px] px-2.5 flex items-center gap-1.5 rounded-lg bg-[var(--ide-accent)] text-white text-xs font-semibold transition-colors whitespace-nowrap"
+            >
+              {copiedSel ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copiedSel ? t('term_copied_selection') : t('term_copy_selection')}</span>
+            </button>
+          )}
           {onOpenLogs && (
             <button
               type="button"
@@ -229,7 +281,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       {/* Output Scroll Area */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto ide-scroll p-4 font-mono text-[13px] leading-relaxed space-y-2"
+        className="terminal-selectable flex-1 overflow-y-auto ide-scroll p-4 font-mono text-[13px] leading-relaxed space-y-2"
       >
         {entries.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center py-8 text-[var(--ide-text-muted)] font-sans">

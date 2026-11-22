@@ -25,6 +25,7 @@ import {
 } from '../types/ide';
 import { probeUrlViaTermux } from '../services/termuxBridge';
 import { useI18n } from '../services/i18n';
+import { copyTextReliable } from '../utils/clipboard';
 import {
   DESKTOP_CHROME_UA,
   MOBILE_ANDROID_UA,
@@ -199,23 +200,23 @@ export const CrawlerBrowserPanel: React.FC<CrawlerBrowserPanelProps> = ({
   };
 
   const handleCopyPython = async () => {
-    try {
-      await navigator.clipboard.writeText(buildPythonCrawlerScript(session));
+    const ok = await copyTextReliable(buildPythonCrawlerScript(session));
+    if (ok) {
       setCopiedKey('py');
       onNotify(t('brw_toast_copied_py'));
       window.setTimeout(() => setCopiedKey(null), 1800);
-    } catch {
+    } else {
       onNotify(t('files_clipboard_err'));
     }
   };
 
   const handleCopyBookmarklet = async () => {
-    try {
-      await navigator.clipboard.writeText(bookmarkletCode);
+    const ok = await copyTextReliable(bookmarkletCode);
+    if (ok) {
       setCopiedKey('bookmarklet');
       onNotify(t('brw_toast_copied_bookmarklet'));
       window.setTimeout(() => setCopiedKey(null), 1800);
-    } catch {
+    } else {
       onNotify(t('files_clipboard_err'));
     }
   };
@@ -441,7 +442,7 @@ export const CrawlerBrowserPanel: React.FC<CrawlerBrowserPanelProps> = ({
               </div>
 
               {probeResult.setCookies.length > 0 && (
-                <div className="rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-2.5 space-y-1">
+                <div className="selectable-text rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-2.5 space-y-1">
                   <div className="text-[11px] font-semibold text-[var(--ide-accent-text)]">
                     Set-Cookie
                   </div>
@@ -456,7 +457,7 @@ export const CrawlerBrowserPanel: React.FC<CrawlerBrowserPanelProps> = ({
                 </div>
               )}
 
-              <pre className="rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-3 font-mono text-[11px] leading-relaxed overflow-x-auto whitespace-pre-wrap break-all text-[var(--ide-text-muted)]">
+              <pre className="selectable-text rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-3 font-mono text-[11px] leading-relaxed overflow-x-auto whitespace-pre-wrap break-all text-[var(--ide-text-muted)]">
                 {probeResult.bodyPreview}
               </pre>
             </div>

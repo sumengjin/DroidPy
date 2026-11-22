@@ -14,6 +14,7 @@ import {
 import { ToolsAndPackages } from './ToolsAndPackages';
 import { useI18n } from '../services/i18n';
 import { OutdatedPackageInfo } from '../services/pyodideRuntime';
+import { TermuxOutdatedPipItem } from '../services/termuxBridge';
 import { AppUpdateCheckResult } from '../services/appUpdater';
 
 interface NegativeScreenDrawerProps {
@@ -34,9 +35,15 @@ interface NegativeScreenDrawerProps {
   checkingOutdated?: boolean;
   upgradingPackages?: boolean;
   onUpgradePackage?: (pkg: string) => Promise<void>;
+  onUninstallPackage?: (pkg: string) => Promise<void>;
   onCheckAndUpgradeAll?: () => Promise<void>;
+  onUpgradeAllPackages?: () => Promise<void>;
   onUpgradeAllTermux?: (kind: 'pip' | 'pkg') => Promise<void>;
   onUpgradeSingleTermuxPip?: (pkg: string) => Promise<void>;
+  outdatedTermuxPips?: TermuxOutdatedPipItem[];
+  checkingTermuxOutdated?: boolean;
+  onCheckTermuxOutdated?: () => Promise<void>;
+  onUninstallInTermux?: (mode: 'pip' | 'pkg', target: string) => Promise<void>;
   upgradingTermux?: boolean;
   appUpdateResult?: AppUpdateCheckResult | null;
   checkingAppUpdate?: boolean;
@@ -83,9 +90,15 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
   checkingOutdated,
   upgradingPackages,
   onUpgradePackage,
+  onUninstallPackage,
   onCheckAndUpgradeAll,
+  onUpgradeAllPackages,
   onUpgradeAllTermux,
   onUpgradeSingleTermuxPip,
+  outdatedTermuxPips,
+  checkingTermuxOutdated,
+  onCheckTermuxOutdated,
+  onUninstallInTermux,
   upgradingTermux,
   appUpdateResult,
   checkingAppUpdate,
@@ -229,9 +242,15 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
             checkingOutdated={checkingOutdated}
             upgradingPackages={upgradingPackages}
             onUpgradePackage={onUpgradePackage}
+            onUninstallPackage={onUninstallPackage}
             onCheckAndUpgradeAll={onCheckAndUpgradeAll}
+            onUpgradeAllPackages={onUpgradeAllPackages}
             onUpgradeAllTermux={onUpgradeAllTermux}
             onUpgradeSingleTermuxPip={onUpgradeSingleTermuxPip}
+            outdatedTermuxPips={outdatedTermuxPips}
+            checkingTermuxOutdated={checkingTermuxOutdated}
+            onCheckTermuxOutdated={onCheckTermuxOutdated}
+            onUninstallInTermux={onUninstallInTermux}
             upgradingTermux={upgradingTermux}
             appUpdateResult={appUpdateResult}
             checkingAppUpdate={checkingAppUpdate}
