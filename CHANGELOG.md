@@ -2,6 +2,20 @@
 
 All notable changes to **DroidPy** are documented in this file.
 
+## [1.2.9] - 2026-11-22
+
+### Fixed (Real-Device Execution Logs: `pip install` exit 2 & `pkg update` exit 100)
+- **修復實機執行 `pip install requests` / `pip install beautifulsoup4` 回傳 `exitCode=2` 的問題**：
+  - `EmbeddedTermuxBridge.kt` 與 `MainActivity.kt` 改為遞迴修復 `usr/bin`、`usr/etc`、`usr/lib`、`usr/libexec`、`usr/share` 內所有指向 `/data/data/com.termux/files/usr` 的符號連結（涵蓋 `etc/tls/cert.pem` 與 CA 憑證目錄）。
+  - 新增 `resolveCaBundleFile()` 檢查：僅在實際存在的 CA 憑證檔可讀取時才注入 `PIP_CERT`、`REQUESTS_CA_BUNDLE`、`SSL_CERT_FILE`、`CURL_CA_BUNDLE`，避免因預設 `etc/tls/cert.pem` 尚未安裝或為無效連結導致 `pip` 拋出 `OSError`（`UNKNOWN_ERROR=2`）立即退出；並於 `pip` Wrapper 補上不存在憑證時自動 `unset` 與 `ensurepip` 檢查、指定獨立 `PIP_CACHE_DIR`／`XDG_CACHE_HOME`。
+- **修復實機執行 `pkg update` 回傳 `exitCode=100` 的問題**：
+  - `ensurePrefixWrappers()` 自動將 `etc/apt/sources.list` 與 `etc/apt/sources.list.d/*.list` 補齊 `[trusted=yes]` 並重寫 `bin/apt-key` 舊路徑，同時於 `apt.conf`／`APT_OPTS` 加入 `Acquire::AllowDowngradeToInsecureRepositories=true` 與 `Dir::Bin::apt-key`／`Dir::Bin::gpg`，消除重定位後金鑰驗證失敗導致 `apt-get update` 回傳 100 的錯誤。
+- **強化失敗日誌詳情與 `chart_demo.py` 引擎提示**：
+  - `EmbeddedTermuxBridge.kt` 與 `App.tsx` 於 `pkg`／`pip`／Shell 非 0 結束碼時自動擷取並保存最後輸出內容至「程式執行所有日誌」與 `droidpy_native.log`，方便一鍵診斷。
+  - `chart_demo.py` 在未安裝 `matplotlib` 的 Termux 環境改為輸出友善提示，引導切換沙盒或安裝套件。
+
+---
+
 ## [1.2.8] - 2026-11-21
 
 ### Fixed & Improved (Persistence, APT Prefix, Script Feedback, Phone/Tablet UX & Historical Releases)

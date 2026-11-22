@@ -135,10 +135,11 @@ declare global {
 
 function upgradeLegacyDefaultFiles(list: PythonFile[]): PythonFile[] {
   const defaultUtils = DEFAULT_FILES.find((f) => f.id === 'utils-py');
-  if (!defaultUtils) return list;
+  const defaultChart = DEFAULT_FILES.find((f) => f.id === 'chart-demo-py');
   let changed = false;
   const next = list.map((f) => {
     if (
+      defaultUtils &&
       (f.id === 'utils-py' || f.name === 'utils.py') &&
       f.content.includes('def format_device_report') &&
       !f.content.includes('__name__') &&
@@ -146,6 +147,15 @@ function upgradeLegacyDefaultFiles(list: PythonFile[]): PythonFile[] {
     ) {
       changed = true;
       return { ...f, content: defaultUtils.content };
+    }
+    if (
+      defaultChart &&
+      (f.id === 'chart-demo-py' || f.name === 'chart_demo.py') &&
+      f.content.includes('Android Sensor Waveform') &&
+      !f.content.includes('ModuleNotFoundError')
+    ) {
+      changed = true;
+      return { ...f, content: defaultChart.content };
     }
     return f;
   });
@@ -1057,9 +1067,13 @@ export default function App() {
       appendEntry('system', t('log_termux_install', { cmd: label }));
       appLog('package', `Termux install start: ${label}`);
       const streamId = makeId();
+      let tailBuf = '';
       try {
         const res = await streamInstallInTermux(termuxConfig, mode, target, {
-          onChunk: (chunk) => appendStreamChunk(streamId, chunk),
+          onChunk: (chunk) => {
+            appendStreamChunk(streamId, chunk);
+            tailBuf = (tailBuf + chunk).slice(-1200);
+          },
         });
         setTermuxConnectionState('connected');
         setLastDurationMs(res.durationMs);
@@ -1068,7 +1082,10 @@ export default function App() {
           showToast(t('toast_termux_install_ok', { pkg: target }));
         } else {
           appendEntry('stderr', t('log_termux_exit', { code: res.exitCode }));
-          appLog('package', `Termux install failed: ${label} (exit=${res.exitCode})`, { level: 'error' });
+          appLog('package', `Termux install failed: ${label} (exit=${res.exitCode})`, {
+            level: 'error',
+            detail: tailBuf.trim() || undefined,
+          });
           showToast(t('toast_termux_install_err', { pkg: target, code: res.exitCode }));
         }
       } catch (err) {
@@ -1076,7 +1093,10 @@ export default function App() {
         setTermuxConnectionState('error');
         setTermuxError(msg);
         appendEntry('stderr', msg);
-        appLog('package', `Termux install exception (${label}): ${msg}`, { level: 'error' });
+        appLog('package', `Termux install exception (${label}): ${msg}`, {
+          level: 'error',
+          detail: tailBuf.trim() || undefined,
+        });
         showToast(t('toast_termux_install_fail'));
       } finally {
         try {
@@ -1103,15 +1123,22 @@ export default function App() {
       appendEntry('repl-in', `$ ${command}`);
       appLog('termux', `Shell command: ${command}`);
       const streamId = makeId();
+      let tailBuf = '';
       try {
         const res = await streamShellInTermux(termuxConfig, command, {
-          onChunk: (chunk) => appendStreamChunk(streamId, chunk),
+          onChunk: (chunk) => {
+            appendStreamChunk(streamId, chunk);
+            tailBuf = (tailBuf + chunk).slice(-1200);
+          },
         });
         setTermuxConnectionState('connected');
         setLastDurationMs(res.durationMs);
         if (res.exitCode !== 0) {
           appendEntry('stderr', t('log_termux_exit', { code: res.exitCode }));
-          appLog('termux', `Shell exited with code ${res.exitCode}`, { level: 'warn', detail: command });
+          appLog('termux', `Shell exited with code ${res.exitCode}`, {
+            level: 'warn',
+            detail: tailBuf.trim() ? `${command}\n\n${tailBuf.trim()}` : command,
+          });
         } else {
           appLog('termux', `Shell finished (${res.durationMs} ms)`);
         }
@@ -1120,7 +1147,10 @@ export default function App() {
         setTermuxConnectionState('error');
         setTermuxError(msg);
         appendEntry('stderr', msg);
-        appLog('termux', `Shell exception: ${msg}`, { level: 'error', detail: command });
+        appLog('termux', `Shell exception: ${msg}`, {
+          level: 'error',
+          detail: tailBuf.trim() ? `${command}\n\n${tailBuf.trim()}` : command,
+        });
       } finally {
         if (/\b(pkg|apt|apt-get|pip|pip3)\b/i.test(command)) {
           try {
@@ -1152,9 +1182,13 @@ export default function App() {
       appendEntry('system', t('log_termux_init', { cmd }));
       appLog('termux', `One-tap env initialization started (includeBaseSystem=${includeBaseSystem})`);
       const streamId = makeId();
+      let tailBuf = '';
       try {
         const res = await streamShellInTermux(termuxConfig, cmd, {
-          onChunk: (chunk) => appendStreamChunk(streamId, chunk),
+          onChunk: (chunk) => {
+            appendStreamChunk(streamId, chunk);
+            tailBuf = (tailBuf + chunk).slice(-1200);
+          },
         });
         setTermuxConnectionState('connected');
         setLastDurationMs(res.durationMs);
@@ -1163,7 +1197,10 @@ export default function App() {
           showToast(t('toast_termux_init_ok'));
         } else {
           appendEntry('stderr', t('log_termux_exit', { code: res.exitCode }));
-          appLog('termux', `One-tap env initialization exited ${res.exitCode}`, { level: 'error' });
+          appLog('termux', `One-tap env initialization exited ${res.exitCode}`, {
+            level: 'error',
+            detail: tailBuf.trim() || undefined,
+          });
           showToast(t('toast_termux_init_err', { code: res.exitCode }));
         }
       } catch (err) {
@@ -1171,7 +1208,10 @@ export default function App() {
         setTermuxConnectionState('error');
         setTermuxError(msg);
         appendEntry('stderr', msg);
-        appLog('termux', `One-tap env initialization error: ${msg}`, { level: 'error' });
+        appLog('termux', `One-tap env initialization error: ${msg}`, {
+          level: 'error',
+          detail: tailBuf.trim() || undefined,
+        });
         showToast(t('toast_termux_install_fail'));
       } finally {
         try {

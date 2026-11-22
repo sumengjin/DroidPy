@@ -222,8 +222,8 @@ android {
         minSdk = 24
         // targetSdk = 28 讓內嵌 Termux bootstrap 能在 App 私有目錄自由執行 pkg / python / clang（GitHub 發佈專用）
         targetSdk = 28
-        versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 10208
-        versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.8"
+        versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 10209
+        versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.9"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -984,18 +984,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
         val legacyPrefix = "/data/data/com.termux/files/usr"
-        listOf(
-            binDir,
-            File(usrDir, "etc/apt/trusted.gpg.d"),
-            File(usrDir, "lib")
-        ).forEach { dir ->
-            if (!dir.isDirectory) return@forEach
+        fun healSymlinksRecursive(dir: File, depth: Int) {
+            if (depth > 5 || !dir.isDirectory) return
             dir.listFiles()?.forEach { f ->
                 try {
                     val p = f.toPath()
                     if (java.nio.file.Files.isSymbolicLink(p)) {
                         val target = android.system.Os.readlink(f.absolutePath)
-                        if (target.startsWith("$legacyPrefix/")) {
+                        if (target.startsWith("\$legacyPrefix/")) {
                             val fixed = usrDir.absolutePath + target.removePrefix(legacyPrefix)
                             f.delete()
                             android.system.Os.symlink(fixed, f.absolutePath)
@@ -1003,11 +999,20 @@ class MainActivity : AppCompatActivity() {
                             f.delete()
                             android.system.Os.symlink(usrDir.absolutePath, f.absolutePath)
                         }
+                    } else if (f.isDirectory) {
+                        healSymlinksRecursive(f, depth + 1)
                     }
                 } catch (_: Exception) {
                 }
             }
         }
+        listOf(
+            binDir,
+            File(usrDir, "etc"),
+            File(usrDir, "lib"),
+            File(usrDir, "libexec"),
+            File(usrDir, "share")
+        ).forEach { healSymlinksRecursive(it, 0) }
         val pyCand = binDir.listFiles()?.firstOrNull {
             it.name.startsWith("python3.") && !it.name.endsWith("-config") && it.isFile
         }
@@ -1162,7 +1167,39 @@ class EmbeddedTermuxBridge(
         val wrapperDir = File(homeDir, ".droidpy_bin").apply { mkdirs() }
         val prefix = usrDir.absolutePath
         val legacyPrefix = "/data/data/com.termux/files/usr"
-        val cert = File(usrDir, "etc/tls/cert.pem").absolutePath
+
+        // Heal symlinks first so etc/tls/cert.pem or etc/apt/trusted.gpg.d/* resolve properly
+        val binDir = File(usrDir, "bin")
+        fun healDirSymlinks(dir: File, depth: Int) {
+            if (depth > 5 || !dir.isDirectory) return
+            dir.listFiles()?.forEach { f ->
+                try {
+                    if (java.nio.file.Files.isSymbolicLink(f.toPath())) {
+                        val target = android.system.Os.readlink(f.absolutePath)
+                        if (target.startsWith("\$legacyPrefix/")) {
+                            f.delete()
+                            android.system.Os.symlink(prefix + target.removePrefix(legacyPrefix), f.absolutePath)
+                        } else if (target == legacyPrefix) {
+                            f.delete()
+                            android.system.Os.symlink(prefix, f.absolutePath)
+                        }
+                    } else if (f.isDirectory) {
+                        healDirSymlinks(f, depth + 1)
+                    }
+                } catch (_: Exception) {
+                }
+            }
+        }
+        listOf(
+            binDir,
+            File(usrDir, "etc"),
+            File(usrDir, "lib"),
+            File(usrDir, "libexec"),
+            File(usrDir, "share")
+        ).forEach { healDirSymlinks(it, 0) }
+
+        val certFile = resolveCaBundleFile()
+        val cert = certFile?.absolutePath ?: File(usrDir, "etc/tls/cert.pem").absolutePath
 
         // Ensure essential APT/dpkg directories exist cleanly inside app filesDir/usr
         listOf(
@@ -1187,43 +1224,46 @@ class EmbeddedTermuxBridge(
 
         // Unconditionally write full APT config so libapt-pkg redirects Dir/Dir::Etc/Dir::Etc::parts
         // BEFORE it ever tries reading compiled-in /data/data/com.termux/files/usr/etc/apt/apt.conf.d/
+        val aptConfLines = mutableListOf(
+            "Dir \\"$prefix/\\";",
+            "Dir::State \\"$prefix/var/lib/apt\\";",
+            "Dir::State::status \\"$prefix/var/lib/dpkg/status\\";",
+            "Dir::Cache \\"$prefix/var/cache/apt\\";",
+            "Dir::Etc \\"$prefix/etc/apt\\";",
+            "Dir::Etc::parts \\"$prefix/etc/apt/apt.conf.d\\";",
+            "Dir::Etc::main \\"$prefix/etc/apt/apt.conf\\";",
+            "Dir::Etc::preferences \\"$prefix/etc/apt/preferences\\";",
+            "Dir::Etc::preferencesparts \\"$prefix/etc/apt/preferences.d\\";",
+            "Dir::Etc::sourcelist \\"$prefix/etc/apt/sources.list\\";",
+            "Dir::Etc::sourceparts \\"$prefix/etc/apt/sources.list.d\\";",
+            "Dir::Etc::Trusted \\"$prefix/etc/apt/trusted.gpg\\";",
+            "Dir::Etc::TrustedParts \\"$prefix/etc/apt/trusted.gpg.d\\";",
+            "Dir::Log \\"$prefix/var/log/apt\\";",
+            "Dir::Bin::methods \\"$prefix/lib/apt/methods\\";",
+            "Dir::Bin::dpkg \\"$prefix/bin/dpkg\\";",
+            "Dir::Bin::apt-key \\"$prefix/bin/apt-key\\";",
+            "Dir::Bin::gpg \\"$prefix/bin/gpgv\\";",
+            "APT::Sandbox::User \\"root\\";",
+            "Acquire::AllowInsecureRepositories \\"true\\";",
+            "Acquire::AllowDowngradeToInsecureRepositories \\"true\\";",
+            "APT::Get::AllowUnauthenticated \\"true\\";"
+        )
+        if (certFile != null) {
+            aptConfLines.add("Acquire::https::CaInfo \\"\${certFile.absolutePath}\\";")
+        } else {
+            aptConfLines.add("Acquire::https::Verify-Peer \\"false\\";")
+            aptConfLines.add("Acquire::https::Verify-Host \\"false\\";")
+        }
         val aptConfFile = File(usrDir, "etc/apt/apt.conf").apply {
             parentFile?.mkdirs()
-            writeText(
-                listOf(
-                    "Dir \\"$prefix/\\";",
-                    "Dir::State \\"$prefix/var/lib/apt\\";",
-                    "Dir::State::status \\"$prefix/var/lib/dpkg/status\\";",
-                    "Dir::Cache \\"$prefix/var/cache/apt\\";",
-                    "Dir::Etc \\"$prefix/etc/apt\\";",
-                    "Dir::Etc::parts \\"$prefix/etc/apt/apt.conf.d\\";",
-                    "Dir::Etc::main \\"$prefix/etc/apt/apt.conf\\";",
-                    "Dir::Etc::preferences \\"$prefix/etc/apt/preferences\\";",
-                    "Dir::Etc::preferencesparts \\"$prefix/etc/apt/preferences.d\\";",
-                    "Dir::Etc::sourcelist \\"$prefix/etc/apt/sources.list\\";",
-                    "Dir::Etc::sourceparts \\"$prefix/etc/apt/sources.list.d\\";",
-                    "Dir::Etc::Trusted \\"$prefix/etc/apt/trusted.gpg\\";",
-                    "Dir::Etc::TrustedParts \\"$prefix/etc/apt/trusted.gpg.d\\";",
-                    "Dir::Log \\"$prefix/var/log/apt\\";",
-                    "Dir::Bin::methods \\"$prefix/lib/apt/methods\\";",
-                    "Dir::Bin::dpkg \\"$prefix/bin/dpkg\\";",
-                    "APT::Sandbox::User \\"root\\";",
-                    "Acquire::AllowInsecureRepositories \\"true\\";",
-                    "APT::Get::AllowUnauthenticated \\"true\\";",
-                    "Acquire::https::CaInfo \\"$cert\\";"
-                ).joinToString("\\n") + "\\n"
-            )
+            writeText(aptConfLines.joinToString("\\n") + "\\n")
         }
 
-        // Rewrite any legacy /data/data/com.termux/files/usr paths in sources.list / apt.conf.d
-        listOf(
-            File(usrDir, "etc/apt/sources.list"),
-            File(usrDir, "etc/apt/sources.list.d"),
-            File(usrDir, "etc/apt/apt.conf.d")
-        ).forEach { target ->
+        // Rewrite legacy /data/data/com.termux/files/usr paths in apt.conf.d and bin/apt-key
+        listOf(File(usrDir, "etc/apt/apt.conf.d"), File(usrDir, "bin/apt-key")).forEach { target ->
             val targets = if (target.isDirectory) target.listFiles()?.toList() ?: emptyList() else listOf(target)
             targets.forEach { cfg ->
-                if (cfg.isFile) {
+                if (cfg.isFile && cfg.length() < 256 * 1024L) {
                     try {
                         val txt = cfg.readText()
                         if (txt.contains(legacyPrefix)) {
@@ -1235,22 +1275,43 @@ class EmbeddedTermuxBridge(
             }
         }
 
-        // Keep bin/sh, trusted.gpg.d/*.gpg, python/python3 symlinks healed on every invocation
-        val binDir = File(usrDir, "bin")
-        listOf(binDir, File(usrDir, "etc/apt/trusted.gpg.d"), File(usrDir, "lib")).forEach { dir ->
-            dir.listFiles()?.forEach { f ->
-                try {
-                    if (java.nio.file.Files.isSymbolicLink(f.toPath())) {
-                        val target = android.system.Os.readlink(f.absolutePath)
-                        if (target.startsWith("$legacyPrefix/")) {
-                            f.delete()
-                            android.system.Os.symlink(prefix + target.removePrefix(legacyPrefix), f.absolutePath)
-                        }
+        // Ensure sources.list* use relocated prefix and [trusted=yes] so apt-get update never exits 100
+        val listFiles = mutableListOf<File>()
+        val mainSources = File(usrDir, "etc/apt/sources.list")
+        if (mainSources.isFile) listFiles.add(mainSources)
+        File(usrDir, "etc/apt/sources.list.d").listFiles()?.filter { it.isFile }?.let { listFiles.addAll(it) }
+        listFiles.forEach { cfg ->
+            try {
+                val orig = cfg.readText()
+                val updated = orig.lines().joinToString("\\n") { line ->
+                    var cur = line.replace(legacyPrefix, prefix)
+                    val trimmed = cur.trimStart()
+                    if (trimmed.startsWith("deb ") && !trimmed.startsWith("deb [")) {
+                        cur = cur.replaceFirst("deb ", "deb [trusted=yes] ")
+                    } else if (trimmed.startsWith("deb-src ") && !trimmed.startsWith("deb-src [")) {
+                        cur = cur.replaceFirst("deb-src ", "deb-src [trusted=yes] ")
                     }
-                } catch (_: Exception) {
+                    cur
                 }
+                if (updated != orig) cfg.writeText(updated)
+            } catch (_: Exception) {
             }
         }
+        val activeDebLines = listFiles.sumOf { f ->
+            try {
+                f.readLines().count { it.trimStart().startsWith("deb ") }
+            } catch (_: Exception) {
+                0
+            }
+        }
+        if (activeDebLines == 0) {
+            try {
+                mainSources.parentFile?.mkdirs()
+                mainSources.writeText("deb [trusted=yes] https://packages-cf.termux.dev/apt/termux-main/ stable main\\n")
+            } catch (_: Exception) {
+            }
+        }
+
         val pyCand = binDir.listFiles()?.firstOrNull {
             it.name.startsWith("python3.") && !it.name.endsWith("-config") && it.isFile
         }
@@ -1273,13 +1334,18 @@ class EmbeddedTermuxBridge(
         }
 
         val d = '$'
+        val caOpt = if (certFile != null) {
+            "-o Acquire::https::CaInfo=\${certFile.absolutePath}"
+        } else {
+            "-o Acquire::https::Verify-Peer=false -o Acquire::https::Verify-Host=false"
+        }
 
         val pkgLines = listOf(
             "#!/system/bin/sh",
             "PREFIX=\\"$prefix\\"",
             "APT_CONFIG=\\"\${aptConfFile.absolutePath}\\"",
             "export PREFIX APT_CONFIG",
-            "APT_OPTS=\\"-c \${d}APT_CONFIG -o Dir=\${d}PREFIX/ -o Dir::State=\${d}PREFIX/var/lib/apt -o Dir::State::status=\${d}PREFIX/var/lib/dpkg/status -o Dir::Cache=\${d}PREFIX/var/cache/apt -o Dir::Etc=\${d}PREFIX/etc/apt -o Dir::Etc::parts=\${d}PREFIX/etc/apt/apt.conf.d -o Dir::Etc::main=\${d}PREFIX/etc/apt/apt.conf -o Dir::Etc::preferences=\${d}PREFIX/etc/apt/preferences -o Dir::Etc::preferencesparts=\${d}PREFIX/etc/apt/preferences.d -o Dir::Etc::sourcelist=\${d}PREFIX/etc/apt/sources.list -o Dir::Etc::sourceparts=\${d}PREFIX/etc/apt/sources.list.d -o Dir::Etc::Trusted=\${d}PREFIX/etc/apt/trusted.gpg -o Dir::Etc::TrustedParts=\${d}PREFIX/etc/apt/trusted.gpg.d -o Dir::Log=\${d}PREFIX/var/log/apt -o Dir::Bin::methods=\${d}PREFIX/lib/apt/methods -o Dir::Bin::dpkg=\${d}PREFIX/bin/dpkg -o DPkg::Options::=--admindir=\${d}PREFIX/var/lib/dpkg -o Acquire::AllowInsecureRepositories=true -o APT::Get::AllowUnauthenticated=true -o APT::Sandbox::User=root -o Acquire::https::CaInfo=$cert\\"",
+            "APT_OPTS=\\"-c \${d}APT_CONFIG -o Dir=\${d}PREFIX/ -o Dir::State=\${d}PREFIX/var/lib/apt -o Dir::State::status=\${d}PREFIX/var/lib/dpkg/status -o Dir::Cache=\${d}PREFIX/var/cache/apt -o Dir::Etc=\${d}PREFIX/etc/apt -o Dir::Etc::parts=\${d}PREFIX/etc/apt/apt.conf.d -o Dir::Etc::main=\${d}PREFIX/etc/apt/apt.conf -o Dir::Etc::preferences=\${d}PREFIX/etc/apt/preferences -o Dir::Etc::preferencesparts=\${d}PREFIX/etc/apt/preferences.d -o Dir::Etc::sourcelist=\${d}PREFIX/etc/apt/sources.list -o Dir::Etc::sourceparts=\${d}PREFIX/etc/apt/sources.list.d -o Dir::Etc::Trusted=\${d}PREFIX/etc/apt/trusted.gpg -o Dir::Etc::TrustedParts=\${d}PREFIX/etc/apt/trusted.gpg.d -o Dir::Log=\${d}PREFIX/var/log/apt -o Dir::Bin::methods=\${d}PREFIX/lib/apt/methods -o Dir::Bin::dpkg=\${d}PREFIX/bin/dpkg -o Dir::Bin::apt-key=\${d}PREFIX/bin/apt-key -o Dir::Bin::gpg=\${d}PREFIX/bin/gpgv -o DPkg::Options::=--admindir=\${d}PREFIX/var/lib/dpkg -o Acquire::AllowInsecureRepositories=true -o Acquire::AllowDowngradeToInsecureRepositories=true -o APT::Get::AllowUnauthenticated=true -o APT::Sandbox::User=root $caOpt\\"",
             "mkdir -p \\"\${d}PREFIX/var/lib/apt/lists/partial\\" \\"\${d}PREFIX/var/cache/apt/archives/partial\\" \\"\${d}PREFIX/var/lib/dpkg/updates\\" \\"\${d}PREFIX/var/lib/dpkg/info\\" \\"\${d}PREFIX/etc/apt/apt.conf.d\\" \\"\${d}PREFIX/etc/apt/preferences.d\\" \\"\${d}PREFIX/var/log/apt\\"",
             "touch \\"\${d}PREFIX/var/lib/dpkg/status\\" \\"\${d}PREFIX/etc/apt/apt.conf\\" \\"\${d}PREFIX/etc/apt/preferences\\"",
             "SUB=\\"\${d}1\\"",
@@ -1393,6 +1459,14 @@ class EmbeddedTermuxBridge(
             "    chmod 755 \\"\${d}c\\" 2>/dev/null || true",
             "    PY_BIN=\\"\${d}c\\"; break",
             "  done",
+            "fi",
+            "[ -n \\"\${d}PIP_CERT\\" ] && [ ! -r \\"\${d}PIP_CERT\\" ] && unset PIP_CERT",
+            "[ -n \\"\${d}REQUESTS_CA_BUNDLE\\" ] && [ ! -r \\"\${d}REQUESTS_CA_BUNDLE\\" ] && unset REQUESTS_CA_BUNDLE",
+            "[ -n \\"\${d}SSL_CERT_FILE\\" ] && [ ! -r \\"\${d}SSL_CERT_FILE\\" ] && unset SSL_CERT_FILE",
+            "[ -n \\"\${d}CURL_CA_BUNDLE\\" ] && [ ! -r \\"\${d}CURL_CA_BUNDLE\\" ] && unset CURL_CA_BUNDLE",
+            "export PIP_DISABLE_PIP_VERSION_CHECK=1",
+            "if ! \\"\${d}PY_BIN\\" -m pip --version >/dev/null 2>&1; then",
+            "  \\"\${d}PY_BIN\\" -m ensurepip --upgrade >/dev/null 2>&1 || true",
             "fi",
             "exec \\"\${d}PY_BIN\\" -m pip \\"\${d}@\\""
         ).joinToString("\\n") + "\\n"
@@ -1564,15 +1638,34 @@ def clipboard_set(text):
         try { proc.destroyForcibly() } catch (_: Exception) {}
     }
 
+    private fun resolveCaBundleFile(): File? {
+        val candidates = listOf(
+            File(usrDir, "etc/tls/cert.pem"),
+            File(usrDir, "etc/ssl/cert.pem"),
+            File(usrDir, "etc/ssl/certs/ca-certificates.crt"),
+            File(usrDir, "share/ca-certificates/cacert.pem")
+        )
+        return candidates.firstOrNull { f ->
+            try {
+                f.exists() && f.isFile && f.length() > 0L
+            } catch (_: Exception) {
+                false
+            }
+        }
+    }
+
     private fun buildEnv(): Map<String, String> {
         val homeDir = workspaceDir.parentFile!!
         val wrapperBin = ensurePrefixWrappers().absolutePath
         val droidLib = File(homeDir, ".droidpy_lib").absolutePath
         val bin = File(usrDir, "bin").absolutePath
         val lib = File(usrDir, "lib").absolutePath
-        val cert = File(usrDir, "etc/tls/cert.pem").absolutePath
+        val tmpDir = File(homeDir, "tmp").apply { mkdirs() }.absolutePath
+        val pipCacheDir = File(homeDir, "tmp/pip-cache").apply { mkdirs() }.absolutePath
+        val xdgCacheDir = File(homeDir, ".cache").apply { mkdirs() }.absolutePath
+        val certFile = resolveCaBundleFile()
         val sdcard = Environment.getExternalStorageDirectory().absolutePath
-        return mapOf(
+        val env = mutableMapOf(
             "PREFIX" to usrDir.absolutePath,
             "PYTHONHOME" to usrDir.absolutePath,
             "PYTHONPATH" to "$droidLib:\${workspaceDir.absolutePath}",
@@ -1582,16 +1675,25 @@ def clipboard_set(text):
             "PATH" to "$wrapperBin:$bin:/system/bin",
             "LD_LIBRARY_PATH" to lib,
             "TERMINFO" to File(usrDir, "share/terminfo").absolutePath,
-            "TMPDIR" to File(homeDir, "tmp").apply { mkdirs() }.absolutePath,
+            "TMPDIR" to tmpDir,
+            "TMP" to tmpDir,
+            "TEMP" to tmpDir,
+            "XDG_CACHE_HOME" to xdgCacheDir,
+            "PIP_CACHE_DIR" to pipCacheDir,
+            "PIP_DISABLE_PIP_VERSION_CHECK" to "1",
             "PYTHONUNBUFFERED" to "1",
             "TERM" to "xterm-256color",
             "LANG" to "en_US.UTF-8",
-            "SSL_CERT_FILE" to cert,
-            "CURL_CA_BUNDLE" to cert,
-            "REQUESTS_CA_BUNDLE" to cert,
-            "PIP_CERT" to cert,
             "APT_CONFIG" to File(usrDir, "etc/apt/apt.conf").absolutePath
         )
+        if (certFile != null) {
+            val certPath = certFile.absolutePath
+            env["SSL_CERT_FILE"] = certPath
+            env["CURL_CA_BUNDLE"] = certPath
+            env["REQUESTS_CA_BUNDLE"] = certPath
+            env["PIP_CERT"] = certPath
+        }
+        return env
     }
 
     private fun handleClient(socket: Socket) {
@@ -2153,6 +2255,13 @@ def clipboard_set(text):
         }
 
         var code = 1
+        val outputTail = StringBuilder()
+        fun recordTail(chunk: String) {
+            outputTail.append(chunk)
+            if (outputTail.length > 2400) {
+                outputTail.delete(0, outputTail.length - 1600)
+            }
+        }
         if (!shFile.exists()) {
             appendNativeLog("Exec", "Bootstrap missing sh at \${shFile.absolutePath}")
             try {
@@ -2174,8 +2283,10 @@ def clipboard_set(text):
                     val n = inpReader.read(charBuf)
                     if (n < 0) break
                     if (n > 0) {
+                        val s = String(charBuf, 0, n)
+                        recordTail(s)
                         try {
-                            sendStdout(String(charBuf, 0, n))
+                            sendStdout(s)
                         } catch (_: Exception) {
                             proc.destroyForcibly()
                             break
@@ -2185,6 +2296,7 @@ def clipboard_set(text):
                 code = proc.waitFor()
             } catch (e: Exception) {
                 appendNativeLog("Exec", "Exec exception: \${e.message}")
+                recordTail("[DroidPy] Exec error: \${e.message}\\n")
                 try {
                     sendStdout("[DroidPy] Exec error: \${e.message}\\n")
                 } catch (_: Exception) {
@@ -2196,6 +2308,10 @@ def clipboard_set(text):
 
         val elapsed = System.currentTimeMillis() - t0
         appendNativeLog("Exec", "Stream shell finished: exitCode=$code, durationMs=$elapsed")
+        if (code != 0 && outputTail.isNotBlank()) {
+            val tailCompact = outputTail.toString().trim().takeLast(1200)
+            appendNativeLog("Exec", "Non-zero exit ($code) output tail:\\n$tailCompact")
+        }
 
         val doneLine = JSONObject()
             .put("type", "done")
@@ -2330,6 +2446,12 @@ def clipboard_set(text):
 `;
 
   const changelogContent = `# Changelog / 更新日誌
+
+## [1.2.9] - 2026-11-22
+- **修復實機日誌回報之 \`pip install\` 退出碼 2 與 \`pkg update\` 退出碼 100 問題**：
+  - 遞迴修復 \`usr/etc\`、\`usr/share\`、\`usr/lib\` 與 \`usr/bin\` 符號連結，並改以 \`resolveCaBundleFile()\` 僅於憑證檔實際存在時才設定 \`PIP_CERT\`／\`SSL_CERT_FILE\`／\`REQUESTS_CA_BUNDLE\`（避免無 \`etc/tls/cert.pem\` 時 \`pip\` 因找不到憑證路徑而直接以 \`exit=2\` 崩潰），同時補齊 \`PIP_CACHE_DIR\` 與 \`ensurepip\` 回退檢查。
+  - 為 \`sources.list*\` 補上 \`[trusted=yes]\` 與重定位路徑修正，並於 \`APT_OPTS\` 補齊 \`AllowDowngradeToInsecureRepositories\` 與 \`apt-key\`／\`gpgv\` 路徑，解決 \`pkg update\` 退出碼 \`100\`。
+  - 加強 \`droidpy_native.log\` 與前端 \`appLogger\`：非 0 結束碼之指令自動記錄錯誤輸出尾段；\`chart_demo.py\` 缺少 \`matplotlib\` 時提供清楚引擎切換提示。
 
 ## [1.2.8] - 2026-11-21
 - **徹底修復 Termux Python / 套件重開機恢復預設與 \`apt.conf.d\` Permission denied**：
