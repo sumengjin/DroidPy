@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { PythonFile } from '../types/ide';
-import { SNIPPET_TEMPLATES } from '../data/defaultFiles';
+import { SNIPPET_CATEGORIES, SNIPPET_TEMPLATES, SnippetCategoryId } from '../data/defaultFiles';
 import { useI18n } from '../services/i18n';
 import { downloadBlob } from '../utils/downloadBlob';
 
@@ -71,6 +71,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   const [renameValue, setRenameValue] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [templateCategory, setTemplateCategory] = useState<SnippetCategoryId>('all');
   const isNativeApk = Boolean(termuxEmbedded || window.DroidPyNative?.isNativeApp?.());
   const [nativeStorageGranted, setNativeStorageGranted] = useState<boolean>(() =>
     Boolean(window.DroidPyNative?.hasStoragePermission?.())
@@ -463,27 +464,54 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           </button>
 
           {showTemplates && (
-            <div className="mt-2 space-y-2">
-              {SNIPPET_TEMPLATES.map((tpl) => (
-                <button
-                  key={tpl.id}
-                  type="button"
-                  onClick={() => {
-                    let targetName = tpl.filename;
-                    if (files.some((f) => f.name === targetName)) {
-                      targetName = `${tpl.filename.replace('.py', '')}_${Date.now().toString().slice(-3)}.py`;
-                    }
-                    onCreateFile(targetName, tpl.code);
-                    onNotify(t('files_template_added', { name: targetName }));
-                  }}
-                  className="w-full text-left p-3 rounded-xl border border-[var(--ide-border)] hover:border-[var(--ide-accent)] bg-[var(--ide-surface)] transition-colors"
-                >
-                  <div className="text-xs font-semibold text-[var(--ide-text)]">{tpl.title}</div>
-                  <div className="text-[11px] text-[var(--ide-text-muted)] mt-0.5 leading-snug">
-                    {tpl.desc}
-                  </div>
-                </button>
-              ))}
+            <div className="mt-2.5 space-y-2.5">
+              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-0.5">
+                {SNIPPET_CATEGORIES.map((cat) => {
+                  const active = templateCategory === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setTemplateCategory(cat.id)}
+                      className={`min-h-[32px] px-2.5 rounded-lg text-[11px] font-medium whitespace-nowrap shrink-0 transition-colors ${
+                        active
+                          ? 'bg-[var(--ide-accent)] text-white font-semibold'
+                          : 'bg-[var(--ide-surface)] border border-[var(--ide-border)] text-[var(--ide-text-muted)] hover:border-[var(--ide-accent)]'
+                      }`}
+                    >
+                      {t(cat.labelKey as Parameters<typeof t>[0])}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="space-y-2">
+                {SNIPPET_TEMPLATES.filter(
+                  (tpl) => templateCategory === 'all' || tpl.category === templateCategory
+                ).map((tpl) => (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    onClick={() => {
+                      let targetName = tpl.filename;
+                      if (files.some((f) => f.name === targetName)) {
+                        targetName = `${tpl.filename.replace('.py', '')}_${Date.now().toString().slice(-3)}.py`;
+                      }
+                      onCreateFile(targetName, tpl.code);
+                      onNotify(t('files_template_added', { name: targetName }));
+                    }}
+                    className="w-full text-left p-3 rounded-xl border border-[var(--ide-border)] hover:border-[var(--ide-accent)] bg-[var(--ide-surface)] transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-[var(--ide-text)] truncate">{tpl.title}</span>
+                      <span className="font-mono text-[10px] text-[var(--ide-accent-text)] shrink-0">{tpl.filename}</span>
+                    </div>
+                    <div className="text-[11px] text-[var(--ide-text-muted)] mt-0.5 leading-snug">
+                      {tpl.desc}
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>

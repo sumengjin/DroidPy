@@ -800,4 +800,25 @@ export async function clearTermuxNativeLogs(config: TermuxConfig): Promise<{ ok:
   return termuxFetch<{ ok: boolean }>(config, '/logs/clear', { method: 'POST', body: '{}' }, 5000);
 }
 
+const TERMUX_BASE_PIP_SKIP = new Set(['pip', 'setuptools', 'wheel']);
+
+export function buildTermuxPipUpgradeCommand(installedPipPackages: string[]): string {
+  const safeTargets = installedPipPackages
+    .map((p) => p.replace(/[^a-zA-Z0-9_.-]/g, '').trim())
+    .filter((p) => p && !TERMUX_BASE_PIP_SKIP.has(p.toLowerCase()));
+  if (safeTargets.length === 0) {
+    return 'pip install --upgrade pip';
+  }
+  return `pip install --upgrade ${safeTargets.join(' ')}`;
+}
+
+export function buildTermuxAptUpgradeCommand(pkgNames?: string[]): string {
+  const cleaned = (pkgNames ?? [])
+    .map((p) => p.replace(/[^a-zA-Z0-9_.+-]/g, '').trim())
+    .filter(Boolean);
+  if (cleaned.length > 0) {
+    return `(pkg update -y || true) && pkg install --reinstall -y ${cleaned.join(' ')}`;
+  }
+  return '(pkg update -y || true) && pkg upgrade -y';
+}
 

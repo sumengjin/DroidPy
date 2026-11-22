@@ -64,6 +64,8 @@ jobs:
           node-version: '20'
 
       - name: Bundle Offline Web UI if present
+        env:
+          VITE_GITHUB_REPO: \${{ github.repository }}
         run: |
           if [ -f "package.json" ]; then
             if [ -f "package-lock.json" ]; then
@@ -222,8 +224,8 @@ android {
         minSdk = 24
         // targetSdk = 28 讓內嵌 Termux bootstrap 能在 App 私有目錄自由執行 pkg / python / clang（GitHub 發佈專用）
         targetSdk = 28
-        versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 10210
-        versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.10"
+        versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 10211
+        versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.11"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -293,6 +295,7 @@ dependencies {
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 ${storagePerms}
 
     <application
@@ -303,6 +306,15 @@ ${storagePerms}
         android:usesCleartextTraffic="true"
         android:requestLegacyExternalStorage="true"
         android:theme="@style/Theme.AppCompat.DayNight.NoActionBar">
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${safePkg}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -315,6 +327,15 @@ ${storagePerms}
         </activity>
     </application>
 </manifest>
+`
+  );
+
+  zip.file(
+    'android/app/src/main/res/xml/file_paths.xml',
+    `<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <files-path name="updates" path="updates/" />
+</paths>
 `
   );
 
@@ -358,8 +379,11 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import org.json.JSONObject
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.zip.ZipInputStream
 import kotlin.concurrent.thread
 
@@ -384,6 +408,125 @@ class MainActivity : AppCompatActivity() {
     inner class NativeDownloadBridge {
         @JavascriptInterface
         fun isNativeApp(): Boolean = true
+
+        @JavascriptInterface
+        fun getAppVersionName(): String {
+            return try {
+                @Suppress("DEPRECATION")
+                packageManager.getPackageInfo(packageName, 0).versionName ?: "1.2.11"
+            } catch (_: Exception) {
+                "1.2.11"
+            }
+        }
+
+        @JavascriptInterface
+        fun downloadAndInstallApk(apkUrl: String, fileName: String) {
+            val safeName = File(fileName).name.ifBlank { "DroidPy-update.apk" }.let {
+                if (it.lowercase().endsWith(".apk")) it else "$it.apk"
+            }
+            fun emitProgress(status: String, progress: Int, downloaded: Long = 0L, total: Long = 0L, message: String = "") {
+                val payload = JSONObject()
+                    .put("status", status)
+                    .put("progress", progress)
+                    .put("downloadedBytes", downloaded)
+                    .put("totalBytes", total)
+                    .put("fileName", safeName)
+                    .put("message", message)
+                val js = "window.dispatchEvent(new CustomEvent('droidpy-apk-download', { detail: \${payload.toString()} }));"
+                runOnUiThread {
+                    webView.evaluateJavascript(js, null)
+                }
+            }
+
+            thread {
+                try {
+                    emitProgress("downloading", 0, 0L, 0L)
+                    val updatesDir = File(filesDir, "updates").apply { mkdirs() }
+                    updatesDir.listFiles()?.forEach { old -> if (old.isFile && old.name != safeName) old.delete() }
+                    val outFile = File(updatesDir, safeName)
+
+                    var currentUrl = apkUrl
+                    var conn: HttpURLConnection? = null
+                    var redirects = 0
+                    while (redirects < 6) {
+                        val urlObj = URL(currentUrl)
+                        val c = (urlObj.openConnection() as HttpURLConnection).apply {
+                            instanceFollowRedirects = false
+                            connectTimeout = 20000
+                            readTimeout = 30000
+                            setRequestProperty("User-Agent", "DroidPy-Updater/1.0")
+                        }
+                        val code = c.responseCode
+                        if (code in 300..399) {
+                            val loc = c.getHeaderField("Location")
+                            c.disconnect()
+                            if (loc.isNullOrBlank()) break
+                            currentUrl = URL(urlObj, loc).toString()
+                            redirects++
+                            continue
+                        }
+                        conn = c
+                        break
+                    }
+                    if (conn == null || conn.responseCode !in 200..299) {
+                        val errCode = conn?.responseCode ?: -1
+                        conn?.disconnect()
+                        emitProgress("error", 0, message = "下載更新失敗 (HTTP $errCode)")
+                        return@thread
+                    }
+
+                    val totalBytes = conn.contentLengthLong
+                    var downloaded = 0L
+                    var lastEmit = 0L
+                    conn.inputStream.use { inp ->
+                        outFile.outputStream().use { out ->
+                            val buf = ByteArray(16384)
+                            while (true) {
+                                val r = inp.read(buf)
+                                if (r <= 0) break
+                                out.write(buf, 0, r)
+                                downloaded += r
+                                val now = SystemClock.elapsedRealtime()
+                                if (now - lastEmit >= 180L) {
+                                    lastEmit = now
+                                    val pct = if (totalBytes > 0L) ((downloaded * 100L) / totalBytes).toInt().coerceIn(0, 99) else -1
+                                    emitProgress("downloading", pct, downloaded, totalBytes)
+                                }
+                            }
+                        }
+                    }
+                    conn.disconnect()
+                    emitProgress("installing", 100, downloaded, if (totalBytes > 0L) totalBytes else downloaded)
+
+                    runOnUiThread {
+                        try {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+                                Toast.makeText(this@MainActivity, "請允許 DroidPy 安裝未知來源應用程式以完成更新", Toast.LENGTH_LONG).show()
+                                val permIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                                    data = Uri.parse("package:\$packageName")
+                                }
+                                startActivity(permIntent)
+                                return@runOnUiThread
+                            }
+                            val contentUri = FileProvider.getUriForFile(
+                                this@MainActivity,
+                                "\${packageName}.fileprovider",
+                                outFile
+                            )
+                            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                                setDataAndType(contentUri, "application/vnd.android.package-archive")
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            startActivity(installIntent)
+                        } catch (e: Exception) {
+                            emitProgress("error", 0, message = "啟動系統安裝器失敗: \${e.message}")
+                        }
+                    }
+                } catch (e: Exception) {
+                    emitProgress("error", 0, message = "更新下載錯誤: \${e.message}")
+                }
+            }
+        }
 
         @JavascriptInterface
         fun readPersistedState(): String {
@@ -1705,8 +1848,13 @@ def clipboard_set(text):
         val certFile = resolveCaBundleFile()
         val sdcard = Environment.getExternalStorageDirectory().absolutePath
         val certDir = File(usrDir, "etc/tls/certs")
+        val shAbs = listOf(File(usrDir, "bin/sh"), File(usrDir, "bin/dash"), File(usrDir, "bin/bash"))
+            .firstOrNull { it.exists() && it.canExecute() }?.absolutePath ?: "/system/bin/sh"
         val env = mutableMapOf(
             "PREFIX" to usrDir.absolutePath,
+            "SHELL" to shAbs,
+            "CONFIG_SHELL" to shAbs,
+            "CMAKE_SH" to shAbs,
             "PYTHONHOME" to usrDir.absolutePath,
             "PYTHONPATH" to "$droidLib:\${workspaceDir.absolutePath}",
             "HOME" to homeDir.absolutePath,
@@ -2512,6 +2660,12 @@ def clipboard_set(text):
 `;
 
   const changelogContent = `# Changelog / 更新日誌
+
+## [1.2.11] - 2026-11-22
+- **新增更多趣味 Python 腳本範例、分類篩選與熱門／冷門 60+ 完整套件目錄**：
+  - 範本庫新增數位雨、曼德布羅碎形、生命遊戲、迷宮尋路、21 點、猜數字、Wordle、Hacker News 爬蟲、CSV 視覺化、愛心曲線、番茄鐘、密碼生成器等共 18 支即跑範例與 7 大分類篩選。
+  - 套件目錄擴充 60+ 熱門與冷門實用套件（7 大分類）並加入即時模糊聯想提示與 Termux APT 名稱指引，同時支援手動與啟動時自動更新已安裝套件。
+  - 新增程式內 GitHub Release 版本檢查、更新日誌展示與原生 \`FileProvider\` APK 下載覆蓋安裝功能；並於 \`buildEnv()\` 導出 \`SHELL\`／\`CONFIG_SHELL\`／\`CMAKE_SH\` 徹底修復 \`make[1]: /data/data/com.termux/files/usr/bin/sh: Permission denied\` 錯誤。
 
 ## [1.2.10] - 2026-11-22
 - **根治實機 \`PermissionError: [Errno 13] Permission denied\`（\`pip\` Truststore 與 C 擴充編譯 \`build_clib\`）**：

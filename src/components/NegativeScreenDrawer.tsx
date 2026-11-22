@@ -13,6 +13,8 @@ import {
 } from '../types/ide';
 import { ToolsAndPackages } from './ToolsAndPackages';
 import { useI18n } from '../services/i18n';
+import { OutdatedPackageInfo } from '../services/pyodideRuntime';
+import { AppUpdateCheckResult } from '../services/appUpdater';
 
 interface NegativeScreenDrawerProps {
   open: boolean;
@@ -28,6 +30,17 @@ interface NegativeScreenDrawerProps {
   installedPackages: InstalledPackage[];
   onInstallPackage: (pkg: string) => Promise<void>;
   onRefreshPackages: () => Promise<void>;
+  outdatedPackages?: OutdatedPackageInfo[];
+  checkingOutdated?: boolean;
+  upgradingPackages?: boolean;
+  onUpgradePackage?: (pkg: string) => Promise<void>;
+  onCheckAndUpgradeAll?: () => Promise<void>;
+  onUpgradeAllTermux?: (kind: 'pip' | 'pkg') => Promise<void>;
+  onUpgradeSingleTermuxPip?: (pkg: string) => Promise<void>;
+  upgradingTermux?: boolean;
+  appUpdateResult?: AppUpdateCheckResult | null;
+  checkingAppUpdate?: boolean;
+  onOpenUpdateModal?: () => void;
   linkedDirName: string | null;
   onLinkDirectory: () => Promise<void>;
   onImportFromDirectory: () => Promise<void>;
@@ -66,6 +79,17 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
   installedPackages,
   onInstallPackage,
   onRefreshPackages,
+  outdatedPackages,
+  checkingOutdated,
+  upgradingPackages,
+  onUpgradePackage,
+  onCheckAndUpgradeAll,
+  onUpgradeAllTermux,
+  onUpgradeSingleTermuxPip,
+  upgradingTermux,
+  appUpdateResult,
+  checkingAppUpdate,
+  onOpenUpdateModal,
   linkedDirName,
   onLinkDirectory,
   onImportFromDirectory,
@@ -160,12 +184,13 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
           <div className="grid grid-cols-4 gap-1 p-1 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)]">
             {tabs.map(({ id, label, Icon }) => {
               const active = section === id;
+              const showDot = id === 'settings' && Boolean(appUpdateResult?.hasUpdate);
               return (
                 <button
                   key={id}
                   type="button"
                   onClick={() => onChangeSection(id)}
-                  className={`min-h-[38px] px-2 rounded-lg text-[11px] font-medium flex items-center justify-center gap-1 whitespace-nowrap transition-colors ${
+                  className={`relative min-h-[38px] px-2 rounded-lg text-[11px] font-medium flex items-center justify-center gap-1 whitespace-nowrap transition-colors ${
                     active
                       ? 'bg-[var(--ide-accent)] text-white font-semibold shadow-xs'
                       : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
@@ -173,6 +198,13 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
                 >
                   <Icon className="w-3.5 h-3.5 shrink-0" />
                   <span className="truncate">{label}</span>
+                  {showDot && (
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                        active ? 'bg-white' : 'bg-[var(--ide-accent)]'
+                      }`}
+                    />
+                  )}
                 </button>
               );
             })}
@@ -193,6 +225,24 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
             installedPackages={installedPackages}
             onInstallPackage={onInstallPackage}
             onRefreshPackages={onRefreshPackages}
+            outdatedPackages={outdatedPackages}
+            checkingOutdated={checkingOutdated}
+            upgradingPackages={upgradingPackages}
+            onUpgradePackage={onUpgradePackage}
+            onCheckAndUpgradeAll={onCheckAndUpgradeAll}
+            onUpgradeAllTermux={onUpgradeAllTermux}
+            onUpgradeSingleTermuxPip={onUpgradeSingleTermuxPip}
+            upgradingTermux={upgradingTermux}
+            appUpdateResult={appUpdateResult}
+            checkingAppUpdate={checkingAppUpdate}
+            onOpenUpdateModal={
+              onOpenUpdateModal
+                ? () => {
+                    onClose();
+                    onOpenUpdateModal();
+                  }
+                : undefined
+            }
             linkedDirName={linkedDirName}
             onLinkDirectory={onLinkDirectory}
             onImportFromDirectory={onImportFromDirectory}

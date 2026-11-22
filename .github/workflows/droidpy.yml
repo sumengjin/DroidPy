@@ -48,6 +48,8 @@ jobs:
           node-version: "20"
 
       - name: 安裝依賴並建置前端 PWA
+        env:
+          VITE_GITHUB_REPO: ${{ github.repository }}
         run: |
           if [ -f "package-lock.json" ]; then
             npm ci || npm install --legacy-peer-deps --no-audit --no-fund

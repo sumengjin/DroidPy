@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Terminal,
   PlugZap,
@@ -12,6 +12,8 @@ import {
   AlertCircle,
   Loader2,
   Cpu,
+  ArrowUpCircle,
+  Search,
 } from 'lucide-react';
 import {
   ExecutionEngine,
@@ -24,8 +26,16 @@ import {
   buildTermuxBridgeScript,
   buildTermuxOneLineCommand,
 } from '../services/termuxBridge';
-import { useI18n } from '../services/i18n';
+import { TranslationKey, useI18n } from '../services/i18n';
 import { downloadBlob } from '../utils/downloadBlob';
+import {
+  PACKAGE_CATALOG,
+  PACKAGE_CATEGORIES,
+  PackageCategoryId,
+  PackageTier,
+  TERMUX_PKG_NAME_HINTS,
+  fuzzyMatchPackages,
+} from '../data/packageCatalog';
 
 interface TermuxIntegrationPanelProps {
   engine: ExecutionEngine;
@@ -41,21 +51,11 @@ interface TermuxIntegrationPanelProps {
   onRunInTermux: () => Promise<void>;
   onRunShellInTermux: (cmd: string) => Promise<void>;
   onInitializeEmbeddedEnv: (includeBaseSystem: boolean) => Promise<void>;
+  onUpgradeAllTermux?: (kind: 'pip' | 'pkg') => Promise<void>;
+  onUpgradeSinglePip?: (pkg: string) => Promise<void>;
+  upgradingTermux?: boolean;
   onNotify: (msg: string) => void;
 }
-
-const TERMUX_QUICK_ITEMS: { mode: 'pkg' | 'pip'; target: string; desc: string }[] = [
-  { mode: 'pip', target: 'requests', desc: '爬蟲 / HTTP 網路請求核心' },
-  { mode: 'pip', target: 'beautifulsoup4', desc: '網頁 HTML 爬蟲結構解析' },
-  { mode: 'pip', target: 'httpx', desc: '非同步高速爬蟲請求庫' },
-  { mode: 'pip', target: 'yt-dlp', desc: '多媒體串流擷取工具' },
-  { mode: 'pkg', target: 'python-lxml', desc: 'Termux 預編譯高速 XML/HTML 解析器' },
-  { mode: 'pkg', target: 'python-pillow', desc: 'Termux 預編譯 Pillow 影像處理（免編譯）' },
-  { mode: 'pkg', target: 'ffmpeg', desc: '原生 C/C++ 影音處理核心' },
-  { mode: 'pkg', target: 'clang', desc: 'Android 原生 C/C++ 編譯器' },
-  { mode: 'pkg', target: 'cmake', desc: '原生擴充套件建置系統' },
-  { mode: 'pip', target: 'flask', desc: '輕量級 Python Web / API 伺服器框架' },
-];
 
 export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
   engine,
@@ -71,6 +71,9 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
   onRunInTermux,
   onRunShellInTermux,
   onInitializeEmbeddedEnv,
+  onUpgradeAllTermux,
+  onUpgradeSinglePip,
+  upgradingTermux = false,
   onNotify,
 }) => {
   const { t } = useI18n();
@@ -79,8 +82,36 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
   const [pkgTarget, setPkgTarget] = useState('');
   const [shellCmd, setShellCmd] = useState('');
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [tierFilter, setTierFilter] = useState<'all' | PackageTier>('all');
+  const [catFilter, setCatFilter] = useState<PackageCategoryId>('all');
 
   const oneLineCmd = buildTermuxOneLineCommand(config.token);
+
+  const termuxCatalogItems = useMemo(
+    () => PACKAGE_CATALOG.filter((item) => Boolean(item.termux)),
+    []
+  );
+
+  const filteredCatalog = useMemo(
+    () =>
+      termuxCatalogItems.filter((item) => {
+        if (tierFilter !== 'all' && item.tier !== tierFilter) return false;
+        if (catFilter !== 'all' && item.category !== catFilter) return false;
+        return true;
+      }),
+    [termuxCatalogItems, tierFilter, catFilter]
+  );
+
+  const fuzzyResults = useMemo(() => {
+    const q = pkgTarget.trim();
+    if (!q) return [];
+    return fuzzyMatchPackages(q, termuxCatalogItems, { runtime: 'all', limit: 6 });
+  }, [pkgTarget, termuxCatalogItems]);
+
+  const termuxNameHint = useMemo(() => {
+    const key = pkgTarget.trim().toLowerCase();
+    return key ? TERMUX_PKG_NAME_HINTS[key] ?? null : null;
+  }, [pkgTarget]);
 
   const handleCopyBootstrap = async () => {
     try {
@@ -103,7 +134,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
   const handleInstallSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const clean = pkgTarget.trim();
-    if (!clean || busyAction) return;
+    if (!clean || busyAction || upgradingTermux) return;
     setBusyAction(`install:${clean}`);
     try {
       await onInstallInTermux(installMode, clean);
@@ -114,10 +145,11 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
   };
 
   const handleQuickInstall = async (mode: 'pkg' | 'pip', target: string) => {
-    if (busyAction) return;
+    if (busyAction || upgradingTermux) return;
     setBusyAction(`install:${target}`);
     try {
       await onInstallInTermux(mode, target);
+      setPkgTarget('');
     } finally {
       setBusyAction(null);
     }
@@ -126,7 +158,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
   const handleShellSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const clean = shellCmd.trim();
-    if (!clean || busyAction) return;
+    if (!clean || busyAction || upgradingTermux) return;
     setBusyAction('shell');
     try {
       await onRunShellInTermux(clean);
@@ -137,7 +169,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
   };
 
   const handleInitEmbedded = async (includeBaseSystem: boolean) => {
-    if (busyAction) return;
+    if (busyAction || upgradingTermux) return;
     setBusyAction(includeBaseSystem ? 'init:full' : 'init:crawler');
     try {
       await onInitializeEmbeddedEnv(includeBaseSystem);
@@ -260,12 +292,49 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
               <div>FFmpeg : {healthInfo.hasFfmpeg ? t('tmx_ready') : t('tmx_not_installed')}</div>
               <div className="truncate">{t('tmx_dir')} : {healthInfo.workspaceDir}</div>
               {healthInfo.installedPipPackages && healthInfo.installedPipPackages.length > 0 && (
-                <div className="pt-1.5 mt-1.5 border-t border-[var(--ide-border)] font-sans">
-                  <div className="text-[11px] font-medium text-[var(--ide-text-muted)]">
-                    {t('tmx_installed_pkgs')}
+                <div className="pt-2 mt-2 border-t border-[var(--ide-border)] font-sans space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[11px] font-medium text-[var(--ide-text-muted)]">
+                      {t('tmx_installed_pkgs')}
+                    </span>
+                    {onUpgradeAllTermux && (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          disabled={!!busyAction || upgradingTermux}
+                          onClick={() => void onUpgradeAllTermux('pip')}
+                          className="min-h-[30px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] text-[11px] font-medium inline-flex items-center gap-1 whitespace-nowrap disabled:opacity-50"
+                        >
+                          {upgradingTermux ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <ArrowUpCircle className="w-3 h-3 text-[var(--ide-accent)]" />
+                          )}
+                          <span>{t('tmx_upgrade_pip_btn')}</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <div className="mt-1 font-mono text-[11px] text-[var(--ide-text)] leading-relaxed break-words">
-                    {healthInfo.installedPipPackages.join(' · ')}
+                  <div className="flex flex-wrap gap-1.5">
+                    {healthInfo.installedPipPackages.map((pipPkg) => (
+                      <div
+                        key={pipPkg}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] text-[11px] font-mono text-[var(--ide-text)]"
+                      >
+                        <span>{pipPkg}</span>
+                        {onUpgradeSinglePip && (
+                          <button
+                            type="button"
+                            disabled={!!busyAction || upgradingTermux}
+                            onClick={() => void onUpgradeSinglePip(pipPkg)}
+                            title={t('pkg_upgrade_btn')}
+                            className="text-[var(--ide-accent-text)] hover:underline font-sans font-semibold disabled:opacity-40"
+                          >
+                            ↑
+                          </button>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -285,7 +354,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
             <button
               type="button"
               onClick={onRunInTermux}
-              disabled={!!busyAction}
+              disabled={!!busyAction || upgradingTermux}
               className="min-h-[42px] px-4 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium inline-flex items-center gap-2 hover:border-[var(--ide-accent)] transition-colors"
             >
               <Play className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
@@ -357,7 +426,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
         <div className="flex flex-wrap items-center gap-2.5">
           <button
             type="button"
-            disabled={!!busyAction}
+            disabled={!!busyAction || upgradingTermux}
             onClick={() => void handleInitEmbedded(true)}
             className="min-h-[44px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-2 whitespace-nowrap transition-colors"
           >
@@ -373,7 +442,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
 
           <button
             type="button"
-            disabled={!!busyAction}
+            disabled={!!busyAction || upgradingTermux}
             onClick={() => void handleInitEmbedded(false)}
             className="min-h-[44px] px-4 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] disabled:opacity-50 text-xs font-medium inline-flex items-center gap-2 whitespace-nowrap transition-colors"
           >
@@ -400,84 +469,231 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--ide-surface-alt)] border border-[var(--ide-border)]">
-            <button
-              type="button"
-              onClick={() => setInstallMode('pip')}
-              className={`min-h-[34px] px-3 rounded-lg text-xs font-mono font-medium transition-colors ${
-                installMode === 'pip'
-                  ? 'bg-[var(--ide-surface)] text-[var(--ide-text)] shadow-sm'
-                  : 'text-[var(--ide-text-muted)]'
-              }`}
-            >
-              pip
-            </button>
-            <button
-              type="button"
-              onClick={() => setInstallMode('pkg')}
-              className={`min-h-[34px] px-3 rounded-lg text-xs font-mono font-medium transition-colors ${
-                installMode === 'pkg'
-                  ? 'bg-[var(--ide-surface)] text-[var(--ide-text)] shadow-sm'
-                  : 'text-[var(--ide-text-muted)]'
-              }`}
-            >
-              pkg
-            </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {onUpgradeAllTermux && (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={!!busyAction || upgradingTermux}
+                  onClick={() => void onUpgradeAllTermux('pip')}
+                  className="min-h-[36px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] text-xs font-medium inline-flex items-center gap-1.5 whitespace-nowrap disabled:opacity-50 transition-colors"
+                >
+                  {upgradingTermux ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--ide-accent)]" />
+                  ) : (
+                    <ArrowUpCircle className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
+                  )}
+                  <span>{t('tmx_upgrade_pip_btn')}</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={!!busyAction || upgradingTermux}
+                  onClick={() => void onUpgradeAllTermux('pkg')}
+                  className="min-h-[36px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] text-xs font-medium inline-flex items-center gap-1.5 whitespace-nowrap disabled:opacity-50 transition-colors"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
+                  <span>{t('tmx_upgrade_pkg_btn')}</span>
+                </button>
+              </div>
+            )}
+
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--ide-surface-alt)] border border-[var(--ide-border)]">
+              <button
+                type="button"
+                onClick={() => setInstallMode('pip')}
+                className={`min-h-[34px] px-3 rounded-lg text-xs font-mono font-medium transition-colors ${
+                  installMode === 'pip'
+                    ? 'bg-[var(--ide-surface)] text-[var(--ide-text)] shadow-sm'
+                    : 'text-[var(--ide-text-muted)]'
+                }`}
+              >
+                pip
+              </button>
+              <button
+                type="button"
+                onClick={() => setInstallMode('pkg')}
+                className={`min-h-[34px] px-3 rounded-lg text-xs font-mono font-medium transition-colors ${
+                  installMode === 'pkg'
+                    ? 'bg-[var(--ide-surface)] text-[var(--ide-text)] shadow-sm'
+                    : 'text-[var(--ide-text-muted)]'
+                }`}
+              >
+                pkg
+              </button>
+            </div>
           </div>
         </div>
 
-        <form onSubmit={handleInstallSubmit} className="flex items-center gap-2">
-          <input
-            type="text"
-            value={pkgTarget}
-            onChange={(e) => setPkgTarget(e.target.value)}
-            placeholder={
-              installMode === 'pkg'
-                ? t('tmx_pkg_placeholder_pkg')
-                : t('tmx_pkg_placeholder_pip')
-            }
-            className="flex-1 min-w-0 min-h-[44px] px-4 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
-          />
-          <button
-            type="submit"
-            disabled={!pkgTarget.trim() || !!busyAction}
-            className="min-h-[44px] px-5 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-sm font-medium disabled:opacity-40 flex items-center gap-2 whitespace-nowrap shrink-0 transition-colors"
-          >
-            {busyAction?.startsWith('install:') ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Download className="w-4 h-4" />
-            )}
-            <span>{t('tmx_install_btn')}</span>
-          </button>
-        </form>
+        <div className="space-y-2">
+          <form onSubmit={handleInstallSubmit} className="flex items-center gap-2">
+            <div className="relative flex-1 min-w-0">
+              <Search className="w-4 h-4 text-[var(--ide-text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={pkgTarget}
+                onChange={(e) => setPkgTarget(e.target.value)}
+                placeholder={
+                  installMode === 'pkg'
+                    ? t('tmx_pkg_placeholder_pkg')
+                    : t('tmx_pkg_placeholder_pip')
+                }
+                className="w-full min-w-0 min-h-[44px] pl-10 pr-4 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={!pkgTarget.trim() || !!busyAction || upgradingTermux}
+              className="min-h-[44px] px-5 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-sm font-medium disabled:opacity-40 flex items-center gap-2 whitespace-nowrap shrink-0 transition-colors"
+            >
+              {busyAction?.startsWith('install:') ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              <span>{t('tmx_install_btn')}</span>
+            </button>
+          </form>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-          {TERMUX_QUICK_ITEMS.map((item) => {
-            const isBusy = busyAction === `install:${item.target}`;
+          {/* Termux Prebuilt APT Naming Hint */}
+          {termuxNameHint && (
+            <div className="rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50/70 dark:bg-amber-950/30 p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="min-w-0 flex-1 text-amber-900 dark:text-amber-200">
+                <span className="font-semibold">{t('pkg_termux_hint_title')}</span>
+                <span>{termuxNameHint.reason}</span>
+              </div>
+              <button
+                type="button"
+                disabled={!!busyAction || upgradingTermux}
+                onClick={() => void handleQuickInstall(termuxNameHint.suggestedMode, termuxNameHint.suggestedTarget)}
+                className="min-h-[34px] px-3 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-semibold whitespace-nowrap shrink-0 transition-colors"
+              >
+                {t('pkg_termux_hint_btn', { target: termuxNameHint.suggestedTarget })}
+              </button>
+            </div>
+          )}
+
+          {/* Fuzzy Autocomplete Suggestions */}
+          {pkgTarget.trim().length > 0 && fuzzyResults.length > 0 && (
+            <div className="rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] overflow-hidden divide-y divide-[var(--ide-border)]">
+              <div className="px-3.5 py-2 bg-[var(--ide-surface-alt)] text-[11px] font-medium text-[var(--ide-text-muted)]">
+                {t('pkg_fuzzy_header')}
+              </div>
+              {fuzzyResults.map(({ item, matchedAlias }) => {
+                const tmx = item.termux!;
+                const isBusy = busyAction === `install:${tmx.targetName}`;
+                return (
+                  <div
+                    key={item.id}
+                    className="flex items-center justify-between gap-3 px-3.5 py-2.5 hover:bg-[var(--ide-surface)] transition-colors"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInstallMode(tmx.mode);
+                        setPkgTarget(tmx.targetName);
+                      }}
+                      className="flex-1 min-w-0 text-left"
+                    >
+                      <div className="flex items-center gap-2 text-xs font-mono font-semibold text-[var(--ide-text)]">
+                        <span>{tmx.mode} {tmx.targetName}</span>
+                        {matchedAlias && (
+                          <span className="font-sans font-normal text-[11px] text-[var(--ide-accent-text)]">
+                            · {t('pkg_fuzzy_alias', { alias: matchedAlias })}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-[var(--ide-text-muted)] truncate mt-0.5">
+                        {item.desc}
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!!busyAction || upgradingTermux}
+                      onClick={() => void handleQuickInstall(tmx.mode, tmx.targetName)}
+                      className="min-h-[34px] px-3 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-40 text-white text-xs font-medium whitespace-nowrap shrink-0 inline-flex items-center gap-1.5"
+                    >
+                      {isBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                      <span>{t('pkg_install_short')}</span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Popular/Niche Tier Toggle + Category Strip */}
+        <div className="space-y-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--ide-surface-alt)] border border-[var(--ide-border)]">
+              {(['all', 'popular', 'niche'] as const).map((tier) => (
+                <button
+                  key={tier}
+                  type="button"
+                  onClick={() => setTierFilter(tier)}
+                  className={`min-h-[32px] px-3 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+                    tierFilter === tier
+                      ? 'bg-[var(--ide-surface)] text-[var(--ide-accent-text)] font-semibold shadow-xs'
+                      : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
+                  }`}
+                >
+                  {t(`pkg_tier_${tier}` as TranslationKey)}
+                </button>
+              ))}
+            </div>
+            <span className="text-[11px] text-[var(--ide-text-muted)] tabular-nums">
+              {t('pkg_loaded_count', { count: filteredCatalog.length })}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+            {PACKAGE_CATEGORIES.map((cat) => {
+              const active = catFilter === cat.id;
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setCatFilter(cat.id)}
+                  className={`min-h-[34px] px-3 rounded-xl border text-xs font-medium whitespace-nowrap shrink-0 transition-colors ${
+                    active
+                      ? 'border-[var(--ide-accent)] bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] font-semibold'
+                      : 'border-[var(--ide-border)] bg-[var(--ide-bg)] text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
+                  }`}
+                >
+                  {t(cat.labelKey as TranslationKey)}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-[380px] overflow-y-auto ide-scroll pr-0.5">
+          {filteredCatalog.map((item) => {
+            const tmx = item.termux!;
+            const isBusy = busyAction === `install:${tmx.targetName}`;
             const pipInstalled =
-              item.mode === 'pip' &&
+              tmx.mode === 'pip' &&
               Boolean(
                 healthInfo?.installedPipPackages?.some(
-                  (p) => p.toLowerCase().replace(/_/g, '-') === item.target.toLowerCase().replace(/_/g, '-')
+                  (p) => p.toLowerCase().replace(/_/g, '-') === tmx.targetName.toLowerCase().replace(/_/g, '-')
                 )
               );
             const pkgInstalled =
-              item.mode === 'pkg' &&
-              ((item.target === 'clang' && Boolean(healthInfo?.hasClang)) ||
-                (item.target === 'ffmpeg' && Boolean(healthInfo?.hasFfmpeg)) ||
+              tmx.mode === 'pkg' &&
+              ((tmx.targetName === 'clang' && Boolean(healthInfo?.hasClang)) ||
+                (tmx.targetName === 'ffmpeg' && Boolean(healthInfo?.hasFfmpeg)) ||
                 Boolean(
                   healthInfo?.installedPkgPackages?.some(
-                    (p) => p.toLowerCase() === item.target.toLowerCase()
+                    (p) => p.toLowerCase() === tmx.targetName.toLowerCase()
                   )
                 ));
             const alreadyInstalled = pipInstalled || pkgInstalled;
             return (
               <button
-                key={`${item.mode}-${item.target}`}
+                key={item.id}
                 type="button"
-                disabled={!!busyAction}
-                onClick={() => handleQuickInstall(item.mode, item.target)}
+                disabled={!!busyAction || upgradingTermux}
+                onClick={() => handleQuickInstall(tmx.mode, tmx.targetName)}
                 className={`p-3 rounded-xl border text-left transition-colors disabled:opacity-50 ${
                   alreadyInstalled
                     ? 'border-[var(--ide-accent)]/50 bg-[var(--ide-accent-soft)]/50'
@@ -485,17 +701,20 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-xs font-semibold text-[var(--ide-text)]">
-                    {item.mode} {item.target}
+                  <span className="font-mono text-xs font-semibold text-[var(--ide-text)] truncate">
+                    {tmx.mode} {tmx.targetName}
                   </span>
                   {isBusy ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--ide-accent)]" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--ide-accent)] shrink-0" />
                   ) : alreadyInstalled ? (
                     <Check className="w-3.5 h-3.5 text-[var(--ide-accent)] shrink-0" />
                   ) : null}
                 </div>
-                <div className="text-[11px] text-[var(--ide-text-muted)] mt-1 truncate">
+                <div className="text-[11px] text-[var(--ide-text-muted)] mt-1 line-clamp-2 leading-relaxed">
                   {item.desc}
+                </div>
+                <div className="text-[10px] text-[var(--ide-text-muted)] mt-1.5 truncate">
+                  {item.tier === 'popular' ? t('pkg_tier_popular') : t('pkg_tier_niche')} · {item.runtimeHint}
                 </div>
               </button>
             );
@@ -516,7 +735,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
           />
           <button
             type="submit"
-            disabled={!shellCmd.trim() || !!busyAction}
+            disabled={!shellCmd.trim() || !!busyAction || upgradingTermux}
             className="min-h-[42px] px-4 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] text-xs font-medium whitespace-nowrap shrink-0 disabled:opacity-40"
           >
             {busyAction === 'shell' ? t('tmx_shell_running') : t('tmx_shell_btn')}

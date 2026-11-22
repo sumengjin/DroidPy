@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Package,
   Download,
@@ -18,6 +18,10 @@ import {
   ChevronDown,
   ChevronRight,
   FileText,
+  ArrowUpCircle,
+  Search,
+  Sparkles,
+  PackageCheck,
 } from 'lucide-react';
 import JSZip from 'jszip';
 import {
@@ -35,7 +39,7 @@ import { PWAInstallButton } from './PWAInstallButton';
 import { TermuxIntegrationPanel } from './TermuxIntegrationPanel';
 import { InternalStoragePanel } from './InternalStoragePanel';
 import { IDE_THEMES } from '../services/themes';
-import { LOCALE_OPTIONS, getLocalizedThemeText, useI18n } from '../services/i18n';
+import { LOCALE_OPTIONS, TranslationKey, getLocalizedThemeText, useI18n } from '../services/i18n';
 import { generateGitHubApkProjectZip } from '../services/androidApkBuilder';
 import { downloadBlob } from '../utils/downloadBlob';
 import { getSdcardStatus } from '../services/termuxBridge';
@@ -46,6 +50,15 @@ import {
   requestPersistentStorage,
   supportsDirectoryAccess,
 } from '../services/storageManager';
+import {
+  PACKAGE_CATALOG,
+  PACKAGE_CATEGORIES,
+  PackageCategoryId,
+  PackageTier,
+  fuzzyMatchPackages,
+} from '../data/packageCatalog';
+import { OutdatedPackageInfo } from '../services/pyodideRuntime';
+import { AppUpdateCheckResult, getInstalledAppVersion } from '../services/appUpdater';
 
 interface ToolsAndPackagesProps {
   activeSubView?: 'termux' | 'packages' | 'android' | 'settings' | 'all';
@@ -59,6 +72,17 @@ interface ToolsAndPackagesProps {
   installedPackages: InstalledPackage[];
   onInstallPackage: (pkg: string) => Promise<void>;
   onRefreshPackages: () => Promise<void>;
+  outdatedPackages?: OutdatedPackageInfo[];
+  checkingOutdated?: boolean;
+  upgradingPackages?: boolean;
+  onUpgradePackage?: (pkg: string) => Promise<void>;
+  onCheckAndUpgradeAll?: () => Promise<void>;
+  onUpgradeAllTermux?: (kind: 'pip' | 'pkg') => Promise<void>;
+  onUpgradeSingleTermuxPip?: (pkg: string) => Promise<void>;
+  upgradingTermux?: boolean;
+  appUpdateResult?: AppUpdateCheckResult | null;
+  checkingAppUpdate?: boolean;
+  onOpenUpdateModal?: () => void;
   linkedDirName: string | null;
   onLinkDirectory: () => Promise<void>;
   onImportFromDirectory: () => Promise<void>;
@@ -83,18 +107,6 @@ interface ToolsAndPackagesProps {
   onNotify: (msg: string) => void;
 }
 
-const POPULAR_PACKAGES = [
-  { name: 'numpy', desc: '高效能矩陣與數值運算', kind: 'C/C++ WASM 預編譯' },
-  { name: 'matplotlib', desc: '資料視覺化與圖表繪製', kind: 'C/C++ WASM 預編譯' },
-  { name: 'pandas', desc: '表格式資料清洗與分析', kind: 'C/C++ WASM 預編譯' },
-  { name: 'scipy', desc: '科學計算與統計工具庫', kind: 'C/Fortran WASM 預編譯' },
-  { name: 'pillow', desc: '影像處理與格式轉換', kind: 'C WASM 預編譯' },
-  { name: 'scikit-learn', desc: '機器學習與分類迴歸模型', kind: 'C/Cython WASM 預編譯' },
-  { name: 'cryptography', desc: '密碼學與金鑰加解密', kind: 'Rust/C WASM 預編譯' },
-  { name: 'sympy', desc: '符號代數與微積分計算', kind: '純 Python' },
-  { name: 'beautifulsoup4', desc: 'HTML / XML 結構解析', kind: '純 Python' },
-];
-
 export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
   activeSubView = 'all',
   compactDrawer = false,
@@ -107,6 +119,17 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
   installedPackages,
   onInstallPackage,
   onRefreshPackages,
+  outdatedPackages = [],
+  checkingOutdated = false,
+  upgradingPackages = false,
+  onUpgradePackage,
+  onCheckAndUpgradeAll,
+  onUpgradeAllTermux,
+  onUpgradeSingleTermuxPip,
+  upgradingTermux = false,
+  appUpdateResult,
+  checkingAppUpdate = false,
+  onOpenUpdateModal,
   linkedDirName,
   onLinkDirectory,
   onImportFromDirectory,
@@ -133,6 +156,8 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
   const { locale, t } = useI18n();
   const [pkgQuery, setPkgQuery] = useState('');
   const [installingPkg, setInstallingPkg] = useState<string | null>(null);
+  const [tierFilter, setTierFilter] = useState<'all' | PackageTier>('all');
+  const [catFilter, setCatFilter] = useState<PackageCategoryId>('all');
   const [appPackageName, setAppPackageName] = useState('org.droidpy.app');
   const [appTitle, setAppTitle] = useState('DroidPyApp');
   const [confirmReset, setConfirmReset] = useState(false);
@@ -150,6 +175,35 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
   const [nativeStorageGranted, setNativeStorageGranted] = useState<boolean>(() =>
     Boolean(window.DroidPyNative?.hasStoragePermission?.())
   );
+
+  const pyodideCatalog = useMemo(
+    () => PACKAGE_CATALOG.filter((item) => Boolean(item.pyodide?.supported)),
+    []
+  );
+
+  const filteredPyCatalog = useMemo(
+    () =>
+      pyodideCatalog.filter((item) => {
+        if (tierFilter !== 'all' && item.tier !== tierFilter) return false;
+        if (catFilter !== 'all' && item.category !== catFilter) return false;
+        return true;
+      }),
+    [pyodideCatalog, tierFilter, catFilter]
+  );
+
+  const fuzzyPyResults = useMemo(() => {
+    const q = pkgQuery.trim();
+    if (!q) return [];
+    return fuzzyMatchPackages(q, PACKAGE_CATALOG, { runtime: 'pyodide', limit: 6 });
+  }, [pkgQuery]);
+
+  const outdatedMap = useMemo(() => {
+    const map = new Map<string, OutdatedPackageInfo>();
+    for (const item of outdatedPackages) {
+      map.set(item.name.toLowerCase(), item);
+    }
+    return map;
+  }, [outdatedPackages]);
 
   const refreshStorage = async (showNotice = false) => {
     setRefreshingStorage(true);
@@ -423,6 +477,40 @@ python ${entryFile}
           </div>
         )}
 
+        {/* App Version & In-App Update Card */}
+        {onOpenUpdateModal && (!compactDrawer || showSettings) && (
+          <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold flex flex-wrap items-center gap-2">
+                <PackageCheck className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
+                <span>{t('upd_card_title')}</span>
+                <span className="font-mono text-xs text-[var(--ide-text-muted)]">
+                  v{getInstalledAppVersion()}
+                </span>
+                {appUpdateResult?.hasUpdate && appUpdateResult.latest && (
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--ide-accent-text)]">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>{t('upd_badge_new', { ver: appUpdateResult.latest.version })}</span>
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-[var(--ide-text-muted)] mt-0.5">{t('upd_card_desc')}</p>
+            </div>
+            <button
+              type="button"
+              onClick={onOpenUpdateModal}
+              className="min-h-[40px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-semibold inline-flex items-center gap-2 whitespace-nowrap shrink-0 transition-colors"
+            >
+              {checkingAppUpdate ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5" />
+              )}
+              <span>{t('upd_open_btn')}</span>
+            </button>
+          </div>
+        )}
+
         {/* Termux Native Bridge & Auto Invocation */}
         {showTermux && (
           <TermuxIntegrationPanel
@@ -439,6 +527,9 @@ python ${entryFile}
             onRunInTermux={onRunInTermux}
             onRunShellInTermux={onRunShellInTermux}
             onInitializeEmbeddedEnv={onInitializeEmbeddedEnv}
+            onUpgradeAllTermux={onUpgradeAllTermux}
+            onUpgradeSinglePip={onUpgradeSingleTermuxPip}
+            upgradingTermux={upgradingTermux}
             onNotify={onNotify}
           />
         )}
@@ -725,6 +816,21 @@ python ${entryFile}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                {onCheckAndUpgradeAll && (
+                  <button
+                    type="button"
+                    onClick={() => void onCheckAndUpgradeAll()}
+                    disabled={checkingOutdated || upgradingPackages || pyodideStatus === 'loading'}
+                    className="min-h-[40px] px-3.5 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-40 text-white text-xs font-medium flex items-center gap-2 transition-colors whitespace-nowrap"
+                  >
+                    {checkingOutdated || upgradingPackages ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <ArrowUpCircle className="w-3.5 h-3.5" />
+                    )}
+                    <span>{t('pkg_upgrade_all')}</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={onGenerateRequirements}
@@ -754,86 +860,225 @@ python ${entryFile}
               </div>
             </div>
 
-            {/* Install Input */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleInstall(pkgQuery);
-              }}
-              className="flex items-center gap-2"
-            >
-              <input
-                type="text"
-                value={pkgQuery}
-                onChange={(e) => setPkgQuery(e.target.value)}
-                placeholder={t('pkg_placeholder')}
-                className="flex-1 min-w-0 min-h-[44px] px-4 rounded-xl bg-[var(--ide-surface)] border border-[var(--ide-border)] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
-              />
-              <button
-                type="submit"
-                disabled={!pkgQuery.trim() || !!installingPkg}
-                className="min-h-[44px] px-5 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-sm font-medium disabled:opacity-40 flex items-center gap-2 whitespace-nowrap shrink-0 transition-colors"
+            {/* Install Input + Fuzzy Autocomplete */}
+            <div className="space-y-2">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void handleInstall(pkgQuery);
+                }}
+                className="flex items-center gap-2"
               >
-                {installingPkg ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                <span>{installingPkg ? t('pkg_installing') : t('pkg_install')}</span>
-              </button>
-            </form>
+                <div className="relative flex-1 min-w-0">
+                  <Search className="w-4 h-4 text-[var(--ide-text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={pkgQuery}
+                    onChange={(e) => setPkgQuery(e.target.value)}
+                    placeholder={t('pkg_placeholder')}
+                    className="w-full min-w-0 min-h-[44px] pl-10 pr-4 rounded-xl bg-[var(--ide-surface)] border border-[var(--ide-border)] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={!pkgQuery.trim() || !!installingPkg}
+                  className="min-h-[44px] px-5 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-sm font-medium disabled:opacity-40 flex items-center gap-2 whitespace-nowrap shrink-0 transition-colors"
+                >
+                  {installingPkg ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  <span>{installingPkg ? t('pkg_installing') : t('pkg_install')}</span>
+                </button>
+              </form>
 
-            {/* C/C++ Native Extension Environment Note */}
-            <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-4 text-xs text-[var(--ide-text-muted)] space-y-1.5">
-              <div className="font-semibold text-[var(--ide-text)]">
-                {t('pkg_cpp_title')}
-              </div>
-              <p className="leading-relaxed">
-                {t('pkg_cpp_desc')}
-              </p>
+              {pkgQuery.trim().length > 0 && fuzzyPyResults.length > 0 && (
+                <div className="rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] overflow-hidden divide-y divide-[var(--ide-border)]">
+                  <div className="px-3.5 py-2 bg-[var(--ide-surface-alt)] text-[11px] font-medium text-[var(--ide-text-muted)]">
+                    {t('pkg_fuzzy_header')}
+                  </div>
+                  {fuzzyPyResults.map(({ item, matchedAlias }) => {
+                    const targetPkg = item.pyodide?.packageName ?? item.name;
+                    const isInstalled = installedPackages.some(
+                      (p) => p.name.toLowerCase() === targetPkg.toLowerCase()
+                    );
+                    const isBusy = installingPkg === targetPkg;
+                    return (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between gap-3 px-3.5 py-2.5 hover:bg-[var(--ide-bg)] transition-colors"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setPkgQuery(targetPkg)}
+                          className="flex-1 min-w-0 text-left"
+                        >
+                          <div className="flex items-center gap-2 text-xs font-mono font-semibold text-[var(--ide-text)]">
+                            <span>{targetPkg}</span>
+                            {matchedAlias && (
+                              <span className="font-sans font-normal text-[11px] text-[var(--ide-accent-text)]">
+                                · {t('pkg_fuzzy_alias', { alias: matchedAlias })}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-[var(--ide-text-muted)] truncate mt-0.5">
+                            {item.desc}
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isInstalled || !!installingPkg}
+                          onClick={() => void handleInstall(targetPkg)}
+                          className={`min-h-[34px] px-3 rounded-lg text-xs font-medium whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 ${
+                            isInstalled
+                              ? 'bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)]'
+                              : 'bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white disabled:opacity-40'
+                          }`}
+                        >
+                          {isBusy ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : isInstalled ? (
+                            <Check className="w-3.5 h-3.5" />
+                          ) : (
+                            <Download className="w-3.5 h-3.5" />
+                          )}
+                          <span>{isInstalled ? t('pkg_installed') : t('pkg_install_short')}</span>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            {/* Quick Install Popular Packages */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {POPULAR_PACKAGES.map((item) => {
-                const isInstalled = installedPackages.some(
-                  (p) => p.name.toLowerCase() === item.name.toLowerCase()
-                );
-                const isBusy = installingPkg === item.name;
-                return (
-                  <div
-                    key={item.name}
-                    className="flex items-center justify-between gap-3 p-3.5 rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)]"
-                  >
-                    <div className="min-w-0">
-                      <div className="font-mono text-sm font-semibold text-[var(--ide-text)]">
-                        {item.name}
-                      </div>
-                      <div className="text-xs text-[var(--ide-text-muted)] truncate mt-0.5">
-                        {item.desc} · {item.kind}
-                      </div>
-                    </div>
+            {/* Auto-update Packages on Startup Toggle + C/C++ Note */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-4 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-[var(--ide-text)]">
+                    {t('pkg_auto_update_title')}
+                  </div>
+                  <p className="text-[11px] text-[var(--ide-text-muted)] mt-0.5 leading-relaxed">
+                    {t('pkg_auto_update_desc')}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={Boolean(settings.autoUpdatePackages)}
+                  onClick={() =>
+                    onUpdateSettings({ autoUpdatePackages: !settings.autoUpdatePackages })
+                  }
+                  className={`min-h-[32px] w-12 rounded-full p-1 transition-colors flex items-center shrink-0 ${
+                    settings.autoUpdatePackages
+                      ? 'bg-[var(--ide-accent)] justify-end'
+                      : 'bg-slate-300 dark:bg-slate-700 justify-start'
+                  }`}
+                >
+                  <span className="w-5 h-5 rounded-full bg-white shadow-sm" />
+                </button>
+              </div>
+
+              <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-4 text-xs text-[var(--ide-text-muted)] space-y-1">
+                <div className="font-semibold text-[var(--ide-text)]">
+                  {t('pkg_cpp_title')}
+                </div>
+                <p className="leading-relaxed">
+                  {t('pkg_cpp_desc')}
+                </p>
+              </div>
+            </div>
+
+            {/* Categorized Popular & Niche Packages Catalog */}
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--ide-surface-alt)] border border-[var(--ide-border)]">
+                  {(['all', 'popular', 'niche'] as const).map((tier) => (
                     <button
+                      key={tier}
                       type="button"
-                      disabled={isInstalled || !!installingPkg}
-                      onClick={() => handleInstall(item.name)}
-                      className={`min-h-[40px] px-3 rounded-xl text-xs font-medium whitespace-nowrap shrink-0 flex items-center gap-1.5 transition-colors ${
-                        isInstalled
-                          ? 'bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)]'
-                          : 'bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white disabled:opacity-40'
+                      onClick={() => setTierFilter(tier)}
+                      className={`min-h-[34px] px-3 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+                        tierFilter === tier
+                          ? 'bg-[var(--ide-surface)] text-[var(--ide-accent-text)] font-semibold shadow-xs'
+                          : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
                       }`}
                     >
-                      {isBusy ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : isInstalled ? (
-                        <Check className="w-3.5 h-3.5" />
-                      ) : null}
-                      <span>
-                        {isInstalled ? t('pkg_installed') : isBusy ? t('pkg_installing') : t('pkg_install_short')}
-                      </span>
+                      {t(`pkg_tier_${tier}` as TranslationKey)}
                     </button>
-                  </div>
-                );
-              })}
+                  ))}
+                </div>
+                <span className="text-xs text-[var(--ide-text-muted)] tabular-nums">
+                  {t('pkg_loaded_count', { count: filteredPyCatalog.length })}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                {PACKAGE_CATEGORIES.map((cat) => {
+                  const active = catFilter === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setCatFilter(cat.id)}
+                      className={`min-h-[36px] px-3 rounded-xl border text-xs font-medium whitespace-nowrap shrink-0 transition-colors ${
+                        active
+                          ? 'border-[var(--ide-accent)] bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] font-semibold'
+                          : 'border-[var(--ide-border)] bg-[var(--ide-surface)] text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
+                      }`}
+                    >
+                      {t(cat.labelKey as TranslationKey)}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[420px] overflow-y-auto ide-scroll pr-0.5">
+                {filteredPyCatalog.map((item) => {
+                  const targetName = item.pyodide?.packageName ?? item.name;
+                  const isInstalled = installedPackages.some(
+                    (p) => p.name.toLowerCase() === targetName.toLowerCase()
+                  );
+                  const isBusy = installingPkg === targetName;
+                  return (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between gap-3 p-3.5 rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)]"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-mono text-sm font-semibold text-[var(--ide-text)] truncate">
+                          {targetName}
+                        </div>
+                        <div className="text-xs text-[var(--ide-text-muted)] line-clamp-2 mt-0.5 leading-relaxed">
+                          {item.desc}
+                        </div>
+                        <div className="text-[11px] text-[var(--ide-text-muted)] truncate mt-1">
+                          {item.tier === 'popular' ? t('pkg_tier_popular') : t('pkg_tier_niche')} · {item.runtimeHint}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={isInstalled || !!installingPkg}
+                        onClick={() => void handleInstall(targetName)}
+                        className={`min-h-[40px] px-3 rounded-xl text-xs font-medium whitespace-nowrap shrink-0 flex items-center gap-1.5 transition-colors ${
+                          isInstalled
+                            ? 'bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)]'
+                            : 'bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white disabled:opacity-40'
+                        }`}
+                      >
+                        {isBusy ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : isInstalled ? (
+                          <Check className="w-3.5 h-3.5" />
+                        ) : null}
+                        <span>
+                          {isInstalled ? t('pkg_installed') : isBusy ? t('pkg_installing') : t('pkg_install_short')}
+                        </span>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
-            {/* Installed Packages Table */}
+            {/* Installed Packages Table with Manual Per-Package Upgrade */}
             <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] overflow-hidden">
               <div className="px-4 py-3 border-b border-[var(--ide-border)] flex items-center justify-between text-xs font-medium text-[var(--ide-text-muted)]">
                 <span>{t('pkg_loaded_title')}</span>
@@ -844,15 +1089,44 @@ python ${entryFile}
                   {t('pkg_loaded_empty')}
                 </div>
               ) : (
-                <div className="divide-y divide-[var(--ide-border)] max-h-60 overflow-y-auto ide-scroll">
-                  {installedPackages.map((pkg) => (
-                    <div key={pkg.name} className="flex items-center justify-between px-4 py-2.5 text-xs">
-                      <span className="font-mono font-medium text-[var(--ide-text)]">{pkg.name}</span>
-                      <span className="font-mono tabular-nums text-[var(--ide-text-muted)]">
-                        {pkg.version}
-                      </span>
-                    </div>
-                  ))}
+                <div className="divide-y divide-[var(--ide-border)] max-h-64 overflow-y-auto ide-scroll">
+                  {installedPackages.map((pkg) => {
+                    const outdated = outdatedMap.get(pkg.name.toLowerCase());
+                    const isCoreSystem = ['micropip', 'packaging', 'pyodide-http'].includes(
+                      pkg.name.toLowerCase()
+                    );
+                    return (
+                      <div key={pkg.name} className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs">
+                        <div className="min-w-0">
+                          <span className="font-mono font-medium text-[var(--ide-text)]">{pkg.name}</span>
+                          {outdated && (
+                            <span className="ml-2 font-mono text-[11px] text-[var(--ide-accent-text)] font-semibold">
+                              {pkg.version} → {outdated.latestVersion}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2.5 shrink-0">
+                          <span className="font-mono tabular-nums text-[var(--ide-text-muted)]">
+                            {pkg.version}
+                          </span>
+                          {onUpgradePackage && !isCoreSystem && (
+                            <button
+                              type="button"
+                              disabled={upgradingPackages || !!installingPkg}
+                              onClick={() => void onUpgradePackage(pkg.name)}
+                              className={`min-h-[30px] px-2.5 rounded-lg text-[11px] font-medium whitespace-nowrap transition-colors ${
+                                outdated
+                                  ? 'bg-[var(--ide-accent)] text-white hover:bg-[var(--ide-accent-hover)]'
+                                  : 'border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] text-[var(--ide-text)]'
+                              } disabled:opacity-40`}
+                            >
+                              {t('pkg_upgrade_btn')}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

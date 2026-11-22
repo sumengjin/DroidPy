@@ -22,6 +22,7 @@ import {
   PanelLeft,
   Columns2,
   Menu,
+  Sparkles,
 } from 'lucide-react';
 import { registerSW } from 'virtual:pwa-register';
 import { DEFAULT_FILES } from './data/defaultFiles';
@@ -52,7 +53,15 @@ import { PWAInstallButton } from './components/PWAInstallButton';
 import { CrawlerBrowserPanel } from './components/CrawlerBrowserPanel';
 import { HelpTutorialModal } from './components/HelpTutorialModal';
 import { AppExecutionLogModal } from './components/AppExecutionLogModal';
+import { AppUpdateModal } from './components/AppUpdateModal';
 import { appLog } from './services/appLogger';
+import {
+  getAutoUpdatePackagesPref,
+  getSavedGithubRepo,
+  saveGithubRepo,
+  setAutoUpdatePackagesPref,
+} from './version';
+import { AppUpdateCheckResult, checkForAppUpdates } from './services/appUpdater';
 import {
   DEFAULT_CRAWLER_SESSION,
   buildCookiesJsonContent,
@@ -73,6 +82,8 @@ import {
   DEFAULT_TERMUX_CONFIG,
   abortActiveTermuxStream,
   backupWorkspaceToSdcard,
+  buildTermuxAptUpgradeCommand,
+  buildTermuxPipUpgradeCommand,
   checkTermuxHealth,
   fetchTermuxWorkspaceFiles,
   getSdcardStatus,
@@ -91,12 +102,16 @@ import {
   writeFilesToDirectory,
 } from './services/storageManager';
 import {
+  OutdatedPackageInfo,
+  checkOutdatedPyPackages,
   executePythonFile,
   executeReplLine,
   initPyodide,
   installPyPackage,
   listPyPackages,
   RuntimeCallbacks,
+  upgradeAllPyPackages,
+  upgradePyPackage,
 } from './services/pyodideRuntime';
 
 const STORAGE_FILES_KEY = 'droidpy_files_v1';
@@ -115,6 +130,8 @@ const DEFAULT_SETTINGS: EditorSettings = {
   theme: 'rose',
   locale: 'zh-TW',
   androidStoragePermission: true,
+  autoUpdatePackages: getAutoUpdatePackagesPref(),
+  githubRepo: getSavedGithubRepo(),
 };
 
 interface PersistedIdeSnapshot {
@@ -312,6 +329,15 @@ export default function App() {
   const [showLangPicker, setShowLangPicker] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showLogsModal, setShowLogsModal] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [appUpdateResult, setAppUpdateResult] = useState<AppUpdateCheckResult | null>(null);
+  const [checkingAppUpdate, setCheckingAppUpdate] = useState(false);
+  const [updateBannerDismissed, setUpdateBannerDismissed] = useState(false);
+  const [githubRepo, setGithubRepo] = useState<string>(() => getSavedGithubRepo());
+  const [outdatedPyPackages, setOutdatedPyPackages] = useState<OutdatedPackageInfo[]>([]);
+  const [checkingOutdatedPkgs, setCheckingOutdatedPkgs] = useState(false);
+  const [upgradingPyPackages, setUpgradingPyPackages] = useState(false);
+  const [upgradingTermux, setUpgradingTermux] = useState(false);
   const [mobileNewFileOpen, setMobileNewFileOpen] = useState(false);
   const [mobileNewFileName, setMobileNewFileName] = useState('');
   const [linkedDirHandle, setLinkedDirHandle] = useState<DirectoryHandleLike | null>(null);
@@ -366,10 +392,13 @@ export default function App() {
   sandboxPackagesRef.current = sandboxPackages;
   const pyodideStatusRef = useRef(pyodideStatus);
   pyodideStatusRef.current = pyodideStatus;
+  const autoUpdatePyRanRef = useRef(false);
+  const autoUpdateTermuxRanRef = useRef(false);
   const edgeSwipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const overlayStateRef = useRef({
     showHelpModal,
     showLogsModal,
+    showUpdateModal,
     showThemePicker,
     showLangPicker,
     negativeOpen,
@@ -378,6 +407,7 @@ export default function App() {
   overlayStateRef.current = {
     showHelpModal,
     showLogsModal,
+    showUpdateModal,
     showThemePicker,
     showLangPicker,
     negativeOpen,
@@ -526,6 +556,10 @@ export default function App() {
   useEffect(() => {
     window.__droidpyHandleBack = () => {
       const ov = overlayStateRef.current;
+      if (ov.showUpdateModal) {
+        setShowUpdateModal(false);
+        return true;
+      }
       if (ov.showLogsModal) {
         setShowLogsModal(false);
         return true;
@@ -1516,6 +1550,13 @@ export default function App() {
   }, [handleSaveWorkspaceFile, showToast, t]);
 
   const handleUpdateSettings = useCallback((patch: Partial<EditorSettings>) => {
+    if (patch.autoUpdatePackages !== undefined) {
+      setAutoUpdatePackagesPref(patch.autoUpdatePackages);
+    }
+    if (patch.githubRepo !== undefined) {
+      const cleaned = saveGithubRepo(patch.githubRepo);
+      setGithubRepo(cleaned);
+    }
     setSettings((prev) => ({ ...prev, ...patch }));
   }, []);
 
@@ -1555,6 +1596,212 @@ export default function App() {
       showToast(err instanceof Error ? err.message : t('pkg_loaded_empty'));
     }
   }, [showToast, t]);
+
+  const handleUpgradePyPackage = useCallback(
+    async (pkgName: string) => {
+      setUpgradingPyPackages(true);
+      appLog('package', `Upgrading Pyodide package: ${pkgName}`);
+      try {
+        const targetInfo = outdatedPyPackages.find(
+          (p) => p.name.toLowerCase() === pkgName.toLowerCase()
+        );
+        const list = await upgradePyPackage(pkgName, callbacksRef.current, targetInfo?.latestVersion);
+        setInstalledPackages(list);
+        setOutdatedPyPackages((prev) =>
+          prev.filter((p) => p.name.toLowerCase() !== pkgName.toLowerCase())
+        );
+        appLog('package', `Upgraded Pyodide package: ${pkgName}`);
+        showToast(t('pkg_upgraded_toast', { count: 1 }));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        appendEntry('stderr', `${t('toast_pkg_fail', { pkg: pkgName })}: ${msg}`);
+        appLog('package', `Upgrade failed (${pkgName}): ${msg}`, { level: 'error' });
+        showToast(t('toast_pkg_fail', { pkg: pkgName }));
+      } finally {
+        setUpgradingPyPackages(false);
+      }
+    },
+    [outdatedPyPackages, appendEntry, showToast, t]
+  );
+
+  const handleCheckAndUpgradeAllPy = useCallback(async () => {
+    if (checkingOutdatedPkgs || upgradingPyPackages) return;
+    setCheckingOutdatedPkgs(true);
+    try {
+      const currentList = await listPyPackages(callbacksRef.current);
+      setInstalledPackages(currentList);
+      const outdated = await checkOutdatedPyPackages(currentList);
+      setOutdatedPyPackages(outdated);
+      if (outdated.length === 0) {
+        showToast(t('pkg_up_to_date'));
+        appLog('package', 'Checked Pyodide packages: all up to date');
+        return;
+      }
+      setUpgradingPyPackages(true);
+      appLog('package', `Upgrading ${outdated.length} outdated Pyodide package(s): ${outdated.map((o) => o.name).join(', ')}`);
+      const nextList = await upgradeAllPyPackages(outdated, callbacksRef.current);
+      setInstalledPackages(nextList);
+      setOutdatedPyPackages([]);
+      showToast(t('pkg_upgraded_toast', { count: outdated.length }));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      appendEntry('stderr', msg);
+      showToast(msg);
+    } finally {
+      setCheckingOutdatedPkgs(false);
+      setUpgradingPyPackages(false);
+    }
+  }, [checkingOutdatedPkgs, upgradingPyPackages, appendEntry, showToast, t]);
+
+  const handleUpgradeAllTermux = useCallback(
+    async (kind: 'pip' | 'pkg') => {
+      if (termuxRunning || upgradingTermux) {
+        showToast(t('cta_running'));
+        return;
+      }
+      setUpgradingTermux(true);
+      try {
+        const cmd =
+          kind === 'pip'
+            ? buildTermuxPipUpgradeCommand(termuxHealth?.installedPipPackages ?? [])
+            : buildTermuxAptUpgradeCommand();
+        await handleRunShellInTermux(cmd);
+      } finally {
+        setUpgradingTermux(false);
+      }
+    },
+    [termuxRunning, upgradingTermux, termuxHealth, handleRunShellInTermux, showToast, t]
+  );
+
+  const handleUpgradeSingleTermuxPip = useCallback(
+    async (pkg: string) => {
+      if (termuxRunning || upgradingTermux) {
+        showToast(t('cta_running'));
+        return;
+      }
+      const clean = pkg.replace(/[^a-zA-Z0-9_.-]/g, '').trim();
+      if (!clean) return;
+      setUpgradingTermux(true);
+      try {
+        await handleRunShellInTermux(`pip install --upgrade ${clean}`);
+      } finally {
+        setUpgradingTermux(false);
+      }
+    },
+    [termuxRunning, upgradingTermux, handleRunShellInTermux, showToast, t]
+  );
+
+  const handleCheckAppUpdates = useCallback(
+    async (repoOverride?: string, silent = false) => {
+      setCheckingAppUpdate(true);
+      try {
+        const result = await checkForAppUpdates(
+          repoOverride ?? githubRepo,
+          termuxConfigRef.current,
+          termuxConnectionState === 'connected'
+        );
+        setAppUpdateResult(result);
+        if (result.hasUpdate && result.latest) {
+          setUpdateBannerDismissed(false);
+          appLog('lifecycle', `New DroidPy version detected: v${result.latest.version}`);
+          if (!silent) {
+            showToast(t('upd_found_title', { ver: result.latest.version }));
+          }
+        } else if (!silent) {
+          if (result.error) {
+            showToast(t('upd_fetch_err', { msg: result.error }));
+          } else if (result.repoSlug) {
+            showToast(t('upd_up_to_date'));
+          }
+        }
+      } finally {
+        setCheckingAppUpdate(false);
+      }
+    },
+    [githubRepo, termuxConnectionState, showToast, t]
+  );
+
+  useEffect(() => {
+    if (!isOnline || !githubRepo) return;
+    const timer = window.setTimeout(() => {
+      void handleCheckAppUpdates(githubRepo, true);
+    }, 2200);
+    return () => window.clearTimeout(timer);
+    // Run silent version check on initial startup
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (
+      pyodideStatus !== 'ready' ||
+      !settings.autoUpdatePackages ||
+      !isOnline ||
+      autoUpdatePyRanRef.current
+    ) {
+      return;
+    }
+    autoUpdatePyRanRef.current = true;
+    const timer = window.setTimeout(async () => {
+      try {
+        const list = await listPyPackages(callbacksRef.current);
+        setInstalledPackages(list);
+        const outdated = await checkOutdatedPyPackages(list);
+        setOutdatedPyPackages(outdated);
+        if (outdated.length > 0) {
+          appLog('package', `Auto-updating ${outdated.length} Pyodide package(s): ${outdated.map((o) => o.name).join(', ')}`);
+          setUpgradingPyPackages(true);
+          const next = await upgradeAllPyPackages(outdated, callbacksRef.current);
+          setInstalledPackages(next);
+          setOutdatedPyPackages([]);
+          showToast(t('pkg_upgraded_toast', { count: outdated.length }));
+        }
+      } catch {
+        // silent background check
+      } finally {
+        setUpgradingPyPackages(false);
+      }
+    }, 2500);
+    return () => window.clearTimeout(timer);
+  }, [pyodideStatus, settings.autoUpdatePackages, isOnline, showToast, t]);
+
+  useEffect(() => {
+    if (
+      termuxConnectionState !== 'connected' ||
+      termuxHealth?.hasPython === false ||
+      !settings.autoUpdatePackages ||
+      !isOnline ||
+      autoUpdateTermuxRanRef.current
+    ) {
+      return;
+    }
+    const userPips = (termuxHealth?.installedPipPackages ?? []).filter(
+      (p) => !['pip', 'setuptools', 'wheel'].includes(p.toLowerCase())
+    );
+    if (userPips.length === 0) return;
+    autoUpdateTermuxRanRef.current = true;
+    const timer = window.setTimeout(async () => {
+      if (termuxRunning) return;
+      const cmd = buildTermuxPipUpgradeCommand(userPips);
+      appLog('package', `Background auto-updating Termux pip packages: ${userPips.join(', ')}`);
+      setUpgradingTermux(true);
+      const streamId = makeId();
+      try {
+        const res = await streamShellInTermux(termuxConfigRef.current, cmd, {
+          onChunk: (chunk) => appendStreamChunk(streamId, chunk),
+        });
+        if (res.exitCode === 0) {
+          appLog('package', `Background Termux pip upgrade finished (${res.durationMs} ms)`);
+          const nextHealth = await checkTermuxHealth(termuxConfigRef.current).catch(() => null);
+          if (nextHealth) setTermuxHealth(nextHealth);
+        }
+      } catch {
+        // silent background failure
+      } finally {
+        setUpgradingTermux(false);
+      }
+    }, 3200);
+    return () => window.clearTimeout(timer);
+  }, [termuxConnectionState, termuxHealth, settings.autoUpdatePackages, isOnline, termuxRunning, appendStreamChunk]);
 
   const handleFormatActiveFile = useCallback(() => {
     const ok = editorRef.current?.formatCode();
@@ -2188,6 +2435,22 @@ export default function App() {
                   installedPackages={installedPackages}
                   onInstallPackage={handleInstallPackage}
                   onRefreshPackages={handleRefreshPackages}
+                  outdatedPackages={outdatedPyPackages}
+                  checkingOutdated={checkingOutdatedPkgs}
+                  upgradingPackages={upgradingPyPackages}
+                  onUpgradePackage={handleUpgradePyPackage}
+                  onCheckAndUpgradeAll={handleCheckAndUpgradeAllPy}
+                  onUpgradeAllTermux={handleUpgradeAllTermux}
+                  onUpgradeSingleTermuxPip={handleUpgradeSingleTermuxPip}
+                  upgradingTermux={upgradingTermux}
+                  appUpdateResult={appUpdateResult}
+                  checkingAppUpdate={checkingAppUpdate}
+                  onOpenUpdateModal={() => {
+                    setShowUpdateModal(true);
+                    if (!appUpdateResult && githubRepo) {
+                      void handleCheckAppUpdates(githubRepo, true);
+                    }
+                  }}
                   linkedDirName={linkedDirHandle?.name ?? null}
                   onLinkDirectory={handleLinkDirectory}
                   onImportFromDirectory={handleImportFromDirectory}
@@ -2686,6 +2949,22 @@ export default function App() {
           installedPackages={installedPackages}
           onInstallPackage={handleInstallPackage}
           onRefreshPackages={handleRefreshPackages}
+          outdatedPackages={outdatedPyPackages}
+          checkingOutdated={checkingOutdatedPkgs}
+          upgradingPackages={upgradingPyPackages}
+          onUpgradePackage={handleUpgradePyPackage}
+          onCheckAndUpgradeAll={handleCheckAndUpgradeAllPy}
+          onUpgradeAllTermux={handleUpgradeAllTermux}
+          onUpgradeSingleTermuxPip={handleUpgradeSingleTermuxPip}
+          upgradingTermux={upgradingTermux}
+          appUpdateResult={appUpdateResult}
+          checkingAppUpdate={checkingAppUpdate}
+          onOpenUpdateModal={() => {
+            setShowUpdateModal(true);
+            if (!appUpdateResult && githubRepo) {
+              void handleCheckAppUpdates(githubRepo, true);
+            }
+          }}
           linkedDirName={linkedDirHandle?.name ?? null}
           onLinkDirectory={handleLinkDirectory}
           onImportFromDirectory={handleImportFromDirectory}
@@ -2867,6 +3146,46 @@ export default function App() {
         termuxConnected={termuxConnectionState === 'connected'}
         onNotify={showToast}
       />
+
+      {/* In-App Version Update & Changelog Modal */}
+      <AppUpdateModal
+        open={showUpdateModal}
+        onClose={() => setShowUpdateModal(false)}
+        updateResult={appUpdateResult}
+        checking={checkingAppUpdate}
+        repoSlug={githubRepo}
+        onChangeRepoSlug={(next) => {
+          setGithubRepo(next);
+          handleUpdateSettings({ githubRepo: next });
+        }}
+        onCheckNow={(override) => handleCheckAppUpdates(override, false)}
+        onNotify={showToast}
+      />
+
+      {/* Compact Dismissible New Version Banner */}
+      {appUpdateResult?.hasUpdate && appUpdateResult.latest && !updateBannerDismissed && !showUpdateModal && (
+        <div className="fixed bottom-16 lg:bottom-4 right-3 sm:right-4 z-40 flex items-center gap-2 rounded-2xl border border-[var(--ide-accent)] bg-[var(--ide-surface)]/95 backdrop-blur-md px-3 py-2 text-xs shadow-xl max-w-[calc(100vw-24px)]">
+          <Sparkles className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
+          <span className="font-semibold text-[var(--ide-text)] truncate">
+            {t('upd_banner_text', { ver: appUpdateResult.latest.version })}
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowUpdateModal(true)}
+            className="min-h-[30px] px-2.5 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-[11px] font-semibold whitespace-nowrap shrink-0 transition-colors"
+          >
+            {t('upd_banner_cta')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setUpdateBannerDismissed(true)}
+            aria-label={t('btn_done')}
+            className="min-h-[28px] min-w-[28px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] shrink-0"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Offline Status Banner */}
       {!isOnline && (

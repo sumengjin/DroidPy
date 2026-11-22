@@ -2,6 +2,22 @@
 
 All notable changes to **DroidPy** are documented in this file.
 
+## [1.2.11] - 2026-11-22
+
+### Added & Fixed (Fun Snippets, Fuzzy Package Search, Auto-Update, In-App Updater & `sh` Permission Fix)
+- **新增更多趣味 Python 腳本範例與分類篩選**：
+  - `SNIPPET_TEMPLATES` 擴充至 18 個即點即跑範例（含駭客任務數位雨、曼德布羅碎形、康威生命遊戲、迷宮 DFS 生成與 BFS 尋路、互動 21 點撲克、AI 二分搜尋猜數字、Wordle 猜字、Hacker News 熱榜即時爬蟲、CSV 銷售統計圖、極座標愛心曲線、番茄鐘震動倒數計時器、安全密碼熵值生成器、QR Code 終端生成與本機 JSON API 測試伺服器），並於檔案總管加上 7 大分類頁籤篩選。
+- **新增程式內版本檢查、APK 下載與更新日誌展示**：
+  - 新增 `AppUpdateModal` 支援連線 GitHub Releases 檢查最新版本（CI 自動帶入倉庫 Slug 並支援手動設定 `owner/repo` 與代理回退），當偵測到新版本時自動展示完整更新日誌、歷史版本清單與預編譯 APK 檔案大小。
+  - Android 原生 `MainActivity.kt` 與 `AndroidManifest.xml` 加入 `REQUEST_INSTALL_PACKAGES`、`FileProvider` 與 `downloadAndInstallApk()` 原生串流下載器，支援程式內顯示下載進度並直接呼叫系統套件安裝程式覆蓋升級（與固定簽名金鑰相容）。
+- **新增更全熱門與冷門套件目錄、分類篩選與輸入模糊聯想**：
+  - 整理 60+ 款支援行動開發的熱門與冷門 Python／Termux 套件（涵蓋「爬蟲與網路」、「科學與數據」、「圖像與影音」、「Web 與 API」、「冷門寶藏工具」如 `rich`、`faker`、`thefuzz`、`pypinyin`、`jieba`、`icecream`、`loguru`、`art`、「編譯與系統工具」），並提供 `全部 / 熱門 / 冷門` 與分類篩選。
+  - 輸入套件名稱時即時顯示模糊搜尋聯想清單（支援拼字容錯、縮寫別名如 `bs4`／`pil`／`np`／`yaml` 以及 Termux APT 套件名自動提示如 `numpy` → `pkg install python-numpy`）。
+- **新增已安裝套件手動與背景自動更新機制**：
+  - Pyodide 沙盒與 Termux 原生環境皆支援檢查過期套件、單筆升級或一鍵全部更新（`pip install --upgrade` / `pkg upgrade -y`），並於設定與負屏工具箱提供「啟動時自動檢查並更新已安裝套件」開關。
+- **修復實機編譯套件時 `make[1]: /data/data/com.termux/files/usr/bin/sh: Permission denied` 錯誤**：
+  - `EmbeddedTermuxBridge.kt` `buildEnv()` 自動導出 `SHELL`、`CONFIG_SHELL` 與 `CMAKE_SH` 指向 App 私有目錄下可執行之 `usr/bin/sh`（或 `/system/bin/sh`），避免 `make` / `cmake` / `ninja` 在手機上編譯原生擴充時誤呼叫無權限的舊 Termux 路徑。
+
 ## [1.2.10] - 2026-11-22
 
 ### Fixed (`PermissionError: [Errno 13]` on Truststore SSL & `build_clib` C Compilation)

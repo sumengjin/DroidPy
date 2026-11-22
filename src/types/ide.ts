@@ -40,6 +40,8 @@ export interface EditorSettings {
   theme: ThemeId;
   locale: LocaleId;
   androidStoragePermission: boolean;
+  autoUpdatePackages?: boolean;
+  githubRepo?: string;
 }
 
 export type MobileTab = 'editor' | 'console' | 'browser' | 'files';
@@ -118,6 +120,8 @@ export interface SdcardStatusInfo {
 
 export interface DroidPyNativeBridge {
   isNativeApp?: () => boolean;
+  getAppVersionName?: () => string;
+  downloadAndInstallApk?: (apkUrl: string, fileName: string) => void;
   readPersistedState?: () => string;
   writePersistedState?: (json: string) => void;
   getInternalStoragePath?: () => string;

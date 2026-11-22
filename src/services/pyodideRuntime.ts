@@ -540,6 +540,108 @@ json.dumps([{"name": str(k), "version": str(v.version)} for k, v in _pkgs.items(
   }
 }
 
+export interface OutdatedPackageInfo {
+  name: string;
+  currentVersion: string;
+  latestVersion: string;
+}
+
+const PYPI_SKIP_CORE = new Set(['micropip', 'packaging', 'pyodide-http']);
+
+function compareDottedVersions(aRaw: string, bRaw: string): number {
+  const clean = (s: string) =>
+    s
+      .trim()
+      .split(/[+-]/)[0]
+      .split('.')
+      .map((n) => parseInt(n, 10) || 0);
+  const a = clean(aRaw);
+  const b = clean(bRaw);
+  const len = Math.max(a.length, b.length, 3);
+  for (let i = 0; i < len; i++) {
+    const va = a[i] ?? 0;
+    const vb = b[i] ?? 0;
+    if (va > vb) return 1;
+    if (va < vb) return -1;
+  }
+  return 0;
+}
+
+export async function checkOutdatedPyPackages(
+  installed: InstalledPackage[]
+): Promise<OutdatedPackageInfo[]> {
+  const targets = installed.filter((p) => !PYPI_SKIP_CORE.has(p.name.toLowerCase()));
+  const results = await Promise.all(
+    targets.map(async (pkg) => {
+      try {
+        const res = await fetch(`https://pypi.org/pypi/${encodeURIComponent(pkg.name)}/json`);
+        if (!res.ok) return null;
+        const json = (await res.json()) as { info?: { version?: string } };
+        const latest = json?.info?.version?.trim();
+        if (latest && compareDottedVersions(latest, pkg.version) > 0) {
+          return {
+            name: pkg.name,
+            currentVersion: pkg.version,
+            latestVersion: latest,
+          };
+        }
+      } catch {
+        // ignore network errors for individual packages
+      }
+      return null;
+    })
+  );
+  return results.filter((x): x is OutdatedPackageInfo => x !== null);
+}
+
+export async function upgradePyPackage(
+  packageName: string,
+  callbacks: RuntimeCallbacks,
+  targetVersion?: string
+): Promise<InstalledPackage[]> {
+  activeCallbacks = callbacks;
+  const py = await initPyodide(callbacks);
+  const cleanPkg = packageName.trim();
+  if (!cleanPkg) return listPyPackages(callbacks);
+
+  if (!micropipLoaded) {
+    callbacks.onSystem('正在載入 micropip 套件管理員...');
+    await py.loadPackage('micropip');
+    micropipLoaded = true;
+  }
+
+  const spec = targetVersion ? `${cleanPkg}==${targetVersion}` : cleanPkg;
+  callbacks.onSystem(`正在更新套件 "${spec}"...`);
+  py.globals.set('__droidpy_pkg_target__', cleanPkg);
+  py.globals.set('__droidpy_pkg_spec__', spec);
+  await py.runPythonAsync(`
+import micropip
+try:
+    micropip.uninstall(__droidpy_pkg_target__)
+except Exception:
+    pass
+await micropip.install(__droidpy_pkg_spec__)
+`);
+  callbacks.onSystem(`套件 "${cleanPkg}" 更新完成`);
+  return listPyPackages(callbacks);
+}
+
+export async function upgradeAllPyPackages(
+  targets: OutdatedPackageInfo[],
+  callbacks: RuntimeCallbacks
+): Promise<InstalledPackage[]> {
+  let latestList = await listPyPackages(callbacks);
+  for (const item of targets) {
+    try {
+      latestList = await upgradePyPackage(item.name, callbacks, item.latestVersion);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      callbacks.onStderr(`更新 ${item.name} 失敗: ${msg}`);
+    }
+  }
+  return latestList;
+}
+
 export interface PythonSyntaxErrorInfo {
   line: number;
   col: number;
