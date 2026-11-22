@@ -49,10 +49,12 @@ const TERMUX_QUICK_ITEMS: { mode: 'pkg' | 'pip'; target: string; desc: string }[
   { mode: 'pip', target: 'beautifulsoup4', desc: '網頁 HTML 爬蟲結構解析' },
   { mode: 'pip', target: 'httpx', desc: '非同步高速爬蟲請求庫' },
   { mode: 'pip', target: 'yt-dlp', desc: '多媒體串流擷取工具' },
+  { mode: 'pkg', target: 'python-lxml', desc: 'Termux 預編譯高速 XML/HTML 解析器' },
+  { mode: 'pkg', target: 'python-pillow', desc: 'Termux 預編譯 Pillow 影像處理（免編譯）' },
   { mode: 'pkg', target: 'ffmpeg', desc: '原生 C/C++ 影音處理核心' },
   { mode: 'pkg', target: 'clang', desc: 'Android 原生 C/C++ 編譯器' },
   { mode: 'pkg', target: 'cmake', desc: '原生擴充套件建置系統' },
-  { mode: 'pip', target: 'fastapi', desc: '高效能非同步 Web 框架' },
+  { mode: 'pip', target: 'flask', desc: '輕量級 Python Web / API 伺服器框架' },
 ];
 
 export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({

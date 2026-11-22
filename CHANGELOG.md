@@ -2,6 +2,19 @@
 
 All notable changes to **DroidPy** are documented in this file.
 
+## [1.2.10] - 2026-11-22
+
+### Fixed (`PermissionError: [Errno 13]` on Truststore SSL & `build_clib` C Compilation)
+- **根治一鍵初始化時的 `pip/_vendor/truststore` `PermissionError: [Errno 13]`**：
+  - `pip` / `pip3` Wrapper 改為於執行當下動態尋找可讀取之 CA 憑證（含自動複製 `pip._vendor.certifi.where()` 至可寫暫存路徑），並同步設定 `PIP_CERT` 與 `SSL_CERT_DIR`，避免同一次 `pkg install && pip install` 執行鏈中 `pip` 進入 `_create_truststore_ssl_context()` 觸發跨權限存取拒絕。
+- **根治編譯 C 擴充套件（如 `Pillow` `build_clib`）時的 `error: [Errno 13] Permission denied`**：
+  - `relocate_debs()` 補充修正 `usr/etc`、`usr/lib`、`usr/share`、`usr/include` 與 LLVM／Clang 工具鏈執行權限，並自動將 Python `_sysconfigdata*.py`、`Makefile` 及 `pkgconfig/*.pc` 內的 `/data/data/com.termux/files/usr` 改寫為實際私有目錄。
+  - `buildEnv()` 於安裝 `clang` 後自動導出 `CC`、`CXX`、`LDSHARED`、`AR`、`RANLIB`、`CPPFLAGS`、`LDFLAGS` 與 `PKG_CONFIG_PATH`，確保原生編譯流程不再誤觸受限路徑。
+- **優化 Termux 快捷套件清單**：
+  - 新增 Termux 預編譯套件 `python-pillow`、`python-lxml`（對應 `pkg` 實際套件名）與純 Python `flask`，避免在無 `rustup` 目標架構支援的手機環境直接編譯 `pydantic-core` 或從源碼編譯 Pillow。
+
+---
+
 ## [1.2.9] - 2026-11-22
 
 ### Fixed (Real-Device Execution Logs: `pip install` exit 2 & `pkg update` exit 100)

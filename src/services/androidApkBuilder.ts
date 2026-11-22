@@ -222,8 +222,8 @@ android {
         minSdk = 24
         // targetSdk = 28 讓內嵌 Termux bootstrap 能在 App 私有目錄自由執行 pkg / python / clang（GitHub 發佈專用）
         targetSdk = 28
-        versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 10209
-        versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.9"
+        versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 10210
+        versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.10"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -1352,10 +1352,8 @@ class EmbeddedTermuxBridge(
             "[ -z \\"\${d}SUB\\" ] && exit 1",
             "shift",
             "fix_prefix_symlinks() {",
-            "  for linkdir in \\"\${d}PREFIX/bin\\" \\"\${d}PREFIX/etc/apt/trusted.gpg.d\\" \\"\${d}PREFIX/lib\\"; do",
-            "    [ -d \\"\${d}linkdir\\" ] || continue",
-            "    for item in \\"\${d}linkdir\\"/*; do",
-            "      [ -L \\"\${d}item\\" ] || continue",
+            "  if [ -x \\"\${d}PREFIX/bin/find\\" ]; then",
+            "    \\"\${d}PREFIX/bin/find\\" \\"\${d}PREFIX/bin\\" \\"\${d}PREFIX/etc\\" \\"\${d}PREFIX/lib\\" \\"\${d}PREFIX/libexec\\" \\"\${d}PREFIX/share\\" -maxdepth 5 -type l 2>/dev/null | while IFS= read -r item; do",
             "      tgt=\\"\${d}(readlink \\"\${d}item\\" 2>/dev/null)\\"",
             "      case \\"\${d}tgt\\" in",
             "        /data/data/com.termux/files/usr/*)",
@@ -1363,6 +1361,27 @@ class EmbeddedTermuxBridge(
             "          ;;",
             "      esac",
             "    done",
+            "  else",
+            "    for linkdir in \\"\${d}PREFIX/bin\\" \\"\${d}PREFIX/etc/apt/trusted.gpg.d\\" \\"\${d}PREFIX/etc/tls\\" \\"\${d}PREFIX/lib\\"; do",
+            "      [ -d \\"\${d}linkdir\\" ] || continue",
+            "      for item in \\"\${d}linkdir\\"/*; do",
+            "        [ -L \\"\${d}item\\" ] || continue",
+            "        tgt=\\"\${d}(readlink \\"\${d}item\\" 2>/dev/null)\\"",
+            "        case \\"\${d}tgt\\" in",
+            "          /data/data/com.termux/files/usr/*)",
+            "            ln -sf \\"\${d}PREFIX/\${d}{tgt#/data/data/com.termux/files/usr/}\\" \\"\${d}item\\" 2>/dev/null || true",
+            "            ;;",
+            "        esac",
+            "      done",
+            "    done",
+            "  fi",
+            "}",
+            "rewrite_sysconfig_prefix() {",
+            "  for sc in \\"\${d}PREFIX/lib/python3.\\"*/_sysconfigdata*.py \\"\${d}PREFIX/lib/python3.\\"*/config-*/Makefile \\"\${d}PREFIX/lib/pkgconfig/\\"*.pc; do",
+            "    [ -f \\"\${d}sc\\" ] || continue",
+            "    if grep -q \\"/data/data/com.termux/files/usr\\" \\"\${d}sc\\" 2>/dev/null; then",
+            "      sed -i \\"s|/data/data/com.termux/files/usr|\${d}PREFIX|g\\" \\"\${d}sc\\" 2>/dev/null || true",
+            "    fi",
             "  done",
             "}",
             "ensure_python_links() {",
@@ -1409,7 +1428,8 @@ class EmbeddedTermuxBridge(
             "    rm -f \\"\${d}deb\\"",
             "  done",
             "  rm -rf \\"\${d}STAGE\\"",
-            "  chmod -R 755 \\"\${d}PREFIX/libexec\\" 2>/dev/null || true",
+            "  chmod -R u+rwX,go+rX \\"\${d}PREFIX/etc\\" \\"\${d}PREFIX/lib\\" \\"\${d}PREFIX/share\\" \\"\${d}PREFIX/include\\" 2>/dev/null || true",
+            "  chmod -R 755 \\"\${d}PREFIX/libexec\\" \\"\${d}PREFIX/lib/llvm-\\"*\\"/bin\\" \\"\${d}PREFIX/aarch64-linux-android/bin\\" 2>/dev/null || true",
             "  fix_prefix_symlinks",
             "  for f in \\"\${d}PREFIX/bin/\\"*; do",
             "    [ -f \\"\${d}f\\" ] || continue",
@@ -1418,11 +1438,13 @@ class EmbeddedTermuxBridge(
             "      sed -i \\"1s|^#!/data/data/com.termux/files/usr/bin/|#!\${d}PREFIX/bin/|\\" \\"\${d}f\\" 2>/dev/null || true",
             "    fi",
             "  done",
+            "  rewrite_sysconfig_prefix",
             "  ensure_python_links",
             "  echo \\"[DroidPy pkg] 套件配置完成。\\"",
             "  return 0",
             "}",
             "fix_prefix_symlinks",
+            "rewrite_sysconfig_prefix",
             "case \\"\${d}SUB\\" in",
             "  update)",
             "    \\"\${d}PREFIX/bin/apt-get\\" \${d}APT_OPTS update \\"\${d}@\\"",
@@ -1460,14 +1482,31 @@ class EmbeddedTermuxBridge(
             "    PY_BIN=\\"\${d}c\\"; break",
             "  done",
             "fi",
-            "[ -n \\"\${d}PIP_CERT\\" ] && [ ! -r \\"\${d}PIP_CERT\\" ] && unset PIP_CERT",
-            "[ -n \\"\${d}REQUESTS_CA_BUNDLE\\" ] && [ ! -r \\"\${d}REQUESTS_CA_BUNDLE\\" ] && unset REQUESTS_CA_BUNDLE",
-            "[ -n \\"\${d}SSL_CERT_FILE\\" ] && [ ! -r \\"\${d}SSL_CERT_FILE\\" ] && unset SSL_CERT_FILE",
-            "[ -n \\"\${d}CURL_CA_BUNDLE\\" ] && [ ! -r \\"\${d}CURL_CA_BUNDLE\\" ] && unset CURL_CA_BUNDLE",
-            "export PIP_DISABLE_PIP_VERSION_CHECK=1",
             "if ! \\"\${d}PY_BIN\\" -m pip --version >/dev/null 2>&1; then",
             "  \\"\${d}PY_BIN\\" -m ensurepip --upgrade >/dev/null 2>&1 || true",
             "fi",
+            "CA_FOUND=\\"\\"",
+            "for cf in \\"$prefix/etc/tls/cert.pem\\" \\"$prefix/etc/ssl/cert.pem\\" \\"$prefix/etc/ssl/certs/ca-certificates.crt\\" \\"$prefix/share/ca-certificates/cacert.pem\\"; do",
+            "  if [ -r \\"\${d}cf\\" ] && [ -s \\"\${d}cf\\" ]; then",
+            "    CA_FOUND=\\"\${d}cf\\"",
+            "    break",
+            "  fi",
+            "done",
+            "if [ -z \\"\${d}CA_FOUND\\" ]; then",
+            "  CERTIFI_PATH=\\"\${d}(\\"\${d}PY_BIN\\" -c 'import pip._vendor.certifi as c; print(c.where())' 2>/dev/null || true)\\"",
+            "  if [ -n \\"\${d}CERTIFI_PATH\\" ] && [ -r \\"\${d}CERTIFI_PATH\\" ]; then",
+            "    mkdir -p \\"\${d}HOME/tmp\\"",
+            "    cp -f \\"\${d}CERTIFI_PATH\\" \\"\${d}HOME/tmp/droidpy-cacert.pem\\" 2>/dev/null && chmod 644 \\"\${d}HOME/tmp/droidpy-cacert.pem\\" 2>/dev/null || true",
+            "    [ -r \\"\${d}HOME/tmp/droidpy-cacert.pem\\" ] && CA_FOUND=\\"\${d}HOME/tmp/droidpy-cacert.pem\\"",
+            "  fi",
+            "fi",
+            "if [ -n \\"\${d}CA_FOUND\\" ]; then",
+            "  export PIP_CERT=\\"\${d}CA_FOUND\\" SSL_CERT_FILE=\\"\${d}CA_FOUND\\" REQUESTS_CA_BUNDLE=\\"\${d}CA_FOUND\\" CURL_CA_BUNDLE=\\"\${d}CA_FOUND\\"",
+            "else",
+            "  unset PIP_CERT SSL_CERT_FILE REQUESTS_CA_BUNDLE CURL_CA_BUNDLE",
+            "fi",
+            "if [ -d \\"$prefix/etc/tls/certs\\" ]; then export SSL_CERT_DIR=\\"$prefix/etc/tls/certs\\"; else export SSL_CERT_DIR=\\"\${d}HOME/tmp\\"; fi",
+            "export PIP_DISABLE_PIP_VERSION_CHECK=1",
             "exec \\"\${d}PY_BIN\\" -m pip \\"\${d}@\\""
         ).joinToString("\\n") + "\\n"
         File(wrapperDir, "pip").apply {
@@ -1665,6 +1704,7 @@ def clipboard_set(text):
         val xdgCacheDir = File(homeDir, ".cache").apply { mkdirs() }.absolutePath
         val certFile = resolveCaBundleFile()
         val sdcard = Environment.getExternalStorageDirectory().absolutePath
+        val certDir = File(usrDir, "etc/tls/certs")
         val env = mutableMapOf(
             "PREFIX" to usrDir.absolutePath,
             "PYTHONHOME" to usrDir.absolutePath,
@@ -1681,11 +1721,37 @@ def clipboard_set(text):
             "XDG_CACHE_HOME" to xdgCacheDir,
             "PIP_CACHE_DIR" to pipCacheDir,
             "PIP_DISABLE_PIP_VERSION_CHECK" to "1",
+            "SSL_CERT_DIR" to (if (certDir.isDirectory) certDir.absolutePath else tmpDir),
             "PYTHONUNBUFFERED" to "1",
             "TERM" to "xterm-256color",
             "LANG" to "en_US.UTF-8",
             "APT_CONFIG" to File(usrDir, "etc/apt/apt.conf").absolutePath
         )
+        val clangBin = listOf(File(usrDir, "bin/clang"), File(usrDir, "bin/aarch64-linux-android-clang")).firstOrNull { it.exists() }
+        if (clangBin != null) {
+            clangBin.setExecutable(true, false)
+            val cxxBin = listOf(File(usrDir, "bin/clang++"), File(usrDir, "bin/aarch64-linux-android-clang++")).firstOrNull { it.exists() }
+            val arBin = listOf(File(usrDir, "bin/llvm-ar"), File(usrDir, "bin/ar")).firstOrNull { it.exists() }
+            val ranlibBin = listOf(File(usrDir, "bin/llvm-ranlib"), File(usrDir, "bin/ranlib")).firstOrNull { it.exists() }
+            val prefixPath = usrDir.absolutePath
+            env["CC"] = clangBin.absolutePath
+            if (cxxBin != null) {
+                cxxBin.setExecutable(true, false)
+                env["CXX"] = cxxBin.absolutePath
+            }
+            env["LDSHARED"] = "\${clangBin.absolutePath} -shared"
+            if (arBin != null) {
+                arBin.setExecutable(true, false)
+                env["AR"] = arBin.absolutePath
+            }
+            if (ranlibBin != null) {
+                ranlibBin.setExecutable(true, false)
+                env["RANLIB"] = ranlibBin.absolutePath
+            }
+            env["CPPFLAGS"] = "-I$prefixPath/include"
+            env["LDFLAGS"] = "-L$prefixPath/lib -Wl,-rpath,$prefixPath/lib"
+            env["PKG_CONFIG_PATH"] = "$prefixPath/lib/pkgconfig"
+        }
         if (certFile != null) {
             val certPath = certFile.absolutePath
             env["SSL_CERT_FILE"] = certPath
@@ -2446,6 +2512,12 @@ def clipboard_set(text):
 `;
 
   const changelogContent = `# Changelog / 更新日誌
+
+## [1.2.10] - 2026-11-22
+- **根治實機 \`PermissionError: [Errno 13] Permission denied\`（\`pip\` Truststore 與 C 擴充編譯 \`build_clib\`）**：
+  - \`pip\` Wrapper 於執行時動態偵測可用 CA 憑證（含備援複製 \`certifi.where()\`）並強制設定 \`PIP_CERT\`／\`SSL_CERT_DIR\`，徹底避免一鍵初始化同一次執行鏈中 \`pip\` 呼叫 \`_create_truststore_ssl_context()\` 存取舊路徑觸發 \`Errno 13\`。
+  - \`relocate_debs()\` 與 \`buildEnv()\` 自動重寫 \`_sysconfigdata*.py\`／\`Makefile\`／\`pkgconfig\` 內的舊 Termux 路徑、為 \`etc\`／\`lib\`／\`llvm\` 工具鏈設定正確權限，並於偵測到 \`clang\` 時導出 \`CC\`、\`CXX\`、\`AR\`、\`RANLIB\`、\`LDSHARED\`，解決編譯 C 擴充庫時的 \`Permission denied\`。
+  - Termux 快捷套件新增預編譯 \`python-pillow\`、\`python-lxml\` 與純 Python \`flask\`。
 
 ## [1.2.9] - 2026-11-22
 - **修復實機日誌回報之 \`pip install\` 退出碼 2 與 \`pkg update\` 退出碼 100 問題**：
