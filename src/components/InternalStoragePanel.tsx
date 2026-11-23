@@ -13,11 +13,19 @@ import {
   Loader2,
   HardDrive,
 } from 'lucide-react';
-import { PythonFile, SdcardEntry, SdcardStatusInfo, TermuxConfig } from '../types/ide';
+import {
+  AppStorageUsageInfo,
+  PythonFile,
+  SdcardEntry,
+  SdcardStatusInfo,
+  TermuxConfig,
+} from '../types/ide';
 import {
   backupWorkspaceToSdcard,
+  cleanupAppStorage,
   createSdcardFolder,
   deleteSdcardPath,
+  getAppStorageUsage,
   listSdcardDirectory,
   readSdcardFile,
   writeSdcardFile,
@@ -49,6 +57,8 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
 }) => {
   const { t } = useI18n();
   const [status, setStatus] = useState<SdcardStatusInfo | null>(null);
+  const [appUsage, setAppUsage] = useState<AppStorageUsageInfo | null>(null);
+  const [cleaningCache, setCleaningCache] = useState(false);
   const [currentPath, setCurrentPath] = useState('');
   const [entries, setEntries] = useState<SdcardEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -62,11 +72,13 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
       setLoading(true);
       setErrorMsg(null);
       try {
-        const [st, list] = await Promise.all([
+        const [st, list, usage] = await Promise.all([
           getSdcardStatus(termuxConfig),
           listSdcardDirectory(termuxConfig, relPath),
+          getAppStorageUsage(termuxConfig),
         ]);
         setStatus(st);
+        if (usage) setAppUsage(usage);
         setCurrentPath(list.currentPath || relPath);
         setEntries(Array.isArray(list.entries) ? list.entries : []);
       } catch (err) {
@@ -195,11 +207,28 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
     }
   };
 
+  const handleCleanupAppCache = async () => {
+    if (cleaningCache) return;
+    setCleaningCache(true);
+    try {
+      const res = await cleanupAppStorage(termuxConfig);
+      if (res?.usageAfter) {
+        setAppUsage(res.usageAfter);
+      } else {
+        const fresh = await getAppStorageUsage(termuxConfig);
+        if (fresh) setAppUsage(fresh);
+      }
+      onNotify(t('sd_app_cache_freed', { size: formatSize(res?.freedBytes ?? 0) }));
+    } finally {
+      setCleaningCache(false);
+    }
+  };
+
   const rootDisplay = status?.rootPath || window.DroidPyNative?.getInternalStoragePath?.() || '/storage/emulated/0';
   const fullDisplayPath = currentPath ? `${rootDisplay}/${currentPath}` : rootDisplay;
 
   return (
-    <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-5 space-y-4">
+    <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-4 sm:p-5 space-y-4">
       {/* Header & Permission Status */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
@@ -253,16 +282,49 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
         </div>
       )}
 
+      {/* App Private Runtime & Reclaimable Cache Cleanup */}
+      {appUsage && (
+        <div className="rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] p-3.5 flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="text-xs font-semibold text-[var(--ide-text)]">
+              {t('sd_app_cache_title')}
+            </div>
+            <p className="text-[11px] text-[var(--ide-text-muted)] leading-relaxed">
+              {t('sd_app_cache_desc')}
+            </p>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-mono tabular-nums text-[var(--ide-text-muted)]">
+              <span>{t('sd_app_cache_usr')}: {formatSize(appUsage.usrBytes)}</span>
+              <span className={appUsage.reclaimableBytes > 0 ? 'text-amber-600 dark:text-amber-400 font-semibold' : ''}>
+                {t('sd_app_cache_reclaimable')}: {formatSize(appUsage.reclaimableBytes)}
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            disabled={cleaningCache}
+            onClick={() => void handleCleanupAppCache()}
+            className="min-h-[38px] px-3.5 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5 shrink-0 transition-colors"
+          >
+            {cleaningCache ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Trash2 className="w-3.5 h-3.5" />
+            )}
+            <span>{cleaningCache ? t('sd_app_cache_cleaning') : t('sd_app_cache_clean_btn')}</span>
+          </button>
+        </div>
+      )}
+
       {/* Action Buttons: Save Active & Backup Project */}
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => void handleSaveActiveHere()}
           disabled={!!busyAction || !isGranted}
-          className="min-h-[40px] px-3.5 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-45 text-white text-xs font-medium inline-flex items-center gap-1.5 transition-colors"
+          className="min-h-[40px] max-w-full px-3.5 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-45 text-white text-xs font-medium inline-flex items-center gap-1.5 transition-colors"
         >
-          {busyAction === 'save' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-          <span>{t('sd_save_active_btn')} ({activeFile?.name})</span>
+          {busyAction === 'save' ? <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" /> : <Save className="w-3.5 h-3.5 shrink-0" />}
+          <span className="truncate">{t('sd_save_active_btn')} ({activeFile?.name})</span>
         </button>
 
         <button
@@ -272,9 +334,9 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
           className="min-h-[40px] px-3.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] disabled:opacity-45 text-xs font-medium inline-flex items-center gap-1.5 transition-colors"
         >
           {busyAction === 'backup' ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--ide-accent)]" />
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--ide-accent)] shrink-0" />
           ) : (
-            <FolderSync className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
+            <FolderSync className="w-3.5 h-3.5 text-[var(--ide-accent)] shrink-0" />
           )}
           <span>{t('sd_export_proj_btn')}</span>
         </button>
@@ -292,7 +354,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
 
       {/* Path Bar + Mkdir */}
       <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)]">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
+        <div className="flex items-center gap-2 min-w-0 w-full sm:w-auto flex-1">
           <button
             type="button"
             onClick={handleGoUp}
@@ -307,19 +369,19 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
           </span>
         </div>
 
-        <form onSubmit={(e) => void handleCreateFolder(e)} className="flex items-center gap-1.5 shrink-0">
+        <form onSubmit={(e) => void handleCreateFolder(e)} className="flex items-center gap-1.5 w-full sm:w-auto shrink-0">
           <input
             type="text"
             value={newFolderName}
             onChange={(e) => setNewFolderName(e.target.value)}
             placeholder={t('sd_mkdir_placeholder')}
             disabled={!isGranted}
-            className="w-32 sm:w-40 min-h-[34px] px-2.5 rounded-lg bg-[var(--ide-surface)] border border-[var(--ide-border)] text-xs focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
+            className="flex-1 sm:flex-initial min-w-0 sm:w-40 min-h-[34px] px-2.5 rounded-lg bg-[var(--ide-surface)] border border-[var(--ide-border)] text-xs focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
           />
           <button
             type="submit"
             disabled={!newFolderName.trim() || !isGranted || !!busyAction}
-            className="min-h-[34px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] disabled:opacity-40 text-xs font-medium inline-flex items-center gap-1"
+            className="min-h-[34px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] disabled:opacity-40 text-xs font-medium inline-flex items-center gap-1 shrink-0"
           >
             <FolderPlus className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
             <span>{t('sd_mkdir_btn')}</span>

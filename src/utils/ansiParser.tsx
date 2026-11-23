@@ -88,27 +88,30 @@ function xterm256ToCss(n: number, dark: boolean): string {
 }
 
 function normalizeTerminalText(raw: string): string {
-  // Normalize CRLF -> LF and strip OSC, charset, CSI, and truncated/orphaned SGR fragments
+  // Normalize CRLF -> LF and strip OSC, DCS, charset, CSI, and truncated/orphaned SGR fragments
   let cleaned = raw.replace(/\r\n/g, '\n');
   // Strip OSC sequences like \x1b]...\x07 or \x1b]...\x1b\\ or C1 0x9d...
   cleaned = cleaned.replace(/(?:\x1b\]|\x9d)[^\x07\x1b\x9c]*(?:\x07|\x1b\\|\x9c)/g, '');
+  // Strip DCS / SOS / PM / APC sequences (\x1bP, \x1bX, \x1b^, \x1b_)
+  cleaned = cleaned.replace(/\x1b[PX^_][\s\S]*?(?:\x07|\x1b\\|\x9c)/g, '');
   // Strip character set / 2-byte ESC sequences such as \x1b(B, \x1b)0, \x1b=, \x1b>
   cleaned = cleaned.replace(/\x1b[()#][0-9A-Za-z]/g, '');
   cleaned = cleaned.replace(/\x1b[=>NOM78c]/g, '');
-  // Strip non-SGR CSI sequences (ending in letters/symbols other than 'm')
-  cleaned = cleaned.replace(/(?:\x1b\[|\x9b)[0-9;?]*[A-LN-Za-ln-z~@`]/g, '');
+  // Strip non-SGR CSI sequences including private/intermediate sequences (ending in letters/symbols other than 'm')
+  cleaned = cleaned.replace(/(?:\x1b\[|\x9b)[0-9;:<=>?]*[\x20-\x2f]*[A-LN-Za-ln-z~@^`|]/g, '');
   // Strip dangling incomplete ESC/CSI/OSC sequences at end of chunk or string
-  cleaned = cleaned.replace(/\x1b(?:\][^\x07\x1b]*|\[[0-9;?]*)?$/g, '');
-  // Strip orphaned bracketed SGR fragments missing ESC (e.g. "[0m", "[38;5;88m", "[91m")
-  cleaned = cleaned.replace(/\[(?:[0-9]{1,3}(?:;[0-9]{1,3})*)m/g, (match, _inner, offset, full) => {
+  cleaned = cleaned.replace(/\x1b(?:\][^\x07\x1b]*|\[[0-9;:<=>?]*)?$/g, '');
+  // Strip lone ESC not followed by '[' or ']' (prevents "\x1b部" rendering tofu "□" boxes)
+  cleaned = cleaned.replace(/\x1b(?![\[\]])/g, '');
+  // Strip orphaned bracketed SGR fragments missing ESC (e.g. "[0m", "[38;5;88m", "[38;5;129mm")
+  cleaned = cleaned.replace(/\[(?:[0-9]{1,3}(?:;[0-9]{1,3})*)m{1,2}/g, (match, offset: number, full: string) => {
     const prev = offset > 0 ? full[offset - 1] : '';
     if (prev === '\x1b' || prev === '\u001b') return match;
-    // Keep normal bracketed text if clearly not ANSI (Wait: numbers+m like [0m, [38;5;88m, [91m are ANSI SGR)
     return '';
   });
-  // Strip orphaned truncated SGR tail fragments like ";88m", ";5;208m", "38;5;88m" caused by upstream slice
-  cleaned = cleaned.replace(/(?:^|(?<=[\s\]|:]))(?:38;5|48;5|38;2|48;2)?(?:;[0-9]{1,3})+m/g, '');
-  cleaned = cleaned.replace(/(?:^|(?<=\s))(?:0|1|2|3|4|22|24|3[0-79]|4[0-79]|9[0-7]|10[0-7])m(?=[A-Za-z0-9\u4e00-\u9fff\[\(]|$)/g, '');
+  // Strip orphaned truncated SGR tail fragments like ";88m", ";5;208m", "8;5;129mm", "38;5;88m" caused by upstream slice
+  cleaned = cleaned.replace(/(?:^|(?<=[\s\]|:]))(?:[34]?8;[25])?(?:;[0-9]{1,3})+m{1,2}/g, '');
+  cleaned = cleaned.replace(/(?:^|(?<=\s))(?:0|1|2|3|4|22|24|3[0-79]|4[0-79]|9[0-7]|10[0-7])m{1,2}(?=[A-Za-z0-9\u4e00-\u9fff\[\(]|$)/g, '');
   // Resolve remaining standalone \r carriage-return overwrites per line
   cleaned = cleaned
     .split('\n')
@@ -122,8 +125,8 @@ function normalizeTerminalText(raw: string): string {
 }
 
 function stripOtherControlChars(text: string): string {
-  // Keep \n (0x0A) and \t (0x09), remove other C0/DEL and replacement control bytes
-  return text.replace(/[\x00-\x08\x0b-\x1a\x1c-\x1f\x7f]/g, '');
+  // Keep \n (0x0A) and \t (0x09), remove all leftover C0 (including stray \x1b), DEL, C1 (0x80-0x9f), and U+FFFD
+  return text.replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f\uFFFD]/g, '');
 }
 
 export function stripAnsi(raw: string): string {
@@ -142,7 +145,7 @@ export function createAnsiStreamBuffer(): {
   flush: () => string;
 } {
   let pending = '';
-  const partialEscRegex = /\x1b(?:\[[^\x40-\x7e]*|\][^\x07\x1b]*|[()#]?)?$/;
+  const partialEscRegex = /\x1b(?:\[[^\x40-\x7e]*|\][^\x07\x1b]*|[PX^_][^\x07\x1b]*|[()#]?)?$/;
 
   return {
     push(chunk: string): string {

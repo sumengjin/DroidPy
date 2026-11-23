@@ -44,7 +44,13 @@ import { IDE_THEMES } from '../services/themes';
 import { LOCALE_OPTIONS, TranslationKey, getLocalizedThemeText, useI18n } from '../services/i18n';
 import { generateGitHubApkProjectZip } from '../services/androidApkBuilder';
 import { downloadBlob } from '../utils/downloadBlob';
-import { getSdcardStatus, TermuxOutdatedPipItem } from '../services/termuxBridge';
+import {
+  CORE_TERMUX_PIP_PACKAGES,
+  CORE_TERMUX_PKG_PACKAGES,
+  getSdcardStatus,
+  normalizeTermuxPkgName,
+  TermuxOutdatedPipItem,
+} from '../services/termuxBridge';
 import {
   StorageEstimateInfo,
   formatStorageBytes,
@@ -480,15 +486,15 @@ python ${entryFile}
     <div className="h-full overflow-y-auto ide-scroll bg-[var(--ide-bg)] text-[var(--ide-text)]">
       <div className={`${compactDrawer ? 'p-4 space-y-6' : 'max-w-5xl mx-auto p-4 sm:p-6 space-y-8'}`}>
         {(onOpenHelp || onOpenLogs) && (!compactDrawer || showSettings) && (
-          <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0">
+          <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold flex items-center gap-2">
                 <BookOpen className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
                 <span>{t('help_title')}</span>
               </div>
               <p className="text-xs text-[var(--ide-text-muted)] mt-0.5">{t('help_subtitle')}</p>
             </div>
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-2 shrink-0 max-w-full">
               {onOpenLogs && (
                 <button
                   type="button"
@@ -515,8 +521,8 @@ python ${entryFile}
 
         {/* App Version & In-App Update Card */}
         {onOpenUpdateModal && (!compactDrawer || showSettings) && (
-          <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0">
+          <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold flex flex-wrap items-center gap-2">
                 <PackageCheck className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
                 <span>{t('upd_card_title')}</span>
@@ -717,11 +723,11 @@ python ${entryFile}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Persistent Storage & Quota Card */}
-              <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-5 space-y-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
+              <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-3.5 sm:p-5 space-y-4 min-w-0">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
                     <h3 className="text-sm font-semibold flex items-center gap-2">
-                      <ShieldCheck className="w-4 h-4 text-[var(--ide-accent)]" />
+                      <ShieldCheck className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
                       <span>{t('set_persist_title')}</span>
                     </h3>
                     <p className="text-xs text-[var(--ide-text-muted)] mt-1 leading-relaxed">
@@ -734,7 +740,7 @@ python ${entryFile}
                 </div>
 
                 <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs text-[var(--ide-text-muted)] tabular-nums">
+                  <div className="flex flex-wrap items-center justify-between gap-1 text-xs text-[var(--ide-text-muted)] tabular-nums">
                     <span>{t('set_persist_used', { val: formatStorageBytes(displayUsedBytes) })}</span>
                     <span>{t('set_persist_quota', { val: formatStorageBytes(displayQuotaBytes) })}</span>
                   </div>
@@ -750,25 +756,25 @@ python ${entryFile}
                   type="button"
                   onClick={handleRequestPersist}
                   disabled={requestingPersist || storageInfo.persisted}
-                  className="min-h-[42px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white text-xs font-medium inline-flex items-center gap-2 transition-colors"
+                  className="min-h-[42px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white text-xs font-medium inline-flex items-center gap-2 transition-colors max-w-full"
                 >
                   {requestingPersist ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="w-4 h-4 animate-spin shrink-0" />
                   ) : (
-                    <ShieldCheck className="w-4 h-4" />
+                    <ShieldCheck className="w-4 h-4 shrink-0" />
                   )}
                   <span>{storageInfo.persisted ? t('set_persist_btn_ok') : t('set_persist_btn')}</span>
                 </button>
               </div>
 
               {/* Local Device Directory Access Card */}
-              <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-5 space-y-4">
+              <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-3.5 sm:p-5 space-y-4 min-w-0">
                 <div>
                   <h3 className="text-sm font-semibold flex items-center gap-2">
-                    <FolderSync className="w-4 h-4 text-[var(--ide-accent)]" />
+                    <FolderSync className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
                     <span>{t('set_dir_title')}</span>
                   </h3>
-                  <p className="text-xs text-[var(--ide-text-muted)] mt-1 leading-relaxed">
+                  <p className="text-xs text-[var(--ide-text-muted)] mt-1 leading-relaxed break-words">
                     {isNativeApk
                       ? nativeStorageGranted
                         ? t('set_dir_apk_ok', { path: sdcardStatus?.rootPath || '/storage/emulated/0' })
@@ -779,7 +785,7 @@ python ${entryFile}
                   </p>
                 </div>
 
-                <div className="text-xs text-[var(--ide-text-muted)]">
+                <div className="text-xs text-[var(--ide-text-muted)] break-all">
                   {t('set_dir_current')}
                   <span className="font-mono font-semibold text-[var(--ide-text)] ml-1">
                     {isNativeApk
@@ -847,9 +853,183 @@ python ${entryFile}
           </section>
         )}
 
+        {/* Native Termux Installed Packages Overview (always available in Packages tab even when Sandbox Add-on is off) */}
+        {showPackages && (
+          <section className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-3.5 sm:p-5 space-y-4 min-w-0">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-semibold flex items-center gap-2">
+                  <Package className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
+                  <span>{t('tmx_native_pkg_mgr_title')}</span>
+                </h2>
+                <p className="text-xs text-[var(--ide-text-muted)] mt-1 leading-relaxed">
+                  {t('tmx_native_pkg_mgr_desc')}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 shrink-0 max-w-full">
+                <button
+                  type="button"
+                  onClick={() => void onTestTermuxConnection()}
+                  className="min-h-[36px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] text-xs font-medium inline-flex items-center gap-1.5 transition-colors"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-[var(--ide-accent)] ${termuxConnectionState === 'checking' ? 'animate-spin' : ''}`} />
+                  <span>{t('pkg_refresh')}</span>
+                </button>
+                {onCheckTermuxOutdated && termuxConnectionState === 'connected' && (
+                  <button
+                    type="button"
+                    disabled={checkingTermuxOutdated || upgradingTermux}
+                    onClick={() => void onCheckTermuxOutdated()}
+                    className="min-h-[36px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] text-xs font-medium inline-flex items-center gap-1.5 disabled:opacity-50 transition-colors"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 text-[var(--ide-accent)] ${checkingTermuxOutdated ? 'animate-spin' : ''}`} />
+                    <span>{t('tmx_check_outdated_btn')}</span>
+                  </button>
+                )}
+                {onUpgradeAllPackages && termuxConnectionState === 'connected' && (
+                  <button
+                    type="button"
+                    disabled={upgradingTermux}
+                    onClick={() => void onUpgradeAllPackages()}
+                    className="min-h-[36px] px-3.5 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-50 transition-colors"
+                  >
+                    {upgradingTermux ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <ArrowUpCircle className="w-3.5 h-3.5" />
+                    )}
+                    <span>{t('tmx_upgrade_all_btn')}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {backupStatus?.hasBackup &&
+              ((backupStatus.missingPipPackages?.length ?? 0) > 0 ||
+                (backupStatus.missingPkgPackages?.length ?? 0) > 0) &&
+              onRestoreBackedUpPackages && (
+                <div className="rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50/90 dark:bg-amber-950/35 p-3 flex flex-wrap items-center justify-between gap-2.5">
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <div className="text-xs font-semibold text-amber-900 dark:text-amber-200">
+                      {t('backup_banner_title')}
+                    </div>
+                    <div className="text-[11px] text-amber-800 dark:text-amber-300/90">
+                      {t('backup_banner_desc', {
+                        pipCount: backupStatus.missingPipPackages.length,
+                        pkgCount: backupStatus.missingPkgPackages.length,
+                      })}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={restoringBackup || upgradingTermux}
+                    onClick={() => void onRestoreBackedUpPackages()}
+                    className="min-h-[36px] px-3.5 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5 shrink-0"
+                  >
+                    {restoringBackup ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                    <span>{restoringBackup ? t('backup_restoring_btn') : t('backup_restore_btn')}</span>
+                  </button>
+                </div>
+              )}
+
+            {termuxConnectionState === 'connected' && termuxHealth ? (
+              <div className="space-y-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] p-3">
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-[var(--ide-text-muted)]">
+                    {t('tmx_installed_pkgs')} ({termuxHealth.installedPipPackages?.length ?? 0})
+                  </div>
+                  {termuxHealth.installedPipPackages && termuxHealth.installedPipPackages.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto ide-scroll pr-0.5">
+                      {termuxHealth.installedPipPackages.map((pipPkg) => {
+                        const normPip = normalizeTermuxPkgName(pipPkg);
+                        const outdatedItem = outdatedTermuxPips.find(
+                          (item) => normalizeTermuxPkgName(item.name) === normPip
+                        );
+                        const isCorePip = CORE_TERMUX_PIP_PACKAGES.has(pipPkg.toLowerCase());
+                        return (
+                          <div
+                            key={pipPkg}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] text-[11px] font-mono text-[var(--ide-text)] max-w-full"
+                          >
+                            <span className="truncate">{pipPkg}</span>
+                            {outdatedItem && onUpgradeSingleTermuxPip && (
+                              <button
+                                type="button"
+                                disabled={upgradingTermux}
+                                onClick={() => void onUpgradeSingleTermuxPip(pipPkg)}
+                                title={`${pipPkg} ${outdatedItem.currentVersion} → ${outdatedItem.latestVersion}`}
+                                className="text-[var(--ide-accent-text)] hover:underline font-sans font-semibold disabled:opacity-40 shrink-0"
+                              >
+                                ↑
+                              </button>
+                            )}
+                            {!isCorePip && onUninstallInTermux && (
+                              <button
+                                type="button"
+                                disabled={upgradingTermux}
+                                onClick={() => void onUninstallInTermux('pip', pipPkg)}
+                                title={`${t('tmx_uninstall_btn')} ${pipPkg}`}
+                                aria-label={`${t('tmx_uninstall_btn')} ${pipPkg}`}
+                                className="text-[var(--ide-text-muted)] hover:text-red-500 font-sans font-semibold disabled:opacity-40 ml-0.5 shrink-0"
+                              >
+                                ×
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-[var(--ide-text-muted)] leading-relaxed">
+                      {t('tmx_installed_pkgs_empty')}
+                    </div>
+                  )}
+                </div>
+
+                {termuxHealth.installedPkgPackages && termuxHealth.installedPkgPackages.length > 0 && (
+                  <div className="pt-2.5 border-t border-[var(--ide-border)] space-y-1.5">
+                    <div className="text-xs font-medium text-[var(--ide-text-muted)]">
+                      {t('tmx_installed_sys_pkgs')} ({termuxHealth.installedPkgPackages.length})
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto ide-scroll pr-0.5">
+                      {termuxHealth.installedPkgPackages.map((sysPkg) => {
+                        const isCoreSys = CORE_TERMUX_PKG_PACKAGES.has(sysPkg.toLowerCase());
+                        return (
+                          <div
+                            key={sysPkg}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-[var(--ide-border)] bg-[var(--ide-surface)] text-[11px] font-mono text-[var(--ide-text-muted)] max-w-full"
+                          >
+                            <span className="truncate">{sysPkg}</span>
+                            {!isCoreSys && onUninstallInTermux && (
+                              <button
+                                type="button"
+                                disabled={upgradingTermux}
+                                onClick={() => void onUninstallInTermux('pkg', sysPkg)}
+                                title={`${t('tmx_uninstall_btn')} ${sysPkg}`}
+                                aria-label={`${t('tmx_uninstall_btn')} ${sysPkg}`}
+                                className="hover:text-red-500 font-sans font-semibold disabled:opacity-40 shrink-0"
+                              >
+                                ×
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-xs text-[var(--ide-text-muted)] rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] p-3">
+                {termuxError || t('tmx_state_off')}
+              </div>
+            )}
+          </section>
+        )}
+
         {/* PyPI Package Manager (Sandbox Add-on) */}
         {showPackages && !settings.enableSandboxAddon && engine !== 'pyodide' && (
-          <section className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-5 space-y-3">
+          <section className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-3.5 sm:p-5 space-y-3 min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-semibold flex items-center gap-2">
@@ -863,7 +1043,7 @@ python ${entryFile}
               <button
                 type="button"
                 onClick={() => onUpdateSettings({ enableSandboxAddon: true })}
-                className="min-h-[40px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-semibold whitespace-nowrap shrink-0 transition-colors"
+                className="min-h-[40px] px-4 py-2 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-semibold shrink-0 max-w-full text-center transition-colors"
               >
                 {t('pkg_sandbox_enable_btn')}
               </button>
@@ -1368,25 +1548,25 @@ python ${entryFile}
                   <button
                     type="button"
                     onClick={handleExportGitHubApkProject}
-                    className="min-h-[44px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium flex items-center gap-2 transition-colors"
+                    className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium flex items-center gap-2 text-left max-w-full transition-colors"
                   >
-                    <Download className="w-4 h-4" />
+                    <Download className="w-4 h-4 shrink-0" />
                     <span>{t('and_btn_github_apk')}</span>
                   </button>
                   <button
                     type="button"
                     onClick={handleExportBuildozerBundle}
-                    className="min-h-[44px] px-4 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium flex items-center gap-2 hover:border-[var(--ide-accent)] transition-colors"
+                    className="min-h-[44px] px-4 py-2 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium flex items-center gap-2 text-left max-w-full hover:border-[var(--ide-accent)] transition-colors"
                   >
-                    <Download className="w-4 h-4" />
+                    <Download className="w-4 h-4 shrink-0" />
                     <span>{t('and_btn_buildozer')}</span>
                   </button>
                   <button
                     type="button"
                     onClick={handleExportTermuxScript}
-                    className="min-h-[44px] px-4 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium flex items-center gap-2 hover:border-[var(--ide-accent)] transition-colors"
+                    className="min-h-[44px] px-4 py-2 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium flex items-center gap-2 text-left max-w-full hover:border-[var(--ide-accent)] transition-colors"
                   >
-                    <Terminal className="w-4 h-4 text-amber-500" />
+                    <Terminal className="w-4 h-4 text-amber-500 shrink-0" />
                     <span>{t('and_btn_termux')}</span>
                   </button>
                 </div>
@@ -1454,14 +1634,14 @@ python ${entryFile}
 
             <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] divide-y divide-[var(--ide-border)]">
               {/* Font Size */}
-              <div className="flex items-center justify-between gap-4 p-4">
-                <div>
+              <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 p-4">
+                <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium">{t('ed_font_title')}</div>
                   <div className="text-xs text-[var(--ide-text-muted)] tabular-nums">
                     {t('ed_font_desc', { size: settings.fontSize })}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
                     onClick={() => onUpdateSettings({ fontSize: Math.max(11, settings.fontSize - 1) })}
@@ -1481,12 +1661,12 @@ python ${entryFile}
               </div>
 
               {/* Tab Size */}
-              <div className="flex items-center justify-between gap-4 p-4">
-                <div>
+              <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 p-4">
+                <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium">{t('ed_tab_title')}</div>
                   <div className="text-xs text-[var(--ide-text-muted)]">{t('ed_tab_desc')}</div>
                 </div>
-                <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--ide-surface-alt)]">
+                <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--ide-surface-alt)] shrink-0">
                   {[2, 4].map((n) => (
                     <button
                       key={n}
@@ -1506,7 +1686,7 @@ python ${entryFile}
 
               {/* Word Wrap */}
               <div className="flex items-center justify-between gap-4 p-4">
-                <div>
+                <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium">{t('ed_wrap_title')}</div>
                   <div className="text-xs text-[var(--ide-text-muted)]">{t('ed_wrap_desc')}</div>
                 </div>
@@ -1515,7 +1695,7 @@ python ${entryFile}
                   role="switch"
                   aria-checked={settings.wordWrap}
                   onClick={() => onUpdateSettings({ wordWrap: !settings.wordWrap })}
-                  className={`min-h-[36px] w-14 rounded-full p-1 transition-colors flex items-center ${
+                  className={`min-h-[36px] w-14 rounded-full p-1 transition-colors flex items-center shrink-0 ${
                     settings.wordWrap ? 'bg-[var(--ide-accent)] justify-end' : 'bg-slate-300 dark:bg-slate-700 justify-start'
                   }`}
                 >
@@ -1525,7 +1705,7 @@ python ${entryFile}
 
               {/* Android Symbol Bar */}
               <div className="flex items-center justify-between gap-4 p-4">
-                <div>
+                <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium">{t('ed_sym_title')}</div>
                   <div className="text-xs text-[var(--ide-text-muted)]">{t('ed_sym_desc')}</div>
                 </div>
@@ -1534,27 +1714,8 @@ python ${entryFile}
                   role="switch"
                   aria-checked={settings.showSymbolBar}
                   onClick={() => onUpdateSettings({ showSymbolBar: !settings.showSymbolBar })}
-                  className={`min-h-[36px] w-14 rounded-full p-1 transition-colors flex items-center ${
-                    settings.showSymbolBar ? 'bg-[var(--ide-accent)] justify-end' : 'bg-slate-300 dark:bg-slate-700 justify-start'
-                  }`}
-                >
-                  <span className="w-6 h-6 rounded-full bg-white shadow-sm" />
-                </button>
-              </div>
-
-              {/* Clean Text Output Mode */}
-              <div className="flex items-center justify-between gap-4 p-4">
-                <div className="min-w-0">
-                  <div className="text-sm font-medium">{t('set_clean_text_title')}</div>
-                  <div className="text-xs text-[var(--ide-text-muted)]">{t('set_clean_text_desc')}</div>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={Boolean(settings.cleanTextMode)}
-                  onClick={() => onUpdateSettings({ cleanTextMode: !settings.cleanTextMode })}
                   className={`min-h-[36px] w-14 rounded-full p-1 transition-colors flex items-center shrink-0 ${
-                    settings.cleanTextMode ? 'bg-[var(--ide-accent)] justify-end' : 'bg-slate-300 dark:bg-slate-700 justify-start'
+                    settings.showSymbolBar ? 'bg-[var(--ide-accent)] justify-end' : 'bg-slate-300 dark:bg-slate-700 justify-start'
                   }`}
                 >
                   <span className="w-6 h-6 rounded-full bg-white shadow-sm" />
@@ -1563,7 +1724,7 @@ python ${entryFile}
 
               {/* Optional Pyodide Browser Sandbox Add-on */}
               <div className="flex items-center justify-between gap-4 p-4">
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium">{t('addon_sandbox_title')}</div>
                   <div className="text-xs text-[var(--ide-text-muted)]">{t('addon_sandbox_desc')}</div>
                 </div>
@@ -1587,13 +1748,13 @@ python ${entryFile}
               </div>
 
               {/* Reset Workspace */}
-              <div className="flex items-center justify-between gap-4 p-4">
-                <div>
+              <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 p-4">
+                <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium">{t('ed_reset_title')}</div>
                   <div className="text-xs text-[var(--ide-text-muted)]">{t('ed_reset_desc')}</div>
                 </div>
                 {confirmReset ? (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
                     <button
                       type="button"
                       onClick={() => {
@@ -1616,7 +1777,7 @@ python ${entryFile}
                   <button
                     type="button"
                     onClick={() => setConfirmReset(true)}
-                    className="min-h-[40px] px-3.5 rounded-xl border border-red-300 dark:border-red-900/60 text-red-600 dark:text-red-400 text-xs font-medium hover:bg-red-50 dark:hover:bg-red-950/30"
+                    className="min-h-[40px] px-3.5 rounded-xl border border-red-300 dark:border-red-900/60 text-red-600 dark:text-red-400 text-xs font-medium hover:bg-red-50 dark:hover:bg-red-950/30 shrink-0"
                   >
                     {t('ed_reset_btn')}
                   </button>

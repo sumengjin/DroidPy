@@ -130,6 +130,23 @@ export interface SdcardStatusInfo {
   usedBytes?: number;
 }
 
+export interface AppStorageUsageInfo {
+  ok: boolean;
+  usrBytes: number;
+  tmpBytes: number;
+  cacheBytes: number;
+  workspaceBytes: number;
+  logBytes: number;
+  apkUpdatesBytes: number;
+  reclaimableBytes: number;
+}
+
+export interface AppStorageCleanupResult {
+  ok: boolean;
+  freedBytes: number;
+  usageAfter?: AppStorageUsageInfo;
+}
+
 export interface DroidPyNativeBridge {
   isNativeApp?: () => boolean;
   getAppVersionName?: () => string;

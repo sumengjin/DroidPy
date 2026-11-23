@@ -136,6 +136,10 @@ const STORAGE_TERMUX_CFG_KEY = 'droidpy_termux_cfg_v1';
 const STORAGE_CRAWLER_SESSION_KEY = 'droidpy_crawler_session_v1';
 const STORAGE_PY_PKGS_KEY = 'droidpy_sandbox_pkgs_v1';
 
+const MAX_TERMINAL_ENTRIES = 250;
+const MAX_TERMINAL_ENTRY_CHARS = 100_000;
+let startupBootLoggedInModule = false;
+
 const DEFAULT_SETTINGS: EditorSettings = {
   fontSize: 14,
   tabSize: 4,
@@ -147,7 +151,6 @@ const DEFAULT_SETTINGS: EditorSettings = {
   autoUpdatePackages: getAutoUpdatePackagesPref(),
   githubRepo: getSavedGithubRepo(),
   enableSandboxAddon: false,
-  cleanTextMode: false,
 };
 
 interface PersistedIdeSnapshot {
@@ -237,6 +240,9 @@ function mergeTerminalChunk(prev: string, chunk: string): string {
     } else {
       out += ch;
     }
+  }
+  if (out.length > MAX_TERMINAL_ENTRY_CHARS) {
+    out = out.slice(-MAX_TERMINAL_ENTRY_CHARS);
   }
   return out;
 }
@@ -401,6 +407,8 @@ export default function App() {
   const ansiStreamBuffersRef = useRef<Map<string, ReturnType<typeof createAnsiStreamBuffer>>>(
     new Map()
   );
+  const pendingStreamChunksRef = useRef<Map<string, string>>(new Map());
+  const streamRafRef = useRef<number | null>(null);
 
   const editorRef = useRef<CodeEditorHandle | null>(null);
   const filesRef = useRef(files);
@@ -450,11 +458,28 @@ export default function App() {
   const isOnline = useOnlineStatus();
 
   useEffect(() => {
-    registerSW({ immediate: true });
-    appLog(
-      'lifecycle',
-      `DroidPy started (layout=${deviceClass}, engine=${executionEngineRef.current}, files=${filesRef.current.length}, sandboxPkgs=${sandboxPackagesRef.current.length})`
-    );
+    const isNativeApp = Boolean(window.DroidPyNative?.isNativeApp?.());
+    if (!isNativeApp) {
+      registerSW({ immediate: true });
+    }
+    let alreadyLogged = startupBootLoggedInModule;
+    try {
+      if (!alreadyLogged && sessionStorage.getItem('droidpy_boot_logged_v1') === '1') {
+        alreadyLogged = true;
+      }
+      if (!alreadyLogged) {
+        sessionStorage.setItem('droidpy_boot_logged_v1', '1');
+      }
+    } catch {
+      // ignore sessionStorage errors
+    }
+    if (!alreadyLogged) {
+      startupBootLoggedInModule = true;
+      appLog(
+        'lifecycle',
+        `DroidPy started (layout=${deviceClass}, engine=${executionEngineRef.current}, files=${filesRef.current.length}, sandboxPkgs=${sandboxPackagesRef.current.length})`
+      );
+    }
     const onWinErr = (ev: ErrorEvent) => {
       appLog('lifecycle', `Uncaught error: ${ev.message}`, {
         level: 'error',
@@ -580,7 +605,7 @@ export default function App() {
   useEffect(() => {
     const timer = window.setTimeout(() => {
       flushNativeStateNow();
-    }, 200);
+    }, 1500);
     return () => window.clearTimeout(timer);
   }, [
     files,
@@ -676,66 +701,147 @@ export default function App() {
 
   const appendEntry = useCallback(
     (type: TerminalEntry['type'], content: string, imageDataUrl?: string) => {
-      setEntries((prev) => [
-        ...prev,
-        {
-          id: makeId(),
-          type,
-          content,
-          timestamp: formatTime(),
-          imageDataUrl,
-        },
-      ]);
+      const cappedContent =
+        content.length > MAX_TERMINAL_ENTRY_CHARS
+          ? content.slice(-MAX_TERMINAL_ENTRY_CHARS)
+          : content;
+      setEntries((prev) => {
+        const next = [
+          ...prev,
+          {
+            id: makeId(),
+            type,
+            content: cappedContent,
+            timestamp: formatTime(),
+            imageDataUrl,
+          },
+        ];
+        return next.length > MAX_TERMINAL_ENTRIES
+          ? next.slice(-MAX_TERMINAL_ENTRIES)
+          : next;
+      });
     },
     []
   );
 
-  const appendStreamChunk = useCallback((streamId: string, chunk: string) => {
-    let buf = ansiStreamBuffersRef.current.get(streamId);
-    if (!buf) {
-      buf = createAnsiStreamBuffer();
-      ansiStreamBuffersRef.current.set(streamId, buf);
-    }
-    const processed = buf.push(chunk);
-    if (!processed) return;
+  const commitPendingStreamChunks = useCallback(() => {
+    streamRafRef.current = null;
+    const pending = pendingStreamChunksRef.current;
+    if (pending.size === 0) return;
+    const batch = Array.from(pending.entries());
+    pending.clear();
     setEntries((prev) => {
-      const idx = prev.findIndex((e) => e.id === streamId);
-      if (idx === -1) {
-        return [
-          ...prev,
-          {
+      let next = prev;
+      let cloned = false;
+      for (const [streamId, text] of batch) {
+        if (!text) continue;
+        const idx = next.findIndex((e) => e.id === streamId);
+        if (idx === -1) {
+          if (!cloned) {
+            next = [...prev];
+            cloned = true;
+          }
+          next.push({
             id: streamId,
             type: 'stdout',
-            content: mergeTerminalChunk('', processed),
+            content: mergeTerminalChunk('', text),
             timestamp: formatTime(),
-          },
-        ];
+          });
+        } else {
+          if (!cloned) {
+            next = [...prev];
+            cloned = true;
+          }
+          next[idx] = {
+            ...next[idx],
+            content: mergeTerminalChunk(next[idx].content, text),
+          };
+        }
       }
-      const next = [...prev];
-      next[idx] = {
-        ...next[idx],
-        content: mergeTerminalChunk(next[idx].content, processed),
-      };
-      return next;
+      if (!cloned) return prev;
+      return next.length > MAX_TERMINAL_ENTRIES
+        ? next.slice(-MAX_TERMINAL_ENTRIES)
+        : next;
     });
   }, []);
 
-  const flushStreamChunk = useCallback((streamId: string) => {
-    const buf = ansiStreamBuffersRef.current.get(streamId);
-    if (!buf) return;
-    const rem = buf.flush();
-    ansiStreamBuffersRef.current.delete(streamId);
-    if (!rem) return;
-    setEntries((prev) => {
-      const idx = prev.findIndex((e) => e.id === streamId);
-      if (idx === -1) return prev;
-      const next = [...prev];
-      next[idx] = {
-        ...next[idx],
-        content: mergeTerminalChunk(next[idx].content, rem),
-      };
-      return next;
-    });
+  const appendStreamChunk = useCallback(
+    (streamId: string, chunk: string) => {
+      let buf = ansiStreamBuffersRef.current.get(streamId);
+      if (!buf) {
+        buf = createAnsiStreamBuffer();
+        ansiStreamBuffersRef.current.set(streamId, buf);
+      }
+      const processed = buf.push(chunk);
+      if (!processed) return;
+      const prevPending = pendingStreamChunksRef.current.get(streamId) ?? '';
+      const combined = prevPending + processed;
+      pendingStreamChunksRef.current.set(
+        streamId,
+        combined.length > MAX_TERMINAL_ENTRY_CHARS
+          ? combined.slice(-MAX_TERMINAL_ENTRY_CHARS)
+          : combined
+      );
+      if (streamRafRef.current === null) {
+        streamRafRef.current = window.requestAnimationFrame(commitPendingStreamChunks);
+      }
+    },
+    [commitPendingStreamChunks]
+  );
+
+  const flushStreamChunk = useCallback(
+    (streamId: string) => {
+      const buf = ansiStreamBuffersRef.current.get(streamId);
+      const rem = buf ? buf.flush() : '';
+      ansiStreamBuffersRef.current.delete(streamId);
+      const queued = pendingStreamChunksRef.current.get(streamId) ?? '';
+      pendingStreamChunksRef.current.delete(streamId);
+      const combined = queued + rem;
+      if (!combined) return;
+      setEntries((prev) => {
+        const idx = prev.findIndex((e) => e.id === streamId);
+        if (idx === -1) {
+          const next = [
+            ...prev,
+            {
+              id: streamId,
+              type: 'stdout' as const,
+              content: mergeTerminalChunk('', combined),
+              timestamp: formatTime(),
+            },
+          ];
+          return next.length > MAX_TERMINAL_ENTRIES
+            ? next.slice(-MAX_TERMINAL_ENTRIES)
+            : next;
+        }
+        const next = [...prev];
+        next[idx] = {
+          ...next[idx],
+          content: mergeTerminalChunk(next[idx].content, combined),
+        };
+        return next;
+      });
+    },
+    []
+  );
+
+  const handleClearTerminal = useCallback(() => {
+    if (streamRafRef.current !== null) {
+      window.cancelAnimationFrame(streamRafRef.current);
+      streamRafRef.current = null;
+    }
+    pendingStreamChunksRef.current.clear();
+    ansiStreamBuffersRef.current.clear();
+    setEntries([]);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (streamRafRef.current !== null) {
+        window.cancelAnimationFrame(streamRafRef.current);
+        streamRafRef.current = null;
+      }
+    };
   }, []);
 
   const callbacksRef = useRef<RuntimeCallbacks>({
@@ -1109,16 +1215,24 @@ export default function App() {
       appLog('termux', `Run script in Termux: ${entryFile.name}`);
       let hasOutput = false;
       let outputTail = '';
+      const outputTailAnsiBuf = createAnsiStreamBuffer();
 
       const res = await streamRunInTermux(termuxConfig, entryFile, files, {
         onChunk: (chunk) => {
           if (chunk.length > 0) {
             hasOutput = true;
-            outputTail = stripAnsi(outputTail + chunk).slice(-500);
+            const cleanChunk = stripAnsi(outputTailAnsiBuf.push(chunk));
+            if (cleanChunk) {
+              outputTail = (outputTail + cleanChunk).slice(-500);
+            }
           }
           appendStreamChunk(streamId, chunk);
         },
       });
+      const outputRem = stripAnsi(outputTailAnsiBuf.flush());
+      if (outputRem) {
+        outputTail = (outputTail + outputRem).slice(-500);
+      }
       flushStreamChunk(streamId);
       setTermuxConnectionState('connected');
       setLastDurationMs(res.durationMs);
@@ -1187,13 +1301,21 @@ export default function App() {
       appLog('package', `Termux install start: ${label}`);
       const streamId = makeId();
       let tailBuf = '';
+      const tailAnsiBuf = createAnsiStreamBuffer();
       try {
         const res = await streamInstallInTermux(termuxConfig, mode, target, {
           onChunk: (chunk) => {
             appendStreamChunk(streamId, chunk);
-            tailBuf = stripAnsi(tailBuf + chunk).slice(-1200);
+            const cleanChunk = stripAnsi(tailAnsiBuf.push(chunk));
+            if (cleanChunk) {
+              tailBuf = (tailBuf + cleanChunk).slice(-1200);
+            }
           },
         });
+        const remTail = stripAnsi(tailAnsiBuf.flush());
+        if (remTail) {
+          tailBuf = (tailBuf + remTail).slice(-1200);
+        }
         flushStreamChunk(streamId);
         setTermuxConnectionState('connected');
         setLastDurationMs(res.durationMs);
@@ -1259,13 +1381,21 @@ export default function App() {
       appLog('termux', `Shell command: ${command}`);
       const streamId = makeId();
       let tailBuf = '';
+      const tailAnsiBuf = createAnsiStreamBuffer();
       try {
         const res = await streamShellInTermux(termuxConfig, command, {
           onChunk: (chunk) => {
             appendStreamChunk(streamId, chunk);
-            tailBuf = stripAnsi(tailBuf + chunk).slice(-1200);
+            const cleanChunk = stripAnsi(tailAnsiBuf.push(chunk));
+            if (cleanChunk) {
+              tailBuf = (tailBuf + cleanChunk).slice(-1200);
+            }
           },
         });
+        const remTail = stripAnsi(tailAnsiBuf.flush());
+        if (remTail) {
+          tailBuf = (tailBuf + remTail).slice(-1200);
+        }
         flushStreamChunk(streamId);
         setTermuxConnectionState('connected');
         setLastDurationMs(res.durationMs);
@@ -1323,13 +1453,21 @@ export default function App() {
       appLog('termux', `One-tap env initialization started (includeBaseSystem=${includeBaseSystem})`);
       const streamId = makeId();
       let tailBuf = '';
+      const tailAnsiBuf = createAnsiStreamBuffer();
       try {
         const res = await streamShellInTermux(termuxConfig, cmd, {
           onChunk: (chunk) => {
             appendStreamChunk(streamId, chunk);
-            tailBuf = stripAnsi(tailBuf + chunk).slice(-1200);
+            const cleanChunk = stripAnsi(tailAnsiBuf.push(chunk));
+            if (cleanChunk) {
+              tailBuf = (tailBuf + cleanChunk).slice(-1200);
+            }
           },
         });
+        const remTail = stripAnsi(tailAnsiBuf.flush());
+        if (remTail) {
+          tailBuf = (tailBuf + remTail).slice(-1200);
+        }
         flushStreamChunk(streamId);
         setTermuxConnectionState('connected');
         setLastDurationMs(res.durationMs);
@@ -1386,13 +1524,21 @@ export default function App() {
     appLog('package', 'Restoring backed-up packages from /sdcard/DroidPy/.droidpy_backup');
     const streamId = makeId();
     let tailBuf = '';
+    const tailAnsiBuf = createAnsiStreamBuffer();
     try {
       const res = await streamRestoreBackedUpPackages(termuxConfig, {
         onChunk: (chunk) => {
           appendStreamChunk(streamId, chunk);
-          tailBuf = stripAnsi(tailBuf + chunk).slice(-1200);
+          const cleanChunk = stripAnsi(tailAnsiBuf.push(chunk));
+          if (cleanChunk) {
+            tailBuf = (tailBuf + cleanChunk).slice(-1200);
+          }
         },
       });
+      const remTail = stripAnsi(tailAnsiBuf.flush());
+      if (remTail) {
+        tailBuf = (tailBuf + remTail).slice(-1200);
+      }
       flushStreamChunk(streamId);
       setTermuxConnectionState('connected');
       setLastDurationMs(res.durationMs);
@@ -1909,13 +2055,21 @@ export default function App() {
       appLog('package', `Termux uninstall start: ${cmd}`);
       const streamId = makeId();
       let tailBuf = '';
+      const tailAnsiBuf = createAnsiStreamBuffer();
       try {
         const res = await streamShellInTermux(termuxConfig, cmd, {
           onChunk: (chunk) => {
             appendStreamChunk(streamId, chunk);
-            tailBuf = stripAnsi(tailBuf + chunk).slice(-1200);
+            const cleanChunk = stripAnsi(tailAnsiBuf.push(chunk));
+            if (cleanChunk) {
+              tailBuf = (tailBuf + cleanChunk).slice(-1200);
+            }
           },
         });
+        const remTail = stripAnsi(tailAnsiBuf.flush());
+        if (remTail) {
+          tailBuf = (tailBuf + remTail).slice(-1200);
+        }
         flushStreamChunk(streamId);
         setTermuxConnectionState('connected');
         setLastDurationMs(res.durationMs);
@@ -1985,6 +2139,8 @@ export default function App() {
             outdatedTargets = outdated
               .map((item) => item.name)
               .filter((n) => !CORE_TERMUX_PIP_PACKAGES.has(normalizeTermuxPkgName(n)));
+          } catch {
+            // ignore outdated check failure
           } finally {
             setCheckingTermuxOutdated(false);
           }
@@ -2077,6 +2233,8 @@ export default function App() {
             pipTargets = outdatedPips
               .map((item) => item.name)
               .filter((n) => !CORE_TERMUX_PIP_PACKAGES.has(normalizeTermuxPkgName(n)));
+          } catch {
+            // ignore pip outdated check failure and continue apt upgrade
           } finally {
             setCheckingTermuxOutdated(false);
           }
@@ -2558,7 +2716,7 @@ export default function App() {
       {/* Phone Compact Top App Bar (Negative Screen button + Title/File + Primary Run CTA only) */}
       {deviceClass === 'phone' && (
       <header className="flex items-center justify-between gap-2 h-12 px-2.5 pt-safe border-b border-[var(--ide-border)] bg-[var(--ide-surface)] shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           <button
             type="button"
             onClick={() => setNegativeOpen(true)}
@@ -2574,8 +2732,8 @@ export default function App() {
             referrerPolicy="no-referrer"
           />
           <span className="text-sm font-bold whitespace-nowrap shrink-0">DroidPy</span>
-          <span className="text-[var(--ide-border)]" aria-hidden="true">/</span>
-          <span className="font-mono text-xs text-[var(--ide-text-muted)] truncate">
+          <span className="text-[var(--ide-border)] shrink-0" aria-hidden="true">/</span>
+          <span className="font-mono text-xs text-[var(--ide-text-muted)] truncate min-w-0">
             {activeFile?.name}
           </span>
         </div>
@@ -2849,11 +3007,7 @@ export default function App() {
                         onStopTermux={handleStopTermux}
                         onOpenLogs={() => setShowLogsModal(true)}
                         enableSandboxAddon={Boolean(settings.enableSandboxAddon)}
-                        cleanTextMode={Boolean(settings.cleanTextMode)}
-                        onToggleCleanTextMode={() =>
-                          handleUpdateSettings({ cleanTextMode: !settings.cleanTextMode })
-                        }
-                        onClear={() => setEntries([])}
+                        onClear={handleClearTerminal}
                       />
                     </div>
                     <div className={desktopRightPane === 'browser' ? 'h-full' : 'hidden'}>
@@ -3112,11 +3266,7 @@ export default function App() {
                       onStopTermux={handleStopTermux}
                       onOpenLogs={() => setShowLogsModal(true)}
                       enableSandboxAddon={Boolean(settings.enableSandboxAddon)}
-                      cleanTextMode={Boolean(settings.cleanTextMode)}
-                      onToggleCleanTextMode={() =>
-                        handleUpdateSettings({ cleanTextMode: !settings.cleanTextMode })
-                      }
-                      onClear={() => setEntries([])}
+                      onClear={handleClearTerminal}
                     />
                   </div>
                   <div className={tabletPaneTab === 'files' ? 'h-full' : 'hidden'}>
@@ -3321,11 +3471,7 @@ export default function App() {
                   onStopTermux={handleStopTermux}
                   onOpenLogs={() => setShowLogsModal(true)}
                   enableSandboxAddon={Boolean(settings.enableSandboxAddon)}
-                  cleanTextMode={Boolean(settings.cleanTextMode)}
-                  onToggleCleanTextMode={() =>
-                    handleUpdateSettings({ cleanTextMode: !settings.cleanTextMode })
-                  }
-                  onClear={() => setEntries([])}
+                  onClear={handleClearTerminal}
                 />
               </div>
             )}
@@ -3666,9 +3812,9 @@ export default function App() {
 
       {/* Offline Status Banner */}
       {!isOnline && (
-        <div className="fixed bottom-16 lg:bottom-4 left-4 z-50 flex items-center gap-2 rounded-xl bg-amber-600 text-white px-3.5 py-2 text-xs font-medium shadow-lg">
+        <div className="fixed bottom-16 lg:bottom-4 left-3 right-3 sm:right-auto z-50 flex items-center gap-2 rounded-xl bg-amber-600 text-white px-3.5 py-2 text-xs font-medium shadow-lg max-w-[calc(100vw-24px)]">
           <WifiOff className="w-3.5 h-3.5 shrink-0" />
-          <span>{t('offline_banner')}</span>
+          <span className="min-w-0 break-words">{t('offline_banner')}</span>
         </div>
       )}
 
@@ -3677,7 +3823,7 @@ export default function App() {
         <div
           role="status"
           aria-live="polite"
-          className="fixed bottom-16 lg:bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none px-4 py-2.5 rounded-full bg-slate-900/95 dark:bg-slate-100/95 text-white dark:text-slate-900 text-xs font-medium shadow-xl whitespace-nowrap"
+          className="fixed bottom-16 lg:bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none px-4 py-2.5 rounded-2xl bg-slate-900/95 dark:bg-slate-100/95 text-white dark:text-slate-900 text-xs font-medium shadow-xl max-w-[calc(100vw-24px)] text-center break-words"
         >
           {toastMsg}
         </div>

@@ -212,13 +212,13 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
               </button>
             </div>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               {activeTab === 'native' && (
                 <button
                   type="button"
                   onClick={() => void loadNative()}
                   disabled={loadingNative || !termuxConnected}
-                  className="min-h-[34px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium inline-flex items-center gap-1.5 disabled:opacity-40"
+                  className="min-h-[34px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium inline-flex items-center gap-1.5 disabled:opacity-40 whitespace-nowrap"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${loadingNative ? 'animate-spin' : ''}`} />
                   <span>{t('logs_refresh')}</span>
@@ -227,7 +227,7 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
               <button
                 type="button"
                 onClick={() => void handleCopyAll()}
-                className="min-h-[34px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium inline-flex items-center gap-1.5"
+                className="min-h-[34px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium inline-flex items-center gap-1.5 whitespace-nowrap"
               >
                 {copied ? <Check className="w-3.5 h-3.5 text-[var(--ide-accent)]" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{copied ? t('term_copied') : t('logs_copy')}</span>
@@ -235,7 +235,7 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
               <button
                 type="button"
                 onClick={() => void handleExportLogFile()}
-                className="min-h-[34px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium inline-flex items-center gap-1.5"
+                className="min-h-[34px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium inline-flex items-center gap-1.5 whitespace-nowrap"
               >
                 <Download className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
                 <span>{t('logs_export')}</span>
@@ -243,7 +243,7 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
               <button
                 type="button"
                 onClick={() => void handleClear()}
-                className="min-h-[34px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium text-red-500 inline-flex items-center gap-1.5"
+                className="min-h-[34px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium text-red-500 inline-flex items-center gap-1.5 whitespace-nowrap"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>{t('logs_clear')}</span>

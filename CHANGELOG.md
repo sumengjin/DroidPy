@@ -2,6 +2,23 @@
 
 All notable changes to **DroidPy** are documented in this file.
 
+## [1.2.14] - 2026-11-23
+
+### Fixed (Installed Packages Detection, Cache/Temp Cleanup, Control-Char/Garbled Output, `/shell` 404, Mobile Overflow & Long-Session Performance)
+- **重點修復「已安裝套件為空」顯示與偵測問題**：
+  - `EmbeddedTermuxBridge.kt` `collectInstalledPipNames()` 擴大掃描 `usr/lib/python3.*`、`usr/local/lib/python3.*` 與 `.local/lib/python3.*` 的 `site-packages`/`dist-packages`，並補上 `python -c "import importlib.metadata ..."` 回退驗證；強化 `pip` Wrapper 導出 `PIP_USER=0`、`PIP_BREAK_SYSTEM_PACKAGES=1`、`PIP_NO_CACHE_DIR=1` 與自動清除 `EXTERNALLY-MANAGED`。
+  - `TermuxIntegrationPanel` 與 `ToolsAndPackages`（套件頁籤）不再於清單暫為空或沙盒停用時整塊隱藏，並直接展示原生 Termux `pip` / `pkg` 套件清單與刷新／解除安裝操作。
+- **修復套件安裝失敗後暫存佔用不減小問題＋一鍵清理**：
+  - `EmbeddedTermuxBridge.kt` 與 `MainActivity.kt` 於開機與每次 `pip`/`pkg`/`apt` 指令結束（包含失敗）自動清理 `home/tmp/pip-*`、`.cache/pip`、`usr/tmp_pkg_stage`、`filesDir/usr_tmp`、`apt/archives/*.deb` 與過期更新 APK；新增 `GET /storage/app-usage` 與 `POST /storage/cleanup` 端點及「手機」儲存面板一鍵清理介面。
+  - `savePackageBackupSnapshot()` 僅於偵測到非空套件清單時覆寫備份，避免重整期間空白快照覆蓋既有備份。
+- **修復腳本亂碼（`□`／`\x1b部`／`8;5;129mm`）並隱藏「純淨文字」按鈕**：
+  - `EmbeddedTermuxBridge.kt` `buildEnv()` 強制導出 `PYTHONUTF8=1`、`PYTHONIOENCODING=utf-8`、`LC_ALL=en_US.UTF-8`；`ansiParser.tsx` 與 `stripAnsiForLog()` 全面濾除殘留 ESC、C1 控制碼、`U+FFFD`、雙 `m` SGR 尾端片段。
+  - 隱藏終端機與設定中多餘的「純淨文字」切換按鈕，改為自動潔淨輸出。
+- **修復 `/shell` 404 與重複開機日誌**：
+  - Kotlin 新增原生 `POST /shell` 同步指令端點，`termuxBridge.ts` 補上 `/shell` 404 自動回退 `/shell-stream`，並修正原生 APK WebView 中 SW 重載導致 `DroidPy started` 重複記錄問題。
+- **全面修復手機端 UI 字體與按鈕溢出，並優化長時間運行流暢度**：
+  - 隔離 250ms 終端機即時計時器、`React.memo` 記憶化每筆輸出與 `renderAnsiText`、限制終端機緩衝列數與單筆長度、`requestAnimationFrame` 合併串流更新、`appLogger` 與 `flushNativeStateNow` 去抖寫盤，並將 Android `writePersistedState` 移至背景單執行緒及加入 `onTrimMemory` 緩存釋放。
+
 ## [1.2.13] - 2026-11-23
 
 ### Added & Fixed (Native Python Default, Sandbox Add-on, Clean ANSI Logs, Phone-Default Detection & Upgrade Package Restore)

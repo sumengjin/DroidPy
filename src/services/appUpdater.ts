@@ -117,6 +117,22 @@ function mapGitHubReleases(rawList: RawGitHubRelease[]): AppReleaseInfo[] {
 
 export const BUILTIN_LOCAL_RELEASES: AppReleaseInfo[] = [
   {
+    tagName: 'v1.2.14',
+    version: '1.2.14',
+    name: 'DroidPy v1.2.14',
+    publishedAt: '2026-11-23',
+    htmlUrl: '',
+    prerelease: false,
+    apkAssets: [],
+    body: [
+      '• 修復原生與 Pyodide「已安裝套件為空」顯示異常：補齊 Termux site-packages/dist-packages + importlib.metadata 雙重掃描與 UI 套件面板常駐顯示',
+      '• 徹底修復 pip / pkg 安裝失敗後殘留暫存檔導致儲存空間暴增且不清的問題，新增應用程式暫存用量檢查與「一鍵清理暫存」功能',
+      '• 補強 Kotlin 與前端 ANSI／控制碼濾除並預設導出 PYTHONUTF8=1，根除腳本輸出出現「□」或 8;5;129mm 等亂碼',
+      '• 移除終端機與設定中冗餘的「純淨文字」切換按鈕，改由底層自動呈現潔淨色彩輸出',
+      '• 實作原生 POST /shell 端點與 404 串流自動回退、消除重複開機日誌，全面修正手機窄螢幕字體／按鈕溢出與長時使用卡頓問題',
+    ].join('\n'),
+  },
+  {
     tagName: 'v1.2.13',
     version: '1.2.13',
     name: 'DroidPy v1.2.13',

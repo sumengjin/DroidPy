@@ -21,12 +21,14 @@ export interface AppExecutionLogEntry {
 }
 
 const STORAGE_APP_LOGS_KEY = 'droidpy_exec_logs_v1';
-const MAX_LOG_ENTRIES = 600;
+const MAX_LOG_ENTRIES = 400;
 
 type LogListener = (logs: AppExecutionLogEntry[]) => void;
 
 const listeners = new Set<LogListener>();
 let memoryLogs: AppExecutionLogEntry[] | null = null;
+let persistTimer: number | null = null;
+let lifecycleHooked = false;
 
 function formatTimestamp(): string {
   const now = new Date();
@@ -59,7 +61,7 @@ function loadLogs(): AppExecutionLogEntry[] {
   return memoryLogs;
 }
 
-function persistLogs(logs: AppExecutionLogEntry[]): void {
+function writeLogsToStorageNow(logs: AppExecutionLogEntry[]): void {
   try {
     localStorage.setItem(STORAGE_APP_LOGS_KEY, JSON.stringify(logs));
   } catch {
@@ -72,6 +74,45 @@ function persistLogs(logs: AppExecutionLogEntry[]): void {
       // ignore
     }
   }
+}
+
+export function flushAppLogs(): void {
+  if (persistTimer !== null) {
+    window.clearTimeout(persistTimer);
+    persistTimer = null;
+  }
+  if (memoryLogs !== null) {
+    writeLogsToStorageNow(memoryLogs);
+  }
+}
+
+function ensureLifecycleFlushHook(): void {
+  if (lifecycleHooked || typeof window === 'undefined') return;
+  lifecycleHooked = true;
+  window.addEventListener('pagehide', flushAppLogs);
+  window.addEventListener('beforeunload', flushAppLogs);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      flushAppLogs();
+    }
+  });
+}
+
+function schedulePersistLogs(): void {
+  if (typeof window === 'undefined') {
+    if (memoryLogs) writeLogsToStorageNow(memoryLogs);
+    return;
+  }
+  ensureLifecycleFlushHook();
+  if (persistTimer !== null) {
+    window.clearTimeout(persistTimer);
+  }
+  persistTimer = window.setTimeout(() => {
+    persistTimer = null;
+    if (memoryLogs !== null) {
+      writeLogsToStorageNow(memoryLogs);
+    }
+  }, 1000);
 }
 
 function notifyListeners(): void {
@@ -92,7 +133,7 @@ export function appLog(
 ): void {
   const logs = loadLogs();
   const cleanMsg = stripAnsi(message);
-  const cleanDetail = options?.detail ? stripAnsi(options.detail).slice(0, 1200) : undefined;
+  const cleanDetail = options?.detail ? stripAnsi(options.detail).slice(0, 900) : undefined;
   const entry: AppExecutionLogEntry = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     timestamp: formatTimestamp(),
@@ -103,7 +144,7 @@ export function appLog(
   };
   const next = [...logs, entry];
   memoryLogs = next.length > MAX_LOG_ENTRIES ? next.slice(-MAX_LOG_ENTRIES) : next;
-  persistLogs(memoryLogs);
+  schedulePersistLogs();
   notifyListeners();
 }
 
@@ -112,6 +153,10 @@ export function getAppLogs(): AppExecutionLogEntry[] {
 }
 
 export function clearAppLogs(): void {
+  if (persistTimer !== null && typeof window !== 'undefined') {
+    window.clearTimeout(persistTimer);
+    persistTimer = null;
+  }
   memoryLogs = [];
   try {
     localStorage.removeItem(STORAGE_APP_LOGS_KEY);

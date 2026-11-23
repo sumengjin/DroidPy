@@ -200,7 +200,7 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
         </div>
 
         {/* Segmented Drawer Tabs */}
-        <div className="px-3 py-2 border-b border-[var(--ide-border)] bg-[var(--ide-surface-alt)] shrink-0">
+        <div className="px-2.5 sm:px-3 py-2 border-b border-[var(--ide-border)] bg-[var(--ide-surface-alt)] shrink-0">
           <div className="grid grid-cols-4 gap-1 p-1 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)]">
             {tabs.map(({ id, label, Icon }) => {
               const active = section === id;
@@ -210,7 +210,7 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
                   key={id}
                   type="button"
                   onClick={() => onChangeSection(id)}
-                  className={`relative min-h-[38px] px-2 rounded-lg text-[11px] font-medium flex items-center justify-center gap-1 whitespace-nowrap transition-colors ${
+                  className={`relative min-h-[38px] min-w-0 px-1.5 rounded-lg text-[11px] font-medium flex items-center justify-center gap-1 transition-colors ${
                     active
                       ? 'bg-[var(--ide-accent)] text-white font-semibold shadow-xs'
                       : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'

@@ -1,4 +1,6 @@
 import {
+  AppStorageCleanupResult,
+  AppStorageUsageInfo,
   PackageBackupStatus,
   PythonFile,
   SdcardEntry,
@@ -664,15 +666,34 @@ export async function execTermuxShell(
   config: TermuxConfig,
   command: string
 ): Promise<TermuxExecResult> {
-  return termuxFetch<TermuxExecResult>(
-    config,
-    '/shell',
-    {
-      method: 'POST',
-      body: JSON.stringify({ command }),
-    },
-    185000
-  );
+  try {
+    return await termuxFetch<TermuxExecResult>(
+      config,
+      '/shell',
+      {
+        method: 'POST',
+        body: JSON.stringify({ command }),
+      },
+      185000
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('HTTP 404') || msg.includes('Not found')) {
+      let stdout = '';
+      const res = await streamShellInTermux(config, command, {
+        onChunk: (chunk) => {
+          stdout += chunk;
+        },
+      });
+      return {
+        exitCode: res.exitCode,
+        stdout,
+        stderr: '',
+        durationMs: res.durationMs,
+      };
+    }
+    throw err;
+  }
 }
 
 export async function streamShellInTermux(
@@ -850,6 +871,31 @@ export async function streamRestoreBackedUpPackages(
   callbacks: TermuxStreamCallbacks
 ): Promise<{ exitCode: number; durationMs: number }> {
   return termuxStreamRequest(config, '/backup/restore', {}, callbacks);
+}
+
+export async function getAppStorageUsage(
+  config: TermuxConfig
+): Promise<AppStorageUsageInfo | null> {
+  try {
+    return await termuxFetch<AppStorageUsageInfo>(config, '/storage/app-usage', { method: 'GET' }, 6000);
+  } catch {
+    return null;
+  }
+}
+
+export async function cleanupAppStorage(
+  config: TermuxConfig
+): Promise<AppStorageCleanupResult | null> {
+  try {
+    return await termuxFetch<AppStorageCleanupResult>(
+      config,
+      '/storage/cleanup',
+      { method: 'POST', body: '{}' },
+      15000
+    );
+  } catch {
+    return null;
+  }
 }
 
 export const CORE_TERMUX_PIP_PACKAGES = new Set(['pip', 'setuptools', 'wheel']);

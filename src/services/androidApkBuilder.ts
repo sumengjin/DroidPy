@@ -224,8 +224,8 @@ android {
         minSdk = 24
         // targetSdk = 28 讓內嵌 Termux bootstrap 能在 App 私有目錄自由執行 pkg / python / clang（GitHub 發佈專用）
         targetSdk = 28
-        versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 10213
-        versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.13"
+        versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 10214
+        versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.14"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -402,6 +402,7 @@ class MainActivity : AppCompatActivity() {
     private var appOriginHost: String? = null
     private var lastBackPressedAt: Long = 0L
     private var exitToast: Toast? = null
+    private val stateIoExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
 
     private val mobileUaString =
         "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
@@ -416,9 +417,9 @@ class MainActivity : AppCompatActivity() {
         fun getAppVersionName(): String {
             return try {
                 @Suppress("DEPRECATION")
-                packageManager.getPackageInfo(packageName, 0).versionName ?: "1.2.13"
+                packageManager.getPackageInfo(packageName, 0).versionName ?: "1.2.14"
             } catch (_: Exception) {
-                "1.2.13"
+                "1.2.14"
             }
         }
 
@@ -570,27 +571,29 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun writePersistedState(json: String) {
-            try {
-                val target = File(filesDir, "droidpy_ide_state.json")
-                val tmp = File(filesDir, "droidpy_ide_state.json.tmp")
-                tmp.writeText(json, Charsets.UTF_8)
-                if (!tmp.renameTo(target)) {
-                    target.writeText(json, Charsets.UTF_8)
-                    tmp.delete()
-                }
-            } catch (_: Exception) {
-            }
-            if (hasStoragePermission()) {
+            stateIoExecutor.execute {
                 try {
-                    val backupDir = File(Environment.getExternalStorageDirectory(), "DroidPy/.droidpy_backup").apply { mkdirs() }
-                    val backup = File(backupDir, "droidpy_ide_state.json")
-                    val backupTmp = File(backupDir, "droidpy_ide_state.json.tmp")
-                    backupTmp.writeText(json, Charsets.UTF_8)
-                    if (!backupTmp.renameTo(backup)) {
-                        backup.writeText(json, Charsets.UTF_8)
-                        backupTmp.delete()
+                    val target = File(filesDir, "droidpy_ide_state.json")
+                    val tmp = File(filesDir, "droidpy_ide_state.json.tmp")
+                    tmp.writeText(json, Charsets.UTF_8)
+                    if (!tmp.renameTo(target)) {
+                        target.writeText(json, Charsets.UTF_8)
+                        tmp.delete()
                     }
                 } catch (_: Exception) {
+                }
+                if (hasStoragePermission()) {
+                    try {
+                        val backupDir = File(Environment.getExternalStorageDirectory(), "DroidPy/.droidpy_backup").apply { mkdirs() }
+                        val backup = File(backupDir, "droidpy_ide_state.json")
+                        val backupTmp = File(backupDir, "droidpy_ide_state.json.tmp")
+                        backupTmp.writeText(json, Charsets.UTF_8)
+                        if (!backupTmp.renameTo(backup)) {
+                            backup.writeText(json, Charsets.UTF_8)
+                            backupTmp.delete()
+                        }
+                    } catch (_: Exception) {
+                    }
                 }
             }
         }
@@ -988,6 +991,7 @@ class MainActivity : AppCompatActivity() {
         thread {
             val usrDir = File(filesDir, "usr")
             val workspaceDir = File(filesDir, "droidpy_workspace").apply { mkdirs() }
+            val homeDir = workspaceDir.parentFile!!
             seedDefaultWorkspaceFiles(workspaceDir)
 
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()) {
@@ -997,6 +1001,37 @@ class MainActivity : AppCompatActivity() {
                 } catch (_: Exception) {
                 }
             }
+
+            fun cleanupOrphanedFilesOnStartup() {
+                try {
+                    File(filesDir, "usr_tmp").takeIf { it.exists() }?.deleteRecursively()
+                    File(usrDir, "tmp_pkg_stage").takeIf { it.exists() }?.deleteRecursively()
+                    File(usrDir, "var/cache/apt/archives").listFiles()?.forEach { f ->
+                        if (f.isFile && f.name.endsWith(".deb")) f.delete()
+                        else if (f.isDirectory && f.name == "partial") f.listFiles()?.forEach { it.deleteRecursively() }
+                    }
+                    File(homeDir, "tmp").listFiles()?.forEach { f ->
+                        if (f.name.startsWith("pip-") || f.name.startsWith("pip_build_") || f.name == "pip-cache") {
+                            f.deleteRecursively()
+                        }
+                    }
+                    File(homeDir, ".cache/pip").takeIf { it.exists() }?.deleteRecursively()
+                    val updatesDir = File(filesDir, "updates")
+                    if (updatesDir.isDirectory) {
+                        val apks = updatesDir.listFiles()?.filter { it.isFile && it.name.endsWith(".apk") }
+                            ?.sortedByDescending { it.lastModified() } ?: emptyList()
+                        apks.drop(1).forEach { it.delete() }
+                    }
+                    val lf = File(filesDir, "droidpy_native.log")
+                    if (lf.isFile && lf.length() > 220 * 1024L) {
+                        val kept = lf.readLines(Charsets.UTF_8).takeLast(400)
+                        lf.writeText(kept.joinToString("\\n") + "\\n", Charsets.UTF_8)
+                    }
+                } catch (_: Exception) {
+                }
+            }
+
+            cleanupOrphanedFilesOnStartup()
 
             val bootstrapMarker = File(usrDir, ".droidpy_bootstrap_ok")
             val hasExistingInstall = bootstrapMarker.exists() ||
@@ -1260,8 +1295,25 @@ class MainActivity : AppCompatActivity() {
         super.onPause()
     }
 
+    @Suppress("DEPRECATION")
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= TRIM_MEMORY_MODERATE) {
+            runOnUiThread {
+                try {
+                    webView.clearCache(false)
+                } catch (_: Exception) {
+                }
+            }
+        }
+    }
+
     override fun onDestroy() {
         localBridge?.stop()
+        try {
+            stateIoExecutor.shutdown()
+        } catch (_: Exception) {
+        }
         super.onDestroy()
     }
 }
@@ -1332,10 +1384,10 @@ class EmbeddedTermuxBridge(
                     val nxt = s[i + 1]
                     if (nxt == '[') {
                         i += 2
-                        while (i < n && !(s[i] in '@'..'\u007E')) i++
+                        while (i < n && !(s[i] in '@'..'~')) i++
                         if (i < n) i++
                         continue
-                    } else if (nxt == ']') {
+                    } else if (nxt == ']' || nxt == 'P' || nxt == 'X' || nxt == '^' || nxt == '_') {
                         i += 2
                         while (i < n && s[i] != '\\u0007') {
                             if (s[i] == '\\u001B' && i + 1 < n && s[i + 1] == '\\\\') {
@@ -1346,15 +1398,18 @@ class EmbeddedTermuxBridge(
                         }
                         if (i < n && s[i] == '\\u0007') i++
                         continue
-                    } else if (nxt == '(' || nxt == ')') {
+                    } else if (nxt == '(' || nxt == ')' || nxt == '#') {
                         i = (i + 3).coerceAtMost(n)
                         continue
+                    } else if (nxt in ' '..'~') {
+                        i += 2
+                        continue
                     }
-                    i += 2
+                    i++
                     continue
                 } else if (ch == '\\u009B') {
                     i++
-                    while (i < n && !(s[i] in '@'..'\u007E')) i++
+                    while (i < n && !(s[i] in '@'..'~')) i++
                     if (i < n) i++
                     continue
                 }
@@ -1369,7 +1424,7 @@ class EmbeddedTermuxBridge(
                 }
                 continue
             }
-            if ((ch.code in 0..8) || ch.code in 11..31 || ch.code == 127) {
+            if (ch == '\\uFFFD' || (ch.code in 0..8) || ch.code in 11..31 || ch.code in 127..159) {
                 i++
                 continue
             }
@@ -1377,8 +1432,9 @@ class EmbeddedTermuxBridge(
             i++
         }
         return out.toString()
-            .replace(Regex("\\\\[(?:[0-9]{1,3}(?:;[0-9]{1,3})*)?m"), "")
-            .replace(Regex("^[0-9;]{1,12}m", RegexOption.MULTILINE), "")
+            .replace(Regex("\\\\[(?:[0-9]{1,3}(?:;[0-9]{1,3})*)?m{1,2}"), "")
+            .replace(Regex("(?:^|(?<=[\\\\s\\\\]|:]))(?:[34]?8;[25])?(?:;[0-9]{1,3})+m{1,2}"), "")
+            .replace(Regex("^[0-9;]{1,12}m{1,2}", RegexOption.MULTILINE), "")
     }
 
     private fun appendNativeLog(tag: String, msg: String) {
@@ -1774,6 +1830,15 @@ class EmbeddedTermuxBridge(
             writeText(pkgLines.joinToString("\\n") + "\\n")
             setExecutable(true, false)
         }
+        // Remove PEP 668 EXTERNALLY-MANAGED markers so pip never refuses or splits user installs
+        File(usrDir, "lib").listFiles()?.filter { it.isDirectory && it.name.startsWith("python3.") }?.forEach { pyLib ->
+            try {
+                val em = File(pyLib, "EXTERNALLY-MANAGED")
+                if (em.exists()) em.delete()
+            } catch (_: Exception) {
+            }
+        }
+
         val pipScript = listOf(
             "#!/system/bin/sh",
             "PY_BIN=\\"$prefix/bin/python\\"",
@@ -1789,6 +1854,7 @@ class EmbeddedTermuxBridge(
             "if ! \\"\${d}PY_BIN\\" -m pip --version >/dev/null 2>&1; then",
             "  \\"\${d}PY_BIN\\" -m ensurepip --upgrade >/dev/null 2>&1 || true",
             "fi",
+            "rm -f \\"$prefix/lib/python3.\\"*/EXTERNALLY-MANAGED 2>/dev/null || true",
             "CA_FOUND=\\"\\"",
             "for cf in \\"$prefix/etc/tls/cert.pem\\" \\"$prefix/etc/ssl/cert.pem\\" \\"$prefix/etc/ssl/certs/ca-certificates.crt\\" \\"$prefix/share/ca-certificates/cacert.pem\\"; do",
             "  if [ -r \\"\${d}cf\\" ] && [ -s \\"\${d}cf\\" ]; then",
@@ -1810,7 +1876,7 @@ class EmbeddedTermuxBridge(
             "  unset PIP_CERT SSL_CERT_FILE REQUESTS_CA_BUNDLE CURL_CA_BUNDLE",
             "fi",
             "if [ -d \\"$prefix/etc/tls/certs\\" ]; then export SSL_CERT_DIR=\\"$prefix/etc/tls/certs\\"; else export SSL_CERT_DIR=\\"\${d}HOME/tmp\\"; fi",
-            "export PIP_DISABLE_PIP_VERSION_CHECK=1",
+            "export PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_USER=0 PIP_BREAK_SYSTEM_PACKAGES=1 PIP_NO_CACHE_DIR=1",
             "exec \\"\${d}PY_BIN\\" -m pip \\"\${d}@\\""
         ).joinToString("\\n") + "\\n"
         File(wrapperDir, "pip").apply {
@@ -2030,11 +2096,18 @@ def clipboard_set(text):
             "TEMP" to tmpDir,
             "XDG_CACHE_HOME" to xdgCacheDir,
             "PIP_CACHE_DIR" to pipCacheDir,
+            "PIP_NO_CACHE_DIR" to "1",
+            "PIP_USER" to "0",
+            "PIP_BREAK_SYSTEM_PACKAGES" to "1",
             "PIP_DISABLE_PIP_VERSION_CHECK" to "1",
             "SSL_CERT_DIR" to (if (certDir.isDirectory) certDir.absolutePath else tmpDir),
             "PYTHONUNBUFFERED" to "1",
+            "PYTHONUTF8" to "1",
+            "PYTHONIOENCODING" to "utf-8",
+            "PYTHON_BASIC_REPL" to "1",
             "TERM" to "xterm-256color",
             "LANG" to "en_US.UTF-8",
+            "LC_ALL" to "en_US.UTF-8",
             "APT_CONFIG" to File(usrDir, "etc/apt/apt.conf").absolutePath
         )
         val clangBin = listOf(File(usrDir, "bin/clang"), File(usrDir, "bin/aarch64-linux-android-clang")).firstOrNull { it.exists() }
@@ -2080,63 +2153,191 @@ def clipboard_set(text):
 
     private fun collectInstalledPipNames(): List<String> {
         val pipNames = mutableSetOf<String>()
+        val homeDir = workspaceDir.parentFile!!
+        val libRoots = listOf(
+            File(usrDir, "lib"),
+            File(usrDir, "local/lib"),
+            File(homeDir, ".local/lib")
+        )
         try {
-            File(usrDir, "lib").listFiles()?.filter { it.isDirectory && it.name.startsWith("python3.") }?.forEach { pyLib ->
-                val sp = File(pyLib, "site-packages")
-                if (!sp.isDirectory) return@forEach
-                sp.listFiles()?.filter { it.isDirectory }?.forEach { entry ->
-                    val ename = entry.name
-                    if (ename.startsWith("~")) return@forEach
-                    var parsedName: String? = null
-                    if (ename.endsWith(".dist-info")) {
-                        val meta = File(entry, "METADATA")
-                        if (meta.isFile) {
-                            try {
-                                meta.bufferedReader(Charsets.UTF_8).use { reader ->
-                                    for (i in 0 until 25) {
-                                        val line = reader.readLine() ?: break
-                                        if (line.startsWith("Name:", ignoreCase = true)) {
-                                            parsedName = line.substringAfter(":").trim()
-                                            break
+            libRoots.forEach { libRoot ->
+                libRoot.listFiles()?.filter { it.isDirectory && it.name.startsWith("python3.") }?.forEach { pyLib ->
+                    listOf(File(pyLib, "site-packages"), File(pyLib, "dist-packages"))
+                        .filter { it.isDirectory }
+                        .forEach { sp ->
+                            sp.listFiles()?.filter { it.isDirectory }?.forEach { entry ->
+                                val ename = entry.name
+                                if (ename.startsWith("~")) return@forEach
+                                var parsedName: String? = null
+                                if (ename.endsWith(".dist-info")) {
+                                    val meta = File(entry, "METADATA")
+                                    if (meta.isFile) {
+                                        try {
+                                            meta.bufferedReader(Charsets.UTF_8).use { reader ->
+                                                for (i in 0 until 25) {
+                                                    val line = reader.readLine() ?: break
+                                                    if (line.startsWith("Name:", ignoreCase = true)) {
+                                                        parsedName = line.substringAfter(":").trim()
+                                                        break
+                                                    }
+                                                }
+                                            }
+                                        } catch (_: Exception) {
                                         }
                                     }
-                                }
-                            } catch (_: Exception) {
-                            }
-                        }
-                        if (parsedName.isNullOrBlank()) {
-                            val base = ename.removeSuffix(".dist-info")
-                            parsedName = base.replace(Regex("-[0-9].*$"), "")
-                        }
-                    } else if (ename.endsWith(".egg-info")) {
-                        val pkgInfo = File(entry, "PKG-INFO")
-                        if (pkgInfo.isFile) {
-                            try {
-                                pkgInfo.bufferedReader(Charsets.UTF_8).use { reader ->
-                                    for (i in 0 until 25) {
-                                        val line = reader.readLine() ?: break
-                                        if (line.startsWith("Name:", ignoreCase = true)) {
-                                            parsedName = line.substringAfter(":").trim()
-                                            break
+                                    if (parsedName.isNullOrBlank()) {
+                                        val base = ename.removeSuffix(".dist-info")
+                                        parsedName = base.replace(Regex("-[0-9].*$"), "")
+                                    }
+                                } else if (ename.endsWith(".egg-info")) {
+                                    val pkgInfo = File(entry, "PKG-INFO")
+                                    if (pkgInfo.isFile) {
+                                        try {
+                                            pkgInfo.bufferedReader(Charsets.UTF_8).use { reader ->
+                                                for (i in 0 until 25) {
+                                                    val line = reader.readLine() ?: break
+                                                    if (line.startsWith("Name:", ignoreCase = true)) {
+                                                        parsedName = line.substringAfter(":").trim()
+                                                        break
+                                                    }
+                                                }
+                                            }
+                                        } catch (_: Exception) {
                                         }
                                     }
+                                    if (parsedName.isNullOrBlank()) {
+                                        val base = ename.removeSuffix(".egg-info")
+                                        parsedName = base.replace(Regex("-[0-9].*$"), "")
+                                    }
                                 }
-                            } catch (_: Exception) {
+                                if (!parsedName.isNullOrBlank()) {
+                                    pipNames.add(normalizePipPkgName(parsedName!!))
+                                }
                             }
                         }
-                        if (parsedName.isNullOrBlank()) {
-                            val base = ename.removeSuffix(".egg-info")
-                            parsedName = base.replace(Regex("-[0-9].*$"), "")
-                        }
-                    }
-                    if (!parsedName.isNullOrBlank()) {
-                        pipNames.add(normalizePipPkgName(parsedName!!))
-                    }
                 }
             }
         } catch (_: Exception) {
         }
+
+        val hasNonCoreFromFs = pipNames.any { it !in corePipSet }
+        if (!hasNonCoreFromFs) {
+            val binDir = File(usrDir, "bin")
+            val pyExe = listOf(File(binDir, "python3"), File(binDir, "python")).firstOrNull { it.exists() }
+                ?: binDir.listFiles()?.firstOrNull {
+                    it.name.startsWith("python3.") && !it.name.endsWith("-config") && it.isFile
+                }
+            if (pyExe != null) {
+                var proc: Process? = null
+                try {
+                    pyExe.setExecutable(true, false)
+                    val pb = ProcessBuilder(
+                        pyExe.absolutePath,
+                        "-c",
+                        "import importlib.metadata, json; print(json.dumps([d.metadata.get('Name','') for d in importlib.metadata.distributions()]))"
+                    )
+                    pb.directory(workspaceDir)
+                    pb.redirectErrorStream(true)
+                    pb.environment().putAll(buildEnv())
+                    proc = pb.start()
+                    val finished = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        proc.waitFor(4, java.util.concurrent.TimeUnit.SECONDS)
+                    } else {
+                        proc.waitFor() == 0
+                    }
+                    if (!finished) {
+                        proc.destroyForcibly()
+                    } else {
+                        val txt = proc.inputStream.bufferedReader(Charsets.UTF_8).readText().trim()
+                        val idx = txt.indexOf('[')
+                        if (idx >= 0) {
+                            val arr = JSONArray(txt.substring(idx))
+                            for (i in 0 until arr.length()) {
+                                val raw = arr.optString(i, "").trim()
+                                if (raw.isNotEmpty()) pipNames.add(normalizePipPkgName(raw))
+                            }
+                        }
+                    }
+                } catch (_: Exception) {
+                } finally {
+                    try { proc?.inputStream?.close() } catch (_: Exception) {}
+                    try { proc?.errorStream?.close() } catch (_: Exception) {}
+                    try { proc?.outputStream?.close() } catch (_: Exception) {}
+                }
+            }
+        }
         return pipNames.sorted()
+    }
+
+    private fun calcDirSize(target: File): Long {
+        if (!target.exists()) return 0L
+        if (target.isFile) return target.length()
+        if (java.nio.file.Files.isSymbolicLink(target.toPath())) return 0L
+        var total = 0L
+        target.listFiles()?.forEach { child ->
+            total += calcDirSize(child)
+        }
+        return total
+    }
+
+    private fun collectAppStorageUsage(): JSONObject {
+        val homeDir = workspaceDir.parentFile!!
+        val usrBytes = calcDirSize(usrDir)
+        var tmpBytes = calcDirSize(File(appContext.filesDir, "usr_tmp")) + calcDirSize(File(usrDir, "tmp_pkg_stage"))
+        File(homeDir, "tmp").listFiles()?.forEach { f ->
+            if (f.name.startsWith("pip-") || f.name.startsWith("pip_build_") || f.name == "pip-cache") {
+                tmpBytes += calcDirSize(f)
+            }
+        }
+        val cacheBytes = calcDirSize(File(homeDir, ".cache")) + calcDirSize(File(usrDir, "var/cache/apt/archives"))
+        val workspaceBytes = calcDirSize(workspaceDir)
+        val logBytes = if (nativeLogFile.isFile) nativeLogFile.length() else 0L
+        val apkUpdatesBytes = calcDirSize(File(appContext.filesDir, "updates"))
+        val reclaimableBytes = tmpBytes + cacheBytes + apkUpdatesBytes
+        return JSONObject()
+            .put("ok", true)
+            .put("usrBytes", usrBytes)
+            .put("tmpBytes", tmpBytes)
+            .put("cacheBytes", cacheBytes)
+            .put("workspaceBytes", workspaceBytes)
+            .put("logBytes", logBytes)
+            .put("apkUpdatesBytes", apkUpdatesBytes)
+            .put("reclaimableBytes", reclaimableBytes)
+    }
+
+    private fun pruneStaleCacheAndTemp(clearAptLists: Boolean = false): Long {
+        val before = collectAppStorageUsage().optLong("reclaimableBytes", 0L)
+        val homeDir = workspaceDir.parentFile!!
+        try {
+            File(appContext.filesDir, "usr_tmp").takeIf { it.exists() }?.deleteRecursively()
+            File(usrDir, "tmp_pkg_stage").takeIf { it.exists() }?.deleteRecursively()
+            File(homeDir, "tmp").listFiles()?.forEach { f ->
+                if (f.name.startsWith("pip-") || f.name.startsWith("pip_build_") || f.name == "pip-cache") {
+                    f.deleteRecursively()
+                }
+            }
+            File(homeDir, ".cache/pip").takeIf { it.exists() }?.deleteRecursively()
+            File(usrDir, "var/cache/apt/archives").listFiles()?.forEach { f ->
+                if (f.isFile && f.name.endsWith(".deb")) f.delete()
+                else if (f.isDirectory && f.name == "partial") f.listFiles()?.forEach { it.deleteRecursively() }
+            }
+            val updatesDir = File(appContext.filesDir, "updates")
+            if (updatesDir.isDirectory) {
+                val apks = updatesDir.listFiles()?.filter { it.isFile && it.name.endsWith(".apk") }
+                    ?.sortedByDescending { it.lastModified() } ?: emptyList()
+                val dropCount = if (clearAptLists) 0 else 1
+                apks.drop(dropCount).forEach { it.delete() }
+            }
+            if (clearAptLists) {
+                File(usrDir, "var/lib/apt/lists").listFiles()?.forEach { f ->
+                    if (f.isFile) f.delete()
+                    else if (f.isDirectory && f.name == "partial") f.listFiles()?.forEach { it.deleteRecursively() }
+                }
+            }
+        } catch (_: Exception) {
+        }
+        val after = collectAppStorageUsage().optLong("reclaimableBytes", 0L)
+        return (before - after).coerceAtLeast(0L)
     }
 
     private fun collectInstalledPkgNames(): List<String> {
@@ -2168,10 +2369,14 @@ def clipboard_set(text):
             if (userPip.isEmpty() && existing != null && (existing.optJSONArray("pipPackages")?.length() ?: 0) > 0) {
                 return
             }
+            val mergedPkg = if (userPkg.isEmpty() && existing != null && (existing.optJSONArray("pkgPackages")?.length() ?: 0) > 0) {
+                val prevArr = existing.optJSONArray("pkgPackages")!!
+                (0 until prevArr.length()).mapNotNull { prevArr.optString(it, "").takeIf { s -> s.isNotBlank() } }
+            } else userPkg
             val manifest = JSONObject()
                 .put("updatedAt", System.currentTimeMillis())
                 .put("pipPackages", JSONArray(userPip))
-                .put("pkgPackages", JSONArray(userPkg))
+                .put("pkgPackages", JSONArray(mergedPkg))
             val text = manifest.toString()
             manifestFile.writeText(text, Charsets.UTF_8)
             if (hasStorageAccess()) {
@@ -2252,6 +2457,7 @@ def clipboard_set(text):
                 "/logs/clear",
                 "/stdin",
                 "/stop",
+                "/shell",
                 "/run-stream",
                 "/install-stream",
                 "/shell-stream",
@@ -2260,6 +2466,8 @@ def clipboard_set(text):
                 "/droid-action",
                 "/backup/status",
                 "/backup/restore",
+                "/storage/app-usage",
+                "/storage/cleanup",
                 "/sdcard/status",
                 "/sdcard/list",
                 "/sdcard/read",
@@ -2414,13 +2622,18 @@ def clipboard_set(text):
                     } catch (_: Exception) {
                     }
                     val logcatLines = JSONArray()
+                    var logcatProc: Process? = null
                     try {
                         val pid = android.os.Process.myPid()
-                        val p = ProcessBuilder("logcat", "-d", "-t", "80", "--pid=$pid").redirectErrorStream(true).start()
-                        val txt = p.inputStream.bufferedReader(Charsets.UTF_8).readText()
-                        p.waitFor()
-                        txt.lines().filter { it.isNotBlank() }.takeLast(80).forEach { logcatLines.put(it) }
+                        logcatProc = ProcessBuilder("logcat", "-d", "-t", "80", "--pid=$pid").redirectErrorStream(true).start()
+                        val txt = logcatProc.inputStream.bufferedReader(Charsets.UTF_8).readText()
+                        logcatProc.waitFor()
+                        txt.lines().filter { it.isNotBlank() }.takeLast(80).forEach { logcatLines.put(stripAnsiForLog(it)) }
                     } catch (_: Exception) {
+                    } finally {
+                        try { logcatProc?.inputStream?.close() } catch (_: Exception) {}
+                        try { logcatProc?.errorStream?.close() } catch (_: Exception) {}
+                        try { logcatProc?.outputStream?.close() } catch (_: Exception) {}
                     }
                     writeJson(
                         out,
@@ -2676,6 +2889,33 @@ def clipboard_set(text):
                     }
                 }
 
+                method == "GET" && path == "/storage/app-usage" -> {
+                    writeJson(out, 200, collectAppStorageUsage())
+                }
+
+                method == "POST" && path == "/storage/cleanup" -> {
+                    val freed = pruneStaleCacheAndTemp(clearAptLists = true)
+                    appendNativeLog("Storage", "Cleaned stale temp/cache, freed=\${freed}B")
+                    writeJson(
+                        out,
+                        200,
+                        JSONObject()
+                            .put("ok", true)
+                            .put("freedBytes", freed)
+                            .put("usageAfter", collectAppStorageUsage())
+                    )
+                }
+
+                method == "POST" && path == "/shell" -> {
+                    val cmd = bodyJson.optString("command", "").trim()
+                    if (cmd.isEmpty()) {
+                        writeJson(out, 400, JSONObject().put("error", "Missing command"))
+                    } else {
+                        val res = runBufferedShellCommand(cmd)
+                        writeJson(out, 200, res)
+                    }
+                }
+
                 method == "POST" && (path == "/run-stream" || path == "/install-stream" || path == "/shell-stream") -> {
                     val shellCmd = when (path) {
                         "/run-stream" -> {
@@ -2697,7 +2937,7 @@ def clipboard_set(text):
                         "/install-stream" -> {
                             val mode = bodyJson.optString("mode", "pip")
                             val target = bodyJson.optString("target", "").trim()
-                            if (mode == "pkg") "pkg install -y $target" else "pip install $target"
+                            if (mode == "pkg") "pkg install -y $target" else "pip install --no-cache-dir $target"
                         }
                         else -> bodyJson.optString("command", "")
                     }
@@ -2796,9 +3036,55 @@ def clipboard_set(text):
         }
     }
 
+    private fun runBufferedShellCommand(command: String): JSONObject {
+        val t0 = System.currentTimeMillis()
+        val shFile = File(usrDir, "bin/sh")
+        var code = 1
+        var stdoutText = ""
+        val isPkgOrPip = command.contains("pip") || command.contains("pkg") || command.contains("apt")
+        if (!shFile.exists()) {
+            stdoutText = "[DroidPy] Bootstrap sh not ready"
+        } else {
+            var proc: Process? = null
+            try {
+                val pb = ProcessBuilder(shFile.absolutePath, "-c", command)
+                pb.directory(workspaceDir)
+                pb.redirectErrorStream(true)
+                pb.environment().putAll(buildEnv())
+                proc = pb.start()
+                stdoutText = proc.inputStream.bufferedReader(Charsets.UTF_8).readText()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val done = proc.waitFor(120, java.util.concurrent.TimeUnit.SECONDS)
+                    code = if (done) proc.exitValue() else 124
+                    if (!done) proc.destroyForcibly()
+                } else {
+                    code = proc.waitFor()
+                }
+            } catch (e: Exception) {
+                stdoutText = e.message ?: "Shell execution error"
+            } finally {
+                try { proc?.inputStream?.close() } catch (_: Exception) {}
+                try { proc?.errorStream?.close() } catch (_: Exception) {}
+                try { proc?.outputStream?.close() } catch (_: Exception) {}
+                if (isPkgOrPip) {
+                    pruneStaleCacheAndTemp(clearAptLists = false)
+                }
+            }
+        }
+        if (code == 0 && isPkgOrPip) {
+            savePackageBackupSnapshot()
+        }
+        return JSONObject()
+            .put("exitCode", code)
+            .put("stdout", stripAnsiForLog(stdoutText))
+            .put("stderr", "")
+            .put("durationMs", System.currentTimeMillis() - t0)
+    }
+
     private fun streamShellCommand(out: OutputStream, command: String) {
         val t0 = System.currentTimeMillis()
         val shFile = File(usrDir, "bin/sh")
+        val isPkgOrPip = command.contains("pip") || command.contains("pkg") || command.contains("apt")
         appendNativeLog("Exec", "Stream shell start: \${command.take(180)}")
 
         out.write((
@@ -2846,13 +3132,14 @@ def clipboard_set(text):
             } catch (_: Exception) {
             }
         } else {
+            var proc: Process? = null
             try {
                 val pb = ProcessBuilder(shFile.absolutePath, "-c", command)
                 pb.directory(workspaceDir)
                 pb.redirectErrorStream(true)
                 pb.environment().putAll(buildEnv())
 
-                val proc = pb.start()
+                proc = pb.start()
                 activeProcess = proc
                 val charBuf = CharArray(1024)
                 val inpReader = InputStreamReader(proc.inputStream, Charsets.UTF_8)
@@ -2879,13 +3166,19 @@ def clipboard_set(text):
                 } catch (_: Exception) {
                 }
             } finally {
+                try { proc?.inputStream?.close() } catch (_: Exception) {}
+                try { proc?.errorStream?.close() } catch (_: Exception) {}
+                try { proc?.outputStream?.close() } catch (_: Exception) {}
                 activeProcess = null
+                if (isPkgOrPip) {
+                    pruneStaleCacheAndTemp(clearAptLists = false)
+                }
             }
         }
 
         val elapsed = System.currentTimeMillis() - t0
         appendNativeLog("Exec", "Stream shell finished: exitCode=$code, durationMs=$elapsed")
-        if (code == 0 && (command.contains("pip") || command.contains("pkg") || command.contains("apt"))) {
+        if (code == 0 && isPkgOrPip) {
             savePackageBackupSnapshot()
         }
         if (code != 0 && outputTail.isNotBlank()) {
@@ -3026,6 +3319,12 @@ def clipboard_set(text):
 `;
 
   const changelogContent = `# Changelog / 更新日誌
+
+## [1.2.14] - 2026-11-23
+- **修復「已安裝套件為空」、安裝失敗暫存清理、亂碼淨化、\`/shell\` 404 與長時使用卡頓**：
+  - \`EmbeddedTermuxBridge.kt\` 擴大掃描 \`site-packages\`／\`dist-packages\` 並補上 \`importlib.metadata\` 回退驗證、移除 \`EXTERNALLY-MANAGED\`、導出 \`PIP_USER=0\`／\`PIP_NO_CACHE_DIR=1\` 與 \`PYTHONUTF8=1\`。
+  - 開機與每次 \`pip\`／\`pkg\` 結束自動清理 \`tmp/pip-*\`、\`.cache/pip\`、\`tmp_pkg_stage\` 與 \`.deb\` 暫存，新增 \`GET /storage/app-usage\`、\`POST /storage/cleanup\` 與 \`POST /shell\`。
+  - 強化 ANSI 與控制字元淨化、隱藏「純淨文字」按鈕，並最佳化手機介面不溢出與長時運行流暢度。
 
 ## [1.2.13] - 2026-11-23
 - **原生 Python 直譯器預設、沙盒轉為附加功能、ANSI 純淨文字與跨環境路徑／重裝還原修復**：

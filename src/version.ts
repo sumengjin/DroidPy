@@ -1,5 +1,5 @@
-export const APP_VERSION = '1.2.13';
-export const APP_VERSION_CODE = 10213;
+export const APP_VERSION = '1.2.14';
+export const APP_VERSION_CODE = 10214;
 
 export const STORAGE_GITHUB_REPO_KEY = 'droidpy_github_repo_v1';
 export const STORAGE_AUTO_UPDATE_PKGS_KEY = 'droidpy_auto_update_pkgs_v1';

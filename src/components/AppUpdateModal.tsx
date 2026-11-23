@@ -137,13 +137,13 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
             <label className="block text-xs font-medium text-[var(--ide-text-muted)]">
               {t('upd_repo_label')}
             </label>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
               <input
                 type="text"
                 value={repoInput}
                 onChange={(e) => setRepoInput(e.target.value)}
                 placeholder="owner/DroidPy"
-                className="flex-1 min-w-0 min-h-[42px] px-3.5 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
+                className="flex-1 min-w-[160px] min-h-[42px] px-3.5 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
               />
               <button
                 type="submit"
@@ -173,8 +173,8 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
           {/* Download Progress Bar */}
           {dlState && (
             <div className="rounded-2xl border border-[var(--ide-accent)]/40 bg-[var(--ide-accent-soft)] p-4 space-y-2">
-              <div className="flex items-center justify-between text-xs font-semibold text-[var(--ide-accent-text)]">
-                <span className="truncate">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-[var(--ide-accent-text)]">
+                <span className="truncate min-w-0">
                   {dlState.status === 'installing'
                     ? t('upd_dl_installing')
                     : dlState.status === 'error'
@@ -203,13 +203,13 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
           {/* New Version Available Card + Changelog */}
           {hasUpdate && latest ? (
             <div className="rounded-2xl border border-[var(--ide-accent)] bg-[var(--ide-accent-soft)]/60 p-4 space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
                   <div className="inline-flex items-center gap-1.5 text-xs font-bold text-[var(--ide-accent-text)]">
                     <Sparkles className="w-4 h-4 shrink-0" />
                     <span>{t('upd_found_title', { ver: latest.version })}</span>
                   </div>
-                  <div className="text-[11px] text-[var(--ide-text-muted)] mt-0.5 tabular-nums">
+                  <div className="text-[11px] text-[var(--ide-text-muted)] mt-0.5 tabular-nums break-words">
                     {latest.publishedAt ? latest.publishedAt.slice(0, 10) : ''}
                     {primaryApk ? ` · ${primaryApk.name} (${formatStorageBytes(primaryApk.size)})` : ''}
                   </div>
