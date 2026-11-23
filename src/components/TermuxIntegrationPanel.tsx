@@ -56,7 +56,7 @@ interface TermuxIntegrationPanelProps {
   onTestConnection: () => Promise<void>;
   onInstallInTermux: (mode: 'pip' | 'pkg', target: string) => Promise<void>;
   onRunInTermux: () => Promise<void>;
-  onRunShellInTermux: (cmd: string) => Promise<void>;
+  onRunShellInTermux: (cmd: string) => Promise<boolean | void>;
   onInitializeEmbeddedEnv: (includeBaseSystem: boolean) => Promise<void>;
   onUpgradeAllTermux?: (kind: 'pip' | 'pkg') => Promise<void>;
   onUpgradeSinglePip?: (pkg: string) => Promise<void>;

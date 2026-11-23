@@ -13,6 +13,7 @@ interface PyodideInterface {
   FS: {
     writeFile: (path: string, data: string, opts?: { encoding: string }) => void;
     mkdirTree: (path: string) => void;
+    unlink?: (path: string) => void;
   };
   globals: {
     get: (name: string) => unknown;
@@ -48,6 +49,7 @@ export interface RuntimeCallbacks {
 let pyodideInstance: PyodideInterface | null = null;
 let initPromise: Promise<PyodideInterface> | null = null;
 let micropipLoaded = false;
+const syncedWorkspaceFiles = new Set<string>();
 
 let activeCallbacks: RuntimeCallbacks | null = null;
 
@@ -398,15 +400,38 @@ export async function initPyodide(callbacks: RuntimeCallbacks): Promise<PyodideI
 
 export function syncFilesToFS(py: PyodideInterface, files: PythonFile[]) {
   py.FS.mkdirTree('/home/pyodide');
+  const nextNames = new Set<string>();
   const moduleNames: string[] = [];
+
   for (const file of files) {
     const cleanName = file.name.replace(/^\/+/, '');
+    if (!cleanName) continue;
+    nextNames.add(cleanName);
     py.FS.writeFile(`/home/pyodide/${cleanName}`, file.content, { encoding: 'utf8' });
     if (cleanName.endsWith('.py')) {
       moduleNames.push(cleanName.slice(0, -3));
     }
   }
-  // Invalidate cached user modules in sys.modules so edits apply immediately
+
+  // Remove files deleted or renamed since the previous sync (never touch bundled droid.py)
+  for (const prevName of Array.from(syncedWorkspaceFiles)) {
+    if (!nextNames.has(prevName) && prevName !== 'droid.py') {
+      try {
+        py.FS.unlink?.(`/home/pyodide/${prevName}`);
+      } catch {
+        // ignore if already absent
+      }
+      if (prevName.endsWith('.py')) {
+        moduleNames.push(prevName.slice(0, -3));
+      }
+      syncedWorkspaceFiles.delete(prevName);
+    }
+  }
+  for (const name of nextNames) {
+    syncedWorkspaceFiles.add(name);
+  }
+
+  // Invalidate cached user modules in sys.modules so edits/deletions apply immediately
   py.globals.set('__droidpy_user_mods__', moduleNames);
   py.runPython(`
 import sys
@@ -517,6 +542,26 @@ export async function executeReplLine(
       }
       try {
         await installPyPackage(pkg, callbacks);
+      } catch (err) {
+        callbacks.onStderr(err instanceof Error ? err.message : String(err));
+      }
+    }
+    return null;
+  }
+
+  if (/^pip\s+uninstall\b/i.test(normalizedCmd)) {
+    const tokens = normalizedCmd
+      .replace(/^pip\s+uninstall\b/i, '')
+      .trim()
+      .split(/\s+/)
+      .filter((t) => t && !t.startsWith('-'));
+    if (tokens.length === 0) {
+      callbacks.onStderr('請指定要解除安裝的套件名稱，例如：pip uninstall sympy');
+      return null;
+    }
+    for (const pkg of tokens) {
+      try {
+        await uninstallPyPackage(pkg, callbacks);
       } catch (err) {
         callbacks.onStderr(err instanceof Error ? err.message : String(err));
       }

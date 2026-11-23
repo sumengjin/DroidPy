@@ -24,6 +24,7 @@ interface TerminalPanelProps {
   onStopTermux?: () => Promise<void>;
   onOpenLogs?: () => void;
   enableSandboxAddon?: boolean;
+  isDark?: boolean;
   onClear: () => void;
 }
 
@@ -50,17 +51,18 @@ interface TerminalEntryRowProps {
   plotTitle: string;
   plotZoomLabel: string;
   errTitle: string;
+  isDark?: boolean;
   onExpandPlot: (url: string) => void;
 }
 
 const TerminalEntryRow = React.memo<TerminalEntryRowProps>(
-  ({ entry, plotTitle, plotZoomLabel, errTitle, onExpandPlot }) => {
+  ({ entry, plotTitle, plotZoomLabel, errTitle, isDark, onExpandPlot }) => {
     const renderedAnsi = useMemo(() => {
       if (entry.type === 'plot' || entry.type === 'system' || entry.type === 'repl-in') {
         return null;
       }
-      return renderAnsiText(entry.content);
-    }, [entry.type, entry.content]);
+      return renderAnsiText(entry.content, false, isDark);
+    }, [entry.type, entry.content, isDark]);
 
     const cleanSystemText = useMemo(() => {
       if (entry.type !== 'system') return '';
@@ -175,6 +177,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   onStopTermux,
   onOpenLogs,
   enableSandboxAddon = false,
+  isDark,
   onClear,
 }) => {
   const { t } = useI18n();
@@ -413,12 +416,13 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           </div>
         ) : (
           entries.map((entry) => (
-            <TerminalEntryRow
+              <TerminalEntryRow
               key={entry.id}
               entry={entry}
               plotTitle={t('term_plot_title')}
               plotZoomLabel={t('term_plot_zoom')}
               errTitle={t('term_err_title')}
+              isDark={isDark}
               onExpandPlot={setExpandedPlot}
             />
           ))

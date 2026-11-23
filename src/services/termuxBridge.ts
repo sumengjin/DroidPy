@@ -9,6 +9,7 @@ import {
   TermuxHealthInfo,
   UrlProbeResult,
 } from '../types/ide';
+import { stripAnsi } from '../utils/ansiParser';
 
 export const DEFAULT_TERMUX_CONFIG: TermuxConfig = {
   endpointUrl: 'http://127.0.0.1:8765',
@@ -924,7 +925,7 @@ export interface TermuxOutdatedPipItem {
 }
 
 export function parseOutdatedPipJson(rawOutput: string): TermuxOutdatedPipItem[] {
-  const cleaned = rawOutput.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').trim();
+  const cleaned = stripAnsi(rawOutput).trim();
   const startIdx = cleaned.indexOf('[');
   const endIdx = cleaned.lastIndexOf(']');
   if (startIdx === -1 || endIdx <= startIdx) return [];

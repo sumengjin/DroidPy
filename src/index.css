@@ -5,7 +5,7 @@
   :root,
   html[data-theme="light"] {
     --font-sans: "Plus Jakarta Sans", "Noto Sans TC", -apple-system, BlinkMacSystemFont, sans-serif;
-    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Noto Sans TC", sans-serif;
 
     --ide-bg: #F8FAFC;
     --ide-surface: #FFFFFF;

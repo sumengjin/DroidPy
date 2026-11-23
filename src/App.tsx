@@ -230,13 +230,19 @@ function sanitizeFileName(raw: string): string {
 }
 
 function mergeTerminalChunk(prev: string, chunk: string): string {
-  const normalized = chunk.replace(/\r\n/g, '\n');
+  const normalized = chunk
+    .replace(/\r\n/g, '\n')
+    .replace(/(?:\x1b\[|\x9b)2K/g, '\r')
+    .replace(/(?:\x1b\[|\x9b)[01]?K/g, '');
   let out = prev;
   for (let i = 0; i < normalized.length; i++) {
     const ch = normalized[i];
     if (ch === '\r') {
-      const lastNl = out.lastIndexOf('\n');
-      out = lastNl === -1 ? '' : out.slice(0, lastNl + 1);
+      const nextCh = normalized[i + 1];
+      if (nextCh !== undefined && nextCh !== '\n' && nextCh !== '\r') {
+        const lastNl = out.lastIndexOf('\n');
+        out = lastNl === -1 ? '' : out.slice(0, lastNl + 1);
+      }
     } else {
       out += ch;
     }
@@ -1368,10 +1374,10 @@ export default function App() {
   );
 
   const handleRunShellInTermux = useCallback(
-    async (command: string) => {
+    async (command: string): Promise<boolean> => {
       if (termuxRunning) {
         showToast(t('cta_running'));
-        return;
+        return false;
       }
       focusOutputPane('terminal');
       setTermuxRunning(true);
@@ -1382,6 +1388,7 @@ export default function App() {
       const streamId = makeId();
       let tailBuf = '';
       const tailAnsiBuf = createAnsiStreamBuffer();
+      let succeeded = false;
       try {
         const res = await streamShellInTermux(termuxConfig, command, {
           onChunk: (chunk) => {
@@ -1406,6 +1413,7 @@ export default function App() {
             detail: tailBuf.trim() ? `${command}\n\n${tailBuf.trim()}` : command,
           });
         } else {
+          succeeded = true;
           appLog('termux', `Shell finished (${formatDurationHMS(res.durationMs)})`);
         }
       } catch (err) {
@@ -1431,6 +1439,7 @@ export default function App() {
         setRunStartedAt(null);
         setTermuxRunning(false);
       }
+      return succeeded;
     },
     [termuxConfig, termuxRunning, focusOutputPane, appendEntry, appendStreamChunk, flushStreamChunk, refreshBackupStatus, showToast, t]
   );
@@ -1766,6 +1775,29 @@ export default function App() {
           } catch {
             // ignore refresh errors
           }
+        } else if (/^[!%]?\s*pip\s+uninstall\b/i.test(statement.trim())) {
+          const tokens = statement
+            .trim()
+            .replace(/^[!%]?\s*pip\s+uninstall\s+/i, '')
+            .split(/\s+/)
+            .filter((tok) => tok && !tok.startsWith('-'))
+            .map((tok) => normalizePyPkgName(tok.split(/[=<>!~]/)[0].trim()))
+            .filter(Boolean);
+          if (tokens.length > 0) {
+            const removed = new Set(tokens);
+            setSandboxPackages((prev) =>
+              prev.filter((p) => !removed.has(normalizePyPkgName(p)))
+            );
+            setOutdatedPyPackages((prev) =>
+              prev.filter((p) => !removed.has(normalizePyPkgName(p.name)))
+            );
+          }
+          try {
+            const list = await listPyPackages(callbacksRef.current);
+            setInstalledPackages(list);
+          } catch {
+            // ignore refresh errors
+          }
         }
       } finally {
         setRunStartedAt(null);
@@ -1813,7 +1845,9 @@ export default function App() {
 
   const handleDeleteFile = useCallback(
     (id: string) => {
+      if (filesRef.current.length <= 1) return;
       setFiles((prev) => {
+        if (prev.length <= 1) return prev;
         const filtered = prev.filter((f) => f.id !== id);
         if (filtered.length > 0 && activeFileId === id) {
           setActiveFileId(filtered[0].id);
@@ -2148,9 +2182,11 @@ export default function App() {
             showToast(t('pkg_up_to_date'));
             return;
           }
-          await handleRunShellInTermux(buildTermuxPipUpgradeCommand(outdatedTargets));
-          setOutdatedTermuxPips([]);
-          showToast(t('pkg_upgraded_toast', { count: outdatedTargets.length }));
+          const ok = await handleRunShellInTermux(buildTermuxPipUpgradeCommand(outdatedTargets));
+          if (ok) {
+            setOutdatedTermuxPips([]);
+            showToast(t('pkg_upgraded_toast', { count: outdatedTargets.length }));
+          }
           return;
         }
         await handleRunShellInTermux(buildTermuxAptUpgradeCommand());
@@ -2171,11 +2207,13 @@ export default function App() {
       if (!clean) return;
       setUpgradingTermux(true);
       try {
-        await handleRunShellInTermux(`pip install --upgrade ${clean}`);
-        const normClean = normalizeTermuxPkgName(clean);
-        setOutdatedTermuxPips((prev) =>
-          prev.filter((item) => normalizeTermuxPkgName(item.name) !== normClean)
-        );
+        const ok = await handleRunShellInTermux(`pip install --upgrade ${clean}`);
+        if (ok) {
+          const normClean = normalizeTermuxPkgName(clean);
+          setOutdatedTermuxPips((prev) =>
+            prev.filter((item) => normalizeTermuxPkgName(item.name) !== normClean)
+          );
+        }
       } finally {
         setUpgradingTermux(false);
       }
@@ -2242,11 +2280,15 @@ export default function App() {
         const cmds: string[] = [];
         if (pipTargets.length > 0) {
           cmds.push(buildTermuxPipUpgradeCommand(pipTargets));
-          upgradedCount += pipTargets.length;
         }
         cmds.push(buildTermuxAptUpgradeCommand());
-        await handleRunShellInTermux(cmds.join(' && '));
-        setOutdatedTermuxPips([]);
+        const ok = await handleRunShellInTermux(cmds.join(' && '));
+        if (ok) {
+          if (pipTargets.length > 0) {
+            upgradedCount += pipTargets.length;
+          }
+          setOutdatedTermuxPips([]);
+        }
       } finally {
         setUpgradingTermux(false);
       }
@@ -3007,6 +3049,7 @@ export default function App() {
                         onStopTermux={handleStopTermux}
                         onOpenLogs={() => setShowLogsModal(true)}
                         enableSandboxAddon={Boolean(settings.enableSandboxAddon)}
+                        isDark={getThemeMeta(settings.theme).isDark}
                         onClear={handleClearTerminal}
                       />
                     </div>
@@ -3266,6 +3309,7 @@ export default function App() {
                       onStopTermux={handleStopTermux}
                       onOpenLogs={() => setShowLogsModal(true)}
                       enableSandboxAddon={Boolean(settings.enableSandboxAddon)}
+                      isDark={getThemeMeta(settings.theme).isDark}
                       onClear={handleClearTerminal}
                     />
                   </div>
@@ -3471,6 +3515,7 @@ export default function App() {
                   onStopTermux={handleStopTermux}
                   onOpenLogs={() => setShowLogsModal(true)}
                   enableSandboxAddon={Boolean(settings.enableSandboxAddon)}
+                  isDark={getThemeMeta(settings.theme).isDark}
                   onClear={handleClearTerminal}
                 />
               </div>

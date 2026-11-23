@@ -63,7 +63,7 @@ interface NegativeScreenDrawerProps {
   onTestTermuxConnection: () => Promise<void>;
   onInstallInTermux: (mode: 'pip' | 'pkg', target: string) => Promise<void>;
   onRunInTermux: () => Promise<void>;
-  onRunShellInTermux: (cmd: string) => Promise<void>;
+  onRunShellInTermux: (cmd: string) => Promise<boolean | void>;
   onInitializeEmbeddedEnv: (includeBaseSystem: boolean) => Promise<void>;
   onGenerateRequirements: () => void;
   onInstallRequirements: () => Promise<void>;

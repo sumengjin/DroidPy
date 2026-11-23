@@ -1247,6 +1247,40 @@ class MainActivity : AppCompatActivity() {
             File(usrDir, "libexec"),
             File(usrDir, "share")
         ).forEach { healSymlinksRecursive(it, 0) }
+        val libDir = File(usrDir, "lib")
+        val prefix = usrDir.absolutePath
+        libDir.listFiles()?.filter { it.isDirectory && it.name.startsWith("python3.") }?.forEach { pyLib ->
+            pyLib.listFiles()?.forEach { f ->
+                try {
+                    if (f.isFile && f.name.startsWith("_sysconfigdata") && f.name.endsWith(".py")) {
+                        val txt = f.readText(Charsets.UTF_8)
+                        if (txt.contains(legacyPrefix)) {
+                            f.writeText(txt.replace(legacyPrefix, prefix), Charsets.UTF_8)
+                        }
+                    } else if (f.isDirectory && f.name.startsWith("config-")) {
+                        val mk = File(f, "Makefile")
+                        if (mk.isFile) {
+                            val txt = mk.readText(Charsets.UTF_8)
+                            if (txt.contains(legacyPrefix)) {
+                                mk.writeText(txt.replace(legacyPrefix, prefix), Charsets.UTF_8)
+                            }
+                        }
+                    }
+                } catch (_: Exception) {
+                }
+            }
+        }
+        File(libDir, "pkgconfig").listFiles()?.forEach { pc ->
+            if (pc.isFile && pc.name.endsWith(".pc")) {
+                try {
+                    val txt = pc.readText(Charsets.UTF_8)
+                    if (txt.contains(legacyPrefix)) {
+                        pc.writeText(txt.replace(legacyPrefix, prefix), Charsets.UTF_8)
+                    }
+                } catch (_: Exception) {
+                }
+            }
+        }
         val pyCand = binDir.listFiles()?.firstOrNull {
             it.name.startsWith("python3.") && !it.name.endsWith("-config") && it.isFile
         }
@@ -1348,6 +1382,7 @@ import java.io.InputStreamReader
 import java.io.OutputStream
 import java.net.HttpURLConnection
 import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.URL
@@ -1432,9 +1467,9 @@ class EmbeddedTermuxBridge(
             i++
         }
         return out.toString()
-            .replace(Regex("\\\\[(?:[0-9]{1,3}(?:;[0-9]{1,3})*)?m{1,2}"), "")
-            .replace(Regex("(?:^|(?<=[\\\\s\\\\]|:]))(?:[34]?8;[25])?(?:;[0-9]{1,3})+m{1,2}"), "")
-            .replace(Regex("^[0-9;]{1,12}m{1,2}", RegexOption.MULTILINE), "")
+            .replace(Regex("\\\\[(?:[0-9]{0,3}(?:[;:][0-9]{0,3})*)?m{1,2}"), "")
+            .replace(Regex("(?:^|(?<=[\\\\s\\\\]|:;]))(?:[34]?8[;:][25])?(?:[;:][0-9]{0,3})+m{1,2}"), "")
+            .replace(Regex("^[0-9;:]{1,16}m{1,2}", RegexOption.MULTILINE), "")
     }
 
     private fun appendNativeLog(tag: String, msg: String) {
@@ -1459,7 +1494,10 @@ class EmbeddedTermuxBridge(
     fun start() {
         if (running) return
         running = true
-        serverSocket = ServerSocket(port, 32, InetAddress.getByName("127.0.0.1"))
+        serverSocket = ServerSocket().apply {
+            reuseAddress = true
+            bind(InetSocketAddress(InetAddress.getByName("127.0.0.1"), port), 32)
+        }
         appendNativeLog("Bridge", "EmbeddedTermuxBridge started on 127.0.0.1:$port (usr=\${usrDir.absolutePath})")
         executor.execute {
             while (running) {
@@ -1885,6 +1923,26 @@ class EmbeddedTermuxBridge(
         }
         File(wrapperDir, "pip3").apply {
             writeText(pipScript)
+            setExecutable(true, false)
+        }
+
+        // Override GNU make's hardcoded /data/data/com.termux/files/usr/bin/sh default SHELL
+        val makeWrapper = listOf(
+            "#!/system/bin/sh",
+            "PREFIX=\\"$prefix\\"",
+            "MAKE_SH=\\"\${d}PREFIX/bin/sh\\"",
+            "[ -x \\"\${d}MAKE_SH\\" ] || MAKE_SH=\\"\${d}PREFIX/bin/dash\\"",
+            "[ -x \\"\${d}MAKE_SH\\" ] || MAKE_SH=\\"\${d}PREFIX/bin/bash\\"",
+            "[ -x \\"\${d}MAKE_SH\\" ] || MAKE_SH=/system/bin/sh",
+            "MAKE_BIN=\\"\${d}PREFIX/bin/make\\"",
+            "if [ ! -x \\"\${d}MAKE_BIN\\" ]; then",
+            "  echo \\"make binary not found in \${d}PREFIX/bin\\" >&2",
+            "  exit 127",
+            "fi",
+            "exec \\"\${d}MAKE_BIN\\" SHELL=\\"\${d}MAKE_SH\\" \\"\${d}@\\""
+        ).joinToString("\\n") + "\\n"
+        File(wrapperDir, "make").apply {
+            writeText(makeWrapper)
             setExecutable(true, false)
         }
 
