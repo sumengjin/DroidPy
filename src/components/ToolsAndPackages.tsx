@@ -29,6 +29,7 @@ import {
   EditorSettings,
   ExecutionEngine,
   InstalledPackage,
+  PackageBackupStatus,
   PythonFile,
   PyodideStatus,
   SdcardStatusInfo,
@@ -115,6 +116,9 @@ interface ToolsAndPackagesProps {
   onSaveWorkspaceFile: (filename: string, content: string, openInEditor?: boolean) => void;
   onOpenHelp?: () => void;
   onOpenLogs?: () => void;
+  backupStatus?: PackageBackupStatus | null;
+  onRestoreBackedUpPackages?: () => Promise<void>;
+  restoringBackup?: boolean;
   onNotify: (msg: string) => void;
 }
 
@@ -168,6 +172,9 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
   onSaveWorkspaceFile,
   onOpenHelp,
   onOpenLogs,
+  backupStatus = null,
+  onRestoreBackedUpPackages,
+  restoringBackup = false,
   onNotify,
 }) => {
   const { locale, t } = useI18n();
@@ -564,6 +571,10 @@ python ${entryFile}
             onCheckTermuxOutdated={onCheckTermuxOutdated}
             onUninstallInTermux={onUninstallInTermux}
             upgradingTermux={upgradingTermux}
+            enableSandboxAddon={Boolean(settings.enableSandboxAddon)}
+            backupStatus={backupStatus}
+            onRestoreBackedUpPackages={onRestoreBackedUpPackages}
+            restoringBackup={restoringBackup}
             onNotify={onNotify}
           />
         )}
@@ -836,8 +847,31 @@ python ${entryFile}
           </section>
         )}
 
-        {/* PyPI Package Manager */}
-        {showPackages && (
+        {/* PyPI Package Manager (Sandbox Add-on) */}
+        {showPackages && !settings.enableSandboxAddon && engine !== 'pyodide' && (
+          <section className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-5 space-y-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-semibold flex items-center gap-2">
+                  <Package className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
+                  <span>{t('pkg_sandbox_disabled_title')}</span>
+                </h2>
+                <p className="text-xs text-[var(--ide-text-muted)] mt-1 leading-relaxed">
+                  {t('pkg_sandbox_disabled_desc')}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onUpdateSettings({ enableSandboxAddon: true })}
+                className="min-h-[40px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-semibold whitespace-nowrap shrink-0 transition-colors"
+              >
+                {t('pkg_sandbox_enable_btn')}
+              </button>
+            </div>
+          </section>
+        )}
+
+        {showPackages && (settings.enableSandboxAddon || engine === 'pyodide') && (
           <section className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
@@ -1502,6 +1536,50 @@ python ${entryFile}
                   onClick={() => onUpdateSettings({ showSymbolBar: !settings.showSymbolBar })}
                   className={`min-h-[36px] w-14 rounded-full p-1 transition-colors flex items-center ${
                     settings.showSymbolBar ? 'bg-[var(--ide-accent)] justify-end' : 'bg-slate-300 dark:bg-slate-700 justify-start'
+                  }`}
+                >
+                  <span className="w-6 h-6 rounded-full bg-white shadow-sm" />
+                </button>
+              </div>
+
+              {/* Clean Text Output Mode */}
+              <div className="flex items-center justify-between gap-4 p-4">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium">{t('set_clean_text_title')}</div>
+                  <div className="text-xs text-[var(--ide-text-muted)]">{t('set_clean_text_desc')}</div>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={Boolean(settings.cleanTextMode)}
+                  onClick={() => onUpdateSettings({ cleanTextMode: !settings.cleanTextMode })}
+                  className={`min-h-[36px] w-14 rounded-full p-1 transition-colors flex items-center shrink-0 ${
+                    settings.cleanTextMode ? 'bg-[var(--ide-accent)] justify-end' : 'bg-slate-300 dark:bg-slate-700 justify-start'
+                  }`}
+                >
+                  <span className="w-6 h-6 rounded-full bg-white shadow-sm" />
+                </button>
+              </div>
+
+              {/* Optional Pyodide Browser Sandbox Add-on */}
+              <div className="flex items-center justify-between gap-4 p-4">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium">{t('addon_sandbox_title')}</div>
+                  <div className="text-xs text-[var(--ide-text-muted)]">{t('addon_sandbox_desc')}</div>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={Boolean(settings.enableSandboxAddon)}
+                  onClick={() => {
+                    const nextVal = !settings.enableSandboxAddon;
+                    onUpdateSettings({ enableSandboxAddon: nextVal });
+                    if (!nextVal && engine === 'pyodide') {
+                      onChangeEngine('termux');
+                    }
+                  }}
+                  className={`min-h-[36px] w-14 rounded-full p-1 transition-colors flex items-center shrink-0 ${
+                    settings.enableSandboxAddon ? 'bg-[var(--ide-accent)] justify-end' : 'bg-slate-300 dark:bg-slate-700 justify-start'
                   }`}
                 >
                   <span className="w-6 h-6 rounded-full bg-white shadow-sm" />

@@ -42,6 +42,8 @@ export interface EditorSettings {
   androidStoragePermission: boolean;
   autoUpdatePackages?: boolean;
   githubRepo?: string;
+  enableSandboxAddon?: boolean;
+  cleanTextMode?: boolean;
 }
 
 export type MobileTab = 'editor' | 'console' | 'browser' | 'files';
@@ -69,6 +71,16 @@ export interface TermuxHealthInfo {
   hasPython?: boolean;
   installedPipPackages?: string[];
   installedPkgPackages?: string[];
+}
+
+export interface PackageBackupStatus {
+  hasBackup: boolean;
+  backupSource?: string;
+  updatedAt?: number;
+  pipPackages: string[];
+  pkgPackages: string[];
+  missingPipPackages: string[];
+  missingPkgPackages: string[];
 }
 
 export interface CapturedCookieItem {

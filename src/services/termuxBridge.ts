@@ -1,4 +1,5 @@
 import {
+  PackageBackupStatus,
   PythonFile,
   SdcardEntry,
   SdcardStatusInfo,
@@ -112,7 +113,7 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
             try:
                 import importlib.metadata as _im
                 pip_pkgs = sorted({
-                    (d.metadata.get("Name") or "").replace("_", "-")
+                    (d.metadata.get("Name") or "").strip().lower().replace("_", "-")
                     for d in _im.distributions()
                     if d.metadata.get("Name")
                 })
@@ -434,7 +435,12 @@ async function termuxFetch<T>(
     });
     const data = (await res.json()) as T & { error?: string };
     if (!res.ok) {
-      throw new Error(data.error || `Termux 橋接回應錯誤 (${res.status})`);
+      const errDetail = data.error?.trim();
+      const friendly =
+        errDetail && errDetail !== 'Not found'
+          ? errDetail
+          : `Termux 橋接端點 ${path} 回應錯誤 (HTTP ${res.status}${errDetail ? `: ${errDetail}` : ''})`;
+      throw new Error(friendly);
     }
     return data;
   } catch (err) {
@@ -816,11 +822,34 @@ export interface TermuxNativeLogsResponse {
 export async function fetchTermuxNativeLogs(
   config: TermuxConfig
 ): Promise<TermuxNativeLogsResponse> {
-  return termuxFetch<TermuxNativeLogsResponse>(config, '/logs', { method: 'GET' }, 6000);
+  try {
+    return await termuxFetch<TermuxNativeLogsResponse>(config, '/logs', { method: 'GET' }, 6000);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('HTTP 404') || msg.includes('Not found')) {
+      return { ok: false, nativeLines: [], logcatLines: [] };
+    }
+    throw err;
+  }
 }
 
 export async function clearTermuxNativeLogs(config: TermuxConfig): Promise<{ ok: boolean }> {
   return termuxFetch<{ ok: boolean }>(config, '/logs/clear', { method: 'POST', body: '{}' }, 5000);
+}
+
+export async function getBackupStatus(config: TermuxConfig): Promise<PackageBackupStatus | null> {
+  try {
+    return await termuxFetch<PackageBackupStatus>(config, '/backup/status', { method: 'GET' }, 5000);
+  } catch {
+    return null;
+  }
+}
+
+export async function streamRestoreBackedUpPackages(
+  config: TermuxConfig,
+  callbacks: TermuxStreamCallbacks
+): Promise<{ exitCode: number; durationMs: number }> {
+  return termuxStreamRequest(config, '/backup/restore', {}, callbacks);
 }
 
 export const CORE_TERMUX_PIP_PACKAGES = new Set(['pip', 'setuptools', 'wheel']);

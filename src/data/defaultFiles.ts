@@ -76,8 +76,8 @@ if __name__ == "__main__":
 try:
     import matplotlib.pyplot as plt
 except ModuleNotFoundError:
-    print("提示：目前執行引擎尚未安裝 matplotlib（例如剛初始化的 Termux 原生環境）。")
-    print("請將終端機切換為「沙盒 (Pyodide)」直接繪製互動圖表，或於「負屏工具箱 → 套件」安裝。")
+    print("提示：目前「Python 直譯器」尚未安裝 matplotlib。")
+    print("您可在設定啟用「Pyodide 沙盒附加功能」後繪製互動圖表，或於「工具箱 → 套件」安裝。")
     raise SystemExit(0)
 
 # 產生感測器訊號模擬波形圖

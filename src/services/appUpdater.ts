@@ -117,6 +117,23 @@ function mapGitHubReleases(rawList: RawGitHubRelease[]): AppReleaseInfo[] {
 
 export const BUILTIN_LOCAL_RELEASES: AppReleaseInfo[] = [
   {
+    tagName: 'v1.2.13',
+    version: '1.2.13',
+    name: 'DroidPy v1.2.13',
+    publishedAt: '2026-11-23',
+    htmlUrl: '',
+    prerelease: false,
+    apkAssets: [],
+    body: [
+      '• 改為以原生 Python 直譯器為預設執行引擎，將 Pyodide 瀏覽器沙盒下放為可在設定中開關的附加功能 (Add-on)',
+      '• 強化 Pyodide 沙盒錯誤防護：攔截 subprocess Errno 138、原生編譯輪子失敗（如 parsel）與 input() KeyboardInterrupt 中斷，提供清楚環境引導',
+      '• 修復終端機與匯出 .log 日誌的 ANSI 控制碼外露問題（[0m、[38;5;...m、;88mO 等），並新增「純淨文字模式」一鍵切換',
+      '• 腳本執行與 droid.device_info() 環境偵測預設為手機（Android）環境',
+      '• 修復 /health 套件清單誤將連字號名稱截斷導致 pipPkgs 統計不準的問題，並消除啟動期 Unhandled rejection: Not found 錯誤',
+      '• 新增已安裝套件清單自動備份至 /sdcard/DroidPy/.droidpy_backup/ 與更新／重裝後一鍵恢復功能，並將所有日誌按鈕統一簡化為「日誌」',
+    ].join('\n'),
+  },
+  {
     tagName: 'v1.2.12',
     version: '1.2.12',
     name: 'DroidPy v1.2.12',

@@ -5,6 +5,7 @@ import {
   ExecutionEngine,
   InstalledPackage,
   NegativeScreenSection,
+  PackageBackupStatus,
   PyodideStatus,
   PythonFile,
   TermuxConfig,
@@ -69,6 +70,9 @@ interface NegativeScreenDrawerProps {
   onSaveWorkspaceFile: (filename: string, content: string, openInEditor?: boolean) => void;
   onOpenHelp: () => void;
   onOpenLogs: () => void;
+  backupStatus?: PackageBackupStatus | null;
+  onRestoreBackedUpPackages?: () => Promise<void>;
+  restoringBackup?: boolean;
   onNotify: (msg: string) => void;
 }
 
@@ -124,6 +128,9 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
   onSaveWorkspaceFile,
   onOpenHelp,
   onOpenLogs,
+  backupStatus,
+  onRestoreBackedUpPackages,
+  restoringBackup,
   onNotify,
 }) => {
   const { t } = useI18n();
@@ -301,6 +308,16 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
               onClose();
               onOpenLogs();
             }}
+            backupStatus={backupStatus}
+            onRestoreBackedUpPackages={
+              onRestoreBackedUpPackages
+                ? async () => {
+                    onClose();
+                    await onRestoreBackedUpPackages();
+                  }
+                : undefined
+            }
+            restoringBackup={restoringBackup}
             onNotify={onNotify}
           />
         </div>

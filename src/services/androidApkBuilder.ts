@@ -224,8 +224,8 @@ android {
         minSdk = 24
         // targetSdk = 28 讓內嵌 Termux bootstrap 能在 App 私有目錄自由執行 pkg / python / clang（GitHub 發佈專用）
         targetSdk = 28
-        versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 10212
-        versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.12"
+        versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 10213
+        versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.13"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -416,9 +416,9 @@ class MainActivity : AppCompatActivity() {
         fun getAppVersionName(): String {
             return try {
                 @Suppress("DEPRECATION")
-                packageManager.getPackageInfo(packageName, 0).versionName ?: "1.2.12"
+                packageManager.getPackageInfo(packageName, 0).versionName ?: "1.2.13"
             } catch (_: Exception) {
-                "1.2.12"
+                "1.2.13"
             }
         }
 
@@ -544,12 +544,28 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun readPersistedState(): String {
-            return try {
+            try {
                 val f = File(filesDir, "droidpy_ide_state.json")
-                if (f.exists()) f.readText(Charsets.UTF_8) else ""
+                if (f.exists()) {
+                    val txt = f.readText(Charsets.UTF_8)
+                    if (txt.isNotBlank()) return txt
+                }
             } catch (_: Exception) {
-                ""
             }
+            if (hasStoragePermission()) {
+                try {
+                    val backup = File(Environment.getExternalStorageDirectory(), "DroidPy/.droidpy_backup/droidpy_ide_state.json")
+                    if (backup.exists() && backup.length() > 2L) {
+                        val txt = backup.readText(Charsets.UTF_8)
+                        if (txt.isNotBlank()) {
+                            File(filesDir, "droidpy_ide_state.json").writeText(txt, Charsets.UTF_8)
+                            return txt
+                        }
+                    }
+                } catch (_: Exception) {
+                }
+            }
+            return ""
         }
 
         @JavascriptInterface
@@ -563,6 +579,19 @@ class MainActivity : AppCompatActivity() {
                     tmp.delete()
                 }
             } catch (_: Exception) {
+            }
+            if (hasStoragePermission()) {
+                try {
+                    val backupDir = File(Environment.getExternalStorageDirectory(), "DroidPy/.droidpy_backup").apply { mkdirs() }
+                    val backup = File(backupDir, "droidpy_ide_state.json")
+                    val backupTmp = File(backupDir, "droidpy_ide_state.json.tmp")
+                    backupTmp.writeText(json, Charsets.UTF_8)
+                    if (!backupTmp.renameTo(backup)) {
+                        backup.writeText(json, Charsets.UTF_8)
+                        backupTmp.delete()
+                    }
+                } catch (_: Exception) {
+                }
             }
         }
 
@@ -961,8 +990,17 @@ class MainActivity : AppCompatActivity() {
             val workspaceDir = File(filesDir, "droidpy_workspace").apply { mkdirs() }
             seedDefaultWorkspaceFiles(workspaceDir)
 
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()) {
+                try {
+                    File(Environment.getExternalStorageDirectory(), "Download/tmp").mkdirs()
+                    File(Environment.getExternalStorageDirectory(), "DroidPy/.droidpy_backup").mkdirs()
+                } catch (_: Exception) {
+                }
+            }
+
             val bootstrapMarker = File(usrDir, ".droidpy_bootstrap_ok")
             val hasExistingInstall = bootstrapMarker.exists() ||
+                File(usrDir, "var/lib/dpkg/status").exists() ||
                 File(usrDir, "bin/apt-get").exists() ||
                 File(usrDir, "bin/python").exists() ||
                 File(usrDir, "bin/python3").exists() ||
@@ -1279,12 +1317,76 @@ class EmbeddedTermuxBridge(
     private val logLock = Any()
     private val nativeLogFile: File
         get() = File(appContext.filesDir, "droidpy_native.log")
+    private val manifestFile: File
+        get() = File(appContext.filesDir, "packages_manifest.json")
+
+    private fun stripAnsiForLog(s: String): String {
+        if (s.isEmpty()) return s
+        val out = StringBuilder(s.length)
+        var i = 0
+        val n = s.length
+        while (i < n) {
+            val ch = s[i]
+            if (ch == '\\u001B' || ch == '\\u009B') {
+                if (ch == '\\u001B' && i + 1 < n) {
+                    val nxt = s[i + 1]
+                    if (nxt == '[') {
+                        i += 2
+                        while (i < n && !(s[i] in '@'..'\u007E')) i++
+                        if (i < n) i++
+                        continue
+                    } else if (nxt == ']') {
+                        i += 2
+                        while (i < n && s[i] != '\\u0007') {
+                            if (s[i] == '\\u001B' && i + 1 < n && s[i + 1] == '\\\\') {
+                                i += 2
+                                break
+                            }
+                            i++
+                        }
+                        if (i < n && s[i] == '\\u0007') i++
+                        continue
+                    } else if (nxt == '(' || nxt == ')') {
+                        i = (i + 3).coerceAtMost(n)
+                        continue
+                    }
+                    i += 2
+                    continue
+                } else if (ch == '\\u009B') {
+                    i++
+                    while (i < n && !(s[i] in '@'..'\u007E')) i++
+                    if (i < n) i++
+                    continue
+                }
+            }
+            if (ch == '\\r') {
+                if (i + 1 < n && s[i + 1] == '\\n') {
+                    out.append('\\n')
+                    i += 2
+                } else {
+                    out.append('\\n')
+                    i++
+                }
+                continue
+            }
+            if ((ch.code in 0..8) || ch.code in 11..31 || ch.code == 127) {
+                i++
+                continue
+            }
+            out.append(ch)
+            i++
+        }
+        return out.toString()
+            .replace(Regex("\\\\[(?:[0-9]{1,3}(?:;[0-9]{1,3})*)?m"), "")
+            .replace(Regex("^[0-9;]{1,12}m", RegexOption.MULTILINE), "")
+    }
 
     private fun appendNativeLog(tag: String, msg: String) {
         try {
-            android.util.Log.i("DroidPy", "[$tag] $msg")
+            val cleanMsg = stripAnsiForLog(msg)
+            android.util.Log.i("DroidPy", "[$tag] $cleanMsg")
             val ts = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
-            val line = "[$ts] [$tag] $msg\\n"
+            val line = "[$ts] [$tag] $cleanMsg\\n"
             synchronized(logLock) {
                 val f = nativeLogFile
                 f.parentFile?.mkdirs()
@@ -1768,7 +1870,8 @@ def device_info():
         return _call("/droid-action", {"action": "device_info"})
     except Exception:
         return {
-            "platform": platform.platform(),
+            "platform": f"Android ({platform.platform()})",
+            "deviceType": "phone",
             "screen": "Native Android",
             "maxTouchPoints": 5,
             "online": True,
@@ -1966,7 +2069,140 @@ def clipboard_set(text):
             env["REQUESTS_CA_BUNDLE"] = certPath
             env["PIP_CERT"] = certPath
         }
+        env.putIfAbsent("ANDROID_ROOT", "/system")
+        env.putIfAbsent("ANDROID_DATA", "/data")
         return env
+    }
+
+    private fun normalizePipPkgName(name: String): String {
+        return name.trim().lowercase().replace(Regex("[-_.]+"), "-")
+    }
+
+    private fun collectInstalledPipNames(): List<String> {
+        val pipNames = mutableSetOf<String>()
+        try {
+            File(usrDir, "lib").listFiles()?.filter { it.isDirectory && it.name.startsWith("python3.") }?.forEach { pyLib ->
+                val sp = File(pyLib, "site-packages")
+                if (!sp.isDirectory) return@forEach
+                sp.listFiles()?.filter { it.isDirectory }?.forEach { entry ->
+                    val ename = entry.name
+                    if (ename.startsWith("~")) return@forEach
+                    var parsedName: String? = null
+                    if (ename.endsWith(".dist-info")) {
+                        val meta = File(entry, "METADATA")
+                        if (meta.isFile) {
+                            try {
+                                meta.bufferedReader(Charsets.UTF_8).use { reader ->
+                                    for (i in 0 until 25) {
+                                        val line = reader.readLine() ?: break
+                                        if (line.startsWith("Name:", ignoreCase = true)) {
+                                            parsedName = line.substringAfter(":").trim()
+                                            break
+                                        }
+                                    }
+                                }
+                            } catch (_: Exception) {
+                            }
+                        }
+                        if (parsedName.isNullOrBlank()) {
+                            val base = ename.removeSuffix(".dist-info")
+                            parsedName = base.replace(Regex("-[0-9].*$"), "")
+                        }
+                    } else if (ename.endsWith(".egg-info")) {
+                        val pkgInfo = File(entry, "PKG-INFO")
+                        if (pkgInfo.isFile) {
+                            try {
+                                pkgInfo.bufferedReader(Charsets.UTF_8).use { reader ->
+                                    for (i in 0 until 25) {
+                                        val line = reader.readLine() ?: break
+                                        if (line.startsWith("Name:", ignoreCase = true)) {
+                                            parsedName = line.substringAfter(":").trim()
+                                            break
+                                        }
+                                    }
+                                }
+                            } catch (_: Exception) {
+                            }
+                        }
+                        if (parsedName.isNullOrBlank()) {
+                            val base = ename.removeSuffix(".egg-info")
+                            parsedName = base.replace(Regex("-[0-9].*$"), "")
+                        }
+                    }
+                    if (!parsedName.isNullOrBlank()) {
+                        pipNames.add(normalizePipPkgName(parsedName!!))
+                    }
+                }
+            }
+        } catch (_: Exception) {
+        }
+        return pipNames.sorted()
+    }
+
+    private fun collectInstalledPkgNames(): List<String> {
+        val pkgSet = mutableSetOf<String>()
+        try {
+            val statusFile = File(usrDir, "var/lib/dpkg/status")
+            if (statusFile.isFile) {
+                statusFile.forEachLine { line ->
+                    if (line.startsWith("Package:")) {
+                        val p = line.substringAfter("Package:").trim()
+                        if (p.isNotBlank()) pkgSet.add(p)
+                    }
+                }
+            }
+        } catch (_: Exception) {
+        }
+        return pkgSet.sorted()
+    }
+
+    private val corePipSet = setOf("pip", "setuptools", "wheel", "ensurepip", "distlib", "packaging")
+    private val defaultUserPkgCandidates = setOf("python", "python-pip", "python-lxml", "libxml2", "libxslt", "clang", "ffmpeg", "git", "nodejs", "openssh")
+
+    private fun savePackageBackupSnapshot(pipNames: List<String> = collectInstalledPipNames(), pkgNames: List<String> = collectInstalledPkgNames()) {
+        try {
+            val userPip = pipNames.filter { it !in corePipSet }
+            val userPkg = pkgNames.filter { it in defaultUserPkgCandidates }
+            val existing = readBackupManifest()
+            // Do not overwrite non-empty backup with empty state when Python was wiped after an unclean reinstall
+            if (userPip.isEmpty() && existing != null && (existing.optJSONArray("pipPackages")?.length() ?: 0) > 0) {
+                return
+            }
+            val manifest = JSONObject()
+                .put("updatedAt", System.currentTimeMillis())
+                .put("pipPackages", JSONArray(userPip))
+                .put("pkgPackages", JSONArray(userPkg))
+            val text = manifest.toString()
+            manifestFile.writeText(text, Charsets.UTF_8)
+            if (hasStorageAccess()) {
+                val backupDir = File(Environment.getExternalStorageDirectory(), "DroidPy/.droidpy_backup").apply { mkdirs() }
+                File(backupDir, "packages_manifest.json").writeText(text, Charsets.UTF_8)
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun readBackupManifest(): JSONObject? {
+        val candidates = mutableListOf(manifestFile)
+        if (hasStorageAccess()) {
+            candidates.add(File(Environment.getExternalStorageDirectory(), "DroidPy/.droidpy_backup/packages_manifest.json"))
+        }
+        var best: JSONObject? = null
+        var bestScore = -1
+        for (f in candidates) {
+            try {
+                if (f.isFile && f.length() > 2L) {
+                    val obj = JSONObject(f.readText(Charsets.UTF_8))
+                    val score = (obj.optJSONArray("pipPackages")?.length() ?: 0) + (obj.optJSONArray("pkgPackages")?.length() ?: 0)
+                    if (score > bestScore) {
+                        best = obj
+                        bestScore = score
+                    }
+                }
+            } catch (_: Exception) {
+            }
+        }
+        return best
     }
 
     private fun handleClient(socket: Socket) {
@@ -2022,6 +2258,8 @@ def clipboard_set(text):
                 "/files",
                 "/probe-url",
                 "/droid-action",
+                "/backup/status",
+                "/backup/restore",
                 "/sdcard/status",
                 "/sdcard/list",
                 "/sdcard/read",
@@ -2058,33 +2296,12 @@ def clipboard_set(text):
                         }
                     val hasPython = pyBin != null
 
-                    val pipArr = JSONArray()
-                    try {
-                        val pipNames = mutableSetOf<String>()
-                        File(usrDir, "lib").listFiles()?.filter { it.isDirectory && it.name.startsWith("python3.") }?.forEach { pyLib ->
-                            File(pyLib, "site-packages").listFiles()?.filter { it.isDirectory && it.name.endsWith(".dist-info") }?.forEach { distInfo ->
-                                val pkgName = distInfo.name.substringBefore("-").replace("_", "-")
-                                if (pkgName.isNotBlank()) pipNames.add(pkgName)
-                            }
-                        }
-                        pipNames.sorted().forEach { pipArr.put(it) }
-                    } catch (_: Exception) {
-                    }
-
-                    val pkgArr = JSONArray()
-                    try {
-                        val statusFile = File(usrDir, "var/lib/dpkg/status")
-                        if (statusFile.isFile) {
-                            val pkgSet = mutableSetOf<String>()
-                            statusFile.forEachLine { line ->
-                                if (line.startsWith("Package:")) {
-                                    val p = line.substringAfter("Package:").trim()
-                                    if (p.isNotBlank()) pkgSet.add(p)
-                                }
-                            }
-                            pkgSet.sorted().forEach { pkgArr.put(it) }
-                        }
-                    } catch (_: Exception) {
+                    val pipList = collectInstalledPipNames()
+                    val pipArr = JSONArray(pipList)
+                    val pkgList = collectInstalledPkgNames()
+                    val pkgArr = JSONArray(pkgList)
+                    if (hasPython && pipList.isNotEmpty()) {
+                        savePackageBackupSnapshot(pipList, pkgList)
                     }
 
                     val res = JSONObject()
@@ -2100,6 +2317,89 @@ def clipboard_set(text):
                         .put("installedPipPackages", pipArr)
                         .put("installedPkgPackages", pkgArr)
                     writeJson(out, 200, res)
+                }
+
+                method == "GET" && path == "/backup/status" -> {
+                    val manifest = readBackupManifest()
+                    val currentPips = collectInstalledPipNames().toSet()
+                    val currentPkgs = collectInstalledPkgNames().toSet()
+                    val backedPipList = mutableListOf<String>()
+                    val backedPkgList = mutableListOf<String>()
+                    if (manifest != null) {
+                        val arrP = manifest.optJSONArray("pipPackages")
+                        if (arrP != null) {
+                            for (i in 0 until arrP.length()) {
+                                val v = arrP.optString(i, "").trim()
+                                if (v.isNotEmpty()) backedPipList.add(v)
+                            }
+                        }
+                        val arrK = manifest.optJSONArray("pkgPackages")
+                        if (arrK != null) {
+                            for (i in 0 until arrK.length()) {
+                                val v = arrK.optString(i, "").trim()
+                                if (v.isNotEmpty()) backedPkgList.add(v)
+                            }
+                        }
+                    }
+                    val missingPip = backedPipList.filter { normalizePipPkgName(it) !in currentPips }
+                    val missingPkg = backedPkgList.filter { it !in currentPkgs }
+                    writeJson(
+                        out,
+                        200,
+                        JSONObject()
+                            .put("ok", true)
+                            .put("hasBackup", manifest != null)
+                            .put("updatedAt", manifest?.optLong("updatedAt", 0L) ?: 0L)
+                            .put("pipPackages", JSONArray(backedPipList))
+                            .put("pkgPackages", JSONArray(backedPkgList))
+                            .put("missingPipPackages", JSONArray(missingPip))
+                            .put("missingPkgPackages", JSONArray(missingPkg))
+                    )
+                }
+
+                method == "POST" && path == "/backup/restore" -> {
+                    val manifest = readBackupManifest()
+                    if (manifest == null) {
+                        writeJson(out, 404, JSONObject().put("error", "找不到套件備份清單"))
+                    } else {
+                        val currentPips = collectInstalledPipNames().toSet()
+                        val currentPkgs = collectInstalledPkgNames().toSet()
+                        val needPkgs = mutableListOf("python", "python-pip")
+                        val arrK = manifest.optJSONArray("pkgPackages")
+                        if (arrK != null) {
+                            for (i in 0 until arrK.length()) {
+                                val v = arrK.optString(i, "").trim()
+                                if (v.isNotEmpty() && v !in currentPkgs && v !in needPkgs) {
+                                    needPkgs.add(v)
+                                }
+                            }
+                        }
+                        val needPips = mutableListOf<String>()
+                        val arrP = manifest.optJSONArray("pipPackages")
+                        if (arrP != null) {
+                            for (i in 0 until arrP.length()) {
+                                val v = arrP.optString(i, "").trim()
+                                if (v.isNotEmpty() && normalizePipPkgName(v) !in currentPips) {
+                                    needPips.add(v)
+                                }
+                            }
+                        }
+                        val missingPkgsOnly = needPkgs.filter { it !in currentPkgs }
+                        val steps = mutableListOf<String>()
+                        if (missingPkgsOnly.isNotEmpty()) {
+                            steps.add("(pkg update -y || true)")
+                            steps.add("pkg install -y " + missingPkgsOnly.joinToString(" "))
+                        }
+                        if (needPips.isNotEmpty()) {
+                            steps.add("pip install --no-cache-dir " + needPips.joinToString(" "))
+                        }
+                        val restoreCmd = if (steps.isEmpty()) {
+                            "echo '[DroidPy] 所有已備份套件均已存在，無需還原。'"
+                        } else {
+                            steps.joinToString(" && ")
+                        }
+                        streamShellCommand(out, restoreCmd)
+                    }
                 }
 
                 method == "GET" && path == "/logs" -> {
@@ -2205,6 +2505,7 @@ def clipboard_set(text):
                                 200,
                                 JSONObject()
                                     .put("platform", "Android \${Build.VERSION.RELEASE} (\${Build.MODEL})")
+                                    .put("deviceType", "phone")
                                     .put("screen", "\${dm.widthPixels}x\${dm.heightPixels}")
                                     .put("pixelRatio", dm.density.toDouble())
                                     .put("maxTouchPoints", 5)
@@ -2530,9 +2831,12 @@ def clipboard_set(text):
         var code = 1
         val outputTail = StringBuilder()
         fun recordTail(chunk: String) {
-            outputTail.append(chunk)
-            if (outputTail.length > 2400) {
-                outputTail.delete(0, outputTail.length - 1600)
+            val cleaned = stripAnsiForLog(chunk)
+            if (cleaned.isNotEmpty()) {
+                outputTail.append(cleaned)
+                if (outputTail.length > 2400) {
+                    outputTail.delete(0, outputTail.length - 1600)
+                }
             }
         }
         if (!shFile.exists()) {
@@ -2581,8 +2885,11 @@ def clipboard_set(text):
 
         val elapsed = System.currentTimeMillis() - t0
         appendNativeLog("Exec", "Stream shell finished: exitCode=$code, durationMs=$elapsed")
+        if (code == 0 && (command.contains("pip") || command.contains("pkg") || command.contains("apt"))) {
+            savePackageBackupSnapshot()
+        }
         if (code != 0 && outputTail.isNotBlank()) {
-            val tailCompact = outputTail.toString().trim().takeLast(1200)
+            val tailCompact = stripAnsiForLog(outputTail.toString()).trim().takeLast(1200)
             appendNativeLog("Exec", "Non-zero exit ($code) output tail:\\n$tailCompact")
         }
 
@@ -2719,6 +3026,14 @@ def clipboard_set(text):
 `;
 
   const changelogContent = `# Changelog / 更新日誌
+
+## [1.2.13] - 2026-11-23
+- **原生 Python 直譯器預設、沙盒轉為附加功能、ANSI 純淨文字與跨環境路徑／重裝還原修復**：
+  - 預設執行引擎改為原生 **Python 直譯器**（Termux／內嵌 ARM64），**Pyodide WASM 沙盒**轉為設定內可開啟的附加功能，終端與面板按鈕同步精簡並補強 \`subprocess\`（Errno 138）、無 \`wasm32\` wheel 套件（如 \`parsel\`）與互動輸入 \`KeyboardInterrupt\` 友善防呆。
+  - 新增序列緩衝與強效 ANSI 控制碼淨化器（根除 \`[0m\`、\`[38;5;...m\`、\`;88mO\`、\`91mn\` 殘留），原生 Android \`droidpy_native.log\` 與匯出日誌全面濾除跳脫序列，終端機工具列與編輯器設定加入「純淨文字模式」。
+  - 腳本執行與 \`droid.device_info()\` 環境偵測預設為手機（Android）環境。
+  - 修正 \`/health\` \`pipPkgs\` 讀取 \`METADATA\`/\`PKG-INFO\` 精準計數、\`termuxFetch\` 404/錯誤詳情回報消除 \`Unhandled rejection: Not found\`；強化重裝／更新保留 \`usr/\` 與 \`/sdcard/DroidPy/.droidpy_backup/\` 套件清單備份與一鍵還原。
+  - 所有「日誌」按鈕名稱統一精簡為「日誌」，裝置儲存文案改為「手機」。
 
 ## [1.2.12] - 2026-11-22
 - **終端機實時時分秒計時（\`HH:MM:SS\`）、套件解除安裝、精準更新檢測與長按選字複製修復**：

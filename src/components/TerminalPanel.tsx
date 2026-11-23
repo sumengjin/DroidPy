@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Trash2, Copy, Check, AlertCircle, CornerDownLeft, Download, Maximize2, X, Square, FileText } from 'lucide-react';
+import { Trash2, Copy, Check, AlertCircle, CornerDownLeft, Download, Maximize2, X, Square, FileText, Type } from 'lucide-react';
 import { ExecutionEngine, PyodideStatus, TerminalEntry } from '../types/ide';
 import { renderAnsiText, stripAnsi } from '../utils/ansiParser';
 import { useI18n } from '../services/i18n';
@@ -23,6 +23,9 @@ interface TerminalPanelProps {
   onSendTermuxStdin?: (text: string) => Promise<void>;
   onStopTermux?: () => Promise<void>;
   onOpenLogs?: () => void;
+  enableSandboxAddon?: boolean;
+  cleanTextMode?: boolean;
+  onToggleCleanTextMode?: () => void;
   onClear: () => void;
 }
 
@@ -42,6 +45,9 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   onSendTermuxStdin,
   onStopTermux,
   onOpenLogs,
+  enableSandboxAddon = false,
+  cleanTextMode = false,
+  onToggleCleanTextMode,
   onClear,
 }) => {
   const { t } = useI18n();
@@ -177,17 +183,19 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-[var(--ide-border)] bg-[var(--ide-surface)] shrink-0">
         <div className="flex items-center gap-2 text-xs text-[var(--ide-text-muted)] min-w-0">
           <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-[var(--ide-surface-alt)] border border-[var(--ide-border)] shrink-0">
-            <button
-              type="button"
-              onClick={() => onChangeEngine('pyodide')}
-              className={`min-h-[28px] px-2 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap ${
-                engine === 'pyodide'
-                  ? 'bg-[var(--ide-surface)] text-[var(--ide-text)] shadow-sm'
-                  : 'text-[var(--ide-text-muted)]'
-              }`}
-            >
-              {t('term_sandbox')}
-            </button>
+            {(enableSandboxAddon || engine === 'pyodide') && (
+              <button
+                type="button"
+                onClick={() => onChangeEngine('pyodide')}
+                className={`min-h-[28px] px-2 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap ${
+                  engine === 'pyodide'
+                    ? 'bg-[var(--ide-surface)] text-[var(--ide-text)] shadow-sm'
+                    : 'text-[var(--ide-text-muted)]'
+                }`}
+              >
+                {t('term_sandbox')}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => onChangeEngine('termux')}
@@ -197,7 +205,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
                   : 'text-[var(--ide-text-muted)]'
               }`}
             >
-              Termux
+              {t('tmx_engine_short')}
             </button>
           </div>
           <span className="truncate whitespace-nowrap">{statusLabel}</span>
@@ -227,6 +235,21 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             >
               {copiedSel ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
               <span>{copiedSel ? t('term_copied_selection') : t('term_copy_selection')}</span>
+            </button>
+          )}
+          {onToggleCleanTextMode && (
+            <button
+              type="button"
+              onClick={onToggleCleanTextMode}
+              aria-pressed={Boolean(cleanTextMode)}
+              className={`min-h-[36px] px-2 flex items-center gap-1 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+                cleanTextMode
+                  ? 'bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] font-semibold'
+                  : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-accent-soft)]'
+              }`}
+            >
+              <Type className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">{t('term_clean_text')}</span>
             </button>
           )}
           {onOpenLogs && (
@@ -345,7 +368,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
                     <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                     <span>{t('term_err_title')}</span>
                   </div>
-                  <pre className="whitespace-pre-wrap break-words text-xs">{renderAnsiText(entry.content)}</pre>
+                  <pre className="whitespace-pre-wrap break-words text-xs">{renderAnsiText(entry.content, Boolean(cleanTextMode))}</pre>
                 </div>
               );
             }
@@ -356,7 +379,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
                   <span className="font-mono tabular-nums mr-2 opacity-75">
                     [{entry.timestamp}]
                   </span>
-                  {entry.content}
+                  {stripAnsi(entry.content)}
                 </div>
               );
             }
@@ -372,7 +395,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             if (entry.type === 'repl-out') {
               return (
                 <div key={entry.id} className="text-amber-600 dark:text-amber-300 whitespace-pre-wrap break-words">
-                  {renderAnsiText(entry.content)}
+                  {renderAnsiText(entry.content, Boolean(cleanTextMode))}
                 </div>
               );
             }
@@ -382,7 +405,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
                 key={entry.id}
                 className="whitespace-pre-wrap break-words text-[var(--ide-text)]"
               >
-                {renderAnsiText(entry.content)}
+                {renderAnsiText(entry.content, Boolean(cleanTextMode))}
               </pre>
             );
           })

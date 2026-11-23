@@ -1,3 +1,5 @@
+import { stripAnsi } from '../utils/ansiParser';
+
 export type AppLogLevel = 'info' | 'warn' | 'error' | 'debug';
 
 export type AppLogCategory =
@@ -42,7 +44,11 @@ function loadLogs(): AppExecutionLogEntry[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        memoryLogs = parsed.slice(-MAX_LOG_ENTRIES) as AppExecutionLogEntry[];
+        memoryLogs = parsed.slice(-MAX_LOG_ENTRIES).map((item) => ({
+          ...item,
+          message: typeof item?.message === 'string' ? stripAnsi(item.message) : '',
+          detail: typeof item?.detail === 'string' ? stripAnsi(item.detail) : undefined,
+        })) as AppExecutionLogEntry[];
         return memoryLogs;
       }
     }
@@ -85,13 +91,15 @@ export function appLog(
   options?: { level?: AppLogLevel; detail?: string }
 ): void {
   const logs = loadLogs();
+  const cleanMsg = stripAnsi(message);
+  const cleanDetail = options?.detail ? stripAnsi(options.detail).slice(0, 1200) : undefined;
   const entry: AppExecutionLogEntry = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     timestamp: formatTimestamp(),
     level: options?.level ?? 'info',
     category,
-    message,
-    detail: options?.detail ? options.detail.slice(0, 1200) : undefined,
+    message: cleanMsg,
+    detail: cleanDetail,
   };
   const next = [...logs, entry];
   memoryLogs = next.length > MAX_LOG_ENTRIES ? next.slice(-MAX_LOG_ENTRIES) : next;
@@ -135,17 +143,27 @@ export function formatAppLogsAsText(
   ];
 
   const appLines = logs.map((item) => {
-    const base = `[${item.timestamp}] [${item.level.toUpperCase()}] [${item.category}] ${item.message}`;
-    return item.detail ? `${base}\n  detail: ${item.detail}` : base;
+    const cleanMsg = stripAnsi(item.message);
+    const cleanDetail = item.detail ? stripAnsi(item.detail) : undefined;
+    const base = `[${item.timestamp}] [${item.level.toUpperCase()}] [${item.category}] ${cleanMsg}`;
+    return cleanDetail ? `${base}\n  detail: ${cleanDetail}` : base;
   });
 
   const sections = [...header, ...appLines];
 
   if (nativeLogs?.nativeLines && nativeLogs.nativeLines.length > 0) {
-    sections.push('', '--- Android Native / Embedded Termux Bridge Logs ---', ...nativeLogs.nativeLines);
+    sections.push(
+      '',
+      '--- Android Native / Embedded Bridge Logs ---',
+      ...nativeLogs.nativeLines.map((line) => stripAnsi(line))
+    );
   }
   if (nativeLogs?.logcatLines && nativeLogs.logcatLines.length > 0) {
-    sections.push('', '--- Android Process Logcat ---', ...nativeLogs.logcatLines);
+    sections.push(
+      '',
+      '--- Android Process Logcat ---',
+      ...nativeLogs.logcatLines.map((line) => stripAnsi(line))
+    );
   }
 
   return sections.join('\n') + '\n';

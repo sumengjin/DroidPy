@@ -35,6 +35,7 @@ import {
   InstalledPackage,
   MobileTab,
   NegativeScreenSection,
+  PackageBackupStatus,
   PyodideStatus,
   PythonFile,
   TabletPaneTab,
@@ -79,6 +80,7 @@ import {
   translate,
 } from './services/i18n';
 import { formatDurationHMS } from './utils/formatDuration';
+import { createAnsiStreamBuffer, stripAnsi } from './utils/ansiParser';
 import {
   DEFAULT_TERMUX_CONFIG,
   CORE_TERMUX_PIP_PACKAGES,
@@ -91,12 +93,14 @@ import {
   checkTermuxHealth,
   execTermuxShell,
   fetchTermuxWorkspaceFiles,
+  getBackupStatus,
   getSdcardStatus,
   normalizeTermuxPkgName,
   parseOutdatedPipJson,
   sendTermuxStdin,
   stopTermuxProcess,
   streamInstallInTermux,
+  streamRestoreBackedUpPackages,
   streamRunInTermux,
   streamShellInTermux,
 } from './services/termuxBridge';
@@ -142,6 +146,8 @@ const DEFAULT_SETTINGS: EditorSettings = {
   androidStoragePermission: true,
   autoUpdatePackages: getAutoUpdatePackagesPref(),
   githubRepo: getSavedGithubRepo(),
+  enableSandboxAddon: false,
+  cleanTextMode: false,
 };
 
 interface PersistedIdeSnapshot {
@@ -356,16 +362,19 @@ export default function App() {
   const [linkedDirHandle, setLinkedDirHandle] = useState<DirectoryHandleLike | null>(null);
   const [executionEngine, setExecutionEngine] = useState<ExecutionEngine>(() => {
     const nativeSnap = getInitialNativeSnapshot();
-    if (nativeSnap?.executionEngine === 'termux' || nativeSnap?.executionEngine === 'pyodide') {
-      return nativeSnap.executionEngine;
+    const sandboxEnabled = Boolean(settings.enableSandboxAddon);
+    if (nativeSnap?.executionEngine === 'termux') return 'termux';
+    if (nativeSnap?.executionEngine === 'pyodide') {
+      return sandboxEnabled ? 'pyodide' : 'termux';
     }
     try {
       const saved = localStorage.getItem(STORAGE_ENGINE_KEY);
-      if (saved === 'termux' || saved === 'pyodide') return saved;
+      if (saved === 'termux') return 'termux';
+      if (saved === 'pyodide') return sandboxEnabled ? 'pyodide' : 'termux';
     } catch {
       // ignore
     }
-    return 'pyodide';
+    return 'termux';
   });
   const [termuxConfig, setTermuxConfig] = useState<TermuxConfig>(() => {
     const nativeSnap = getInitialNativeSnapshot();
@@ -387,6 +396,11 @@ export default function App() {
   const [termuxError, setTermuxError] = useState<string | null>(null);
   const [termuxHealth, setTermuxHealth] = useState<TermuxHealthInfo | null>(null);
   const [termuxRunning, setTermuxRunning] = useState(false);
+  const [backupStatus, setBackupStatus] = useState<PackageBackupStatus | null>(null);
+  const [restoringBackup, setRestoringBackup] = useState(false);
+  const ansiStreamBuffersRef = useRef<Map<string, ReturnType<typeof createAnsiStreamBuffer>>>(
+    new Map()
+  );
 
   const editorRef = useRef<CodeEditorHandle | null>(null);
   const filesRef = useRef(files);
@@ -448,8 +462,13 @@ export default function App() {
       });
     };
     const onUnhandled = (ev: PromiseRejectionEvent) => {
-      const msg = ev.reason instanceof Error ? ev.reason.message : String(ev.reason);
-      appLog('lifecycle', `Unhandled rejection: ${msg}`, { level: 'error' });
+      const reason = ev.reason;
+      const msg = reason instanceof Error ? reason.message : String(reason ?? 'Unknown rejection');
+      const stack = reason instanceof Error ? reason.stack : undefined;
+      appLog('lifecycle', `Unhandled rejection: ${msg || 'Unknown error'}`, {
+        level: 'error',
+        detail: stack,
+      });
     };
     window.addEventListener('error', onWinErr);
     window.addEventListener('unhandledrejection', onUnhandled);
@@ -499,6 +518,12 @@ export default function App() {
       themeMeta.setAttribute('content', meta.themeColorMeta);
     }
   }, [settings]);
+
+  useEffect(() => {
+    if (!settings.enableSandboxAddon && executionEngine === 'pyodide') {
+      setExecutionEngine('termux');
+    }
+  }, [settings.enableSandboxAddon, executionEngine]);
 
   useEffect(() => {
     try {
@@ -666,6 +691,13 @@ export default function App() {
   );
 
   const appendStreamChunk = useCallback((streamId: string, chunk: string) => {
+    let buf = ansiStreamBuffersRef.current.get(streamId);
+    if (!buf) {
+      buf = createAnsiStreamBuffer();
+      ansiStreamBuffersRef.current.set(streamId, buf);
+    }
+    const processed = buf.push(chunk);
+    if (!processed) return;
     setEntries((prev) => {
       const idx = prev.findIndex((e) => e.id === streamId);
       if (idx === -1) {
@@ -674,7 +706,7 @@ export default function App() {
           {
             id: streamId,
             type: 'stdout',
-            content: mergeTerminalChunk('', chunk),
+            content: mergeTerminalChunk('', processed),
             timestamp: formatTime(),
           },
         ];
@@ -682,7 +714,25 @@ export default function App() {
       const next = [...prev];
       next[idx] = {
         ...next[idx],
-        content: mergeTerminalChunk(next[idx].content, chunk),
+        content: mergeTerminalChunk(next[idx].content, processed),
+      };
+      return next;
+    });
+  }, []);
+
+  const flushStreamChunk = useCallback((streamId: string) => {
+    const buf = ansiStreamBuffersRef.current.get(streamId);
+    if (!buf) return;
+    const rem = buf.flush();
+    ansiStreamBuffersRef.current.delete(streamId);
+    if (!rem) return;
+    setEntries((prev) => {
+      const idx = prev.findIndex((e) => e.id === streamId);
+      if (idx === -1) return prev;
+      const next = [...prev];
+      next[idx] = {
+        ...next[idx],
+        content: mergeTerminalChunk(next[idx].content, rem),
       };
       return next;
     });
@@ -716,7 +766,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (executionEngine === 'termux') return;
+    if (!settings.enableSandboxAddon || executionEngine === 'termux') return;
     if (pyodideStatusRef.current === 'ready' || pyodideStatusRef.current === 'loading') return;
     let cancelled = false;
     const timer = window.setTimeout(async () => {
@@ -771,7 +821,7 @@ export default function App() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [appendEntry, executionEngine]);
+  }, [appendEntry, executionEngine, settings.enableSandboxAddon]);
 
   const handleLinkDirectory = useCallback(async () => {
     const isNativeApk = Boolean(termuxHealth?.embedded || window.DroidPyNative?.isNativeApp?.());
@@ -886,6 +936,17 @@ export default function App() {
     setTermuxConfig((prev) => ({ ...prev, ...patch }));
   }, []);
 
+  const refreshBackupStatus = useCallback(async (cfg?: TermuxConfig) => {
+    try {
+      const st = await getBackupStatus(cfg ?? termuxConfigRef.current);
+      if (st) {
+        setBackupStatus(st);
+      }
+    } catch {
+      // ignore backup status probe error
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     const timers: number[] = [];
@@ -903,6 +964,7 @@ export default function App() {
           setExecutionEngine('termux');
           showToast(t('toast_termux_auto_embedded'));
         }
+        void refreshBackupStatus(termuxConfig);
         return true;
       } catch {
         // Silent probe on startup — keep retrying briefly in case APK bridge is still initializing
@@ -940,6 +1002,7 @@ export default function App() {
       appLog('bridge', `Manual health check OK: ${health.pythonVersion}`, {
         detail: `embedded=${Boolean(health.embedded)}, hasPython=${health.hasPython}, pip=${(health.installedPipPackages ?? []).join(', ')}`,
       });
+      void refreshBackupStatus(termuxConfig);
       showToast(t('toast_termux_connected', { ver: health.pythonVersion }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : t('toast_termux_disconnected');
@@ -948,7 +1011,7 @@ export default function App() {
       appLog('bridge', `Manual health check failed: ${msg}`, { level: 'warn' });
       showToast(t('toast_termux_disconnected'));
     }
-  }, [termuxConfig, showToast, t]);
+  }, [termuxConfig, refreshBackupStatus, showToast, t]);
 
   const syncFilesFromTermux = useCallback(
     async (showEmptyToast: boolean) => {
@@ -1024,6 +1087,8 @@ export default function App() {
     setRunStartedAt(Date.now());
     setTermuxError(null);
 
+    const streamId = makeId();
+
     try {
       let currentHealth = termuxHealth;
       if (currentHealth?.embedded && currentHealth.hasPython === false) {
@@ -1042,7 +1107,6 @@ export default function App() {
 
       appendEntry('system', t('log_termux_run', { name: entryFile.name }));
       appLog('termux', `Run script in Termux: ${entryFile.name}`);
-      const streamId = makeId();
       let hasOutput = false;
       let outputTail = '';
 
@@ -1050,11 +1114,12 @@ export default function App() {
         onChunk: (chunk) => {
           if (chunk.length > 0) {
             hasOutput = true;
-            outputTail = (outputTail + chunk).slice(-500);
+            outputTail = stripAnsi(outputTail + chunk).slice(-500);
           }
           appendStreamChunk(streamId, chunk);
         },
       });
+      flushStreamChunk(streamId);
       setTermuxConnectionState('connected');
       setLastDurationMs(res.durationMs);
       if (res.exitCode === 0) {
@@ -1077,6 +1142,7 @@ export default function App() {
       }
       await syncFilesFromTermux(false);
     } catch (err) {
+      flushStreamChunk(streamId);
       const msg = err instanceof Error ? err.message : String(err);
       const isAborted = /abort|中止/i.test(msg);
       if (!isAborted) {
@@ -1100,6 +1166,7 @@ export default function App() {
     termuxRunning,
     appendEntry,
     appendStreamChunk,
+    flushStreamChunk,
     syncFilesFromTermux,
     showToast,
     t,
@@ -1124,9 +1191,10 @@ export default function App() {
         const res = await streamInstallInTermux(termuxConfig, mode, target, {
           onChunk: (chunk) => {
             appendStreamChunk(streamId, chunk);
-            tailBuf = (tailBuf + chunk).slice(-1200);
+            tailBuf = stripAnsi(tailBuf + chunk).slice(-1200);
           },
         });
+        flushStreamChunk(streamId);
         setTermuxConnectionState('connected');
         setLastDurationMs(res.durationMs);
         if (res.exitCode === 0) {
@@ -1152,6 +1220,7 @@ export default function App() {
           showToast(t('toast_termux_install_err', { pkg: target, code: res.exitCode }));
         }
       } catch (err) {
+        flushStreamChunk(streamId);
         const msg = err instanceof Error ? err.message : String(err);
         setTermuxConnectionState('error');
         setTermuxError(msg);
@@ -1165,6 +1234,7 @@ export default function App() {
         try {
           const health = await checkTermuxHealth(termuxConfig);
           setTermuxHealth(health);
+          void refreshBackupStatus(termuxConfig);
         } catch {
           // ignore health refresh failure
         }
@@ -1172,7 +1242,7 @@ export default function App() {
         setTermuxRunning(false);
       }
     },
-    [termuxConfig, termuxRunning, focusOutputPane, appendEntry, appendStreamChunk, showToast, t]
+    [termuxConfig, termuxRunning, focusOutputPane, appendEntry, appendStreamChunk, flushStreamChunk, refreshBackupStatus, showToast, t]
   );
 
   const handleRunShellInTermux = useCallback(
@@ -1193,9 +1263,10 @@ export default function App() {
         const res = await streamShellInTermux(termuxConfig, command, {
           onChunk: (chunk) => {
             appendStreamChunk(streamId, chunk);
-            tailBuf = (tailBuf + chunk).slice(-1200);
+            tailBuf = stripAnsi(tailBuf + chunk).slice(-1200);
           },
         });
+        flushStreamChunk(streamId);
         setTermuxConnectionState('connected');
         setLastDurationMs(res.durationMs);
         if (res.exitCode !== 0) {
@@ -1208,6 +1279,7 @@ export default function App() {
           appLog('termux', `Shell finished (${formatDurationHMS(res.durationMs)})`);
         }
       } catch (err) {
+        flushStreamChunk(streamId);
         const msg = err instanceof Error ? err.message : String(err);
         setTermuxConnectionState('error');
         setTermuxError(msg);
@@ -1221,6 +1293,7 @@ export default function App() {
           try {
             const health = await checkTermuxHealth(termuxConfig);
             setTermuxHealth(health);
+            void refreshBackupStatus(termuxConfig);
           } catch {
             // ignore
           }
@@ -1229,7 +1302,7 @@ export default function App() {
         setTermuxRunning(false);
       }
     },
-    [termuxConfig, termuxRunning, focusOutputPane, appendEntry, appendStreamChunk, showToast, t]
+    [termuxConfig, termuxRunning, focusOutputPane, appendEntry, appendStreamChunk, flushStreamChunk, refreshBackupStatus, showToast, t]
   );
 
   const handleInitializeEmbeddedEnv = useCallback(
@@ -1254,9 +1327,10 @@ export default function App() {
         const res = await streamShellInTermux(termuxConfig, cmd, {
           onChunk: (chunk) => {
             appendStreamChunk(streamId, chunk);
-            tailBuf = (tailBuf + chunk).slice(-1200);
+            tailBuf = stripAnsi(tailBuf + chunk).slice(-1200);
           },
         });
+        flushStreamChunk(streamId);
         setTermuxConnectionState('connected');
         setLastDurationMs(res.durationMs);
         if (res.exitCode === 0) {
@@ -1271,6 +1345,7 @@ export default function App() {
           showToast(t('toast_termux_init_err', { code: res.exitCode }));
         }
       } catch (err) {
+        flushStreamChunk(streamId);
         const msg = err instanceof Error ? err.message : String(err);
         setTermuxConnectionState('error');
         setTermuxError(msg);
@@ -1284,6 +1359,7 @@ export default function App() {
         try {
           const health = await checkTermuxHealth(termuxConfig);
           setTermuxHealth(health);
+          void refreshBackupStatus(termuxConfig);
         } catch {
           // ignore background health refresh error
         }
@@ -1292,8 +1368,77 @@ export default function App() {
         setTermuxRunning(false);
       }
     },
-    [termuxConfig, termuxRunning, focusOutputPane, appendEntry, appendStreamChunk, flushNativeStateNow, showToast, t]
+    [termuxConfig, termuxRunning, focusOutputPane, appendEntry, appendStreamChunk, flushStreamChunk, refreshBackupStatus, flushNativeStateNow, showToast, t]
   );
+
+  const handleRestoreBackedUpPackages = useCallback(async () => {
+    if (termuxRunning || restoringBackup) {
+      showToast(t('cta_running'));
+      return;
+    }
+    setExecutionEngine('termux');
+    focusOutputPane('terminal');
+    setRestoringBackup(true);
+    setTermuxRunning(true);
+    setRunStartedAt(Date.now());
+    setTermuxError(null);
+    appendEntry('system', t('backup_restore_btn'));
+    appLog('package', 'Restoring backed-up packages from /sdcard/DroidPy/.droidpy_backup');
+    const streamId = makeId();
+    let tailBuf = '';
+    try {
+      const res = await streamRestoreBackedUpPackages(termuxConfig, {
+        onChunk: (chunk) => {
+          appendStreamChunk(streamId, chunk);
+          tailBuf = stripAnsi(tailBuf + chunk).slice(-1200);
+        },
+      });
+      flushStreamChunk(streamId);
+      setTermuxConnectionState('connected');
+      setLastDurationMs(res.durationMs);
+      if (res.exitCode === 0) {
+        appLog('package', `Backed-up packages restored (${formatDurationHMS(res.durationMs)})`);
+        showToast(t('backup_restore_done'));
+      } else {
+        appendEntry('stderr', t('log_termux_exit', { code: res.exitCode }));
+        appLog('package', `Backed-up package restore exited ${res.exitCode}`, {
+          level: 'warn',
+          detail: tailBuf.trim() || undefined,
+        });
+        showToast(t('backup_restore_err', { msg: `exit ${res.exitCode}` }));
+      }
+    } catch (err) {
+      flushStreamChunk(streamId);
+      const msg = err instanceof Error ? err.message : String(err);
+      appendEntry('stderr', msg);
+      appLog('package', `Backed-up package restore failed: ${msg}`, { level: 'error' });
+      showToast(t('backup_restore_err', { msg }));
+    } finally {
+      try {
+        const health = await checkTermuxHealth(termuxConfig);
+        setTermuxHealth(health);
+        await refreshBackupStatus(termuxConfig);
+      } catch {
+        // ignore refresh failure
+      }
+      flushNativeStateNow();
+      setRestoringBackup(false);
+      setRunStartedAt(null);
+      setTermuxRunning(false);
+    }
+  }, [
+    termuxRunning,
+    restoringBackup,
+    termuxConfig,
+    focusOutputPane,
+    appendEntry,
+    appendStreamChunk,
+    flushStreamChunk,
+    refreshBackupStatus,
+    flushNativeStateNow,
+    showToast,
+    t,
+  ]);
 
   const handleSendTermuxStdin = useCallback(
     async (text: string) => {
@@ -1365,14 +1510,14 @@ export default function App() {
       onStdout: (text) => {
         if (text.length > 0) {
           hasOutput = true;
-          outputTail = (outputTail + text).slice(-500);
+          outputTail = stripAnsi(outputTail + text).slice(-500);
         }
         baseCallbacks.onStdout(text);
       },
       onStderr: (text) => {
         if (text.length > 0) {
           hasOutput = true;
-          outputTail = (outputTail + text).slice(-500);
+          outputTail = stripAnsi(outputTail + text).slice(-500);
         }
         baseCallbacks.onStderr(text);
       },
@@ -1768,9 +1913,10 @@ export default function App() {
         const res = await streamShellInTermux(termuxConfig, cmd, {
           onChunk: (chunk) => {
             appendStreamChunk(streamId, chunk);
-            tailBuf = (tailBuf + chunk).slice(-1200);
+            tailBuf = stripAnsi(tailBuf + chunk).slice(-1200);
           },
         });
+        flushStreamChunk(streamId);
         setTermuxConnectionState('connected');
         setLastDurationMs(res.durationMs);
         if (res.exitCode === 0) {
@@ -1796,6 +1942,7 @@ export default function App() {
           showToast(t('toast_termux_install_err', { pkg: target, code: res.exitCode }));
         }
       } catch (err) {
+        flushStreamChunk(streamId);
         const msg = err instanceof Error ? err.message : String(err);
         setTermuxConnectionState('error');
         setTermuxError(msg);
@@ -1806,6 +1953,7 @@ export default function App() {
         try {
           const health = await checkTermuxHealth(termuxConfig);
           setTermuxHealth(health);
+          void refreshBackupStatus(termuxConfig);
         } catch {
           // ignore health refresh failure
         }
@@ -1813,7 +1961,7 @@ export default function App() {
         setTermuxRunning(false);
       }
     },
-    [termuxRunning, termuxConfig, focusOutputPane, appendEntry, appendStreamChunk, showToast, t]
+    [termuxRunning, termuxConfig, focusOutputPane, appendEntry, appendStreamChunk, flushStreamChunk, refreshBackupStatus, showToast, t]
   );
 
   const handleUpgradeAllTermux = useCallback(
@@ -2078,20 +2226,23 @@ export default function App() {
         const res = await streamShellInTermux(termuxConfigRef.current, cmd, {
           onChunk: (chunk) => appendStreamChunk(streamId, chunk),
         });
+        flushStreamChunk(streamId);
         if (res.exitCode === 0) {
           setOutdatedTermuxPips([]);
           appLog('package', `Startup Termux pip upgrade finished (${formatDurationHMS(res.durationMs)})`);
           const nextHealth = await checkTermuxHealth(termuxConfigRef.current).catch(() => null);
           if (nextHealth) setTermuxHealth(nextHealth);
+          void refreshBackupStatus(termuxConfigRef.current);
         }
       } catch {
+        flushStreamChunk(streamId);
         // silent background failure
       } finally {
         setUpgradingTermux(false);
       }
     }, 3200);
     return () => window.clearTimeout(timer);
-  }, [termuxConnectionState, termuxHealth, isOnline, termuxRunning, appendStreamChunk]);
+  }, [termuxConnectionState, termuxHealth, isOnline, termuxRunning, appendStreamChunk, flushStreamChunk, refreshBackupStatus]);
 
   const handleFormatActiveFile = useCallback(() => {
     const ok = editorRef.current?.formatCode();
@@ -2697,6 +2848,11 @@ export default function App() {
                         onSendTermuxStdin={handleSendTermuxStdin}
                         onStopTermux={handleStopTermux}
                         onOpenLogs={() => setShowLogsModal(true)}
+                        enableSandboxAddon={Boolean(settings.enableSandboxAddon)}
+                        cleanTextMode={Boolean(settings.cleanTextMode)}
+                        onToggleCleanTextMode={() =>
+                          handleUpdateSettings({ cleanTextMode: !settings.cleanTextMode })
+                        }
                         onClear={() => setEntries([])}
                       />
                     </div>
@@ -2769,6 +2925,9 @@ export default function App() {
                   onSaveWorkspaceFile={handleSaveWorkspaceFile}
                   onOpenHelp={() => setShowHelpModal(true)}
                   onOpenLogs={() => setShowLogsModal(true)}
+                  backupStatus={backupStatus}
+                  onRestoreBackedUpPackages={handleRestoreBackedUpPackages}
+                  restoringBackup={restoringBackup}
                   onNotify={showToast}
                 />
               </div>
@@ -2952,6 +3111,11 @@ export default function App() {
                       onSendTermuxStdin={handleSendTermuxStdin}
                       onStopTermux={handleStopTermux}
                       onOpenLogs={() => setShowLogsModal(true)}
+                      enableSandboxAddon={Boolean(settings.enableSandboxAddon)}
+                      cleanTextMode={Boolean(settings.cleanTextMode)}
+                      onToggleCleanTextMode={() =>
+                        handleUpdateSettings({ cleanTextMode: !settings.cleanTextMode })
+                      }
                       onClear={() => setEntries([])}
                     />
                   </div>
@@ -3156,6 +3320,11 @@ export default function App() {
                   onSendTermuxStdin={handleSendTermuxStdin}
                   onStopTermux={handleStopTermux}
                   onOpenLogs={() => setShowLogsModal(true)}
+                  enableSandboxAddon={Boolean(settings.enableSandboxAddon)}
+                  cleanTextMode={Boolean(settings.cleanTextMode)}
+                  onToggleCleanTextMode={() =>
+                    handleUpdateSettings({ cleanTextMode: !settings.cleanTextMode })
+                  }
                   onClear={() => setEntries([])}
                 />
               </div>
@@ -3291,6 +3460,9 @@ export default function App() {
           onSaveWorkspaceFile={handleSaveWorkspaceFile}
           onOpenHelp={() => setShowHelpModal(true)}
           onOpenLogs={() => setShowLogsModal(true)}
+          backupStatus={backupStatus}
+          onRestoreBackedUpPackages={handleRestoreBackedUpPackages}
+          restoringBackup={restoringBackup}
           onNotify={showToast}
         />
       )}

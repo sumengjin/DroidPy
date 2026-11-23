@@ -23,8 +23,8 @@ interface HelpTutorialModalProps {
 }
 
 const CROSS_ENV_DEMO_CODE = `"""
-DroidPy 跨平台相容範例 (PC / Termux / 獨立 APK / 瀏覽器沙盒)
-執行前會自動偵測目前引擎與作業環境
+DroidPy 手機環境偵測範例 (原生 Python 直譯器 / 獨立 APK / 瀏覽器沙盒)
+預設以手機 (Android) 環境為主進行偵測與執行
 """
 import os
 import sys
@@ -47,11 +47,13 @@ def main():
 
     if HAS_DROID:
         info = droid.device_info()
+        print("裝置平台   :", info.get("platform", "Android"))
+        print("裝置類型   :", info.get("deviceType", "phone"))
         print("裝置螢幕   :", info.get("screen"))
         droid.vibrate(35)
-        droid.toast("跨環境偵測完成！")
+        droid.toast("手機環境偵測完成！")
     else:
-        print("目前為原生 Python 環境，可使用相對路徑讀寫工作區檔案。")
+        print("目前為原生 Python 環境，預設使用相對路徑讀寫工作區檔案。")
 
 
 if __name__ == "__main__":
@@ -114,16 +116,16 @@ const GUIDE_TEXT: Record<LocaleId, GuideContent> = {
   'zh-TW': {
     quickSteps: [
       {
-        title: '1. 選擇執行引擎（離線沙盒 vs. Termux 原生）',
-        body: '終端機上方可切換引擎：「沙盒 (Pyodide)」免連線、可畫 matplotlib 圖表並支援 import droid 震動/裝置資訊；「Termux 原生」適合網路爬蟲（無 CORS 限制）與 pip/pkg 原生套件。',
+        title: '1. 預設使用「Python 直譯器」（可另開沙盒附加功能）',
+        body: 'DroidPy 預設直接使用原生 ARM64「Python 直譯器」（支援 requests/bs4 爬蟲、subprocess 與完整 pip/pkg 套件）；若需在純網頁環境離線繪製 matplotlib 圖表，可於「設定」開啟「Pyodide 瀏覽器沙盒」附加功能。',
       },
       {
-        title: '2. 行動端編輯效率技巧',
-        body: '編輯器下方有 Android 快捷符號列（可按鍵盤圖示收合），工具列提供一鍵排版與即時 Python/JSON 語法檢查；非 .py 資料檔按下執行時，會自動改跑 main.py。',
+        title: '2. 預設以手機（Android）為偵測環境',
+        body: '腳本執行與 droid.device_info() 預設回報手機 Android 環境，並可直接透過 /storage/emulated/0 或工作區相對路徑讀寫檔案。',
       },
       {
         title: '3. 工作區檔案與自動同步',
-        body: '支援 .py、.json、.csv、.txt、requirements.txt 等多種格式。於 Termux 執行爬蟲產出的結果檔，執行完會自動拉回左側專案清單，不需手動搬檔。',
+        body: '支援 .py、.json、.csv、.txt、requirements.txt 等多種格式。執行爬蟲產出的結果檔會自動拉回左側專案清單，不需手動搬檔；重裝或更新 APK 亦會自動備份已安裝套件清單。',
       },
     ],
     crawlerSteps: [
@@ -133,17 +135,17 @@ const GUIDE_TEXT: Record<LocaleId, GuideContent> = {
       },
       {
         title: '2. 其他快速取 Cookie 方式（網頁 / Chrome）',
-        body: '連上 Termux 後可用「Termux 探測」抓取 Set-Cookie；或切到「匯入 cURL / 標頭」，直接貼上 DevTools 的 Copy as cURL、Cookie 標頭，或複製內建 Chrome 書籤小工具回貼。',
+        body: '連上橋接後可用「Python 直譯器探測」抓取 Set-Cookie；或切到「匯入 cURL / 標頭」，直接貼上 DevTools 的 Copy as cURL、Cookie 標頭，或複製內建 Chrome 書籤小工具回貼。',
       },
       {
         title: '3. 寫入 cookies.json 並一鍵生成爬蟲',
-        body: '在 Cookie 分頁勾選需要的項目，點「寫入 cookies.json」或「產生 crawler_session.py」，再切換至 Termux 引擎執行，即可帶著登入態與 User-Agent 高速抓取資料。',
+        body: '在 Cookie 分頁勾選需要的項目，點「寫入 cookies.json」或「產生 crawler_session.py」，即可透過原生 Python 直譯器帶著登入態高速抓取資料。',
       },
     ],
     apkSteps: [
       {
         title: '1. 匯出 GitHub 獨立 APK 自動編譯專案',
-        body: '前往「Android 部署」，設定 App 名稱與 Package ID，點選「匯出 GitHub 獨立 APK 專案（內嵌 Termux）」。解壓縮後將整個資料夾 Push 到 GitHub 倉庫。',
+        body: '前往「Android 部署」，設定 App 名稱與 Package ID，點選「匯出 GitHub 獨立 APK 專案（內嵌 Python 環境）」。解壓縮後將整個資料夾 Push 到 GitHub 倉庫。',
       },
       {
         title: '2. GitHub Actions 自動打包 ARM64 APK',
@@ -151,25 +153,25 @@ const GUIDE_TEXT: Record<LocaleId, GuideContent> = {
       },
       {
         title: '3. 手機開啟 APK 一鍵初始化爬蟲環境',
-        body: '安裝後開啟 App（完全不需另外安裝外部 Termux App），進入「Termux 橋接」點擊「一鍵初始化 Python + 爬蟲環境」，系統會自動安裝 python、clang、libxml2 與 requests/bs4/lxml/httpx。',
+        body: '安裝後開啟 App，進入「Python 環境」點擊「一鍵初始化 Python + 爬蟲環境」，系統會自動安裝 python、clang、libxml2 與 requests/bs4/lxml/httpx。',
       },
     ],
     faqs: [
       {
         q: '為什麼部分網站內嵌預覽顯示空白或拒絕連線？',
-        a: '多數登入頁會設定 X-Frame-Options 禁止被 iframe 嵌入。請改用 APK 內的「APK 原生瀏覽器」、用「Termux 探測」，或在 Chrome 登入後用書籤小工具／Copy as cURL 匯入。',
+        a: '多數登入頁會設定 X-Frame-Options 禁止被 iframe 嵌入。請改用 APK 內的「APK 原生瀏覽器」、使用連線探測，或在 Chrome 登入後用書籤小工具／Copy as cURL 匯入。',
       },
       {
-        q: '為什麼在沙盒模式下跑 requests 抓外部網站會失敗？',
-        a: '瀏覽器 WebAssembly 沙盒受限於跨域安全規範（CORS）。網路爬蟲請切換至「Termux 原生引擎」或使用打包後的獨立 APK 執行。',
+        q: '為什麼在沙盒模式下 subprocess 或部分套件（如 parsel）會失敗？',
+        a: '瀏覽器 WebAssembly 沙盒受限於單執行緒 Emscripten（無 fork/exec，亦不支援編譯 C/C++ 原生擴充）。請改用預設的「Python 直譯器」即可完整執行。',
       },
       {
-        q: '為什麼手機執行正常，拿到電腦或 Termux 卻提示找不到 droid 模組？',
-        a: 'import droid 是 Pyodide 沙盒專屬的瀏覽器硬體橋接。建議用 try: import droid / except ImportError: 包裝，或點擊下方「載入跨環境範例腳本」參考標準寫法。',
+        q: '為什麼在瀏覽器沙盒無法直接讀取 /storage/emulated/0 路徑？',
+        a: '瀏覽器 WebAssembly 沙盒無法直接存取手機實體儲存空間，請切換使用預設的「Python 直譯器（原生環境）」並授權手機儲存權限即可正常讀寫。',
       },
       {
-        q: '產出的資料檔與匯出的 ZIP 存在手機哪裡？',
-        a: '在獨立 APK 中匯出 ZIP 會直接存到手機系統的「Downloads / 下載」資料夾；Termux 產出的 JSON/CSV 則會自動同步回 IDE 的專案清單中。',
+        q: '更新或重裝程式後，已安裝的套件會不見嗎？',
+        a: '覆蓋升級會保留 usr/ 環境；同時系統會在每次安裝後自動將清單備份至 /sdcard/DroidPy/.droidpy_backup/，偵測到遺失時提供一鍵還原。',
       },
     ],
   },

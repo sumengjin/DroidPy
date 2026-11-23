@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import {
   ExecutionEngine,
+  PackageBackupStatus,
   PythonFile,
   TermuxConfig,
   TermuxConnectionState,
@@ -65,6 +66,10 @@ interface TermuxIntegrationPanelProps {
   onCheckTermuxOutdated?: () => Promise<void>;
   onUninstallInTermux?: (mode: 'pip' | 'pkg', target: string) => Promise<void>;
   upgradingTermux?: boolean;
+  enableSandboxAddon?: boolean;
+  backupStatus?: PackageBackupStatus | null;
+  onRestoreBackedUpPackages?: () => Promise<void>;
+  restoringBackup?: boolean;
   onNotify: (msg: string) => void;
 }
 
@@ -90,6 +95,10 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
   onCheckTermuxOutdated,
   onUninstallInTermux,
   upgradingTermux = false,
+  enableSandboxAddon = false,
+  backupStatus = null,
+  onRestoreBackedUpPackages,
+  restoringBackup = false,
   onNotify,
 }) => {
   const { t } = useI18n();
@@ -232,17 +241,19 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
         </div>
 
         <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--ide-surface-alt)] border border-[var(--ide-border)]">
-          <button
-            type="button"
-            onClick={() => onChangeEngine('pyodide')}
-            className={`min-h-[38px] px-3.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-              engine === 'pyodide'
-                ? 'bg-[var(--ide-surface)] text-[var(--ide-text)] shadow-sm'
-                : 'text-[var(--ide-text-muted)]'
-            }`}
-          >
-            {t('tmx_engine_py')}
-          </button>
+          {(enableSandboxAddon || engine === 'pyodide') && (
+            <button
+              type="button"
+              onClick={() => onChangeEngine('pyodide')}
+              className={`min-h-[38px] px-3.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+                engine === 'pyodide'
+                  ? 'bg-[var(--ide-surface)] text-[var(--ide-text)] shadow-sm'
+                  : 'text-[var(--ide-text-muted)]'
+              }`}
+            >
+              {t('tmx_engine_py')}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => onChangeEngine('termux')}
@@ -256,6 +267,48 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Package Backup Restore Banner (when reinstall/update cleared missing packages) */}
+      {backupStatus?.hasBackup &&
+        ((backupStatus.missingPipPackages?.length ?? 0) > 0 ||
+          (backupStatus.missingPkgPackages?.length ?? 0) > 0) &&
+        onRestoreBackedUpPackages && (
+          <div className="rounded-2xl border border-amber-300 dark:border-amber-800 bg-amber-50/90 dark:bg-amber-950/35 p-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="text-sm font-semibold text-amber-900 dark:text-amber-200 flex flex-wrap items-center gap-2">
+                <PackagePlus className="w-4 h-4 shrink-0" />
+                <span>{t('backup_banner_title')}</span>
+                <span className="text-[11px] font-normal px-2 py-0.5 rounded-md bg-amber-200/70 dark:bg-amber-900/60">
+                  {t('backup_saved_badge')}
+                </span>
+              </div>
+              <p className="text-xs text-amber-800 dark:text-amber-300/90 leading-relaxed">
+                {t('backup_banner_desc', {
+                  pipCount: backupStatus.missingPipPackages.length,
+                  pkgCount: backupStatus.missingPkgPackages.length,
+                })}
+              </p>
+              <div className="text-[11px] font-mono text-amber-900/90 dark:text-amber-200/90 truncate">
+                {[...backupStatus.missingPkgPackages, ...backupStatus.missingPipPackages].join(', ')}
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={restoringBackup || !!busyAction || upgradingTermux}
+              onClick={() => void onRestoreBackedUpPackages()}
+              className="min-h-[42px] px-4 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-2 whitespace-nowrap shrink-0 transition-colors"
+            >
+              {restoringBackup ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              <span>
+                {restoringBackup ? t('backup_restoring_btn') : t('backup_restore_btn')}
+              </span>
+            </button>
+          </div>
+        )}
 
       {/* Connection Config & Live Health Card */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

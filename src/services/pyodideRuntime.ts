@@ -61,12 +61,13 @@ function ensureDroidBridge() {
     },
     deviceInfo: () => {
       const info = {
-        platform: navigator.platform || 'Android',
+        platform: 'Android',
+        deviceType: 'phone',
         userAgent: navigator.userAgent,
         language: navigator.language,
         screen: `${window.screen.width}x${window.screen.height}`,
         pixelRatio: window.devicePixelRatio || 1,
-        maxTouchPoints: navigator.maxTouchPoints || 0,
+        maxTouchPoints: navigator.maxTouchPoints || 5,
         online: navigator.onLine,
       };
       return JSON.stringify(info);
@@ -140,6 +141,7 @@ function loadPyodideScript(): Promise<void> {
 }
 
 const DROID_MODULE_PY = `import json
+import os
 import js
 
 def vibrate(pattern=40):
@@ -269,8 +271,88 @@ def __droidpy_transform_input_ast__(source_code):
     ast.fix_missing_locations(transformed)
     return ast.unparse(transformed), True
 
+def __droidpy_install_process_guards__():
+    if sys.platform != "emscripten":
+        return
+    try:
+        import subprocess
+        _orig_popen = getattr(subprocess, "Popen", None)
+        _orig_run = getattr(subprocess, "run", None)
+
+        def _guarded_popen(args, *a, **kw):
+            cmd_preview = " ".join(args) if isinstance(args, (list, tuple)) else str(args)
+            raise OSError(
+                138,
+                f"emscripten does not support processes（無法在瀏覽器沙盒執行外部指令：{cmd_preview}；請改用「Python 直譯器」原生引擎）"
+            )
+
+        def _guarded_run(args, *a, **kw):
+            cmd_preview = " ".join(args) if isinstance(args, (list, tuple)) else str(args)
+            raise OSError(
+                138,
+                f"emscripten does not support processes（無法在瀏覽器沙盒執行外部指令：{cmd_preview}；請改用「Python 直譯器」原生引擎）"
+            )
+
+        if _orig_popen is not None:
+            subprocess.Popen = _guarded_popen
+        if _orig_run is not None:
+            subprocess.run = _guarded_run
+            subprocess.check_call = _guarded_run
+            subprocess.check_output = _guarded_run
+            subprocess.call = _guarded_run
+    except Exception:
+        pass
+    try:
+        def _guarded_system(cmd):
+            raise OSError(
+                138,
+                f"emscripten does not support processes（os.system 無法於沙盒執行：{cmd}；請改用「Python 直譯器」原生引擎）"
+            )
+        os.system = _guarded_system
+    except Exception:
+        pass
+
+__droidpy_install_process_guards__()
 __droidpy_repl_ns__ = {"__name__": "__main__"}
 `;
+
+function formatPyodideError(rawMsg: string, contextHint?: string): string {
+  const clean = rawMsg.trim();
+  if (
+    clean.includes('Errno 138') ||
+    clean.includes('emscripten does not support processes') ||
+    clean.includes('subprocess is not supported')
+  ) {
+    return (
+      `${clean}\n\n` +
+      '【環境說明】Pyodide 瀏覽器 WebAssembly 沙盒受限於單執行緒 Emscripten 環境，不支援建立外部子行程（如 subprocess.run / pip / os.system）。\n' +
+      '建議解法：\n' +
+      '1. 切回「Python 直譯器（原生環境）」執行此腳本（支援完整 subprocess 與系統指令）。\n' +
+      '2. 若僅為學習測試，可將腳本中自動呼叫 pip / subprocess 的段落包在 try...except (OSError, NotImplementedError) 中跳過。'
+    );
+  }
+  if (
+    clean.includes("Can't find a pure Python 3 wheel") ||
+    clean.includes('No known packages') ||
+    clean.includes('pure Python')
+  ) {
+    return (
+      `${clean}\n\n` +
+      `【環境說明】${contextHint ? `套件「${contextHint}」或其相依套件` : '目標套件'}包含 C/C++ 原生擴充原始碼（例如 parsel / lxml 等）且缺少 WebAssembly (wasm32) 預編譯 wheel，無法在瀏覽器沙盒中編譯。\n` +
+      '建議改用「Python 直譯器（原生環境）」執行 pip / pkg 安裝。'
+    );
+  }
+  if (
+    clean.includes('FileNotFoundError') &&
+    (/\/storage\/emulated\/0|Download|ovpn|tmp/i.test(clean))
+  ) {
+    return (
+      `${clean}\n\n` +
+      '【路徑提示】目前在 Pyodide 瀏覽器沙盒中無法直接存取手機 /storage/emulated/0 目錄，建議改用預設的「Python 直譯器（原生環境）」執行。'
+    );
+  }
+  return clean;
+}
 
 export async function initPyodide(callbacks: RuntimeCallbacks): Promise<PyodideInterface> {
   activeCallbacks = callbacks;
@@ -287,7 +369,7 @@ export async function initPyodide(callbacks: RuntimeCallbacks): Promise<PyodideI
   }
 
   initPromise = (async () => {
-    callbacks.onSystem('正在載入 Python 3.12 WebAssembly 核心...');
+    callbacks.onSystem('正在載入 Pyodide 3.12 WebAssembly 沙盒核心...');
     await loadPyodideScript();
     if (!window.loadPyodide) {
       throw new Error('loadPyodide 初始化函式遺失');
@@ -302,7 +384,7 @@ export async function initPyodide(callbacks: RuntimeCallbacks): Promise<PyodideI
     await py.runPythonAsync(RUNTIME_BOOTSTRAP_PY);
 
     pyodideInstance = py;
-    callbacks.onSystem('Python 核心就緒（支援離線快取、Matplotlib 圖表與 Android 裝置橋接）');
+    callbacks.onSystem('Pyodide 沙盒就緒（支援離線快取、Matplotlib 圖表與 Android 裝置橋接）');
     return py;
   })();
 
@@ -372,17 +454,25 @@ _ns = {"__name__": "__main__", "__file__": f"/home/pyodide/{__droidpy_filename__
     const durationMs = Math.round(performance.now() - startedAt);
     return { durationMs, success: true };
   } catch (err) {
-    let message = err instanceof Error ? err.message : String(err);
-    const sysExitMatch = message.match(/SystemExit:\s*(.*)$/m);
+    const rawMsg = err instanceof Error ? err.message : String(err);
+    const durationMs = Math.round(performance.now() - startedAt);
+
+    if (rawMsg.includes('KeyboardInterrupt')) {
+      callbacks.onSystem('使用者已中止輸入，程式執行已安全中斷 (KeyboardInterrupt)');
+      return { durationMs, success: false };
+    }
+
+    const sysExitMatch = rawMsg.match(/SystemExit:\s*(.*)$/m);
     if (sysExitMatch) {
       const codeRaw = sysExitMatch[1].trim();
-      const durationMs = Math.round(performance.now() - startedAt);
       if (!codeRaw || codeRaw === '0' || codeRaw === 'None') {
         return { durationMs, success: true };
       }
       callbacks.onStderr(`SystemExit: ${codeRaw}`);
       return { durationMs, success: false };
     }
+
+    let message = formatPyodideError(rawMsg);
     if (
       message.includes('SyntaxError') &&
       /^[!%]?\s*pip\s+install\b/m.test(activeFile.content)
@@ -391,7 +481,6 @@ _ns = {"__name__": "__main__", "__file__": f"/home/pyodide/{__droidpy_filename__
         '\n\n提示：pip install 屬於終端機 Shell 指令，並非 Python 語法，不能直接寫在 .py 檔案中執行。請改至「套件管理」分頁安裝套件，或在下方 >>> REPL 直接輸入 pip install <套件名稱>。';
     }
     callbacks.onStderr(message);
-    const durationMs = Math.round(performance.now() - startedAt);
     return { durationMs, success: false };
   }
 }
@@ -476,8 +565,12 @@ _repl_out
     }
     return null;
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    callbacks.onStderr(message);
+    const rawMsg = err instanceof Error ? err.message : String(err);
+    if (rawMsg.includes('KeyboardInterrupt')) {
+      callbacks.onSystem('使用者已中止輸入 (KeyboardInterrupt)');
+      return null;
+    }
+    callbacks.onStderr(formatPyodideError(rawMsg));
     return null;
   }
 }
@@ -506,12 +599,7 @@ await micropip.install(__droidpy_pkg_target__)
 `);
   } catch (err) {
     const rawMsg = err instanceof Error ? err.message : String(err);
-    if (rawMsg.includes("Can't find a pure Python 3 wheel") || rawMsg.includes('pure Python')) {
-      throw new Error(
-        `套件 "${cleanPkg}" 包含尚未編譯的 C/C++ 原生擴充原始碼，且無對應的 WebAssembly (wasm32) 預編譯 wheel，無法於瀏覽器沙盒中編譯。建議改用 Termux（含 clang 工具鏈）或 Buildozer APK 匯出腳本於原生 Android 環境建置。`
-      );
-    }
-    throw err;
+    throw new Error(formatPyodideError(rawMsg, cleanPkg));
   }
   callbacks.onSystem(`套件 "${cleanPkg}" 安裝完成`);
   const list = await listPyPackages(callbacks);
@@ -778,7 +866,8 @@ export async function upgradePyPackage(
   callbacks.onSystem(`正在更新套件 "${spec}"...`);
   py.globals.set('__droidpy_pkg_target__', cleanPkg);
   py.globals.set('__droidpy_pkg_spec__', spec);
-  await py.runPythonAsync(`
+  try {
+    await py.runPythonAsync(`
 import micropip
 try:
     micropip.uninstall(__droidpy_pkg_target__)
@@ -786,6 +875,10 @@ except Exception:
     pass
 await micropip.install(__droidpy_pkg_spec__)
 `);
+  } catch (err) {
+    const rawMsg = err instanceof Error ? err.message : String(err);
+    throw new Error(formatPyodideError(rawMsg, cleanPkg));
+  }
   callbacks.onSystem(`套件 "${cleanPkg}" 更新完成`);
   const list = await listPyPackages(callbacks);
   const installedEntry = list.find(

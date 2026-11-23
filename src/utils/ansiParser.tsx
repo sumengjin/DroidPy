@@ -88,12 +88,27 @@ function xterm256ToCss(n: number, dark: boolean): string {
 }
 
 function normalizeTerminalText(raw: string): string {
-  // Normalize CRLF -> LF and strip OSC sequences & non-SGR CSI sequences
+  // Normalize CRLF -> LF and strip OSC, charset, CSI, and truncated/orphaned SGR fragments
   let cleaned = raw.replace(/\r\n/g, '\n');
-  // Strip OSC sequences like \x1b]...\x07 or \x1b]...\x1b\\
-  cleaned = cleaned.replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '');
-  // Strip non-SGR CSI sequences (ending in letters other than 'm')
-  cleaned = cleaned.replace(/\x1b\[[0-9;?]*[A-LN-Za-ln-z~@`]/g, '');
+  // Strip OSC sequences like \x1b]...\x07 or \x1b]...\x1b\\ or C1 0x9d...
+  cleaned = cleaned.replace(/(?:\x1b\]|\x9d)[^\x07\x1b\x9c]*(?:\x07|\x1b\\|\x9c)/g, '');
+  // Strip character set / 2-byte ESC sequences such as \x1b(B, \x1b)0, \x1b=, \x1b>
+  cleaned = cleaned.replace(/\x1b[()#][0-9A-Za-z]/g, '');
+  cleaned = cleaned.replace(/\x1b[=>NOM78c]/g, '');
+  // Strip non-SGR CSI sequences (ending in letters/symbols other than 'm')
+  cleaned = cleaned.replace(/(?:\x1b\[|\x9b)[0-9;?]*[A-LN-Za-ln-z~@`]/g, '');
+  // Strip dangling incomplete ESC/CSI/OSC sequences at end of chunk or string
+  cleaned = cleaned.replace(/\x1b(?:\][^\x07\x1b]*|\[[0-9;?]*)?$/g, '');
+  // Strip orphaned bracketed SGR fragments missing ESC (e.g. "[0m", "[38;5;88m", "[91m")
+  cleaned = cleaned.replace(/\[(?:[0-9]{1,3}(?:;[0-9]{1,3})*)m/g, (match, _inner, offset, full) => {
+    const prev = offset > 0 ? full[offset - 1] : '';
+    if (prev === '\x1b' || prev === '\u001b') return match;
+    // Keep normal bracketed text if clearly not ANSI (Wait: numbers+m like [0m, [38;5;88m, [91m are ANSI SGR)
+    return '';
+  });
+  // Strip orphaned truncated SGR tail fragments like ";88m", ";5;208m", "38;5;88m" caused by upstream slice
+  cleaned = cleaned.replace(/(?:^|(?<=[\s\]|:]))(?:38;5|48;5|38;2|48;2)?(?:;[0-9]{1,3})+m/g, '');
+  cleaned = cleaned.replace(/(?:^|(?<=\s))(?:0|1|2|3|4|22|24|3[0-79]|4[0-79]|9[0-7]|10[0-7])m(?=[A-Za-z0-9\u4e00-\u9fff\[\(]|$)/g, '');
   // Resolve remaining standalone \r carriage-return overwrites per line
   cleaned = cleaned
     .split('\n')
@@ -107,14 +122,46 @@ function normalizeTerminalText(raw: string): string {
 }
 
 function stripOtherControlChars(text: string): string {
-  // Keep \n (0x0A) and \t (0x09), remove other C0/DEL control bytes that render as tofu boxes
+  // Keep \n (0x0A) and \t (0x09), remove other C0/DEL and replacement control bytes
   return text.replace(/[\x00-\x08\x0b-\x1a\x1c-\x1f\x7f]/g, '');
 }
 
 export function stripAnsi(raw: string): string {
+  if (!raw) return '';
   const normalized = normalizeTerminalText(raw);
-  const withoutSgr = normalized.replace(/(?:\x1b|\u001b|\x9b)\[[0-9;]*m/g, '');
+  const withoutSgr = normalized.replace(/(?:\x1b|\u001b|\x9b)\[[0-9;?]*m/g, '');
   return stripOtherControlChars(withoutSgr);
+}
+
+/**
+ * Buffers trailing incomplete ESC/CSI/OSC sequences across streaming chunks so
+ * truncated SGR fragments like ";88m" never leak into rendered terminal output.
+ */
+export function createAnsiStreamBuffer(): {
+  push: (chunk: string) => string;
+  flush: () => string;
+} {
+  let pending = '';
+  const partialEscRegex = /\x1b(?:\[[^\x40-\x7e]*|\][^\x07\x1b]*|[()#]?)?$/;
+
+  return {
+    push(chunk: string): string {
+      if (!chunk) return '';
+      const combined = pending + chunk;
+      pending = '';
+      const match = combined.match(partialEscRegex);
+      if (match && match[0].length < 48) {
+        pending = match[0];
+        return combined.slice(0, combined.length - pending.length);
+      }
+      return combined;
+    },
+    flush(): string {
+      const rem = pending;
+      pending = '';
+      return rem;
+    },
+  };
 }
 
 interface AnsiStyleState {
@@ -126,7 +173,10 @@ interface AnsiStyleState {
   underline: boolean;
 }
 
-export function renderAnsiText(raw: string): React.ReactNode {
+export function renderAnsiText(raw: string, cleanTextMode = false): React.ReactNode {
+  if (cleanTextMode) {
+    return stripAnsi(raw);
+  }
   const dark = isDarkModeActive();
   const fgStandard = dark ? ANSI_FG_STANDARD_DARK : ANSI_FG_STANDARD_LIGHT;
   const fgBright = dark ? ANSI_FG_BRIGHT_DARK : ANSI_FG_BRIGHT_LIGHT;

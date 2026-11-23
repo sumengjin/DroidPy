@@ -2,6 +2,23 @@
 
 All notable changes to **DroidPy** are documented in this file.
 
+## [1.2.13] - 2026-11-23
+
+### Added & Fixed (Native Python Default, Sandbox Add-on, Clean ANSI Logs, Phone-Default Detection & Upgrade Package Restore)
+- **原生 Python 直譯器預設與 Pyodide 沙盒附加功能強化**：
+  - 預設執行引擎改為 **Python 直譯器**（Termux／內嵌 ARM64），將 **Pyodide 瀏覽器沙盒**收斂至設定內的選用附加功能開關，避免新手誤在沙盒執行需原生擴充或子行程的腳本。
+  - 為沙盒補上 `subprocess` / `os.system` 防護提示（處理 `OSError: [Errno 138] emscripten does not support processes`）、無 `wasm32` wheel 套件提示（如 `parsel`）與 `input()` 中斷（`KeyboardInterrupt`）友善回收機制。
+- **終端機與匯出日誌 ANSI 跳脫碼淨化＋純淨文字模式**：
+  - 新增 `AnsiStreamBuffer` 串流切分緩衝與完整 ANSI 解析／清除器（消除 `[0m`、`[38;5;...m`、`;88mO`、`91mn` 等殘留片段），並同步在 Android 原生 `droidpy_native.log` 與 `appLogger.ts` 執行潔淨化。
+  - 終端機工具列與編輯器設定同步新增「純淨文字模式 (`cleanTextMode`)」切換開關。
+- **腳本環境預設為手機（Android）**：
+  - 移除手機／電腦環境切換設定與共用 `tmp` 目錄輔助 API，腳本執行與 `droid.device_info()` 環境偵測預設為手機（Android）環境。
+- **`pipPkgs` 統計修正與消除 `Unhandled rejection: Not found`**：
+  - 修正 Android `/health` 掃描套件邏輯，改讀 `.dist-info/METADATA` 與 `.egg-info/PKG-INFO` 實際 `Name:` 欄位並正規化去重，確保 `pipPkgs` 計數與實際相符；強化 `termuxFetch` 錯誤格式與可選端點 404 容錯，並記錄 rejection 堆疊詳情。
+- **修復更新／重裝程式導致已安裝套件清空，並統一「日誌」與「手機」命名**：
+  - 強化 `hasExistingInstall` 偵測保留原有 `usr/`，並自動將狀態與使用者安裝的 `pip`/`pkg` 清單備份至 `/sdcard/DroidPy/.droidpy_backup/`；偵測到缺少套件時於介面提供一鍵還原橫幅。
+  - 所有「所有日誌／查看執行日誌」按鈕簡化為「日誌」，裝置儲存空間「本機」文案改為「手機」。
+
 ## [1.2.12] - 2026-11-22
 
 ### Added & Fixed (HH:MM:SS Timer, Single-Version Changelog, Package Uninstall, Update Accuracy, Launch-Only Auto-Update & WebView Text Copy)
