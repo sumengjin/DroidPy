@@ -136,7 +136,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
   const [tierFilter, setTierFilter] = useState<'all' | PackageTier>('all');
   const [catFilter, setCatFilter] = useState<PackageCategoryId>('all');
 
-  const oneLineCmd = buildTermuxOneLineCommand(config.token);
+  const oneLineCmd = buildTermuxOneLineCommand(config.token, window.location.origin);
 
   const termuxCatalogItems = useMemo(
     () => PACKAGE_CATALOG.filter((item) => Boolean(item.termux)),
@@ -184,7 +184,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
   };
 
   const handleDownloadBridgePy = async () => {
-    const content = buildTermuxBridgeScript(config.token);
+    const content = buildTermuxBridgeScript(config.token, window.location.origin);
     const blob = new Blob([content], { type: 'text/x-python;charset=utf-8' });
     await downloadBlob(blob, 'droidpy_bridge.py');
     onNotify('droidpy_bridge.py');
