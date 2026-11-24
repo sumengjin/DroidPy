@@ -213,7 +213,6 @@ jobs:
       - name: 強制驗證 APK 簽名與原憑證指紋
         env:
           INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
-          SIGNING_KEYSTORE_FILE: ${{ env.DROIDPY_KEYSTORE_FILE }}
         run: |
           set -euo pipefail
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -z "$INPUT_RELEASE_TAG" ]; then
@@ -243,7 +242,7 @@ jobs:
             echo "::error::無法從 apksigner 輸出取得有效的 SHA-256 憑證指紋。"
             exit 1
           fi
-          if [ "$SIGNING_KEYSTORE_FILE" = "droidpy-debug.p12" ]; then
+          if [ "${DROIDPY_KEYSTORE_FILE:-}" = "droidpy-debug.p12" ]; then
             EXPECTED_SHA256="29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA"
             if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
               echo "::error::APK 簽名憑證與 DroidPy 原有憑證不一致，已阻止產物繼續發布。"
