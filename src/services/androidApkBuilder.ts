@@ -143,9 +143,9 @@ jobs:
             fi
             printf '%s' "\$CUSTOM_KS_B64" | base64 -d > android/app/droidpy-custom.keystore
             echo "DROIDPY_KEYSTORE_FILE=droidpy-custom.keystore" >> "\$GITHUB_ENV"
-            printf 'DROIDPY_STORE_PASSWORD=%s\n' "\$CUSTOM_STORE_PASS" >> "\$GITHUB_ENV"
-            printf 'DROIDPY_KEY_ALIAS=%s\n' "\$CUSTOM_KEY_ALIAS" >> "\$GITHUB_ENV"
-            printf 'DROIDPY_KEY_PASSWORD=%s\n' "\$CUSTOM_KEY_PASS" >> "\$GITHUB_ENV"
+            printf 'DROIDPY_STORE_PASSWORD=%s\\n' "\$CUSTOM_STORE_PASS" >> "\$GITHUB_ENV"
+            printf 'DROIDPY_KEY_ALIAS=%s\\n' "\$CUSTOM_KEY_ALIAS" >> "\$GITHUB_ENV"
+            printf 'DROIDPY_KEY_PASSWORD=%s\\n' "\$CUSTOM_KEY_PASS" >> "\$GITHUB_ENV"
           else
             mkdir -p ~/.android
             cp android/app/droidpy-debug.p12 ~/.android/debug.keystore
@@ -171,11 +171,11 @@ jobs:
           fi
           SIGNER_OUTPUT=\$("\$APKSIGNER" verify --verbose --print-certs "\$APK_PATH" 2>&1) || {
             echo "::error::APK signature verification failed."
-            printf '%s\n' "\$SIGNER_OUTPUT"
+            printf '%s\\n' "\$SIGNER_OUTPUT"
             exit 1
           }
-          printf '%s\n' "\$SIGNER_OUTPUT"
-          ACTUAL_SHA256=\$(printf '%s\n' "\$SIGNER_OUTPUT" | sed -nE 's/.*certificate SHA-256 digest: *([0-9A-Fa-f:]+).*/\\1/ip' | head -n1 | tr -d ':' | tr '[:lower:]' '[:upper:]')
+          printf '%s\\n' "\$SIGNER_OUTPUT"
+          ACTUAL_SHA256=\$(printf '%s\\n' "\$SIGNER_OUTPUT" | sed -nE 's/.*certificate SHA-256 digest: *([0-9A-Fa-f:]+).*/\\1/ip' | head -n1 | tr -d ':' | tr '[:lower:]' '[:upper:]')
           EXPECTED_SHA256="29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA"
           if [ "\$ACTUAL_SHA256" != "\$EXPECTED_SHA256" ]; then
             echo "::error::APK signing certificate does not match the original DroidPy certificate."
@@ -1079,7 +1079,7 @@ class MainActivity : AppCompatActivity() {
                     val lf = File(filesDir, "droidpy_native.log")
                     if (lf.isFile && lf.length() > 220 * 1024L) {
                         val kept = lf.readLines(Charsets.UTF_8).takeLast(400)
-                        lf.writeText(kept.joinToString("\n") + "\n", Charsets.UTF_8)
+                        lf.writeText(kept.joinToString("\\n") + "\\n", Charsets.UTF_8)
                     }
                 } catch (_: Exception) {
                 }
@@ -1100,7 +1100,7 @@ class MainActivity : AppCompatActivity() {
                 try {
                     val lf = File(filesDir, "droidpy_native.log")
                     val ts = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
-                    lf.appendText("[$ts] [$tag] $msg\n")
+                    lf.appendText("[$ts] [$tag] $msg\\n")
                 } catch (_: Exception) {
                 }
             }
@@ -1547,11 +1547,11 @@ class EmbeddedTermuxBridge(
                 }
             }
             if (ch == '\\r') {
-                if (i + 1 < n && s[i + 1] == '\n') {
-                    out.append('\n')
+                if (i + 1 < n && s[i + 1] == '\\n') {
+                    out.append('\\n')
                     i += 2
                 } else {
-                    out.append('\n')
+                    out.append('\\n')
                     i++
                 }
                 continue
@@ -1565,7 +1565,7 @@ class EmbeddedTermuxBridge(
         }
         return out.toString()
             .replace(Regex("\\\\[(?:[0-9]{0,3}(?:[;:][0-9]{0,3})*)?m{1,2}"), "")
-            .replace(Regex("(?:^|(?<=[\s\\\\]|:;]))(?:[34]?8[;:][25])?(?:[;:][0-9]{0,3})+m{1,2}"), "")
+            .replace(Regex("(?:^|(?<=[\\\\s\\\\]|:;]))(?:[34]?8[;:][25])?(?:[;:][0-9]{0,3})+m{1,2}"), "")
             .replace(Regex("^[0-9;:]{1,16}m{1,2}", RegexOption.MULTILINE), "")
     }
 
@@ -1574,13 +1574,13 @@ class EmbeddedTermuxBridge(
             val cleanMsg = stripAnsiForLog(msg)
             android.util.Log.i("DroidPy", "[$tag] $cleanMsg")
             val ts = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
-            val line = "[$ts] [$tag] $cleanMsg\n"
+            val line = "[$ts] [$tag] $cleanMsg\\n"
             synchronized(logLock) {
                 val f = nativeLogFile
                 f.parentFile?.mkdirs()
                 if (f.exists() && f.length() > 220 * 1024L) {
                     val lines = f.readLines(Charsets.UTF_8)
-                    f.writeText(lines.takeLast((lines.size / 2).coerceAtLeast(100)).joinToString("\n") + "\n", Charsets.UTF_8)
+                    f.writeText(lines.takeLast((lines.size / 2).coerceAtLeast(100)).joinToString("\\n") + "\\n", Charsets.UTF_8)
                 }
                 f.appendText(line, Charsets.UTF_8)
             }
@@ -1729,7 +1729,7 @@ class EmbeddedTermuxBridge(
         }
         val aptConfFile = File(usrDir, "etc/apt/apt.conf").apply {
             parentFile?.mkdirs()
-            writeText(aptConfLines.joinToString("\n") + "\n")
+            writeText(aptConfLines.joinToString("\\n") + "\\n")
         }
 
         // Rewrite legacy /data/data/com.termux/files/usr paths in apt.conf.d and bin/apt-key
@@ -1756,7 +1756,7 @@ class EmbeddedTermuxBridge(
         listFiles.forEach { cfg ->
             try {
                 val orig = cfg.readText()
-                val updated = orig.lines().joinToString("\n") { line ->
+                val updated = orig.lines().joinToString("\\n") { line ->
                     var cur = line.replace(legacyPrefix, prefix)
                     val trimmed = cur.trimStart()
                     if (trimmed.startsWith("deb ") && !trimmed.startsWith("deb [")) {
@@ -1780,7 +1780,7 @@ class EmbeddedTermuxBridge(
         if (activeDebLines == 0) {
             try {
                 mainSources.parentFile?.mkdirs()
-                mainSources.writeText("deb [trusted=yes] https://packages-cf.termux.dev/apt/termux-main/ stable main\n")
+                mainSources.writeText("deb [trusted=yes] https://packages-cf.termux.dev/apt/termux-main/ stable main\\n")
             } catch (_: Exception) {
             }
         }
@@ -1874,10 +1874,10 @@ class EmbeddedTermuxBridge(
             "record_dpkg_status() {",
             "  deb_file=\\"\${d}1\\"",
             "  CTRL=\\"\${d}(\\"\${d}PREFIX/bin/dpkg-deb\\" -f \\"\${d}deb_file\\" 2>/dev/null)\\"",
-            "  PKG_NAME=\\"\${d}(printf '%s\n' \\"\${d}CTRL\\" | sed -n 's/^Package: *//p' | head -n1)\\"",
+            "  PKG_NAME=\\"\${d}(printf '%s\\\\n' \\"\${d}CTRL\\" | sed -n 's/^Package: *//p' | head -n1)\\"",
             "  [ -z \\"\${d}PKG_NAME\\" ] && return 0",
             "  if ! grep -Fxq \\"Package: \${d}PKG_NAME\\" \\"\${d}PREFIX/var/lib/dpkg/status\\" 2>/dev/null; then",
-            "    printf '%s\nStatus: install ok installed\n\n' \\"\${d}CTRL\\" >> \\"\${d}PREFIX/var/lib/dpkg/status\\"",
+            "    printf '%s\\\\nStatus: install ok installed\\\\n\\\\n' \\"\${d}CTRL\\" >> \\"\${d}PREFIX/var/lib/dpkg/status\\"",
             "  fi",
             "}",
             "relocate_debs() {",
@@ -1944,7 +1944,7 @@ class EmbeddedTermuxBridge(
             "          if [ -z \\"\${d}line\\" ]; then",
             "            if [ \\"\${d}SKIP_BLK\\" -eq 0 ] && [ -s \\"\${d}BLK_ST\\" ]; then",
             "              cat \\"\${d}BLK_ST\\" >> \\"\${d}TMP_ST\\"",
-            "              printf '\n' >> \\"\${d}TMP_ST\\"",
+            "              printf '\\\\n' >> \\"\${d}TMP_ST\\"",
             "            fi",
             "            SKIP_BLK=0",
             "            : > \\"\${d}BLK_ST\\"",
@@ -1953,11 +1953,11 @@ class EmbeddedTermuxBridge(
             "          case \\"\${d}line\\" in",
             "            \\"Package: \${d}rpkg\\") SKIP_BLK=1 ;;",
             "          esac",
-            "          printf '%s\n' \\"\${d}line\\" >> \\"\${d}BLK_ST\\"",
+            "          printf '%s\\\\n' \\"\${d}line\\" >> \\"\${d}BLK_ST\\"",
             "        done < \\"\${d}ST\\"",
             "        if [ \\"\${d}SKIP_BLK\\" -eq 0 ] && [ -s \\"\${d}BLK_ST\\" ]; then",
             "          cat \\"\${d}BLK_ST\\" >> \\"\${d}TMP_ST\\"",
-            "          printf '\n' >> \\"\${d}TMP_ST\\"",
+            "          printf '\\\\n' >> \\"\${d}TMP_ST\\"",
             "        fi",
             "        rm -f \\"\${d}BLK_ST\\"",
             "        mv -f \\"\${d}TMP_ST\\" \\"\${d}ST\\"",
@@ -1981,7 +1981,7 @@ class EmbeddedTermuxBridge(
             "esac"
         )
         File(wrapperDir, "pkg").apply {
-            writeText(pkgLines.joinToString("\n") + "\n")
+            writeText(pkgLines.joinToString("\\n") + "\\n")
             setExecutable(true, false)
         }
         // Remove PEP 668 EXTERNALLY-MANAGED markers so pip never refuses or splits user installs
@@ -2009,15 +2009,15 @@ class EmbeddedTermuxBridge(
             setExecutable(true, false)
         }
         val pipConfBody = buildString {
-            append("[global]\n")
-            append("no-cache-dir = true\n")
-            append("break-system-packages = true\n")
-            append("disable-pip-version-check = true\n")
+            append("[global]\\n")
+            append("no-cache-dir = true\\n")
+            append("break-system-packages = true\\n")
+            append("disable-pip-version-check = true\\n")
             if (certFile != null && certFile.exists() && certFile.length() > 0L) {
-                append("cert = \${certFile.absolutePath}\n")
+                append("cert = \${certFile.absolutePath}\\n")
             }
-            append("\n[install]\n")
-            append("user = true\n")
+            append("\\n[install]\\n")
+            append("user = true\\n")
         }
         listOf(sysPipConf, userPipConf).forEach { cfg ->
             try {
@@ -2290,7 +2290,7 @@ for _mod_name in ("certifi", "pip._vendor.certifi", "pip._vendor.truststore._api
         _droidpy_patch_module(_mod_name, sys.modules[_mod_name])
 if not any(isinstance(f, _DroidPySslImportHook) for f in sys.meta_path):
     sys.meta_path.insert(0, _DroidPySslImportHook())
-""".trimIndent() + "\n"
+""".trimIndent() + "\\n"
 
         try {
             File(droidLibDir, "sitecustomize.py").apply {
@@ -2363,7 +2363,7 @@ if not any(isinstance(f, _DroidPySslImportHook) for f in sys.meta_path):
             "export PYTHONUSERBASE=\\"\${pyUserDir.absolutePath}\\"",
             "export PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 PIP_NO_CACHE_DIR=1",
             "exec \\"\${d}PY_BIN\\" -m pip \\"\${d}@\\""
-        ).joinToString("\n") + "\n"
+        ).joinToString("\\n") + "\\n"
         File(wrapperDir, "pip").apply {
             writeText(pipScript)
             setExecutable(true, false)
@@ -2387,7 +2387,7 @@ if not any(isinstance(f, _DroidPySslImportHook) for f in sys.meta_path):
             "  exit 127",
             "fi",
             "exec \\"\${d}MAKE_BIN\\" SHELL=\\"\${d}MAKE_SH\\" \\"\${d}@\\""
-        ).joinToString("\n") + "\n"
+        ).joinToString("\\n") + "\\n"
         File(wrapperDir, "make").apply {
             writeText(makeWrapper)
             setExecutable(true, false)
@@ -2600,7 +2600,7 @@ def clipboard_set(text):
         val thresholdSec = 1800L
         val myPid = android.os.Process.myPid()
         val uptimeSec = try {
-            File("/proc/uptime").readText(Charsets.UTF_8).trim().split(Regex("\s+")).firstOrNull()?.toDoubleOrNull() ?: 0.0
+            File("/proc/uptime").readText(Charsets.UTF_8).trim().split(Regex("\\\\s+")).firstOrNull()?.toDoubleOrNull() ?: 0.0
         } catch (_: Exception) {
             0.0
         }
@@ -3108,7 +3108,7 @@ def clipboard_set(text):
                 p1 = b
                 if (headerBuf.size() > 65536) return
             }
-            val headerLines = headerBuf.toString("ISO-8859-1").split("\\r\n")
+            val headerLines = headerBuf.toString("ISO-8859-1").split("\\r\\n")
             val requestLine = headerLines.firstOrNull()?.trim() ?: return
             val parts = requestLine.split(" ")
             if (parts.size < 2) return
@@ -3340,7 +3340,7 @@ def clipboard_set(text):
                 }
 
                 method == "POST" && path == "/stdin" -> {
-                    val data = bodyJson.optString("data", "") + "\n"
+                    val data = bodyJson.optString("data", "") + "\\n"
                     val proc = activeProcess
                     if (proc == null) {
                         writeJson(out, 409, JSONObject().put("error", "No active process"))
@@ -3710,7 +3710,7 @@ def clipboard_set(text):
                                 }
                             }
                             val titleMatch = Regex("<title[^>]*>(.*?)</title>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)).find(bodyText)
-                            val title = titleMatch?.groupValues?.getOrNull(1)?.replace(Regex("\s+"), " ")?.trim() ?: ""
+                            val title = titleMatch?.groupValues?.getOrNull(1)?.replace(Regex("\\\\s+"), " ")?.trim() ?: ""
                             val res = JSONObject()
                                 .put("ok", code in 200..399)
                                 .put("url", targetUrl)
@@ -3785,22 +3785,22 @@ def clipboard_set(text):
         appendNativeLog("Exec", "Stream shell start: \${command.take(180)}")
 
         out.write((
-            "HTTP/1.1 200 OK\\r\n" +
+            "HTTP/1.1 200 OK\\r\\n" +
             corsHeaders() +
-            "Content-Type: application/x-ndjson; charset=utf-8\\r\n" +
-            "Connection: close\\r\n\\r\n"
+            "Content-Type: application/x-ndjson; charset=utf-8\\r\\n" +
+            "Connection: close\\r\\n\\r\\n"
         ).toByteArray())
         out.flush()
 
         fun sendStdout(text: String) {
-            val line = JSONObject().put("type", "stdout").put("data", text).toString() + "\n"
+            val line = JSONObject().put("type", "stdout").put("data", text).toString() + "\\n"
             out.write(line.toByteArray(Charsets.UTF_8))
             out.flush()
         }
 
         if (!shFile.exists()) {
             try {
-                sendStdout("[DroidPy] Waiting for Termux bootstrap extraction...\n")
+                sendStdout("[DroidPy] Waiting for Termux bootstrap extraction...\\n")
             } catch (_: Exception) {
                 return
             }
@@ -3825,7 +3825,7 @@ def clipboard_set(text):
         if (!shFile.exists()) {
             appendNativeLog("Exec", "Bootstrap missing sh at \${shFile.absolutePath}")
             try {
-                sendStdout("[DroidPy] Bootstrap not ready at \${shFile.absolutePath}\n")
+                sendStdout("[DroidPy] Bootstrap not ready at \${shFile.absolutePath}\\n")
             } catch (_: Exception) {
             }
         } else {
@@ -3858,9 +3858,9 @@ def clipboard_set(text):
                 code = proc.waitFor()
             } catch (e: Exception) {
                 appendNativeLog("Exec", "Exec exception: \${e.message}")
-                recordTail("[DroidPy] Exec error: \${e.message}\n")
+                recordTail("[DroidPy] Exec error: \${e.message}\\n")
                 try {
-                    sendStdout("[DroidPy] Exec error: \${e.message}\n")
+                    sendStdout("[DroidPy] Exec error: \${e.message}\\n")
                 } catch (_: Exception) {
                 }
             } finally {
@@ -3883,14 +3883,14 @@ def clipboard_set(text):
         }
         if (code != 0 && outputTail.isNotBlank()) {
             val tailCompact = stripAnsiForLog(outputTail.toString()).trim().takeLast(1200)
-            appendNativeLog("Exec", "Non-zero exit ($code) output tail:\n$tailCompact")
+            appendNativeLog("Exec", "Non-zero exit ($code) output tail:\\n$tailCompact")
         }
 
         val doneLine = JSONObject()
             .put("type", "done")
             .put("exitCode", code)
             .put("durationMs", elapsed)
-            .toString() + "\n"
+            .toString() + "\\n"
         try {
             out.write(doneLine.toByteArray(Charsets.UTF_8))
             out.flush()
@@ -3899,10 +3899,10 @@ def clipboard_set(text):
     }
 
     private fun corsHeaders(): String =
-        "Access-Control-Allow-Origin: *\\r\n" +
-        "Access-Control-Allow-Private-Network: true\\r\n" +
-        "Access-Control-Allow-Methods: GET, POST, OPTIONS\\r\n" +
-        "Access-Control-Allow-Headers: Content-Type, X-DroidPy-Token\\r\n"
+        "Access-Control-Allow-Origin: *\\r\\n" +
+        "Access-Control-Allow-Private-Network: true\\r\\n" +
+        "Access-Control-Allow-Methods: GET, POST, OPTIONS\\r\\n" +
+        "Access-Control-Allow-Headers: Content-Type, X-DroidPy-Token\\r\\n"
 
     private fun serveBundledWebAsset(out: OutputStream, requestPath: String): Boolean {
         val mgr = assetManager ?: return false
@@ -3961,11 +3961,11 @@ def clipboard_set(text):
 
     private fun writeHeaders(out: OutputStream, status: Int, contentType: String, length: Int) {
         out.write((
-            "HTTP/1.1 $status \${statusReason(status)}\\r\n" +
+            "HTTP/1.1 $status \${statusReason(status)}\\r\\n" +
             corsHeaders() +
-            "Content-Type: $contentType\\r\n" +
-            "Content-Length: $length\\r\n" +
-            "Connection: close\\r\n\\r\n"
+            "Content-Type: $contentType\\r\\n" +
+            "Content-Length: $length\\r\\n" +
+            "Connection: close\\r\\n\\r\\n"
         ).toByteArray())
         out.flush()
     }
