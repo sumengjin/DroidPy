@@ -78,6 +78,7 @@ try:
         type("Response", (), {"status": 200, "getheaders": lambda self: [("Content-Type", "text/plain")], "read": lambda self, n: b"ok"})(),
     ]
     requests = []
+    original_http_connection = ns["_PinnedHTTPConnection"]
     class FakeConnection:
         def __init__(self, host, port, family, sockaddr, timeout, *args):
             self.host = host
@@ -113,6 +114,7 @@ try:
     except ValueError:
         pass
 
+    ns["_PinnedHTTPConnection"] = original_http_connection
     connected = []
     class FakeSocket:
         def settimeout(self, value):
