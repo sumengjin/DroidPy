@@ -210,7 +210,7 @@ jobs:
         working-directory: android
         run: gradle assembleRelease --no-daemon
 
-      - name: 強制驗證 APK 簽名與原憑證指紋
+      - name: 強制驗證 APK 簽名與設定的受保護憑證
         if: (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))) || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
         env:
           INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
@@ -243,13 +243,21 @@ jobs:
             echo "::error::無法從 apksigner 輸出取得有效的 SHA-256 憑證指紋。"
             exit 1
           fi
-          EXPECTED_SHA256="29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA"
-          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
-            echo "::error::APK 簽名憑證與 DroidPy 原有憑證不一致，已阻止產物繼續發布。"
-            echo "::error::無論使用內嵌金鑰或 GitHub Secrets，簽名指紋都必須保持不變。"
+          KEYSTORE_PATH="android/${DROIDPY_KEYSTORE_FILE:-droidpy-custom.keystore}"
+          if [ ! -f "$KEYSTORE_PATH" ]; then
+            echo "::error::找不到本次 Release 使用的受保護簽名 keystore。"
             exit 1
           fi
-          echo "已確認 APK 使用 DroidPy 原有簽名憑證（SHA-256: $ACTUAL_SHA256）。"
+          EXPECTED_SHA256=$(keytool -exportcert -keystore "$KEYSTORE_PATH" -storepass "$DROIDPY_STORE_PASSWORD" -alias "$DROIDPY_KEY_ALIAS" | sha256sum | awk '{print toupper($1)}')
+          if ! [[ "$EXPECTED_SHA256" =~ ^[0-9A-F]{64}$ ]]; then
+            echo "::error::無法從受保護 keystore 取得有效的 SHA-256 憑證指紋。"
+            exit 1
+          fi
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::APK 簽名與本次受保護 keystore 不一致，已阻止發布。"
+            exit 1
+          fi
+          echo "已確認 APK 使用本次 GitHub Actions 受保護 keystore 的憑證（SHA-256: $ACTUAL_SHA256）。"
 
       - name: 整理發佈版本與 APK 檔名
         id: resolve_tag
