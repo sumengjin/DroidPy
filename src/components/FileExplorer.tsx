@@ -210,10 +210,14 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
 
   const handleCreateSnapshot = (e?: React.FormEvent) => {
     e?.preventDefault();
-    const snap = createScriptBackup(files, backupLabel, 'manual');
-    setBackups(listScriptBackups());
-    setBackupLabel('');
-    onNotify(t('bak_created_toast', { count: snap.fileCount }));
+    try {
+      const snap = createScriptBackup(files, backupLabel, 'manual');
+      setBackups(listScriptBackups());
+      setBackupLabel('');
+      onNotify(t('bak_created_toast', { count: snap.fileCount }));
+    } catch (err) {
+      onNotify(err instanceof Error ? err.message : t('bak_import_err'));
+    }
   };
 
   const handleRestoreSnapshot = (snap: ScriptBackupSnapshot) => {
@@ -249,9 +253,13 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   };
 
   const handleDeleteSnapshot = (id: string) => {
-    setBackups(deleteScriptBackup(id));
-    setConfirmDeleteBackupId(null);
-    onNotify(t('bak_deleted_toast'));
+    try {
+      setBackups(deleteScriptBackup(id));
+      setConfirmDeleteBackupId(null);
+      onNotify(t('bak_deleted_toast'));
+    } catch (err) {
+      onNotify(err instanceof Error ? err.message : t('bak_import_err'));
+    }
   };
 
   const backupReasonLabel = (reason: ScriptBackupSnapshot['reason']) => {
