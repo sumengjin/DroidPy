@@ -137,6 +137,10 @@ jobs:
           echo "DROIDPY_RESOLVED_TAG=\${REL_TAG}" >> "\$GITHUB_ENV"
 
           if [ -n "\$CUSTOM_KS_B64" ]; then
+            if [ -z "\$CUSTOM_STORE_PASS" ] || [ -z "\$CUSTOM_KEY_ALIAS" ] || [ -z "\$CUSTOM_KEY_PASS" ]; then
+              echo "::error::Custom keystore is set but one or more required signing secrets are missing."
+              exit 1
+            fi
             printf '%s' "\$CUSTOM_KS_B64" | base64 -d > android/app/droidpy-custom.keystore
             echo "DROIDPY_KEYSTORE_FILE=droidpy-custom.keystore" >> "\$GITHUB_ENV"
             printf 'DROIDPY_STORE_PASSWORD=%s\\n' "\$CUSTOM_STORE_PASS" >> "\$GITHUB_ENV"
@@ -177,7 +181,7 @@ jobs:
           path: release-apk/*.apk
 
       - name: Publish GitHub Release
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push' || startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
         run: |

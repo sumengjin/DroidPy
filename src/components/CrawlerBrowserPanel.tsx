@@ -461,23 +461,38 @@ export const CrawlerBrowserPanel: React.FC<CrawlerBrowserPanelProps> = ({
                 {probeResult.bodyPreview}
               </pre>
             </div>
-          ) : (
-            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-              <div className="px-3 py-1.5 border-b border-[var(--ide-border)] bg-[var(--ide-surface-alt)] text-[11px] text-[var(--ide-text-muted)] shrink-0">
-                {t('brw_iframe_note')}
+          ) : isNativeApk ? (
+              <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-3 p-5 text-center bg-[var(--ide-surface-alt)]">
+                <ShieldCheck className="w-8 h-8 text-emerald-500" />
+                <p className="text-sm font-semibold">{t('brw_open_native')}</p>
+                <p className="max-w-md text-xs leading-relaxed text-[var(--ide-text-muted)]">
+                  {t('brw_iframe_note')}
+                </p>
+                <button
+                  type="button"
+                  onClick={handleOpenNativeBrowser}
+                  className="min-h-[38px] px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold"
+                >
+                  {t('brw_open_native')}
+                </button>
               </div>
-              <div className="flex-1 min-h-0 bg-white">
-                <iframe
-                  key={`${loadedUrl}-${iframeNonce}`}
-                  src={loadedUrl}
-                  title={t('brw_title')}
-                  className="w-full h-full border-0"
-                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                  referrerPolicy="no-referrer"
-                />
+            ) : (
+              <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                <div className="px-3 py-1.5 border-b border-[var(--ide-border)] bg-[var(--ide-surface-alt)] text-[11px] text-[var(--ide-text-muted)] shrink-0">
+                  {t('brw_iframe_note')}
+                </div>
+                <div className="flex-1 min-h-0 bg-white">
+                  <iframe
+                    key={`${loadedUrl}-${iframeNonce}`}
+                    src={loadedUrl}
+                    title={t('brw_title')}
+                    className="w-full h-full border-0"
+                    sandbox="allow-scripts allow-forms allow-popups"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
               </div>
-            </div>
-          )}
+            )}
         </div>
       )}
 
