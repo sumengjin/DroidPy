@@ -558,7 +558,21 @@ def _is_public_probe_address(value):
         address = ipaddress.ip_address(str(value).split("%", 1)[0])
         if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
             address = address.ipv4_mapped
-        return address.is_global
+        if not address.is_global:
+            return False
+        if isinstance(address, ipaddress.IPv4Address):
+            blocked = (
+                "192.0.0.0/16",
+                "192.88.99.0/24",
+            )
+            return not any(address in ipaddress.ip_network(network) for network in blocked)
+        if isinstance(address, ipaddress.IPv6Address):
+            return (
+                not address.is_reserved
+                and address in ipaddress.ip_network("2000::/3")
+                and address not in ipaddress.ip_network("2001:20::/28")
+            )
+        return False
     except ValueError:
         return False
 
