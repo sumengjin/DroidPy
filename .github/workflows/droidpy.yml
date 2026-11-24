@@ -59,6 +59,7 @@ jobs:
           fi
           npm run lint
           npm run build
+          npm run check:watchdog-safety
 
       - name: 上傳離線前端建置產物
         uses: actions/upload-artifact@v4
