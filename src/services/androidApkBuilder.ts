@@ -307,6 +307,12 @@ android {
         }
     }
 
+    // GitHub sideload builds retain targetSdk 28 for the embedded Termux runtime.
+    // Suppress only the Play Store target-age lint; this does not imply Play Store compliance.
+    lint {
+        disable += "ExpiredTargetSdkVersion"
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
