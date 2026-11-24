@@ -1427,7 +1427,7 @@ export async function getPythonPackageDiagnostics(
     config,
     '/diagnostics/python-packages',
     { method: 'GET' },
-    18000
+    60000
   );
 }
 
