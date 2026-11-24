@@ -605,7 +605,7 @@ def _resolve_public_probe_address(host, port):
             validated.append((family, sockaddr))
     if not validated:
         raise ValueError("Target has no public IP address")
-    return ascii_host, validated[0]
+    return ascii_host, validated
 
 
 class _PinnedHTTPConnection(http.client.HTTPConnection):
@@ -667,30 +667,38 @@ def _probe_url_safely(target_url, request_headers):
         except Exception as exc:
             raise ValueError("Invalid target URL") from exc
 
-        host, pinned = _resolve_public_probe_address(parts.hostname, port)
-        family, sockaddr = pinned
+        host, pinned_addresses = _resolve_public_probe_address(parts.hostname, port)
         request_target = parts.path or "/"
         if parts.query:
             request_target += "?" + parts.query
-        context = ssl.create_default_context()
-        if scheme == "https":
-            conn = _PinnedHTTPSConnection(host, port, family, sockaddr, 18, context)
-        else:
-            conn = _PinnedHTTPConnection(host, port, family, sockaddr, 18)
-        try:
-            conn.request("GET", request_target, headers=headers)
-            response = conn.getresponse()
-            status_code = response.status
-            response_headers = response.getheaders()
-            transfer_encoding = response.getheader("Transfer-Encoding", "").lower()
-            content_length = response.getheader("Content-Length")
-            if transfer_encoding and content_length:
-                raise ValueError("Ambiguous HTTP response framing")
-            if transfer_encoding and transfer_encoding.strip() != "chunked":
-                raise ValueError("Unsupported HTTP transfer encoding")
-            raw_bytes = response.read(24000)
-        finally:
-            conn.close()
+        response = None
+        last_connection_error = None
+        for family, sockaddr in pinned_addresses:
+            context = ssl.create_default_context()
+            if scheme == "https":
+                conn = _PinnedHTTPSConnection(host, port, family, sockaddr, 18, context)
+            else:
+                conn = _PinnedHTTPConnection(host, port, family, sockaddr, 18)
+            try:
+                conn.request("GET", request_target, headers=headers)
+                response = conn.getresponse()
+                status_code = response.status
+                response_headers = response.getheaders()
+                transfer_encoding = response.getheader("Transfer-Encoding", "").lower()
+                content_length = response.getheader("Content-Length")
+                if transfer_encoding and content_length:
+                    raise ValueError("Ambiguous HTTP response framing")
+                if transfer_encoding and transfer_encoding.strip() != "chunked":
+                    raise ValueError("Unsupported HTTP transfer encoding")
+                raw_bytes = response.read(24000)
+                break
+            except (OSError, ssl.SSLError, http.client.HTTPException) as exc:
+                last_connection_error = exc
+                continue
+            finally:
+                conn.close()
+        if response is None:
+            raise last_connection_error or OSError("No reachable public address for target")
 
         location = next((value for key, value in response_headers if key.lower() == "location"), None)
         if status_code in (301, 302, 303, 307, 308) and location and redirect_count < 5:
