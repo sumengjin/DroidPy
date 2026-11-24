@@ -2965,7 +2965,7 @@ print(json.dumps({
             pb.redirectError(errorFile)
             pb.environment().putAll(buildEnv())
             val proc = pb.start()
-            val finished = proc.waitFor(12, java.util.concurrent.TimeUnit.SECONDS)
+            val finished = proc.waitFor(30, java.util.concurrent.TimeUnit.SECONDS)
             if (!finished) {
                 proc.destroyForcibly()
                 return JSONObject().put("ok", false).put("error", "Python 套件診斷逾時").put("pythonExecutable", pyBin.absolutePath)
@@ -2986,7 +2986,7 @@ print(json.dumps({
                         val siteDir = File(pyDir, siteName)
                         if (siteDir.isDirectory) {
                             val entries = siteDir.listFiles()?.count { it.isDirectory && (it.name.endsWith(".dist-info") || it.name.endsWith(".egg-info")) } ?: 0
-                            sites.put(JSONObject().put("path", siteDir.absolutePath).put("bytes", calcDirSize(siteDir)).put("metadataDirectoryCount", entries))
+                            sites.put(JSONObject().put("path", siteDir.absolutePath).put("metadataDirectoryCount", entries))
                         }
                     }
                     versions.put(JSONObject().put("pythonDirectory", pyDir.absolutePath).put("siteDirectories", sites))
@@ -2995,8 +2995,6 @@ print(json.dumps({
                 roots.put(rootInfo)
             }
             report.put("ok", true).put("pythonExecutable", pyBin.absolutePath).put("packageRoots", roots)
-                .put("usrBytes", calcDirSize(usrDir)).put("pyUserBytes", calcDirSize(File(homeDir, "py_user")))
-                .put("localUserBytes", calcDirSize(File(homeDir, ".local")))
             return report
         } catch (e: Exception) {
             return JSONObject().put("ok", false).put("error", e.message ?: e.javaClass.simpleName)
