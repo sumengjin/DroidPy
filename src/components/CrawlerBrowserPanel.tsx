@@ -461,8 +461,7 @@ export const CrawlerBrowserPanel: React.FC<CrawlerBrowserPanelProps> = ({
                 {probeResult.bodyPreview}
               </pre>
             </div>
-          ) : (
-            {isNativeApk ? (
+          ) : isNativeApk ? (
               <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-3 p-5 text-center bg-[var(--ide-surface-alt)]">
                 <ShieldCheck className="w-8 h-8 text-emerald-500" />
                 <p className="text-sm font-semibold">{t('brw_open_native')}</p>
@@ -494,7 +493,6 @@ export const CrawlerBrowserPanel: React.FC<CrawlerBrowserPanelProps> = ({
                 </div>
               </div>
             )}
-          )}
         </div>
       )}
 
