@@ -1049,26 +1049,44 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
         except OSError:
             pass
 
+    def _read_json_body(self):
+        if self.headers.get_all("Transfer-Encoding"):
+            raise ValueError("Transfer-Encoding is not supported")
+        content_lengths = self.headers.get_all("Content-Length") or []
+        if len(content_lengths) > 1:
+            raise ValueError("Duplicate Content-Length")
+        if not content_lengths:
+            return {}
+        raw_length = content_lengths[0].strip()
+        if not re.fullmatch(r"[0-9]{1,10}", raw_length):
+            raise ValueError("Invalid Content-Length")
+        length = int(raw_length, 10)
+        if length > MAX_REQUEST_BYTES:
+            raise OverflowError("Request body exceeds the 8 MiB limit")
+        if length == 0:
+            return {}
+        raw_bytes = self.rfile.read(length)
+        if len(raw_bytes) != length:
+            raise ValueError("Incomplete request body")
+        try:
+            data = json.loads(raw_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            raise ValueError("Invalid JSON request body")
+        if not isinstance(data, dict):
+            raise ValueError("JSON body must be an object")
+        return data
+
     def do_POST(self):
         if not self._host_allowed() or not self._origin_allowed():
             return self._send_json(403, {"error": "Untrusted Host or Origin"})
         if not self._check_auth():
             return self._send_json(401, {"error": "Invalid X-DroidPy-Token"})
         try:
-            length = int(self.headers.get("Content-Length", "0"))
-        except (TypeError, ValueError):
-            return self._send_json(400, {"error": "Invalid Content-Length"})
-        if length < 0 or length > MAX_REQUEST_BYTES:
-            return self._send_json(413, {"error": "Request body exceeds the 8 MiB limit"})
-        try:
-            raw_bytes = self.rfile.read(length) if length > 0 else b"{}"
-            if length > 0 and len(raw_bytes) != length:
-                return self._send_json(400, {"error": "Incomplete request body"})
-            data = json.loads(raw_bytes.decode("utf-8"))
-            if not isinstance(data, dict):
-                return self._send_json(400, {"error": "JSON body must be an object"})
-        except (UnicodeDecodeError, json.JSONDecodeError, TimeoutError, OSError):
-            return self._send_json(400, {"error": "Invalid or incomplete JSON request body"})
+            data = self._read_json_body()
+        except OverflowError as exc:
+            return self._send_json(413, {"error": str(exc)})
+        except ValueError as exc:
+            return self._send_json(400, {"error": str(exc)})
 
         if self.path == "/stdin":
             text = str(data.get("data", ""))
@@ -1197,9 +1215,42 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
 
         return self._send_json(404, {"error": "Not found"})
 
+class BoundedThreadingHTTPServer(ThreadingHTTPServer):
+    request_queue_size = 16
+    daemon_threads = True
+
+    def __init__(self, *args, **kwargs):
+        self._request_slots = threading.BoundedSemaphore(8)
+        super().__init__(*args, **kwargs)
+
+    def process_request(self, request, client_address):
+        if not self._request_slots.acquire(blocking=False):
+            try:
+                request.sendall(
+                    b"HTTP/1.1 503 Service Unavailable\\r\\n"
+                    b"Content-Length: 0\\r\\nConnection: close\\r\\n\\r\\n"
+                )
+            except OSError:
+                pass
+            finally:
+                self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._request_slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._request_slots.release()
+
+
 if __name__ == "__main__":
     print(f"[DroidPy Termux PTY Bridge] Listening on http://127.0.0.1:8765 (Workspace: {WORKSPACE})")
-    ThreadingHTTPServer(("127.0.0.1", 8765), DroidPyBridgeHandler).serve_forever()
+    BoundedThreadingHTTPServer(("127.0.0.1", 8765), DroidPyBridgeHandler).serve_forever()
 `;
 }
 
