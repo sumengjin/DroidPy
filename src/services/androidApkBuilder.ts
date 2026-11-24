@@ -1551,12 +1551,19 @@ import java.io.File
 import java.io.InputStreamReader
 import java.io.OutputStream
 import java.net.HttpURLConnection
+import java.net.IDN
+import java.net.Inet4Address
+import java.net.Inet6Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.net.URI
 import java.net.URL
 import java.net.URLDecoder
+import javax.net.ssl.SNIHostName
+import javax.net.ssl.SSLSocket
+import javax.net.ssl.SSLSocketFactory
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
@@ -3634,73 +3641,312 @@ def clipboard_set(text):
                 }
 
                 method == "POST" && path == "/probe-url" -> {
-                    val targetUrl = bodyJson.optString("url", "").trim()
-                    if (targetUrl.isEmpty()) {
-                        writeJson(out, 400, JSONObject().put("error", "Missing URL"))
-                    } else {
-                        try {
-                            val ua = bodyJson.optString("userAgent", "").ifBlank {
-                                "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36"
-                            }
-                            val cookieHdr = bodyJson.optString("cookieHeader", "")
-                            val extraHdrs = bodyJson.optJSONObject("extraHeaders")
-                            val conn = (URL(targetUrl).openConnection() as HttpURLConnection).apply {
-                                requestMethod = "GET"
-                                instanceFollowRedirects = true
-                                connectTimeout = 15000
-                                readTimeout = 18000
-                                setRequestProperty("User-Agent", ua)
-                                if (extraHdrs != null) {
-                                    val keys = extraHdrs.keys()
-                                    while (keys.hasNext()) {
-                                        val k = keys.next()
-                                        val v = extraHdrs.optString(k, "")
-                                        if (k.isNotBlank() && v.isNotBlank()) {
-                                            setRequestProperty(k, v)
-                                        }
-                                    }
-                                }
-                                if (cookieHdr.isNotBlank()) setRequestProperty("Cookie", cookieHdr)
-                            }
-                            val code = conn.responseCode
-                            val stream = if (code >= 400) conn.errorStream else conn.inputStream
-                            val bodyText = stream?.bufferedReader(Charsets.UTF_8)?.use { r ->
-                                val buf = CharArray(16000)
-                                val n = r.read(buf)
-                                if (n > 0) String(buf, 0, n) else ""
-                            } ?: ""
-                            val setCookies = JSONArray()
-                            val respHeaders = JSONObject()
-                            conn.headerFields.forEach { (k, vals) ->
-                                if (k != null) {
-                                    if (k.equals("Set-Cookie", ignoreCase = true)) {
-                                        vals.forEach { setCookies.put(it) }
-                                    } else if (vals.isNotEmpty()) {
-                                        respHeaders.put(k, vals.joinToString(", "))
-                                    }
-                                }
-                            }
-                            val titleMatch = Regex("<title[^>]*>(.*?)</title>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)).find(bodyText)
-                            val title = titleMatch?.groupValues?.getOrNull(1)?.replace(Regex("\\\\s+"), " ")?.trim() ?: ""
-                            val res = JSONObject()
-                                .put("ok", code in 200..399)
-                                .put("url", targetUrl)
-                                .put("finalUrl", conn.url?.toString() ?: targetUrl)
-                                .put("statusCode", code)
-                                .put("title", title)
-                                .put("setCookies", setCookies)
-                                .put("headers", respHeaders)
-                                .put("bodyPreview", bodyText.take(8000))
-                            writeJson(out, 200, res)
-                        } catch (e: Exception) {
-                            writeJson(out, 502, JSONObject().put("error", e.message ?: "Probe failed"))
-                        }
+                    try {
+                        writeJson(out, 200, probeUrlSafely(bodyJson.optString("url", "").trim(), bodyJson))
+                    } catch (e: IllegalArgumentException) {
+                        writeJson(out, 400, JSONObject().put("error", e.message ?: "Invalid probe URL"))
+                    } catch (_: Exception) {
+                        writeJson(out, 502, JSONObject().put("error", "Unable to safely probe target URL"))
                     }
                 }
 
                 else -> writeJson(out, 404, JSONObject().put("error", "Not found"))
             }
         }
+    }
+
+    private data class SafeProbeResponse(
+        val statusCode: Int,
+        val headers: Map<String, List<String>>,
+        val body: ByteArray
+    )
+
+    private fun isPublicProbeAddress(address: InetAddress): Boolean {
+        if (address.isAnyLocalAddress || address.isLoopbackAddress ||
+            address.isLinkLocalAddress || address.isSiteLocalAddress ||
+            address.isMulticastAddress) return false
+        val b = address.address.map { it.toInt() and 0xff }
+        if (address is Inet4Address) {
+            val a0 = b[0]
+            val a1 = b[1]
+            val a2 = b[2]
+            if (a0 == 0 || a0 == 10 || a0 == 127 || a0 >= 224) return false
+            if (a0 == 100 && a1 in 64..127) return false
+            if (a0 == 169 && a1 == 254) return false
+            if (a0 == 172 && a1 in 16..31) return false
+            if (a0 == 192 && (a1 == 0 || a1 == 2 || a1 == 168)) return false
+            if (a0 == 192 && a1 == 88 && a2 == 99) return false
+            if (a0 == 198 && a1 in 18..19) return false
+            if (a0 == 198 && a1 == 51 && a2 == 100) return false
+            if (a0 == 203 && a1 == 0 && a2 == 113) return false
+            return true
+        }
+        if (address is Inet6Address) {
+            if ((b[0] and 0xe0) != 0x20) return false
+            if (b[0] == 0x20 && b[1] == 0x01) {
+                if (b[2] == 0x0d && b[3] == 0xb8) return false
+                if (b[2] == 0x00 && b[3] == 0x00) return false
+                if (b[2] == 0x00 && b[3] == 0x02) return false
+                if (b[2] == 0x00 && b[3] == 0x10) return false
+            }
+            if (b[0] == 0x20 && b[1] == 0x02) return false
+            if (b[0] == 0x3f && b[1] == 0xff) return false
+            return true
+        }
+        return false
+    }
+
+    private fun validateProbeUrl(url: URL): String {
+        val scheme = url.protocol.lowercase()
+        if (scheme != "http" && scheme != "https") {
+            throw IllegalArgumentException("Only HTTP and HTTPS URLs are allowed")
+        }
+        if (URI(url.toString()).rawUserInfo != null) {
+            throw IllegalArgumentException("URLs containing credentials are not allowed")
+        }
+        val rawHost = url.host.removePrefix("[").removeSuffix("]").trimEnd('.').lowercase()
+        if (rawHost.isBlank() || rawHost == "localhost" ||
+            rawHost.endsWith(".localhost") || rawHost.endsWith(".local") ||
+            rawHost.endsWith(".internal") || rawHost.endsWith(".test") ||
+            rawHost.contains("%")) {
+            throw IllegalArgumentException("Local hostnames and scoped IP addresses are not allowed")
+        }
+        return if (rawHost.contains(":")) rawHost else IDN.toASCII(rawHost)
+    }
+
+    private fun readProbeLine(input: BufferedInputStream, maxBytes: Int = 8192): String {
+        val output = ByteArrayOutputStream()
+        while (true) {
+            val value = input.read()
+            if (value < 0) {
+                if (output.size() == 0) return ""
+                break
+            }
+            if (value == 10) break
+            if (value != 13) output.write(value)
+            if (output.size() > maxBytes) throw IllegalArgumentException("HTTP response header line too large")
+        }
+        return output.toString("ISO-8859-1")
+    }
+
+    private fun readProbeExact(input: BufferedInputStream, output: ByteArrayOutputStream, count: Int) {
+        var remaining = count
+        val buffer = ByteArray(4096)
+        while (remaining > 0) {
+            val n = input.read(buffer, 0, minOf(buffer.size, remaining))
+            if (n < 0) throw java.io.EOFException("Incomplete HTTP response body")
+            output.write(buffer, 0, n)
+            remaining -= n
+        }
+    }
+
+    private fun readProbeBody(input: BufferedInputStream, headers: Map<String, List<String>>): ByteArray {
+        val maxBytes = 24000
+        val output = ByteArrayOutputStream()
+        val transferEncoding = headers["transfer-encoding"]?.joinToString(",")?.lowercase().orEmpty()
+        if (transferEncoding.contains("chunked")) {
+            while (output.size() < maxBytes) {
+                val sizeLine = readProbeLine(input).substringBefore(';').trim()
+                val chunkSize = sizeLine.toLongOrNull(16)
+                    ?: throw IllegalArgumentException("Invalid chunked response")
+                if (chunkSize == 0L) {
+                    while (readProbeLine(input).isNotEmpty()) { }
+                    break
+                }
+                val remaining = maxBytes - output.size()
+                val toRead = minOf(chunkSize, remaining.toLong()).toInt()
+                readProbeExact(input, output, toRead)
+                if (toRead.toLong() < chunkSize) break
+                if (input.read() != 13 || input.read() != 10) {
+                    throw IllegalArgumentException("Invalid chunk delimiter")
+                }
+            }
+            return output.toByteArray()
+        }
+        val lengthHeader = headers["content-length"]?.firstOrNull()
+        if (lengthHeader != null) {
+            val length = lengthHeader.toLongOrNull()
+                ?: throw IllegalArgumentException("Invalid Content-Length")
+            if (length < 0) throw IllegalArgumentException("Invalid Content-Length")
+            readProbeExact(input, output, minOf(length, maxBytes.toLong()).toInt())
+            return output.toByteArray()
+        }
+        val buffer = ByteArray(4096)
+        while (output.size() < maxBytes) {
+            val n = input.read(buffer, 0, minOf(buffer.size, maxBytes - output.size()))
+            if (n < 0) break
+            if (n > 0) output.write(buffer, 0, n)
+        }
+        return output.toByteArray()
+    }
+
+    private fun performPinnedProbeRequest(url: URL, requestHeaders: Map<String, String>): SafeProbeResponse {
+        val host = validateProbeUrl(url)
+        val port = if (url.port > 0) url.port else if (url.protocol.equals("https", true)) 443 else 80
+        val addresses = InetAddress.getAllByName(host)
+        if (addresses.isEmpty() || addresses.any { !isPublicProbeAddress(it) }) {
+            throw IllegalArgumentException("Target resolves to a non-public IP address")
+        }
+        val pinnedAddress = addresses.first()
+        val rawSocket = Socket()
+        rawSocket.connect(InetSocketAddress(pinnedAddress, port), 15000)
+        rawSocket.soTimeout = 18000
+        val activeSocket: Socket = if (url.protocol.equals("https", true)) {
+            try {
+                val factory = SSLSocketFactory.getDefault() as SSLSocketFactory
+                val ssl = factory.createSocket(rawSocket, host, port, true) as SSLSocket
+                val parameters = ssl.sslParameters
+                parameters.endpointIdentificationAlgorithm = "HTTPS"
+                if (!host.contains(":") && !host.matches(Regex("^[0-9.]+$"))) {
+                    parameters.serverNames = listOf(SNIHostName(host))
+                }
+                ssl.sslParameters = parameters
+                ssl.startHandshake()
+                ssl
+            } catch (error: Exception) {
+                try { rawSocket.close() } catch (_: Exception) {}
+                throw error
+            }
+        } else {
+            rawSocket
+        }
+
+        activeSocket.use { socket ->
+            val hostHeader = if (host.contains(":")) "[$host]" else host
+            val authority = if ((url.protocol.equals("https", true) && port == 443) ||
+                (url.protocol.equals("http", true) && port == 80)) hostHeader else "$hostHeader:$port"
+            val requestTarget = url.file.ifBlank { "/" }
+            if (requestTarget.contains("\r") || requestTarget.contains("\n")) {
+                throw IllegalArgumentException("Invalid request path")
+            }
+            val request = StringBuilder()
+                .append("GET ").append(requestTarget).append(" HTTP/1.1\r\n")
+                .append("Host: ").append(authority).append("\r\n")
+                .append("Connection: close\r\n")
+                .append("Accept-Encoding: identity\r\n")
+            for ((name, value) in requestHeaders) {
+                request.append(name).append(": ").append(value).append("\r\n")
+            }
+            request.append("\r\n")
+            socket.getOutputStream().write(request.toString().toByteArray(Charsets.ISO_8859_1))
+            socket.getOutputStream().flush()
+
+            val input = BufferedInputStream(socket.getInputStream())
+            val statusLine = readProbeLine(input)
+            val statusParts = statusLine.split(" ", limit = 3)
+            val statusCode = statusParts.getOrNull(1)?.toIntOrNull()
+                ?: throw IllegalArgumentException("Invalid HTTP status line")
+            val responseHeaders = linkedMapOf<String, MutableList<String>>()
+            var totalHeaderBytes = statusLine.length
+            var headerCount = 0
+            while (true) {
+                val line = readProbeLine(input)
+                if (line.isEmpty()) break
+                totalHeaderBytes += line.length
+                headerCount++
+                if (totalHeaderBytes > 32768 || headerCount > 100) {
+                    throw IllegalArgumentException("HTTP response headers too large")
+                }
+                val separator = line.indexOf(':')
+                if (separator <= 0) throw IllegalArgumentException("Invalid HTTP response header")
+                val name = line.substring(0, separator).trim().lowercase()
+                val value = line.substring(separator + 1).trim()
+                responseHeaders.getOrPut(name) { mutableListOf() }.add(value)
+            }
+            val body = readProbeBody(input, responseHeaders)
+            return SafeProbeResponse(statusCode, responseHeaders, body)
+        }
+    }
+
+    private fun probeOrigin(url: URL): String {
+        val host = url.host.lowercase()
+        val port = if (url.port > 0) url.port else if (url.protocol.equals("https", true)) 443 else 80
+        return url.protocol.lowercase() + "://" + host + ":" + port
+    }
+
+    private fun buildProbeHeaders(bodyJson: JSONObject): MutableMap<String, String> {
+        val userAgent = bodyJson.optString("userAgent", "").ifBlank {
+            "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36"
+        }
+        if (userAgent.length > 512 || userAgent.contains("\r") || userAgent.contains("\n")) {
+            throw IllegalArgumentException("Invalid User-Agent header")
+        }
+        val headers = linkedMapOf(
+            "User-Agent" to userAgent,
+            "Accept" to "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8"
+        )
+        val cookie = bodyJson.optString("cookieHeader", "").trim()
+        if (cookie.isNotEmpty()) {
+            if (cookie.length > 8192 || cookie.contains("\r") || cookie.contains("\n")) {
+                throw IllegalArgumentException("Invalid Cookie header")
+            }
+            headers["Cookie"] = cookie
+        }
+        val forbidden = setOf(
+            "host", "connection", "content-length", "transfer-encoding",
+            "proxy-authorization", "proxy-connection", "keep-alive",
+            "upgrade", "te", "trailer", "cookie"
+        )
+        val extra = bodyJson.optJSONObject("extraHeaders")
+        if (extra != null) {
+            if (extra.length() > 32) throw IllegalArgumentException("Too many custom headers")
+            val keys = extra.keys()
+            while (keys.hasNext()) {
+                val name = keys.next().trim()
+                val value = extra.optString(name, "")
+                if (name.isBlank() || name.length > 128 || value.length > 4096 ||
+                    !Regex("^[A-Za-z0-9!#$%&'*+.^_|~-]+$").matches(name) ||
+                    value.contains("\r") || value.contains("\n") ||
+                    name.lowercase() in forbidden) {
+                    throw IllegalArgumentException("Invalid or restricted custom header")
+                }
+                headers[name] = value
+            }
+        }
+        return headers
+    }
+
+    private fun probeUrlSafely(targetUrl: String, bodyJson: JSONObject): JSONObject {
+        if (targetUrl.isBlank() || targetUrl.length > 4096 || targetUrl.any { it.isWhitespace() }) {
+            throw IllegalArgumentException("Invalid or oversized URL")
+        }
+        var current = URL(targetUrl)
+        val headers = buildProbeHeaders(bodyJson)
+        for (redirectCount in 0..5) {
+            val response = performPinnedProbeRequest(current, headers)
+            val location = response.headers["location"]?.firstOrNull()
+            if (response.statusCode in setOf(301, 302, 303, 307, 308) &&
+                !location.isNullOrBlank() && redirectCount < 5) {
+                val next = URL(current, location)
+                if (probeOrigin(current) != probeOrigin(next)) {
+                    headers.keys.removeAll { it.lowercase() in setOf("cookie", "authorization", "proxy-authorization") }
+                }
+                current = next
+                continue
+            }
+            val bodyText = String(response.body, Charsets.UTF_8)
+            val setCookies = JSONArray()
+            val responseHeaders = JSONObject()
+            response.headers.forEach { (name, values) ->
+                if (name.equals("set-cookie", true)) {
+                    values.forEach { setCookies.put(it.take(4096)) }
+                } else {
+                    responseHeaders.put(name, values.joinToString(", ").take(2048))
+                }
+            }
+            val titleMatch = Regex("<title[^>]*>(.*?)</title>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)).find(bodyText)
+            val title = titleMatch?.groupValues?.getOrNull(1)?.replace(Regex("\\s+"), " ")?.trim() ?: ""
+            return JSONObject()
+                .put("ok", response.statusCode in 200..399)
+                .put("url", targetUrl)
+                .put("finalUrl", current.toString())
+                .put("statusCode", response.statusCode)
+                .put("title", title)
+                .put("setCookies", setCookies)
+                .put("headers", responseHeaders)
+                .put("bodyPreview", bodyText.take(8000))
+        }
+        throw IllegalArgumentException("Too many redirects")
     }
 
     private fun runBufferedShellCommand(command: String): JSONObject {
