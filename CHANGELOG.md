@@ -4,6 +4,12 @@ All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
 
+### Security — URL Probe SSRF Protection (pending validation)
+- **雙端阻斷私有網路探測**：Python Bridge 與 Android 原生 Bridge 都會解析 DNS、拒絕非公網／保留 IP，並直接連線至已驗證的 IP，避免 DNS rebinding 在檢查後改指向內網。
+- **逐跳驗證重新導向**：停用自動跳轉，每一個 redirect 目標都重新解析及驗證；跨來源跳轉不轉送 Cookie、Authorization 或 Referer。
+- **限制探測標頭與回應**：拒絕 Host、連線控制與 Cookie 覆寫標頭，限制標頭大小、回應預覽和逾時；HTTPS 保留憑證及主機名稱驗證。
+- 加入私有 IP、DNS pinning、loopback redirect、跨來源憑證剝除與標頭注入回歸測試；Android 實機驗證仍待完成。
+
 ### Fixed — Python Process Safety and Bridge Lifecycle
 - **停止以執行時間自動終止 Python 工作**：移除 Python／pip 子行程 30 分鐘看門狗與定時清理；程序檢查改為唯讀診斷，不會因執行時間或殭屍狀態自行發送終止訊號。
 - **修復 Bridge 停止時誤殺使用者工作**：停止內嵌 Bridge 不再強制終止目前 Python 程序，並保留程序控制代碼，讓 Bridge 重新啟動後仍可由使用者明確停止該工作。
