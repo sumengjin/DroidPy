@@ -965,6 +965,10 @@ class MainActivity : AppCompatActivity() {
         webView.webChromeClient = WebChromeClient()
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                if (request != null && !request.isForMainFrame) {
+                    // The privileged JavaScript interface must never be exposed to child frames.
+                    return true
+                }
                 val uri = request?.url ?: return false
                 if (isTrustedAppNavigation(uri)) {
                     return false
