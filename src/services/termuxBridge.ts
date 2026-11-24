@@ -705,7 +705,7 @@ def _build_probe_headers(data):
     user_agent = str(data.get("userAgent", "")).strip()
     if not user_agent:
         user_agent = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36"
-    if len(user_agent) > 512 or any(ord(ch) < 32 and ord(ch) != 9 for ch in user_agent) or "\\x7f" in user_agent:
+    if len(user_agent) > 512 or any(ord(ch) < 32 and ord(ch) != 9 for ch in user_agent) or any(ord(ch) == 127 for ch in user_agent):
         raise ValueError("Invalid User-Agent header")
     headers = {
         "User-Agent": user_agent,
@@ -714,7 +714,7 @@ def _build_probe_headers(data):
     }
     cookie_header = str(data.get("cookieHeader", "")).strip()
     if cookie_header:
-        if len(cookie_header) > 8192 or any(ord(ch) < 32 and ord(ch) != 9 for ch in cookie_header) or "\\x7f" in cookie_header:
+        if len(cookie_header) > 8192 or any(ord(ch) < 32 and ord(ch) != 9 for ch in cookie_header) or any(ord(ch) == 127 for ch in cookie_header):
             raise ValueError("Invalid Cookie header")
         headers["Cookie"] = cookie_header
 
@@ -738,7 +738,7 @@ def _build_probe_headers(data):
                 or len(value) > 4096
                 or not re.fullmatch(r"[A-Za-z0-9!#$%&'*+.^_|~-]+", name)
                 or any(ord(ch) < 32 and ord(ch) != 9 for ch in value)
-                or "\\x7f" in value
+                or any(ord(ch) == 127 for ch in value)
                 or name.lower() in forbidden
             ):
                 raise ValueError("Invalid or restricted custom header")
