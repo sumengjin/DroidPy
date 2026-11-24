@@ -68,7 +68,7 @@ jobs:
   build-apk:
     name: 打包 Android APK (ARM64)
     needs: test
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     outputs:
       release_tag: ${{ steps.resolve_tag.outputs.release_tag }}
@@ -126,8 +126,13 @@ jobs:
           CUSTOM_STORE_PASS: ${{ secrets.DROIDPY_STORE_PASSWORD }}
           CUSTOM_KEY_ALIAS: ${{ secrets.DROIDPY_KEY_ALIAS }}
           CUSTOM_KEY_PASS: ${{ secrets.DROIDPY_KEY_PASSWORD }}
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          INPUT_TAG="${{ inputs.release_tag }}"
+          INPUT_TAG="${INPUT_RELEASE_TAG:-}"
+          if [ -n "$INPUT_TAG" ] && ! [[ "$INPUT_TAG" =~ ^v?[0-9]+\\.[0-9]+\\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::release_tag 必須是有效的版本標籤，例如 v1.2.3"
+            exit 1
+          fi
           VER=$(grep -m1 -oE '\[[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md 2>/dev/null | tr -d '[' || true)
           if [ -z "$VER" ]; then
             VER="1.2.${GITHUB_RUN_NUMBER:-1}"
