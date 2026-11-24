@@ -1479,8 +1479,11 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.net.URL
 import java.net.URLDecoder
+import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
@@ -1493,7 +1496,7 @@ class EmbeddedTermuxBridge(
     private val assetManager: AssetManager? = null
 ) {
     private var serverSocket: ServerSocket? = null
-    private val executor = Executors.newFixedThreadPool(8)
+    private val executor = ThreadPoolExecutor(1, 8, 60L, TimeUnit.SECONDS, ArrayBlockingQueue<Runnable>(16))
     private var watchdogScheduler: ScheduledExecutorService? = null
     @Volatile private var running = false
     @Volatile private var activeProcess: Process? = null
@@ -1600,7 +1603,12 @@ class EmbeddedTermuxBridge(
             while (running) {
                 try {
                     val client = serverSocket?.accept() ?: break
-                    executor.execute { handleClient(client) }
+                    try {
+                        executor.execute { handleClient(client) }
+                    } catch (_: RejectedExecutionException) {
+                        try { client.close() } catch (_: Exception) {}
+                        appendNativeLog("Bridge", "Rejected client: bridge is at its bounded connection limit")
+                    }
                 } catch (e: Exception) {
                     if (!running) break
                     appendNativeLog("Bridge", "Accept loop error: \${e.message}")
@@ -1633,6 +1641,7 @@ class EmbeddedTermuxBridge(
         watchdogScheduler = null
         activeProcess?.destroyForcibly()
         try { serverSocket?.close() } catch (_: Exception) {}
+        try { executor.shutdownNow() } catch (_: Exception) {}
     }
 
     private fun ensurePrefixWrappers(): File {
@@ -3156,8 +3165,8 @@ def clipboard_set(text):
                 writeJson(out, 400, JSONObject().put("error", "Invalid Content-Length"))
                 return
             }
-            if (len > 1024 * 1024) {
-                writeJson(out, 413, JSONObject().put("error", "Request body too large (max 1 MiB)"))
+            if (len > 4 * 1024 * 1024) {
+                writeJson(out, 413, JSONObject().put("error", "Request body too large (max 4 MiB)"))
                 return
             }
             val bodyBytes = ByteArray(len)
