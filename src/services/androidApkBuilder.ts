@@ -1514,8 +1514,6 @@ import java.net.Socket
 import java.net.URL
 import java.net.URLDecoder
 import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledExecutorService
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 class EmbeddedTermuxBridge(
@@ -1528,7 +1526,6 @@ class EmbeddedTermuxBridge(
 ) {
     private var serverSocket: ServerSocket? = null
     private val executor = Executors.newCachedThreadPool()
-    private var watchdogScheduler: ScheduledExecutorService? = null
     @Volatile private var running = false
     @Volatile private var activeProcess: Process? = null
     private val activeProcessStartedAt = AtomicLong(0L)
@@ -1641,31 +1638,15 @@ class EmbeddedTermuxBridge(
                 }
             }
         }
-        watchdogScheduler = Executors.newSingleThreadScheduledExecutor().apply {
-            scheduleAtFixedRate(
-                {
-                    try {
-                        val res = cleanupStuckPythonProcesses(manual = false)
-                        val killedCount = res.optInt("killedCount", 0)
-                        if (killedCount > 0) {
-                            appendNativeLog("Watchdog", "30m auto cleanup killed $killedCount stuck/zombie Python process(es)")
-                        }
-                    } catch (_: Exception) {
-                    }
-                },
-                30L,
-                30L,
-                TimeUnit.MINUTES
-            )
-        }
     }
 
     fun stop() {
         running = false
         appendNativeLog("Bridge", "EmbeddedTermuxBridge stopping")
-        try { watchdogScheduler?.shutdownNow() } catch (_: Exception) {}
-        watchdogScheduler = null
-        activeProcess?.destroyForcibly()
+        // The Bridge may stop while a user task is still running. Leave that
+        // process alive; only an explicit user Stop action may terminate it.
+        activeProcess = null
+        activeProcessStartedAt.set(0L)
         try { serverSocket?.close() } catch (_: Exception) {}
     }
 
@@ -2607,44 +2588,8 @@ def clipboard_set(text):
     }
 
     private fun cleanupStuckPythonProcesses(manual: Boolean): JSONObject {
-        val thresholdSec = 1800L
+        // Read-only diagnostics only. Elapsed time never authorizes process termination.
         val myPid = android.os.Process.myPid()
-        val uptimeSec = try {
-            File("/proc/uptime").readText(Charsets.UTF_8).trim().split(Regex("\\\\s+")).firstOrNull()?.toDoubleOrNull() ?: 0.0
-        } catch (_: Exception) {
-            0.0
-        }
-        val activeProcRef = activeProcess
-        val activeStarted = activeProcessStartedAt.get()
-        var activePid = -1
-        if (activeProcRef != null) {
-            try {
-                val f = activeProcRef.javaClass.getDeclaredField("pid").apply { isAccessible = true }
-                activePid = (f.get(activeProcRef) as? Int) ?: -1
-            } catch (_: Exception) {
-            }
-        }
-
-        val pgrepPids = mutableSetOf<Int>()
-        val pgrepBin = listOf(File(usrDir, "bin/pgrep"), File("/system/bin/pgrep")).firstOrNull { it.exists() }
-        if (pgrepBin != null) {
-            var pgProc: Process? = null
-            try {
-                pgProc = ProcessBuilder(pgrepBin.absolutePath, "-f", "python|pip").apply {
-                    redirectErrorStream(true)
-                }.start()
-                val out = pgProc.inputStream.bufferedReader(Charsets.UTF_8).readText()
-                out.lines().forEach { line ->
-                    line.trim().toIntOrNull()?.let { pgrepPids.add(it) }
-                }
-                pgProc.waitFor()
-            } catch (_: Exception) {
-            } finally {
-                try { pgProc?.destroyForcibly() } catch (_: Exception) {}
-            }
-        }
-
-        val killedArr = JSONArray()
         var scannedCount = 0
         File("/proc").listFiles()?.forEach { entry ->
             val pid = entry.name.toIntOrNull() ?: return@forEach
@@ -2655,56 +2600,10 @@ def clipboard_set(text):
                 } catch (_: Exception) {
                     ""
                 }
-                val statText = File(entry, "stat").readText(Charsets.UTF_8)
-                val lp = statText.indexOf('(')
-                val rp = statText.lastIndexOf(')')
-                if (lp < 0 || rp <= lp) return@forEach
-                val comm = statText.substring(lp + 1, rp)
-                val rest = statText.substring(rp + 2).split(' ')
-                val state = rest.getOrNull(0) ?: "?"
-                val ppid = rest.getOrNull(1)?.toIntOrNull() ?: 0
-                val startTicks = rest.getOrNull(19)?.toLongOrNull() ?: 0L
-                val elapsedSec = if (uptimeSec > 0 && startTicks > 0L) {
-                    (uptimeSec - (startTicks / 100.0)).toLong().coerceAtLeast(0L)
-                } else 0L
+                val comm = try { File(entry, "comm").readText(Charsets.UTF_8).trim() } catch (_: Exception) { "" }
                 val lower = (cmdRaw + " " + comm).lowercase()
-                val isPython = pid in pgrepPids || lower.contains("python") || lower.contains("pip")
-                if (!isPython) return@forEach
-                scannedCount++
-                if (lower.contains("droidpy_bridge")) return@forEach
-                if (pid == activePid && state != "Z" && (activeStarted == 0L || (System.currentTimeMillis() - activeStarted) < thresholdSec * 1000L)) {
-                    return@forEach
-                }
-                val isZombie = state == "Z"
-                val isStalled = elapsedSec >= thresholdSec
-                if (!isZombie && !isStalled) return@forEach
-
-                val reason = if (isZombie) "zombie (Z)" else "stalled >= \${thresholdSec}s"
-                var sigUsed = if (isZombie) "SIGKILL" else "SIGTERM"
-                try {
-                    if (isZombie) {
-                        if (ppid > 1 && ppid != myPid) {
-                            try { android.system.Os.kill(ppid, android.system.OsConstants.SIGCHLD) } catch (_: Exception) {}
-                        }
-                        try { android.os.Process.killProcess(pid) } catch (_: Exception) {}
-                    } else {
-                        android.system.Os.kill(pid, android.system.OsConstants.SIGTERM)
-                        Thread.sleep(250)
-                        if (File("/proc/$pid").exists()) {
-                            android.os.Process.killProcess(pid)
-                            sigUsed = "SIGKILL"
-                        }
-                    }
-                    killedArr.put(
-                        JSONObject()
-                            .put("pid", pid)
-                            .put("name", (cmdRaw.ifBlank { comm }).take(120))
-                            .put("state", state)
-                            .put("elapsedSec", elapsedSec)
-                            .put("reason", reason)
-                            .put("signal", sigUsed)
-                    )
-                } catch (_: Exception) {
+                if ((lower.contains("python") || lower.contains("pip")) && !lower.contains("droidpy_bridge")) {
+                    scannedCount++
                 }
             } catch (_: Exception) {
             }
@@ -2714,8 +2613,9 @@ def clipboard_set(text):
             .put("checkedAt", System.currentTimeMillis())
             .put("manual", manual)
             .put("scannedCount", scannedCount)
-            .put("killedCount", killedArr.length())
-            .put("killed", killedArr)
+            .put("killedCount", 0)
+            .put("killed", JSONArray())
+            .put("message", "Read-only process scan; no Python process is terminated based on age.")
     }
 
     private fun buildEnv(): Map<String, String> {
