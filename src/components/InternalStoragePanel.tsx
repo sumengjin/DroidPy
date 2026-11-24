@@ -12,9 +12,12 @@ import {
   Trash2,
   Loader2,
   HardDrive,
+  ScanSearch,
+  Copy,
 } from 'lucide-react';
 import {
   AppStorageUsageInfo,
+  PythonPackageDiagnostics,
   PythonFile,
   SdcardEntry,
   SdcardStatusInfo,
@@ -26,6 +29,7 @@ import {
   createSdcardFolder,
   deleteSdcardPath,
   getAppStorageUsage,
+  getPythonPackageDiagnostics,
   listSdcardDirectory,
   readSdcardFile,
   writeSdcardFile,
@@ -61,6 +65,8 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
   const [status, setStatus] = useState<SdcardStatusInfo | null>(null);
   const [appUsage, setAppUsage] = useState<AppStorageUsageInfo | null>(null);
   const [cleaningCache, setCleaningCache] = useState(false);
+  const [loadingDiagnostics, setLoadingDiagnostics] = useState(false);
+  const [packageDiagnostics, setPackageDiagnostics] = useState<PythonPackageDiagnostics | null>(null);
   const [currentPath, setCurrentPath] = useState('');
   const [entries, setEntries] = useState<SdcardEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -226,6 +232,37 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
     }
   };
 
+  const handlePythonPackageDiagnostics = async () => {
+    if (loadingDiagnostics) return;
+    setLoadingDiagnostics(true);
+    try {
+      const report = await getPythonPackageDiagnostics(termuxConfig);
+      setPackageDiagnostics(report as PythonPackageDiagnostics);
+      onNotify(report.ok === true ? 'Python 套件診斷完成；請查看下方報告' : String(report.error || 'Python 套件診斷失敗'));
+    } catch (err) {
+      onNotify(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoadingDiagnostics(false);
+    }
+  };
+
+  const handleCopyDiagnostics = async () => {
+    if (!packageDiagnostics) return;
+    const payload = JSON.stringify(packageDiagnostics, null, 2);
+    try {
+      if (window.DroidPyNative?.copyToClipboard?.(payload)) {
+        onNotify('診斷報告已複製');
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(payload);
+        onNotify('診斷報告已複製');
+      } else {
+        onNotify('目前環境不支援複製，請直接查看報告');
+      }
+    } catch {
+      onNotify('複製失敗，請直接查看報告');
+    }
+  };
+
   const rootDisplay = status?.rootPath || window.DroidPyNative?.getInternalStoragePath?.() || '/storage/emulated/0';
   const fullDisplayPath = currentPath ? `${rootDisplay}/${currentPath}` : rootDisplay;
 
@@ -320,6 +357,43 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
             )}
             <span>{cleaningCache ? t('sd_app_cache_cleaning') : t('sd_app_cache_clean_btn')}</span>
           </button>
+        </div>
+      )}
+
+      {showCache && (
+        <div className="rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] p-3.5 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-semibold text-[var(--ide-text)]">Python 套件與儲存診斷</div>
+              <p className="text-[11px] text-[var(--ide-text-muted)] mt-1 leading-snug">
+                唯讀檢查 Python 搜尋路徑、pip 套件位置、重複套件與主要目錄容量；不會安裝、刪除或修改套件。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handlePythonPackageDiagnostics()}
+              disabled={loadingDiagnostics}
+              className="min-h-[38px] px-3 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5 shrink-0"
+            >
+              {loadingDiagnostics ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ScanSearch className="w-3.5 h-3.5" />}
+              <span>{loadingDiagnostics ? '診斷中…' : '檢查套件資料'}</span>
+            </button>
+          </div>
+          {packageDiagnostics && (
+            <div className="space-y-2">
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => void handleCopyDiagnostics()}
+                  className="min-h-[34px] px-3 rounded-lg border border-[var(--ide-border)] text-xs inline-flex items-center gap-1.5"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>複製診斷報告</span>
+                </button>
+              </div>
+              <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-black/5 dark:bg-white/5 p-2.5 text-[10px] leading-relaxed font-mono text-[var(--ide-text)]">{JSON.stringify(packageDiagnostics, null, 2)}</pre>
+            </div>
+          )}
         </div>
       )}
 
