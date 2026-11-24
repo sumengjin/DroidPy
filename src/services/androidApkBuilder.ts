@@ -158,13 +158,30 @@ jobs:
 
       - name: Verify APK Signature Fingerprint
         run: |
-          APK_PATH=\$(ls android/app/build/outputs/apk/debug/*.apk | head -n1)
-          APKSIGNER=\$(find "\${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/build-tools" -name apksigner 2>/dev/null | sort -V | tail -n1 || true)
-          if [ -n "\$APKSIGNER" ]; then
-            "\$APKSIGNER" verify --print-certs "\$APK_PATH"
-          else
-            keytool -printcert -jarfile "\$APK_PATH" || true
+          set -euo pipefail
+          APK_PATH=\$(find android/app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -print | sort | head -n1)
+          if [ -z "\$APK_PATH" ]; then
+            echo "::error::No Debug APK found; refusing to publish an unverified artifact."
+            exit 1
           fi
+          APKSIGNER=\$(find "\${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/build-tools" -type f -name apksigner -perm -u+x 2>/dev/null | sort -V | tail -n1)
+          if [ -z "\$APKSIGNER" ]; then
+            echo "::error::Android apksigner not found; refusing to skip signature verification."
+            exit 1
+          fi
+          SIGNER_OUTPUT=\$("\$APKSIGNER" verify --verbose --print-certs "\$APK_PATH" 2>&1) || {
+            echo "::error::APK signature verification failed."
+            printf '%s\\n' "\$SIGNER_OUTPUT"
+            exit 1
+          }
+          printf '%s\\n' "\$SIGNER_OUTPUT"
+          ACTUAL_SHA256=\$(printf '%s\\n' "\$SIGNER_OUTPUT" | sed -nE 's/.*certificate SHA-256 digest: *([0-9A-Fa-f:]+).*/\\1/ip' | head -n1 | tr -d ':' | tr '[:lower:]' '[:upper:]')
+          EXPECTED_SHA256="29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA"
+          if [ "\$ACTUAL_SHA256" != "\$EXPECTED_SHA256" ]; then
+            echo "::error::APK signing certificate does not match the original DroidPy certificate."
+            exit 1
+          fi
+          echo "Original DroidPy APK signing certificate verified."
 
       - name: Prepare Release APK Filename
         run: |
