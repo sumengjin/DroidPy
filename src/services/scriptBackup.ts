@@ -45,11 +45,11 @@ function readSnapshotsStrict(): ScriptBackupSnapshot[] {
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new Error('備份資料格式異常；為避免覆蓋原始備份，已停止操作。請先匯出或複製原始備份資料。');
+    throw new Error('DROIDPY_BACKUP_STORE_CORRUPT');
   }
 
   if (!Array.isArray(parsed) || !parsed.every(isBackupSnapshot)) {
-    throw new Error('備份資料不完整或格式不相容；為避免遺失資料，已停止操作。');
+    throw new Error('DROIDPY_BACKUP_STORE_CORRUPT');
   }
 
   return [...parsed].sort((a, b) => b.createdAt - a.createdAt);
@@ -61,7 +61,11 @@ function readSnapshotsStrict(): ScriptBackupSnapshot[] {
  * Never evict older snapshots automatically to make a new backup fit.
  */
 function writeSnapshots(list: ScriptBackupSnapshot[]): ScriptBackupSnapshot[] {
-  localStorage.setItem(BACKUP_STORAGE_KEY, JSON.stringify(list));
+  try {
+    localStorage.setItem(BACKUP_STORAGE_KEY, JSON.stringify(list));
+  } catch {
+    throw new Error('DROIDPY_BACKUP_SAVE_FAILED');
+  }
   return [...list].sort((a, b) => b.createdAt - a.createdAt);
 }
 
