@@ -1877,7 +1877,7 @@ class EmbeddedTermuxBridge(
 
         val d = '$'
         val caOpt = if (certFile != null) {
-            "-o Acquire::https::CaInfo=${certFile.absolutePath}"
+            "-o Acquire::https::CaInfo=\${certFile.absolutePath}"
         } else {
             ""
         }
