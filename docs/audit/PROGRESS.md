@@ -98,3 +98,11 @@
 - Process inspection is read-only. Bridge shutdown leaves active user Python work alive and retains the native `Process` handle so explicit Stop remains available after Bridge restart. UI labels updated in Traditional Chinese, Simplified Chinese, English and Japanese. Added CI regression checks for age-based termination and explicit Stop preservation.
 - CI run `45479438842` passed Python tests, PWA/TypeScript build, Android ARM64 Debug APK compilation and artifact upload. Follow-up run `45480204247` also passed the full Debug build. Run `45480787105` completed SUCCESS, including Python tests, PWA/TypeScript build and Android ARM64 Debug APK compilation/artifact upload. Latest run `45481122921` passed Python tests and PWA/TypeScript build after restoring the `signal` import and adding an explicit-Stop regression assertion; its Android build is running, while the Kotlin source was already compiled successfully in run `45480787105`. Production Release APK, production signer verification and GitHub Release are skipped for PR builds; no production APK was published.
 - Device verification remains required for Android 10+ process survival and explicit Stop behavior. No `usr/`, installed packages, workspace, backups or signing material was changed.
+
+
+### 2026-11-25 — URL probe SSRF protection (current PR branch)
+- Created `security/probe-url-ssrf-guard-v1` from the latest main after PR #21 merged.
+- Replaced automatic urllib/HttpURLConnection redirect handling in both Bridge implementations with manual redirects. Every hop resolves and validates all DNS answers, then pins the socket to a validated public IP; HTTPS preserves SNI and certificate hostname verification.
+- Rejects loopback/private/link-local/reserved addresses, local hostnames, URL userinfo, unsafe custom headers and control characters. Cross-origin redirects drop Cookie, Authorization and Referer; response previews and timeouts are bounded.
+- Added `scripts/check-probe-url-security.mjs` with static checks plus generated-Python tests for private ranges, pinned sockets, loopback redirects and credential stripping; wired it into CI.
+- CI and Android ARM64 Debug build are pending. Android 10+ device validation must confirm normal public HTTP/HTTPS crawler probing and safe redirect behavior before merge. No workspace, `usr/`, package, backup or signing data is changed.
