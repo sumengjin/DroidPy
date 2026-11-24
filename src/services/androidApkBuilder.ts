@@ -1690,8 +1690,8 @@ class EmbeddedTermuxBridge(
         appendNativeLog("Bridge", "EmbeddedTermuxBridge stopping")
         // The Bridge may stop while a user task is still running. Leave that
         // process alive; only an explicit user Stop action may terminate it.
-        activeProcess = null
-        activeProcessStartedAt.set(0L)
+        // Keep the Process handle so an explicit user Stop can still terminate
+        // the task after the Bridge is restarted. Bridge shutdown is not task cancellation.
         try { serverSocket?.close() } catch (_: Exception) {}
     }
 
