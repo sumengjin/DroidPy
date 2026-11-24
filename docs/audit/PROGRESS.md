@@ -129,3 +129,11 @@
 - Standalone PR #25 was closed as superseded by PR #26; no duplicate PR remains for URL probe SSRF.
 - Integrated CI run `45488075770` passed Python syntax/unit tests, all TypeScript/PWA/security checks, and Android ARM64 Debug APK compile/upload. Artifact: `DroidPy-arm64-debug-179-a1`. Production Release/signature verification and GitHub Release were skipped as expected for a PR.
 - Follow-up commits expand regression coverage for special-purpose IPv4/IPv6 ranges, oversized/ambiguous HTTP response headers and strict chunked framing; latest CI is re-running those assertions. Device acceptance on Android 10+ remains pending before merge.
+
+
+### 2026-11-25 — Bridge request resource limits (dependent on PR #26)
+- Created `security/bridge-resource-limits-v3` from the integrated Termux security branch so the resource fix does not reintroduce stale CORS, SSRF, or watchdog code from the older PR #17 branch.
+- Python Bridge now rejects duplicate Content-Length and Transfer-Encoding, validates bounded decimal lengths and JSON object bodies, retains the 8 MiB body limit and 15-second socket timeout, and caps active request handlers at 8 with a 16-connection backlog and explicit 503 overload rejection.
+- Native Android Bridge now uses a dedicated accept thread plus a bounded 8-worker/16-queue executor, rejects excess clients, caps headers at 16 KiB and bodies at 8 MiB, rejects ambiguous request framing, incomplete bodies and invalid JSON, and preserves the rule that Bridge shutdown must not terminate active user Python work.
+- Extended `check:bridge` to verify the generated Python and native Kotlin source resource limits and lifecycle guards. CI and Android 10+ device acceptance pending.
+- The older PR #17 patch was not merged directly: its stale base and shutdown behavior would conflict with the newer process-preservation fix. Only the required resource protections were ported and adapted.
