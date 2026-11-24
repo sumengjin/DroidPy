@@ -4,6 +4,12 @@ All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
 
+### Security — URL Probe SSRF Protection (pending Android validation)
+- **雙端阻斷私有網路探測**：Python Bridge 與 Android 原生 Bridge 都會解析 DNS、拒絕非公網／保留 IP，並直接連線至已驗證的 IP，避免 DNS rebinding 在檢查後改指向內網。
+- **逐跳驗證重新導向**：停用自動跳轉，每個 redirect 目標都重新解析及驗證；跨來源跳轉不轉送 Cookie、Authorization 或 Referer。
+- **限制探測標頭與回應**：拒絕 Host、連線控制與 Cookie 覆寫標頭，限制標頭大小、回應預覽和逾時；HTTPS 保留憑證及主機名稱驗證。
+- 加入私有 IP、DNS pinning、loopback redirect、跨來源憑證剝除與標頭注入回歸測試；Android 實機驗證仍待完成。
+
 ### Fixed — Termux 套件清單、使用者套件路徑、備份與資料保護（待 Android 實機驗證）
 - **完整盤點 Python 套件**：不再因檔案掃描已找到一個套件（例如 lxml）就跳過 `importlib.metadata.distributions()`；同時核對 `usr/` 與 `PYTHONUSERBASE`，避免漏掉使用者安裝的套件。
 - **限制盤點子程序資源**：輸出改寫入 App 私有暫存檔，不再使用可能塞滿的 pipe；Android 8 以上最多等待 8 秒、輸出限制 1 MiB，並在結束或失敗時清理程序與暫存檔。
