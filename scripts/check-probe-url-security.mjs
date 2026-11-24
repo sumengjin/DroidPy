@@ -59,7 +59,12 @@ assert is_public("2606:4700:4700::1111")
 
 original_getaddrinfo = socket.getaddrinfo
 def fake_getaddrinfo(host, port, type=None):
-    if host in ("public.example", "other.example"):
+    if host == "public.example":
+        return [
+            (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("2606:4700:4700::1111", port, 0, 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", port)),
+        ]
+    if host == "other.example":
         return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", port))]
     if host == "127.0.0.1":
         return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", port))]
@@ -83,13 +88,18 @@ try:
     class FakeConnection:
         def __init__(self, host, port, family, sockaddr, timeout, *args):
             self.host = host
+            self.family = family
         def request(self, method, target, headers):
+            if self.family == socket.AF_INET6:
+                raise OSError("simulated IPv6 route unavailable")
             requests.append(dict(headers))
         def getresponse(self):
             return responses.pop(0)
         def close(self):
             pass
     probe_globals["_PinnedHTTPConnection"] = FakeConnection
+    resolved_host, resolved_addresses = ns["_resolve_public_probe_address"]("public.example", 80)
+    assert len(resolved_addresses) == 2, "all validated DNS addresses must be retained for fallback"
     status, final_url, body, cookies, headers = ns["_probe_url_safely"](
         "http://public.example/start",
         {"Cookie": "session=secret", "Authorization": "Bearer secret"}
