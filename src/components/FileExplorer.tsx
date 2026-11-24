@@ -216,7 +216,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
       setBackupLabel('');
       onNotify(t('bak_created_toast', { count: snap.fileCount }));
     } catch (err) {
-      onNotify(err instanceof Error ? err.message : t('bak_import_err'));
+      onNotify(t('bak_storage_err'));
     }
   };
 
