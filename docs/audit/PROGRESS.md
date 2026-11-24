@@ -106,3 +106,5 @@
 - Inventory subprocess output is redirected to an app-private temporary file (not a pipe), limited to 8 seconds and 1 MiB, parsed using a unique marker, and cleaned up on success, failure or timeout. Existing `pip-` temp cleanup already covers this filename.
 - Ordinary backup-manifest writes remain additive; explicit uninstall remains the only caller allowed to shrink package lists. No package directories, `usr/`, workspace or backup snapshots are deleted or overwritten by inventory.
 - Added a CI regression guard for always-on metadata discovery, bounded file output/timeout/cleanup and monotonic manifest behavior. CI and Android ARM64 Debug compile pending.
+
+- Additional R-008 data-preservation guard added to the same branch: startup now treats non-empty, unreadable or non-directory `usr/` as existing data; when core markers are missing it attempts non-destructive runtime repair, does not write a false bootstrap-success marker, and shows a warning instead of deleting/re-extracting the directory. CI regression checks cover this branch.
