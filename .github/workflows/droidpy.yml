@@ -242,16 +242,13 @@ jobs:
             echo "::error::無法從 apksigner 輸出取得有效的 SHA-256 憑證指紋。"
             exit 1
           fi
-          if [ "${DROIDPY_KEYSTORE_FILE:-}" = "droidpy-debug.p12" ]; then
-            EXPECTED_SHA256="29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA"
-            if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
-              echo "::error::APK 簽名憑證與 DroidPy 原有憑證不一致，已阻止產物繼續發布。"
-              exit 1
-            fi
-            echo "已確認 APK 使用 DroidPy 原有簽名憑證。"
-          else
-            echo "APK 簽名有效；使用自訂簽名憑證（SHA-256: $ACTUAL_SHA256）。"
+          EXPECTED_SHA256="29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA"
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::APK 簽名憑證與 DroidPy 原有憑證不一致，已阻止產物繼續發布。"
+            echo "::error::無論使用內嵌金鑰或 GitHub Secrets，簽名指紋都必須保持不變。"
+            exit 1
           fi
+          echo "已確認 APK 使用 DroidPy 原有簽名憑證（SHA-256: $ACTUAL_SHA256）。"
 
       - name: 整理發佈版本與 APK 檔名
         id: resolve_tag
