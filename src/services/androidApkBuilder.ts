@@ -159,9 +159,9 @@ jobs:
             fi
             printf '%s' "$CUSTOM_KS_B64" | base64 --decode > android/app/droidpy-custom.keystore
             echo 'DROIDPY_KEYSTORE_FILE=droidpy-custom.keystore' >> "$GITHUB_ENV"
-            printf 'DROIDPY_STORE_PASSWORD=%s\n' "$CUSTOM_STORE_PASS" >> "$GITHUB_ENV"
-            printf 'DROIDPY_KEY_ALIAS=%s\n' "$CUSTOM_KEY_ALIAS" >> "$GITHUB_ENV"
-            printf 'DROIDPY_KEY_PASSWORD=%s\n' "$CUSTOM_KEY_PASS" >> "$GITHUB_ENV"
+            printf 'DROIDPY_STORE_PASSWORD=%s\\n' "$CUSTOM_STORE_PASS" >> "$GITHUB_ENV"
+            printf 'DROIDPY_KEY_ALIAS=%s\\n' "$CUSTOM_KEY_ALIAS" >> "$GITHUB_ENV"
+            printf 'DROIDPY_KEY_PASSWORD=%s\\n' "$CUSTOM_KEY_PASS" >> "$GITHUB_ENV"
           else
             rm -f android/app/droidpy-custom.keystore android/app/droidpy-debug.p12
             echo 'Debug build uses Gradle ephemeral debug signing; no production key is loaded.'
@@ -189,8 +189,8 @@ jobs:
           APKSIGNER=$(find "\${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/build-tools" -type f -name apksigner -perm -u+x 2>/dev/null | sort -V | tail -n1)
           if [ -z "$APKSIGNER" ]; then echo '::error::Android apksigner not found.'; exit 1; fi
           SIGNER_OUTPUT=$("$APKSIGNER" verify --verbose --print-certs "$APK_PATH" 2>&1)
-          printf '%s\n' "$SIGNER_OUTPUT"
-          ACTUAL_SHA256=$(printf '%s\n' "$SIGNER_OUTPUT" | sed -nE 's/.*certificate SHA-256 digest: *([0-9A-Fa-f:]+).*/\1/ip' | head -n1 | tr -d ':' | tr '[:lower:]' '[:upper:]')
+          printf '%s\\n' "$SIGNER_OUTPUT"
+          ACTUAL_SHA256=$(printf '%s\\n' "$SIGNER_OUTPUT" | sed -nE 's/.*certificate SHA-256 digest: *([0-9A-Fa-f:]+).*/\\1/ip' | head -n1 | tr -d ':' | tr '[:lower:]' '[:upper:]')
           if ! [[ "$ACTUAL_SHA256" =~ ^[0-9A-F]{64}$ ]]; then echo '::error::Invalid APK signer fingerprint.'; exit 1; fi
           if [ "$DROIDPY_RELEASE_BUILD" = true ]; then
             KEYSTORE_PATH="android/\${DROIDPY_KEYSTORE_FILE}"
