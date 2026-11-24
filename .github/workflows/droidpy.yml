@@ -61,6 +61,7 @@ jobs:
           npm run check:bridge
           npm run check:watchdog-safety
           npm run check:package-inventory
+          npm run check:apt-security
           npm run build
 
       - name: 上傳離線前端建置產物
