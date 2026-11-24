@@ -35,6 +35,7 @@ assert.ok(workflow.includes('DROIDPY_RELEASE_BUILD'));
 assert.ok(workflow.includes("if: steps.configure.outputs.is_release == 'true'"));
 assert.ok(workflow.includes('A production Release requires all protected DROIDPY signing secrets'));
 assert.ok(workflow.includes('keytool -exportcert -keystore'));
+assert.ok(workflow.includes('KEYSTORE_PATH="android/app/'))
 assert.ok(workflow.includes('apksigner verify --verbose --print-certs'));
 assert.ok(workflow.includes('needs.build-apk.outputs.is_release == \'true\''));
 assert.ok(workflow.includes('android/app/build/outputs/apk/release/*.apk'));
