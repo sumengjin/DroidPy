@@ -3899,7 +3899,7 @@ def clipboard_set(text):
         val forbidden = setOf(
             "host", "connection", "content-length", "transfer-encoding",
             "proxy-authorization", "proxy-connection", "keep-alive",
-            "upgrade", "te", "trailer", "cookie"
+            "upgrade", "te", "trailer", "cookie", "accept-encoding"
         )
         val extra = bodyJson.optJSONObject("extraHeaders")
         if (extra != null) {
@@ -3914,7 +3914,8 @@ def clipboard_set(text):
                     name.lowercase() in forbidden) {
                     throw IllegalArgumentException("Invalid or restricted custom header")
                 }
-                headers[name] = value
+                val existingName = headers.keys.firstOrNull { it.equals(name, ignoreCase = true) }
+                headers[existingName ?: name] = value
             }
         }
         return headers
@@ -3933,7 +3934,7 @@ def clipboard_set(text):
                 !location.isNullOrBlank() && redirectCount < 5) {
                 val next = URL(current, location)
                 if (probeOrigin(current) != probeOrigin(next)) {
-                    headers.keys.removeAll { it.lowercase() in setOf("cookie", "authorization", "proxy-authorization") }
+                    headers.keys.removeAll { it.lowercase() in setOf("cookie", "authorization", "proxy-authorization", "referer") }
                 }
                 current = next
                 continue
