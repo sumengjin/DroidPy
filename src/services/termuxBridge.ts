@@ -1420,6 +1420,17 @@ export async function getAppStorageUsage(
   }
 }
 
+export async function getPythonPackageDiagnostics(
+  config: TermuxConfig
+): Promise<Record<string, unknown>> {
+  return termuxFetch<Record<string, unknown>>(
+    config,
+    '/diagnostics/python-packages',
+    { method: 'GET' },
+    18000
+  );
+}
+
 export async function cleanupAppStorage(
   config: TermuxConfig
 ): Promise<AppStorageCleanupResult | null> {
