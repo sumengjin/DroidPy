@@ -1493,7 +1493,7 @@ class EmbeddedTermuxBridge(
     private val assetManager: AssetManager? = null
 ) {
     private var serverSocket: ServerSocket? = null
-    private val executor = Executors.newCachedThreadPool()
+    private val executor = Executors.newFixedThreadPool(8)
     private var watchdogScheduler: ScheduledExecutorService? = null
     @Volatile private var running = false
     @Volatile private var activeProcess: Process? = null
@@ -3069,6 +3069,7 @@ def clipboard_set(text):
 
     private fun handleClient(socket: Socket) {
         socket.use { sock ->
+            sock.soTimeout = 10_000
             val bis = BufferedInputStream(sock.getInputStream())
             val headerBuf = ByteArrayOutputStream()
             var p3 = 0
@@ -3082,7 +3083,10 @@ def clipboard_set(text):
                 p3 = p2
                 p2 = p1
                 p1 = b
-                if (headerBuf.size() > 65536) return
+                if (headerBuf.size() > 16 * 1024) {
+                    writeJson(sock.getOutputStream(), 400, JSONObject().put("error", "Request headers too large"))
+                    return
+                }
             }
             val headerLines = headerBuf.toString("ISO-8859-1").split("\\r\\n")
             val requestLine = headerLines.firstOrNull()?.trim() ?: return
@@ -3142,7 +3146,20 @@ def clipboard_set(text):
                 return
             }
 
-            val len = headers["content-length"]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+            if (headers.containsKey("transfer-encoding")) {
+                writeJson(out, 400, JSONObject().put("error", "Transfer-Encoding is not supported"))
+                return
+            }
+            val rawLength = headers["content-length"]
+            val len = if (rawLength == null) 0 else rawLength.toIntOrNull()
+            if (len == null || len < 0) {
+                writeJson(out, 400, JSONObject().put("error", "Invalid Content-Length"))
+                return
+            }
+            if (len > 1024 * 1024) {
+                writeJson(out, 413, JSONObject().put("error", "Request body too large (max 1 MiB)"))
+                return
+            }
             val bodyBytes = ByteArray(len)
             var readTotal = 0
             while (readTotal < len) {
@@ -3150,8 +3167,17 @@ def clipboard_set(text):
                 if (r < 0) break
                 readTotal += r
             }
+            if (readTotal != len) {
+                writeJson(out, 400, JSONObject().put("error", "Incomplete request body"))
+                return
+            }
             val bodyStr = if (readTotal > 0) String(bodyBytes, 0, readTotal, Charsets.UTF_8).trim() else ""
-            val bodyJson = if (bodyStr.startsWith("{")) JSONObject(bodyStr) else JSONObject()
+            val bodyJson = try {
+                if (bodyStr.isBlank()) JSONObject() else JSONObject(bodyStr)
+            } catch (_: Exception) {
+                writeJson(out, 400, JSONObject().put("error", "Invalid JSON body"))
+                return
+            }
 
             when {
                 method == "GET" && path == "/health" -> {
