@@ -56,6 +56,7 @@ os.makedirs(WORKSPACE, exist_ok=True)
 PROC_LOCK = threading.Lock()
 ACTIVE_PROC = {"pid": None, "pgid": None, "master_fd": None, "started_at": 0.0}
 WATCHDOG_INTERVAL_SEC = 1800
+MAX_REQUEST_BODY_BYTES = 1024 * 1024
 _LEGACY_CERTS_SUPPORTED = None
 
 def _set_active(pid, pgid, master_fd):
@@ -586,6 +587,10 @@ def _watchdog_loop():
 class DroidPyBridgeHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
+    def setup(self):
+        super().setup()
+        self.connection.settimeout(10)
+
     def _send_cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Private-Network", "true")
@@ -616,6 +621,33 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
 
     def _check_auth(self):
         return self.headers.get("X-DroidPy-Token", "") == TOKEN
+
+    def _read_json_body(self):
+        if self.headers.get("Transfer-Encoding"):
+            raise ValueError("Transfer-Encoding is not supported")
+        raw_length = self.headers.get("Content-Length")
+        if raw_length is None:
+            return {}
+        try:
+            length = int(raw_length, 10)
+        except (TypeError, ValueError):
+            raise ValueError("Invalid Content-Length")
+        if length < 0:
+            raise ValueError("Invalid Content-Length")
+        if length > MAX_REQUEST_BODY_BYTES:
+            raise OverflowError("Request body too large")
+        if length == 0:
+            return {}
+        raw = self.rfile.read(length)
+        if len(raw) != length:
+            raise ValueError("Incomplete request body")
+        try:
+            data = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            raise ValueError("Invalid JSON body")
+        if not isinstance(data, dict):
+            raise ValueError("JSON body must be an object")
+        return data
 
     def do_OPTIONS(self):
         self.send_response(204)
@@ -772,9 +804,12 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self._check_auth():
             return self._send_json(401, {"error": "Invalid X-DroidPy-Token"})
-        length = int(self.headers.get("Content-Length", "0"))
-        raw = self.rfile.read(length).decode("utf-8") if length > 0 else "{}"
-        data = json.loads(raw)
+        try:
+            data = self._read_json_body()
+        except OverflowError as exc:
+            return self._send_json(413, {"error": str(exc)})
+        except ValueError as exc:
+            return self._send_json(400, {"error": str(exc)})
 
         if self.path == "/stdin":
             text = str(data.get("data", ""))
@@ -931,7 +966,36 @@ if __name__ == "__main__":
     _watchdog_thread = threading.Thread(target=_watchdog_loop, daemon=True)
     _watchdog_thread.start()
     print(f"[DroidPy Termux PTY Bridge] Listening on http://127.0.0.1:8765 (Workspace: {WORKSPACE})")
-    ThreadingHTTPServer(("127.0.0.1", 8765), DroidPyBridgeHandler).serve_forever()
+    class BoundedThreadingHTTPServer(ThreadingHTTPServer):
+        request_queue_size = 16
+        daemon_threads = True
+
+        def __init__(self, *args, **kwargs):
+            self._request_slots = threading.BoundedSemaphore(8)
+            super().__init__(*args, **kwargs)
+
+        def process_request(self, request, client_address):
+            if not self._request_slots.acquire(blocking=False):
+                try:
+                    request.sendall(b"HTTP/1.1 503 Service Unavailable\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n")
+                except OSError:
+                    pass
+                finally:
+                    self.shutdown_request(request)
+                return
+            try:
+                super().process_request(request, client_address)
+            except BaseException:
+                self._request_slots.release()
+                raise
+
+        def process_request_thread(self, request, client_address):
+            try:
+                super().process_request_thread(request, client_address)
+            finally:
+                self._request_slots.release()
+
+    BoundedThreadingHTTPServer(("127.0.0.1", 8765), DroidPyBridgeHandler).serve_forever()
 `;
 }
 
