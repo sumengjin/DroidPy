@@ -548,6 +548,10 @@ class MainActivity : AppCompatActivity() {
             val safeName = File(fileName).name.ifBlank { "DroidPy-update.apk" }.let {
                 if (it.lowercase().endsWith(".apk")) it else "$it.apk"
             }
+            val maxApkBytes = 300L * 1024L * 1024L
+            var activeConnection: HttpURLConnection? = null
+            var partialFile: File? = null
+
             fun emitProgress(status: String, progress: Int, downloaded: Long = 0L, total: Long = 0L, message: String = "") {
                 val payload = JSONObject()
                     .put("status", status)
@@ -562,64 +566,190 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
+            fun validateGithubAssetUrl(raw: String): URL {
+                val url = URL(raw)
+                val uri = url.toURI()
+                val host = (uri.host ?: "").lowercase(java.util.Locale.US)
+                val allowedHost = host == "github.com" ||
+                    host == "api.github.com" ||
+                    host == "objects.githubusercontent.com" ||
+                    host == "release-assets.githubusercontent.com"
+                if (uri.scheme != "https" || uri.rawUserInfo != null ||
+                    (uri.port != -1 && uri.port != 443) || !allowedHost
+                ) {
+                    throw SecurityException("更新下載網址不是受信任的 GitHub HTTPS 資產網址")
+                }
+                return url
+            }
+
+            fun certificateFingerprint(signature: android.content.pm.Signature): String {
+                return java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(signature.toByteArray())
+                    .joinToString("") { byte ->
+                        "%02X".format(java.util.Locale.US, byte.toInt() and 0xff)
+                    }
+            }
+
+            @Suppress("DEPRECATION")
+            fun signerMatchesInstalledApp(apkPath: String): Boolean {
+                val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    PackageManager.GET_SIGNING_CERTIFICATES
+                } else {
+                    PackageManager.GET_SIGNATURES
+                }
+                val archiveInfo = packageManager.getPackageArchiveInfo(apkPath, flags) ?: return false
+                if (archiveInfo.packageName != packageName) return false
+                val installedInfo = packageManager.getPackageInfo(packageName, flags)
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    val installedSigning = installedInfo.signingInfo ?: return false
+                    val archiveSigning = archiveInfo.signingInfo ?: return false
+                    val installedCurrent = installedSigning.apkContentsSigners
+                        ?.map(::certificateFingerprint)?.toSet().orEmpty()
+                    val archiveCurrent = archiveSigning.apkContentsSigners
+                        ?.map(::certificateFingerprint)?.toSet().orEmpty()
+                    if (installedCurrent.isEmpty() || archiveCurrent.isEmpty()) return false
+
+                    if (installedSigning.hasMultipleSigners() || archiveSigning.hasMultipleSigners()) {
+                        return installedCurrent == archiveCurrent
+                    }
+
+                    val archiveHistory = archiveSigning.signingCertificateHistory
+                        ?.map(::certificateFingerprint)?.toSet().orEmpty()
+                    val compatibleHistory = if (archiveHistory.isNotEmpty()) archiveHistory else archiveCurrent
+                    return compatibleHistory.containsAll(installedCurrent)
+                }
+
+                val installedSigners = installedInfo.signatures
+                    ?.map(::certificateFingerprint)?.toSet().orEmpty()
+                val archiveSigners = archiveInfo.signatures
+                    ?.map(::certificateFingerprint)?.toSet().orEmpty()
+                return installedSigners.isNotEmpty() && installedSigners == archiveSigners
+            }
+
             thread {
                 try {
                     emitProgress("downloading", 0, 0L, 0L)
                     val updatesDir = File(filesDir, "updates").apply { mkdirs() }
-                    updatesDir.listFiles()?.forEach { old -> if (old.isFile && old.name != safeName) old.delete() }
                     val outFile = File(updatesDir, safeName)
+                    val tempFile = File(updatesDir, "$safeName.part")
+                    partialFile = tempFile
+                    if (tempFile.exists()) tempFile.delete()
 
                     var currentUrl = apkUrl
-                    var conn: HttpURLConnection? = null
                     var redirects = 0
                     while (redirects < 6) {
-                        val urlObj = URL(currentUrl)
-                        val c = (urlObj.openConnection() as HttpURLConnection).apply {
+                        val urlObj = validateGithubAssetUrl(currentUrl)
+                        val connection = (urlObj.openConnection() as HttpsURLConnection).apply {
                             instanceFollowRedirects = false
                             connectTimeout = 20000
                             readTimeout = 30000
                             setRequestProperty("User-Agent", "DroidPy-Updater/1.0")
+                            setRequestProperty("Accept", "application/vnd.android.package-archive")
                         }
-                        val code = c.responseCode
+                        activeConnection = connection
+                        val code = connection.responseCode
                         if (code in 300..399) {
-                            val loc = c.getHeaderField("Location")
-                            c.disconnect()
-                            if (loc.isNullOrBlank()) break
-                            currentUrl = URL(urlObj, loc).toString()
+                            val location = connection.getHeaderField("Location")
+                            connection.disconnect()
+                            activeConnection = null
+                            if (location.isNullOrBlank()) break
+                            currentUrl = URL(urlObj, location).toString()
                             redirects++
                             continue
                         }
-                        conn = c
+                        if (code !in 200..299) {
+                            connection.disconnect()
+                            activeConnection = null
+                            emitProgress("error", 0, message = "下載更新失敗 (HTTP $code)")
+                            return@thread
+                        }
                         break
                     }
-                    if (conn == null || conn.responseCode !in 200..299) {
-                        val errCode = conn?.responseCode ?: -1
-                        conn?.disconnect()
-                        emitProgress("error", 0, message = "下載更新失敗 (HTTP $errCode)")
+
+                    val connection = activeConnection
+                    if (connection == null || connection.responseCode !in 200..299) {
+                        connection?.disconnect()
+                        activeConnection = null
+                        emitProgress("error", 0, message = "下載更新失敗：重新導向次數過多或網址無效")
                         return@thread
                     }
 
-                    val totalBytes = conn.contentLengthLong
+                    val totalBytes = connection.contentLengthLong
+                    if (totalBytes > maxApkBytes) {
+                        connection.disconnect()
+                        activeConnection = null
+                        emitProgress("error", 0, message = "更新 APK 超過 300 MiB 安全上限")
+                        return@thread
+                    }
+
                     var downloaded = 0L
                     var lastEmit = 0L
-                    conn.inputStream.use { inp ->
-                        outFile.outputStream().use { out ->
-                            val buf = ByteArray(16384)
+                    connection.inputStream.use { input ->
+                        java.io.FileOutputStream(tempFile).use { output ->
+                            val buffer = ByteArray(16384)
                             while (true) {
-                                val r = inp.read(buf)
-                                if (r <= 0) break
-                                out.write(buf, 0, r)
-                                downloaded += r
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                if (count == 0) continue
+                                downloaded += count.toLong()
+                                if (downloaded > maxApkBytes) {
+                                    throw SecurityException("更新 APK 超過 300 MiB 安全上限")
+                                }
+                                if (totalBytes > 0L && downloaded > totalBytes) {
+                                    throw SecurityException("更新 APK 長度與伺服器宣告不符")
+                                }
+                                output.write(buffer, 0, count)
                                 val now = SystemClock.elapsedRealtime()
                                 if (now - lastEmit >= 180L) {
                                     lastEmit = now
-                                    val pct = if (totalBytes > 0L) ((downloaded * 100L) / totalBytes).toInt().coerceIn(0, 99) else -1
-                                    emitProgress("downloading", pct, downloaded, totalBytes)
+                                    val percent = if (totalBytes > 0L) {
+                                        ((downloaded * 100L) / totalBytes).toInt().coerceIn(0, 99)
+                                    } else -1
+                                    emitProgress("downloading", percent, downloaded, totalBytes)
                                 }
                             }
+                            output.flush()
+                            output.fd.sync()
                         }
                     }
-                    conn.disconnect()
+                    connection.disconnect()
+                    activeConnection = null
+
+                    if (downloaded <= 0L || (totalBytes > 0L && downloaded != totalBytes)) {
+                        tempFile.delete()
+                        emitProgress("error", 0, downloaded, totalBytes, "更新 APK 下載不完整，已拒絕安裝")
+                        return@thread
+                    }
+
+                    if (!signerMatchesInstalledApp(tempFile.absolutePath)) {
+                        tempFile.delete()
+                        emitProgress(
+                            "error",
+                            0,
+                            downloaded,
+                            totalBytes,
+                            "更新 APK 驗證失敗：應用程式識別或簽名與目前安裝版本不相容，已拒絕安裝"
+                        )
+                        return@thread
+                    }
+
+                    // Keep the previous verified download until the new APK has passed identity/signature checks.
+                    val previousFile = File(updatesDir, "$safeName.previous")
+                    if (previousFile.exists()) previousFile.delete()
+                    val hadPrevious = outFile.exists()
+                    if (hadPrevious && !outFile.renameTo(previousFile)) {
+                        tempFile.delete()
+                        throw IllegalStateException("無法安全保留上一份更新 APK")
+                    }
+                    if (!tempFile.renameTo(outFile)) {
+                        if (hadPrevious) previousFile.renameTo(outFile)
+                        tempFile.delete()
+                        throw IllegalStateException("無法安全保存已驗證的更新 APK")
+                    }
+                    if (hadPrevious) previousFile.delete()
+                    partialFile = null
+
                     emitProgress("installing", 100, downloaded, if (totalBytes > 0L) totalBytes else downloaded)
 
                     runOnUiThread {
@@ -627,7 +757,7 @@ class MainActivity : AppCompatActivity() {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
                                 Toast.makeText(this@MainActivity, "請允許 DroidPy 安裝未知來源應用程式以完成更新", Toast.LENGTH_LONG).show()
                                 val permIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                                    data = Uri.parse("package:\$packageName")
+                                    data = Uri.parse("package:\\$packageName")
                                 }
                                 startActivity(permIntent)
                                 return@runOnUiThread
@@ -647,6 +777,8 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 } catch (e: Exception) {
+                    try { activeConnection?.disconnect() } catch (_: Exception) {}
+                    try { partialFile?.delete() } catch (_: Exception) {}
                     emitProgress("error", 0, message = "更新下載錯誤: \${e.message}")
                 }
             }
