@@ -141,54 +141,21 @@ jobs:
             VER="1.2.${GITHUB_RUN_NUMBER:-1}"
           fi
 
-          if [ -n "$INPUT_TAG" ]; then
-            REL_TAG="v${INPUT_TAG#v}"
-            VNAME="${REL_TAG#v}"
-          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            REL_TAG="${GITHUB_REF_NAME}"
-            VNAME="${REL_TAG#v}"
-          else
-            IFS='.' read -r MAJ MIN PAT <<< "$VER"
-            MAJ=${MAJ:-1}
-            MIN=${MIN:-2}
-            PAT=${PAT:-0}
-            for _ in $(seq 1 50); do
-              CAND_TAG="v${MAJ}.${MIN}.${PAT}"
-              REL_EXISTS=0
-              if gh release view "$CAND_TAG" >/dev/null 2>&1; then
-                REL_EXISTS=1
-              fi
-              TAG_SHA=$(git ls-remote --tags origin "refs/tags/${CAND_TAG}^{}" 2>/dev/null | awk '{print $1}' | head -n1 || true)
-              if [ -z "$TAG_SHA" ]; then
-                TAG_SHA=$(git ls-remote --tags origin "refs/tags/${CAND_TAG}" 2>/dev/null | awk '{print $1}' | head -n1 || true)
-              fi
-              if [ "$REL_EXISTS" -eq 0 ] && [ -z "$TAG_SHA" ]; then
-                break
-              fi
-              if [ -n "$TAG_SHA" ] && [ "$TAG_SHA" = "${GITHUB_SHA}" ]; then
-                break
-              fi
-              PAT=$((PAT + 1))
-            done
-            VNAME="${MAJ}.${MIN}.${PAT}"
-            REL_TAG="v${VNAME}"
+          IS_RELEASE_REF=false
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            case "$GITHUB_REF" in
+              refs/heads/main|refs/heads/master|refs/tags/v*) IS_RELEASE_REF=true ;;
+            esac
+          elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -n "$INPUT_TAG" ]; then
+            IS_RELEASE_REF=true
           fi
 
-          SEMVER_PART=$(echo "$VNAME" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' || echo "1.2.15")
-          IFS='.' read -r CMAJ CMIN CPAT <<< "$SEMVER_PART"
-          VCODE=$(( ${CMAJ:-1} * 10000 + ${CMIN:-0} * 100 + ${CPAT:-0} ))
-
-          echo "DROIDPY_VERSION_CODE=${VCODE}" >> "$GITHUB_ENV"
-          echo "DROIDPY_VERSION_NAME=${VNAME}" >> "$GITHUB_ENV"
-          echo "DROIDPY_RESOLVED_TAG=${REL_TAG}" >> "$GITHUB_ENV"
-          echo "Resolved Release=${REL_TAG}, versionCode=${VCODE}, versionName=${VNAME}"
-
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ] || { [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -z "$INPUT_TAG" ]; }; then
+          if [ "$IS_RELEASE_REF" != "true" ]; then
             rm -f android/app/droidpy-custom.keystore android/app/droidpy-debug.p12
-            echo "PR/manual debug build uses Gradle ephemeral debug signer; no production key is loaded."
+            echo "Branch/PR/manual debug build uses Gradle ephemeral debug signer; no production key is loaded."
           elif [ -n "$CUSTOM_KS_B64" ]; then
             if [ -z "$CUSTOM_STORE_PASS" ] || [ -z "$CUSTOM_KEY_ALIAS" ] || [ -z "$CUSTOM_KEY_PASS" ]; then
-              echo "::error::自訂簽名金鑰已設定，但 DROIDPY_STORE_PASSWORD、DROIDPY_KEY_ALIAS 或 DROIDPY_KEY_PASSWORD 缺少必要值。"
+              echo "::error::受保護的 signing secrets 缺少必要值。"
               exit 1
             fi
             printf '%s' "$CUSTOM_KS_B64" | base64 --decode > android/app/droidpy-custom.keystore
@@ -202,17 +169,42 @@ jobs:
             exit 1
           fi
 
+          if [ -n "$INPUT_TAG" ]; then
+            REL_TAG="v${INPUT_TAG#v}"
+            VNAME="${REL_TAG#v}"
+          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            REL_TAG="${GITHUB_REF_NAME}"
+            VNAME="${REL_TAG#v}"
+          else
+            IFS='.' read -r MAJ MIN PAT <<< "$VER"
+            MAJ=${MAJ:-1}
+            MIN=${MIN:-2}
+            PAT=${PAT:-0}
+            for _ in $(seq 1 50); do
+              CAND_TAG="v${MAJ}.${MIN}.${PAT}"
+              if ! gh release view "$CAND_TAG" >/dev/null 2>&1; then
+                REL_TAG="$CAND_TAG"
+                break
+              fi
+              PAT=$((PAT + 1))
+            done
+            VNAME="${REL_TAG#v}"
+          fi
+          CODE=$(echo "$VNAME" | awk -F. '{print ($1*1000000)+($2*1000)+$3}')
+          echo "DROIDPY_VERSION_NAME=$VNAME" >> "$GITHUB_ENV"
+          echo "DROIDPY_VERSION_CODE=$CODE" >> "$GITHUB_ENV"
+          echo "DROIDPY_RESOLVED_TAG=$REL_TAG" >> "$GITHUB_ENV"
       - name: 編譯 Debug APK (arm64-v8a)
         working-directory: android
         run: gradle assembleDebug --no-daemon
 
       - name: 編譯正式 Release APK (arm64-v8a)
-        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') || startsWith(github.ref, 'refs/tags/v')
+        if: (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))) || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
         working-directory: android
         run: gradle assembleRelease --no-daemon
 
       - name: 強制驗證 APK 簽名與原憑證指紋
-        if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.release_tag != '')
+        if: (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))) || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
         env:
           INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
@@ -258,25 +250,28 @@ jobs:
           INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           mkdir -p release-apk
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            REL_TAG="pr-${GITHUB_RUN_NUMBER}"
+          IS_RELEASE_REF=false
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            case "$GITHUB_REF" in
+              refs/heads/main|refs/heads/master|refs/tags/v*) IS_RELEASE_REF=true ;;
+            esac
+          elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -n "$INPUT_RELEASE_TAG" ]; then
+            IS_RELEASE_REF=true
+          fi
+          if [ "$IS_RELEASE_REF" != "true" ]; then
+            REL_TAG="debug-${GITHUB_RUN_NUMBER}"
             SAFE_TAG="$REL_TAG"
-            ART_NAME="DroidPy-arm64-debug-pr-${GITHUB_RUN_NUMBER}-a${GITHUB_RUN_ATTEMPT:-1}"
-            cp android/app/build/outputs/apk/debug/*.apk "release-apk/DroidPy-arm64-debug-pr-${GITHUB_RUN_NUMBER}.apk"
+            ART_NAME="DroidPy-arm64-debug-${GITHUB_RUN_NUMBER}-a${GITHUB_RUN_ATTEMPT:-1}"
+            cp android/app/build/outputs/apk/debug/*.apk "release-apk/DroidPy-arm64-debug-${GITHUB_RUN_NUMBER}.apk"
           else
             REL_TAG="${DROIDPY_RESOLVED_TAG}"
             SAFE_TAG="${REL_TAG//\//-}"
             ART_NAME="DroidPy-arm64-apk-${SAFE_TAG}-r${GITHUB_RUN_NUMBER}-a${GITHUB_RUN_ATTEMPT:-1}"
-            if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -z "$INPUT_RELEASE_TAG" ]; then
-              cp android/app/build/outputs/apk/debug/*.apk "release-apk/DroidPy-arm64-${SAFE_TAG}.apk"
-            else
-              cp android/app/build/outputs/apk/release/*.apk "release-apk/DroidPy-arm64-${SAFE_TAG}.apk"
-            fi
+            cp android/app/build/outputs/apk/release/*.apk "release-apk/DroidPy-arm64-${SAFE_TAG}.apk"
           fi
           echo "release_tag=${REL_TAG}" >> "$GITHUB_OUTPUT"
           echo "safe_tag=${SAFE_TAG}" >> "$GITHUB_OUTPUT"
           echo "artifact_name=${ART_NAME}" >> "$GITHUB_OUTPUT"
-
       - name: 上傳保留版本 APK Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -288,9 +283,7 @@ jobs:
   release:
     name: 建立 GitHub Release（保留歷史版本 APK）
     needs: build-apk
-    permissions:
-      contents: write
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') || startsWith(github.ref, 'refs/tags/v')
+    if: (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))) || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
     runs-on: ubuntu-latest
     permissions:
       contents: write
