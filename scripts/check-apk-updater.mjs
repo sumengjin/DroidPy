@@ -22,7 +22,7 @@ assert.ok(updater.includes('validateGithubAssetUrl(currentUrl)'));
 // until the downloaded candidate has passed package and signer verification.
 assert.ok(updater.includes('val maxApkBytes = 300L * 1024L * 1024L'));
 assert.ok(updater.includes('downloaded > maxApkBytes'));
-assert.ok(updater.includes('totalBytes != downloaded'));
+assert.ok(updater.includes('downloaded != totalBytes'));
 assert.ok(updater.includes('val tempFile = File(updatesDir, "$safeName.part")'));
 assert.ok(updater.includes('output.fd.sync()'));
 assert.ok(updater.includes('tempFile.renameTo(outFile)'));
