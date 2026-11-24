@@ -193,7 +193,7 @@ jobs:
           ACTUAL_SHA256=$(printf '%s\\n' "$SIGNER_OUTPUT" | sed -nE 's/.*certificate SHA-256 digest: *([0-9A-Fa-f:]+).*/\\1/ip' | head -n1 | tr -d ':' | tr '[:lower:]' '[:upper:]')
           if ! [[ "$ACTUAL_SHA256" =~ ^[0-9A-F]{64}$ ]]; then echo '::error::Invalid APK signer fingerprint.'; exit 1; fi
           if [ "$DROIDPY_RELEASE_BUILD" = true ]; then
-            KEYSTORE_PATH="android/\${DROIDPY_KEYSTORE_FILE}"
+            KEYSTORE_PATH="android/app/\${DROIDPY_KEYSTORE_FILE}"
             EXPECTED_SHA256=$(keytool -exportcert -keystore "$KEYSTORE_PATH" -storepass "$DROIDPY_STORE_PASSWORD" -alias "$DROIDPY_KEY_ALIAS" | sha256sum | awk '{print toupper($1)}')
             if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then echo '::error::APK signer does not match the protected keystore.'; exit 1; fi
             echo "Verified Release signer from protected keystore: $ACTUAL_SHA256"
