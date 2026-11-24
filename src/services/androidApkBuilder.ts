@@ -1095,6 +1095,10 @@ class MainActivity : AppCompatActivity() {
                 File(usrDir, "bin/python3").exists() ||
                 File(usrDir, "bin/dash").exists() ||
                 File(usrDir, "bin/bash").exists()
+            // A partially damaged install may have lost its marker/core binaries while
+            // still containing user-installed packages. Never erase non-empty usr/ data
+            // by treating that state as a fresh install.
+            val hasExistingUsrData = usrDir.isDirectory && (usrDir.listFiles()?.isNotEmpty() == true)
 
             fun appendStartupLog(tag: String, msg: String) {
                 try {
