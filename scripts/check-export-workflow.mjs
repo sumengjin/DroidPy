@@ -32,6 +32,7 @@ assert.ok(workflow.includes('contents: write'));
 assert.ok(workflow.includes('gradle assembleDebug --no-daemon'));
 assert.ok(workflow.includes('gradle assembleRelease --no-daemon'));
 assert.ok(workflow.includes('DROIDPY_RELEASE_BUILD'));
+assert.ok(workflow.includes("if: steps.configure.outputs.is_release == 'true'"));
 assert.ok(workflow.includes('A production Release requires all protected DROIDPY signing secrets'));
 assert.ok(workflow.includes('keytool -exportcert -keystore'));
 assert.ok(workflow.includes('apksigner verify --verbose --print-certs'));
