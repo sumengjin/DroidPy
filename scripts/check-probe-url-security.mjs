@@ -34,6 +34,7 @@ assert.match(androidBuilder, /serverNames = listOf\(SNIHostName\(host\)\)/);
 assert.match(androidBuilder, /val next = URL\(current, location\)/);
 assert.match(androidBuilder, /headers\.keys\.removeAll/);
 assert.match(androidBuilder, /private fun buildProbeHeaders\(/);
+assert.match(androidBuilder, /transferEncoding\.trim\(\) != \"chunked\"/);
 assert.doesNotMatch(androidBuilder, /instanceFollowRedirects\s*=\s*true/);
 
 // Exercise the generated Python helpers without opening any network connection.
