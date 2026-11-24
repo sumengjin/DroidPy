@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('../src/services/androidApkBuilder.ts', import.meta.url), 'utf8');
-const start = source.indexOf('private fun collectInstalledPipNames()');
+const start = source.indexOf('private fun collectInstalledPipInventory()');
 const end = source.indexOf('private fun calcDirSize', start);
 assert.ok(start >= 0 && end > start, 'package inventory function must exist');
 const inventory = source.slice(start, end);
