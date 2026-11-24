@@ -139,3 +139,10 @@
 - The older PR #17 patch was not merged directly: its stale base and shutdown behavior would conflict with the newer process-preservation fix. Only the required resource protections were ported and adapted.
 
 - Added `scripts/check-script-backup.mjs` and CI command `check:script-backup`: verifies quota failure leaves the old value unchanged, corrupt storage is never overwritten, imports/deletes preserve independent snapshots, and the restore handler saves its rollback snapshot before calling `setFiles`.
+
+
+### 2026-11-25 — Consolidated PR #27 validation and branch cleanup
+- Latest CI run `45496152665` completed SUCCESS: Python syntax/unit tests, TypeScript/PWA build, Bridge token/origin/resource checks, backup persistence tests, watchdog checks, SSRF checks, package inventory/manifest checks, APT security checks, Android ARM64 Debug APK compile and artifact upload.
+- Debug APK artifact: `DroidPy-arm64-debug-194-a1`. Production Release build, production signer verification and GitHub Release were correctly skipped for the pull request.
+- PR #27 is the sole consolidated integration PR. Superseded PRs #11, #17, #26, #24, #6, #5 and #4 were closed without merging; their relevant code is already in current main or consolidated PR #27.
+- PR Debug APKs use the workflow's ephemeral Debug signer. This is not evidence of the production Release signer or installed-app upgrade compatibility. Android 10+ device acceptance remains required before merge, especially package install/import, `pkg update/install`, partial `usr/` preservation, public HTTP/HTTPS probe behavior, Bridge saturation/restart and backup restore.
