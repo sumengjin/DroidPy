@@ -1,7 +1,6 @@
 import { PythonFile, ScriptBackupSnapshot } from '../types/ide';
 
 const BACKUP_STORAGE_KEY = 'droidpy_script_backups_v1';
-const MAX_BACKUPS = 25;
 
 function calcFilesBytes(files: PythonFile[]): number {
   let bytes = 0;
@@ -15,36 +14,67 @@ function makeBackupId(): string {
   return `bak-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-function writeSnapshots(list: ScriptBackupSnapshot[]): ScriptBackupSnapshot[] {
-  let trimmed = list.slice(0, MAX_BACKUPS);
-  while (trimmed.length > 0) {
-    try {
-      localStorage.setItem(BACKUP_STORAGE_KEY, JSON.stringify(trimmed));
-      return trimmed;
-    } catch {
-      // Drop oldest snapshot on storage quota pressure
-      trimmed = trimmed.slice(0, trimmed.length - 1);
-    }
+function isBackupSnapshot(value: unknown): value is ScriptBackupSnapshot {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Partial<ScriptBackupSnapshot>;
+  return (
+    typeof item.id === 'string' &&
+    typeof item.createdAt === 'number' &&
+    typeof item.label === 'string' &&
+    Array.isArray(item.files) &&
+    item.files.every(
+      (file) =>
+        Boolean(file) &&
+        typeof file === 'object' &&
+        typeof (file as Partial<PythonFile>).name === 'string' &&
+        typeof (file as Partial<PythonFile>).content === 'string'
+    )
+  );
+}
+
+/**
+ * Strictly reads the backup store. A malformed store must never be treated as
+ * empty during a write, because doing so could overwrite the only recoverable
+ * copy of the user's snapshots.
+ */
+function readSnapshotsStrict(): ScriptBackupSnapshot[] {
+  const raw = localStorage.getItem(BACKUP_STORAGE_KEY);
+  if (raw === null) return [];
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error('DROIDPY_BACKUP_STORE_CORRUPT');
   }
-  return [];
+
+  if (!Array.isArray(parsed) || !parsed.every(isBackupSnapshot)) {
+    throw new Error('DROIDPY_BACKUP_STORE_CORRUPT');
+  }
+
+  return [...parsed].sort((a, b) => b.createdAt - a.createdAt);
+}
+
+/**
+ * Writes exactly the requested snapshot list. localStorage.setItem is atomic
+ * for a single key: on quota failure the previous value remains untouched.
+ * Never evict older snapshots automatically to make a new backup fit.
+ */
+function writeSnapshots(list: ScriptBackupSnapshot[]): ScriptBackupSnapshot[] {
+  try {
+    localStorage.setItem(BACKUP_STORAGE_KEY, JSON.stringify(list));
+  } catch {
+    throw new Error('DROIDPY_BACKUP_SAVE_FAILED');
+  }
+  return [...list].sort((a, b) => b.createdAt - a.createdAt);
 }
 
 export function listScriptBackups(): ScriptBackupSnapshot[] {
   try {
-    const raw = localStorage.getItem(BACKUP_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter(
-        (item): item is ScriptBackupSnapshot =>
-          Boolean(item) &&
-          typeof item.id === 'string' &&
-          typeof item.createdAt === 'number' &&
-          Array.isArray(item.files)
-      )
-      .sort((a, b) => b.createdAt - a.createdAt);
+    return readSnapshotsStrict();
   } catch {
+    // Read-only UI listing may degrade to empty, but all write operations use
+    // readSnapshotsStrict() and therefore refuse to overwrite damaged data.
     return [];
   }
 }
@@ -77,13 +107,15 @@ export function createScriptBackup(
     files: clonedFiles,
   };
 
-  const existing = listScriptBackups();
+  // Do not silently evict any previous backup. If storage is full, this throws
+  // and the caller must report failure; the previous stored value is retained.
+  const existing = readSnapshotsStrict();
   writeSnapshots([snapshot, ...existing]);
   return snapshot;
 }
 
 export function deleteScriptBackup(id: string): ScriptBackupSnapshot[] {
-  const next = listScriptBackups().filter((b) => b.id !== id);
+  const next = readSnapshotsStrict().filter((b) => b.id !== id);
   return writeSnapshots(next);
 }
 

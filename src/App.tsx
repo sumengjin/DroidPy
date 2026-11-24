@@ -1742,7 +1742,16 @@ export default function App() {
   const handleRestoreScriptBackup = useCallback(
     (nextFiles: PythonFile[], label: string) => {
       if (!nextFiles || nextFiles.length === 0) return;
-      createScriptBackup(filesRef.current, undefined, 'pre-restore');
+      try {
+        // A restore must not replace the current workspace unless its rollback
+        // snapshot was durably persisted first.
+        createScriptBackup(filesRef.current, undefined, 'pre-restore');
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        appLog('storage', `Restore blocked: pre-restore backup failed (${message})`, { level: 'error' });
+        showToast(t('bak_restore_blocked'));
+        return;
+      }
       setFiles(nextFiles);
       setActiveFileId(nextFiles[0].id);
       setMobileTab('editor');
