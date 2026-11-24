@@ -841,7 +841,7 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
             return self._send_json(413, {"error": "Request body exceeds the 8 MiB limit"})
         try:
             raw_bytes = self.rfile.read(length) if length > 0 else b"{}"
-            if len(raw_bytes) != length:
+            if length > 0 and len(raw_bytes) != length:
                 return self._send_json(400, {"error": "Incomplete request body"})
             data = json.loads(raw_bytes.decode("utf-8"))
             if not isinstance(data, dict):
