@@ -667,12 +667,21 @@ class MainActivity : AppCompatActivity() {
                 }
                 if (hasStoragePermission()) {
                     try {
+                        // The external recovery copy must not contain the per-install
+                        // bridge credential. MainActivity re-injects it from filesDir.
+                        val backupJson = try {
+                            JSONObject(json).apply {
+                                optJSONObject("termuxConfig")?.put("token", "")
+                            }.toString()
+                        } catch (_: Exception) {
+                            json
+                        }
                         val backupDir = File(Environment.getExternalStorageDirectory(), "DroidPy/.droidpy_backup").apply { mkdirs() }
                         val backup = File(backupDir, "droidpy_ide_state.json")
                         val backupTmp = File(backupDir, "droidpy_ide_state.json.tmp")
-                        backupTmp.writeText(json, Charsets.UTF_8)
+                        backupTmp.writeText(backupJson, Charsets.UTF_8)
                         if (!backupTmp.renameTo(backup)) {
-                            backup.writeText(json, Charsets.UTF_8)
+                            backup.writeText(backupJson, Charsets.UTF_8)
                             backupTmp.delete()
                         }
                     } catch (_: Exception) {
