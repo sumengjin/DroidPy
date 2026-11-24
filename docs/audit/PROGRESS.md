@@ -154,3 +154,6 @@
 - Added scripts/check-apk-updater.mjs and CI command check:apk-updater. CI and Android ARM64 Debug compile pending.
 
 - Updated the main repository Release workflow to derive the expected APK certificate SHA-256 from the same protected keystore secret used by Gradle, then compare it to apksigner output. This removes the obsolete hard-coded legacy fingerprint while still failing closed on missing or mismatched signing material; no private key is reintroduced into source control.
+
+- Reworked the generated Android export workflow: Debug runs use an ephemeral Gradle signer and produce artifacts only; main/master/tag pushes or an explicitly supplied workflow_dispatch release_tag require all protected signing secrets, build a Release APK, and compare its certificate to the configured keystore. Release publication is a separate job with contents:write; the build job is read-only. No missing embedded-key fallback remains.
+- Added scripts/check-export-workflow.mjs and CI command check:export-workflow to generate the project ZIP and assert the exported workflow keeps Debug and protected Release paths separate.
