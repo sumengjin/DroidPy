@@ -1683,6 +1683,8 @@ class EmbeddedTermuxBridge(
                 }
             }
         }
+    }
+
     fun stop() {
         running = false
         appendNativeLog("Bridge", "EmbeddedTermuxBridge stopping")
