@@ -1754,6 +1754,7 @@ class EmbeddedTermuxBridge(
         )
         if (certFile != null) {
             aptConfLines.add("Acquire::https::CaInfo \\"\${certFile.absolutePath}\\";")
+        }
         val aptConfFile = File(usrDir, "etc/apt/apt.conf").apply {
             parentFile?.mkdirs()
             writeText(aptConfLines.joinToString("\\n") + "\\n")
