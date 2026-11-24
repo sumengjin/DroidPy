@@ -150,6 +150,28 @@ import os
 import ssl
 import sys
 
+# Explicitly activate pip's configured user base. On embedded Android builds,
+# site.ENABLE_USER_SITE can be false or the default user-site can differ from
+# PYTHONUSERBASE; pip would then install packages that Python cannot import.
+try:
+    import site
+    _droidpy_user_base = os.environ.get("PYTHONUSERBASE")
+    if _droidpy_user_base:
+        _droidpy_user_site = site.getusersitepackages()
+        if isinstance(_droidpy_user_site, (list, tuple)):
+            _droidpy_user_sites = list(_droidpy_user_site)
+        else:
+            _droidpy_user_sites = [_droidpy_user_site]
+        _droidpy_user_sites.append(os.path.join(
+            _droidpy_user_base, "lib",
+            "python%d.%d" % sys.version_info[:2], "site-packages"
+        ))
+        for _droidpy_site in _droidpy_user_sites:
+            if _droidpy_site and os.path.isdir(_droidpy_site):
+                site.addsitedir(_droidpy_site)
+except Exception:
+    pass
+
 _DROIDPY_CA_FILE = None
 _DROIDPY_CA_TEXT = None
 
