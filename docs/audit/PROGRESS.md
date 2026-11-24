@@ -3,7 +3,7 @@
 > 本文件搭配 [COMPREHENSIVE-REPAIR-PLAN.md](./COMPREHENSIVE-REPAIR-PLAN.md) 使用。
 > 最後更新：2026-11-25
 > 計畫分支：`project/comprehensive-hardening-plan`
-> 最新主分支：`6266f67016dd173dd422b545d7565e5c9954ba24`（PR #9 已合併）；續作時仍須重新查詢。
+> 最新主分支：`89e05902dadcfc4362ee274995bdc66d49ec93af`（PR #12、#13、#15 已合併）；續作時仍須重新查詢。
 
 ## 目前狀態
 
@@ -88,3 +88,14 @@
 - Post-merge main push run `45474451656`: tests and PWA build SUCCESS; Android APK job stopped at signing configuration because protected signing secrets are absent; Debug/Release compile and Release job were skipped. This is the intended fail-closed behavior after PR #12, not an application-code failure.
 
 - PR #15 workflow audit caught that any branch push still entered the production Release path. Updated signing mode and Release/verify/job conditions so feature-branch pushes use ephemeral Debug signing and only main/master, version tags or explicitly tagged workflow dispatch can enter production Release. CI for this correction is pending.
+
+
+### 2026-11-25 — latest main and APT trust repair
+
+- Main is now `89e05902dadcfc4362ee274995bdc66d49ec93af` after PR #15 merged. PR #15 adds exact WebView app-origin navigation checks, blocks child-frame navigation, restricts file-origin access, and fixes feature-branch pushes to use ephemeral Debug signing rather than entering production Release. Run `45475815787` passed web CI and Android ARM64 Debug APK compilation; Release compile/verification/publication were skipped for the feature branch. Device navigation/bridge acceptance remains pending.
+- PR #13 is merged; CI permissions default to read-only and only the Release job has write access. PR #15 removed the duplicate Release permission YAML key introduced by the earlier merge and passed Android Debug CI.
+- PR #12 is merged. The public signing key is removed from the current tree and production Release requires protected Actions secrets. The connector cannot create/read repository secrets; no secret provisioning or signing-key rotation is claimed. Production Release will fail closed until the original signer is securely provisioned and verified. The key remains compromised in public Git history and prior artifacts.
+- PR #16's first branch became conflicted after PR #15 changed the same workflow/Android builder/docs files. A clean successor PR #20 is being prepared from current main with only the APT authentication/TLS changes and regression test; do not merge the conflicted PR #16.
+- PR #20 removes APT unauthenticated-repository flags, stops adding `[trusted=yes]`, strips that legacy option from existing sources, and removes the TLS verification-off fallback. It adds `npm run check:apt-security` to CI. CI and Android Debug APK validation pending; runtime `pkg update`/install testing on Android 11/13 remains required before merge.
+- PR #19 (branch `fix/watchdog-read-only-process-scan`) removes age-based termination from both Bridge implementations, disables automatic watchdog scheduling, removes the App's periodic cleanup timer, makes manual process checks read-only, and ensures Bridge shutdown does not force-kill the active user process. Static source assertions passed; CI pending.
+- No changes in these security branches modify existing Termux `usr/`, installed packages, workspace, backups, or signing material. No production Release was published.
