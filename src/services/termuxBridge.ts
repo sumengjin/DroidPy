@@ -615,6 +615,10 @@ def _watchdog_loop():
 class DroidPyBridgeHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
+    def setup(self):
+        super().setup()
+        self.connection.settimeout(15)
+
     def _origin_allowed(self):
         origin = self.headers.get("Origin")
         return origin is None or origin == ALLOWED_ORIGIN
@@ -828,9 +832,21 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
             return self._send_json(403, {"error": "Untrusted Host or Origin"})
         if not self._check_auth():
             return self._send_json(401, {"error": "Invalid X-DroidPy-Token"})
-        length = int(self.headers.get("Content-Length", "0"))
-        raw = self.rfile.read(length).decode("utf-8") if length > 0 else "{}"
-        data = json.loads(raw)
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except (TypeError, ValueError):
+            return self._send_json(400, {"error": "Invalid Content-Length"})
+        if length < 0 or length > MAX_REQUEST_BYTES:
+            return self._send_json(413, {"error": "Request body exceeds the 8 MiB limit"})
+        try:
+            raw_bytes = self.rfile.read(length) if length > 0 else b"{}"
+            if len(raw_bytes) != length:
+                return self._send_json(400, {"error": "Incomplete request body"})
+            data = json.loads(raw_bytes.decode("utf-8"))
+            if not isinstance(data, dict):
+                return self._send_json(400, {"error": "JSON body must be an object"})
+        except (UnicodeDecodeError, json.JSONDecodeError, TimeoutError, OSError):
+            return self._send_json(400, {"error": "Invalid or incomplete JSON request body"})
 
         if self.path == "/stdin":
             text = str(data.get("data", ""))
