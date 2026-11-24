@@ -11,6 +11,7 @@
     "lint": "tsc --noEmit",
     "check:bridge": "node scripts/check-bridge.mjs",
     "check:watchdog-safety": "node scripts/check-watchdog-safety.mjs",
+    "check:probe-url-security": "node scripts/check-probe-url-security.mjs",
     "check:package-inventory": "node scripts/check-package-inventory.mjs",
     "check:apt-security": "node scripts/check-apt-security.mjs"
   },
