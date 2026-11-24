@@ -86,3 +86,5 @@
 - PR #10 WebView hardening branch `security/restrict-main-webview-origin` adds exact scheme/host/port navigation matching, exact local entry-file fallback, blocks child-frame navigation, disables file-origin cross-file/universal access and adds CSP frame/object restrictions. Workflow updated to include Android Debug PR builds; validation pending.
 
 - Post-merge main push run `45474451656`: tests and PWA build SUCCESS; Android APK job stopped at signing configuration because protected signing secrets are absent; Debug/Release compile and Release job were skipped. This is the intended fail-closed behavior after PR #12, not an application-code failure.
+
+- PR #15 workflow audit caught that any branch push still entered the production Release path. Updated signing mode and Release/verify/job conditions so feature-branch pushes use ephemeral Debug signing and only main/master, version tags or explicitly tagged workflow dispatch can enter production Release. CI for this correction is pending.
