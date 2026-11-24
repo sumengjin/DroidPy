@@ -1594,6 +1594,9 @@ class EmbeddedTermuxBridge(
 ) {
     private var serverSocket: ServerSocket? = null
     private var executor: ThreadPoolExecutor? = null
+    private val activeClientSockets = java.util.Collections.newSetFromMap(
+        java.util.concurrent.ConcurrentHashMap<Socket, Boolean>()
+    )
     @Volatile private var running = false
     @Volatile private var activeProcess: Process? = null
     private val activeProcessStartedAt = AtomicLong(0L)
@@ -1704,9 +1707,17 @@ class EmbeddedTermuxBridge(
             while (running && serverSocket === localServer) {
                 try {
                     val client = localServer.accept()
+                    activeClientSockets.add(client)
                     try {
-                        localExecutor.execute { handleClient(client) }
+                        localExecutor.execute {
+                            try {
+                                handleClient(client)
+                            } finally {
+                                activeClientSockets.remove(client)
+                            }
+                        }
                     } catch (_: RejectedExecutionException) {
+                        activeClientSockets.remove(client)
                         try {
                             client.getOutputStream().write(
                                 "HTTP/1.1 503 Service Unavailable\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n".toByteArray(Charsets.US_ASCII)
@@ -1735,6 +1746,10 @@ class EmbeddedTermuxBridge(
         val oldServer = serverSocket
         serverSocket = null
         try { oldServer?.close() } catch (_: Exception) {}
+        activeClientSockets.toList().forEach { client ->
+            try { client.close() } catch (_: Exception) {}
+        }
+        activeClientSockets.clear()
         val oldExecutor = executor
         executor = null
         try { oldExecutor?.shutdownNow() } catch (_: Exception) {}
