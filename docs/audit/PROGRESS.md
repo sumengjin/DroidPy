@@ -91,3 +91,10 @@
 
 - PR #15 merged as `89e05902dadcfc4362ee274995bdc66d49ec93af`. CI run `45475815787` passed PWA and Android ARM64 Debug APK compilation. Generated Kotlin compiled successfully. Kotlin warnings remain for an unused certificate variable, ambiguous nested `return@...` label, redundant stdout initializer, and unused `force` parameter; these are non-fatal and will be reviewed separately.
 - Created PR #16 branch `security/randomize-bridge-token-origin-v2` from the updated main. Ported per-install random Bridge tokens, exact-origin/Host checks, removal of wildcard CORS, PNA preflight restriction, 8 MiB request limits, 15-second socket read timeouts, external-backup token redaction, and generated-Python syntax tests. Android Debug CI and device validation pending. SSRF/redirect/DNS-rebinding defenses and bounded concurrency remain open.
+
+
+### 2026-11-25 — Process watchdog removal (PR #21)
+- PR #21 head `c63bddd2060459b2641c7e7e7df345ee3b6ba0ff` includes the Kotlin `EmbeddedTermuxBridge.start()` brace correction and removes the 30-minute age-based watchdog from both Bridge implementations.
+- Process inspection is now read-only; stopping the Bridge leaves active user Python work alive. UI labels updated in Traditional Chinese, Simplified Chinese, English and Japanese. Added `scripts/check-watchdog-safety.mjs` and wired it into CI.
+- CI run `45479438842` completed SUCCESS: Python syntax/unit tests, PWA/TypeScript build, Android ARM64 Debug APK compilation and artifact upload all passed. Artifact `DroidPy-arm64-debug-115-a1` was generated. Release APK, production signer verification and GitHub Release were skipped by the PR workflow; no production APK was published.
+- Device verification remains required for Android 10+ process survival and explicit Stop behavior. No `usr/`, installed packages, workspace, backups or signing material was changed.
