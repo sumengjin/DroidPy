@@ -78,3 +78,5 @@
 - PR #9 merged successfully via squash: merge commit `6266f67016dd173dd422b545d7565e5c9954ba24`; main now points to this commit. Web CI for the final PR head passed; Android APK job was skipped by workflow policy and device acceptance remains pending.
 
 - Added `docs/audit/SIGNING-INCIDENT-AND-ROTATION-ANALYSIS.md`: confirms v1.2.18 used the public fallback signer; records Android v3/v3.1 behavior, Android 10/11/13 validation requirements, residual compromise risks, and a fail-closed containment/rotation plan. No signing key changed.
+
+- Created PR #10 `security(webview): restrict privileged navigation to the exact app origin` (branch `security/restrict-main-webview-origin`, head `4bd29cd3c2952c1b7b0ccc2982c623ff01fd126c`). It replaces broad prefix/host-only navigation checks with exact origin and exact file entry matching, blocks child frames, disables file-origin cross-file/universal access, and adds CSP frame/object restrictions. PR is draft; CI and Android device acceptance pending. Bridge random-token/CORS/SSRF/body-limit work remains separate and open.
