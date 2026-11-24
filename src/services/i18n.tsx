@@ -2161,7 +2161,7 @@ const ja: Record<TranslationKey, string> = {
   bak_imported_toast: '「{label}」を読み込みました',
   bak_import_err: 'バックアップ JSON を解析できませんでした',
   bak_storage_err: 'バックアップ容量不足またはデータ異常です。既存のバックアップは保持され、操作は行われませんでした。',
-  bak_restore_blocked: '復元を中止しました。現在の作業領域を先に保存できなかったため、既存ファイルは変更されていません。'
+  bak_restore_blocked: '復元を中止しました。現在の作業領域を先に保存できなかったため、既存ファイルは変更されていません。',
   bak_restore_btn: '復元',
   bak_export_btn: 'JSON 出力',
   bak_import_btn: 'JSON 読込',
