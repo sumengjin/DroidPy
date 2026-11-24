@@ -244,7 +244,7 @@ jobs:
             echo "::error::無法從 apksigner 輸出取得有效的 SHA-256 憑證指紋。"
             exit 1
           fi
-          KEYSTORE_PATH="android/${DROIDPY_KEYSTORE_FILE:-droidpy-custom.keystore}"
+          KEYSTORE_PATH="android/app/${DROIDPY_KEYSTORE_FILE:-droidpy-custom.keystore}"
           if [ ! -f "$KEYSTORE_PATH" ]; then
             echo "::error::找不到本次 Release 使用的受保護簽名 keystore。"
             exit 1
