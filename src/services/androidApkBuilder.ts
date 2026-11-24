@@ -452,7 +452,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var crawlerUaBtn: Button
     private var crawlerDesktopUa: Boolean = false
     private var localBridge: EmbeddedTermuxBridge? = null
-    private var appOriginHost: String? = null
+    private var trustedAppOrigin: String? = null
+    private var trustedLocalWebPath: String? = null
     private var lastBackPressedAt: Long = 0L
     private var exitToast: Toast? = null
     private val stateIoExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
@@ -461,6 +462,31 @@ class MainActivity : AppCompatActivity() {
         "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
     private val desktopUaString =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+    private fun normalizedOrigin(uri: Uri): String? {
+        val scheme = uri.scheme?.lowercase() ?: return null
+        val host = uri.host?.lowercase() ?: return null
+        val port = if (uri.port >= 0) uri.port else when (scheme) {
+            "http" -> 80
+            "https" -> 443
+            else -> return null
+        }
+        return "$scheme://$host:$port"
+    }
+
+    private fun isTrustedAppNavigation(uri: Uri): Boolean {
+        if (uri.scheme.equals("file", ignoreCase = true)) {
+            val expectedPath = trustedLocalWebPath ?: return false
+            val actualPath = try {
+                File(uri.path ?: return false).canonicalPath
+            } catch (_: Exception) {
+                return false
+            }
+            return actualPath == expectedPath
+        }
+        val expectedOrigin = trustedAppOrigin ?: return false
+        return normalizedOrigin(uri) == expectedOrigin
+    }
 
     inner class NativeDownloadBridge {
         @JavascriptInterface
@@ -924,6 +950,10 @@ class MainActivity : AppCompatActivity() {
         settings.domStorageEnabled = true
         settings.databaseEnabled = true
         settings.allowFileAccess = true
+        // File URLs may load the exact bundled entry document, but must not gain
+        // cross-file or universal access to private app data.
+        settings.allowFileAccessFromFileURLs = false
+        settings.allowUniversalAccessFromFileURLs = false
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
 
         webView.isLongClickable = true
@@ -934,20 +964,22 @@ class MainActivity : AppCompatActivity() {
         webView.webChromeClient = WebChromeClient()
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                if (request != null && !request.isForMainFrame) {
+                    // The privileged JavaScript interface must never be exposed to child frames.
+                    return true
+                }
                 val uri = request?.url ?: return false
-                val url = uri.toString()
-                val host = uri.host
-                if (url.startsWith("http://127.0.0.1") || url.startsWith("http://localhost") || url.startsWith("file://")) {
+                if (isTrustedAppNavigation(uri)) {
                     return false
                 }
-                val originHost = appOriginHost
-                if (originHost != null && host != null && host.equals(originHost, ignoreCase = true) &&
-                    (url.startsWith("https://") || url.startsWith("http://"))
-                ) {
-                    return false
-                }
+                // Never render an untrusted page in the WebView that owns the
+                // privileged DroidPyNative JavaScript interface.
                 return try {
-                    startActivity(Intent(Intent.ACTION_VIEW, uri))
+                    if (uri.scheme.equals("https", ignoreCase = true) ||
+                        uri.scheme.equals("http", ignoreCase = true)
+                    ) {
+                        startActivity(Intent(Intent.ACTION_VIEW, uri))
+                    }
                     true
                 } catch (_: Exception) {
                     true
@@ -1139,14 +1171,17 @@ class MainActivity : AppCompatActivity() {
 
             runOnUiThread {
                 if (hasBundledWww) {
-                    appOriginHost = "127.0.0.1"
+                    trustedAppOrigin = normalizedOrigin(Uri.parse("http://127.0.0.1:8765/"))
+                    trustedLocalWebPath = null
                     webView.loadUrl("http://127.0.0.1:8765/")
                 } else if (localWeb.exists()) {
-                    appOriginHost = null
+                    trustedAppOrigin = null
+                    trustedLocalWebPath = localWeb.canonicalPath
                     webView.loadUrl("file://" + localWeb.absolutePath)
                 } else {
                     val remoteUrl = "${typeof window !== 'undefined' ? window.location.origin : 'https://localhost'}"
-                    appOriginHost = Uri.parse(remoteUrl).host
+                    trustedAppOrigin = normalizedOrigin(Uri.parse(remoteUrl))
+                    trustedLocalWebPath = null
                     webView.loadUrl(remoteUrl)
                 }
             }
