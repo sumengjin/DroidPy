@@ -14,8 +14,22 @@ import { stripAnsi } from '../utils/ansiParser';
 
 export const DEFAULT_TERMUX_CONFIG: TermuxConfig = {
   endpointUrl: 'http://127.0.0.1:8765',
-  token: 'droidpy-local',
+  token: '',
 };
+
+export function createSecureBridgeToken(): string {
+  const cryptoApi = globalThis.crypto;
+  if (!cryptoApi?.getRandomValues) {
+    throw new Error('安全亂數產生器不可用，已停止建立橋接權杖。');
+  }
+  const bytes = new Uint8Array(32);
+  cryptoApi.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+export function isSecureBridgeToken(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-f0-9]{64}$/i.test(value);
+}
 
 export interface TermuxExecResult {
   exitCode: number;
@@ -29,7 +43,10 @@ export interface TermuxStreamCallbacks {
 }
 
 export function buildTermuxBridgeScript(token: string): string {
-  const safeToken = token.replace(/["'\\]/g, '') || 'droidpy-local';
+  if (!isSecureBridgeToken(token)) {
+    throw new Error('橋接權杖無效；請重新產生安全權杖後再匯出橋接程式。');
+  }
+  const safeToken = token;
   return `import codecs
 import json
 import os
