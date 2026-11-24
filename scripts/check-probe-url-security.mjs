@@ -94,6 +94,23 @@ try:
     assert body == "ok"
     assert "Cookie" not in requests[1] and "Authorization" not in requests[1], "credentials leaked across redirect origin"
 
+    responses[:] = [
+        type("Response", (), {"status": 302, "getheaders": lambda self: [("Location", "http://127.0.0.1/admin")], "read": lambda self, n: b""})(),
+    ]
+    requests.clear()
+    try:
+        ns["_probe_url_safely"]("http://public.example/start", {"Cookie": "session=secret"})
+        raise AssertionError("redirect to loopback was followed")
+    except ValueError:
+        pass
+    assert len(requests) == 1, "request was sent to a private redirect target"
+
+    try:
+        ns["_build_probe_headers"]({"extraHeaders": {"Host": "127.0.0.1"}})
+        raise AssertionError("custom Host header was accepted")
+    except ValueError:
+        pass
+
     connected = []
     class FakeSocket:
         def settimeout(self, value):
