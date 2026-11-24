@@ -67,7 +67,6 @@ import re
 import select
 import shlex
 import shutil
-import signal
 import ssl
 import subprocess
 import sys
@@ -85,7 +84,6 @@ os.makedirs(WORKSPACE, exist_ok=True)
 
 PROC_LOCK = threading.Lock()
 ACTIVE_PROC = {"pid": None, "pgid": None, "master_fd": None, "started_at": 0.0}
-WATCHDOG_INTERVAL_SEC = 1800
 _LEGACY_CERTS_SUPPORTED = None
 
 def _set_active(pid, pgid, master_fd):
@@ -540,78 +538,17 @@ def _scan_python_processes():
     return results
 
 def cleanup_stuck_python_processes(manual=False):
-    my_pid = os.getpid()
-    my_ppid = os.getppid()
-    with PROC_LOCK:
-        active_pid = ACTIVE_PROC.get("pid")
-        active_started = ACTIVE_PROC.get("started_at") or 0.0
+    # Read-only diagnostics only. Process age is not evidence of a hung task.
     procs = _scan_python_processes()
-    killed = []
-    for p in procs:
-        pid = p["pid"]
-        name = p["name"]
-        if pid == my_pid or pid == my_ppid:
-            continue
-        if "droidpy_bridge.py" in name:
-            continue
-        is_zombie = p["state"] == "Z"
-        is_stalled = p["elapsedSec"] >= WATCHDOG_INTERVAL_SEC
-        if active_pid == pid and not is_zombie and not is_stalled:
-            continue
-        if active_pid == pid and active_started > 0 and (time.time() - active_started) < WATCHDOG_INTERVAL_SEC and not is_zombie:
-            continue
-        if not is_zombie and not is_stalled:
-            continue
-        reason = "zombie (Z)" if is_zombie else f"stalled >= {WATCHDOG_INTERVAL_SEC}s"
-        sig_used = "SIGKILL" if is_zombie else "SIGTERM"
-        try:
-            if is_zombie:
-                if p["ppid"] > 1 and p["ppid"] != my_pid:
-                    try:
-                        os.kill(p["ppid"], signal.SIGCHLD)
-                    except OSError:
-                        pass
-                try:
-                    os.kill(pid, signal.SIGKILL)
-                except OSError:
-                    pass
-            else:
-                os.kill(pid, signal.SIGTERM)
-                time.sleep(0.3)
-                try:
-                    os.kill(pid, 0)
-                    os.kill(pid, signal.SIGKILL)
-                    sig_used = "SIGKILL"
-                except OSError:
-                    pass
-            killed.append({
-                "pid": pid,
-                "name": name,
-                "state": p["state"],
-                "elapsedSec": p["elapsedSec"],
-                "reason": reason,
-                "signal": sig_used,
-            })
-        except OSError:
-            continue
     return {
         "ok": True,
         "checkedAt": int(time.time() * 1000),
         "manual": bool(manual),
         "scannedCount": len(procs),
-        "killedCount": len(killed),
-        "killed": killed,
+        "killedCount": 0,
+        "killed": [],
+        "message": "Read-only process scan; no Python process is terminated based on age.",
     }
-
-def _watchdog_loop():
-    while True:
-        time.sleep(WATCHDOG_INTERVAL_SEC)
-        try:
-            res = cleanup_stuck_python_processes(manual=False)
-            if res["killedCount"] > 0:
-                print(f"[DroidPy Watchdog] Cleaned {res['killedCount']} zombie/stalled Python process(es)")
-        except Exception:
-            pass
 
 class DroidPyBridgeHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
@@ -1001,8 +938,6 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
         return self._send_json(404, {"error": "Not found"})
 
 if __name__ == "__main__":
-    _watchdog_thread = threading.Thread(target=_watchdog_loop, daemon=True)
-    _watchdog_thread.start()
     print(f"[DroidPy Termux PTY Bridge] Listening on http://127.0.0.1:8765 (Workspace: {WORKSPACE})")
     ThreadingHTTPServer(("127.0.0.1", 8765), DroidPyBridgeHandler).serve_forever()
 `;
