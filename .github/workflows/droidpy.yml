@@ -129,7 +129,7 @@ jobs:
           INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           INPUT_TAG="${INPUT_RELEASE_TAG:-}"
-          if [ -n "$INPUT_TAG" ] && ! [[ "$INPUT_TAG" =~ ^v?[0-9]+\\.[0-9]+\\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+          if [ -n "$INPUT_TAG" ] && ! [[ "$INPUT_TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
             echo "::error::release_tag 必須是有效的版本標籤，例如 v1.2.3"
             exit 1
           fi
@@ -181,7 +181,11 @@ jobs:
           echo "Resolved Release=${REL_TAG}, versionCode=${VCODE}, versionName=${VNAME}"
 
           if [ -n "$CUSTOM_KS_B64" ]; then
-            printf '%s' "$CUSTOM_KS_B64" | base64 -d > android/app/droidpy-custom.keystore
+            if [ -z "$CUSTOM_STORE_PASS" ] || [ -z "$CUSTOM_KEY_ALIAS" ] || [ -z "$CUSTOM_KEY_PASS" ]; then
+              echo "::error::自訂簽名金鑰已設定，但 DROIDPY_STORE_PASSWORD、DROIDPY_KEY_ALIAS 或 DROIDPY_KEY_PASSWORD 缺少必要值。"
+              exit 1
+            fi
+            printf '%s' "$CUSTOM_KS_B64" | base64 --decode > android/app/droidpy-custom.keystore
             echo "DROIDPY_KEYSTORE_FILE=droidpy-custom.keystore" >> "$GITHUB_ENV"
             printf 'DROIDPY_STORE_PASSWORD=%s\n' "$CUSTOM_STORE_PASS" >> "$GITHUB_ENV"
             printf 'DROIDPY_KEY_ALIAS=%s\n' "$CUSTOM_KEY_ALIAS" >> "$GITHUB_ENV"
