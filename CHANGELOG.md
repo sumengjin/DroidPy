@@ -2,6 +2,19 @@
 
 All notable changes to **DroidPy** are documented in this file.
 
+## [1.2.16] - 2026-11-24
+
+### Fixed & Redesigned (pip Truststore `Errno 13` Deep Fix, Mobile Overflow & Copy Cleanup, Hub -> Dedicated Windows, Realistic 4-Season Sky 3D Backdrop)
+- **深度根治 Android Python 3.14 `pip` `truststore` `PermissionError: [Errno 13]`**：
+  - 於內嵌 Termux `sitecustomize.py` 植入記憶體內建 CA 憑證文本回退，攔截並防護 `certifi`、`pip._vendor.certifi`、`pip._vendor.truststore._api` 與 `_create_truststore_ssl_context()` 遭遇權限拒絕時改讀記憶體憑證；同步產生 `pip.conf`（`cert` 與 `no-cache-dir`）並於 `repairTermuxRuntime()` 規範 `usr/etc`、`usr/tmp`、`lib/python3.*` 與 `certifi` 目錄權限。
+  - 前端 `termuxBridge.ts` 執行期指令一併套用 `PYTHONPATH`、`PIP_CONFIG_FILE` 與 `DROIDPY_DISABLE_TRUSTSTORE=1`，並在維護視窗提供一鍵重建憑證與 `sitecustomize` 工具。
+- **重構工具箱為「選項列表 → 獨立操作視窗」**：
+  - 將「Python」、「套件」、「儲存」、「設定」內部改為單層精簡選項列；點擊任何項目後僅開啟該功能的專屬獨立視窗，並於頂部配備「← 返回」標題列，大幅降低手機端滑動與尋找成本。
+- **精簡冗餘文案並修復手機端文字溢出**：
+  - 移除過於繁瑣與學術感的「Python 直譯器」用詞，統一改為精簡自然的「Python／內建 Python」，縮短四語系過長按鈕與描述文案；修復終端機標題列在 360px 窄螢幕擠壓按鈕與內部儲存長按鈕斷行溢出的問題。
+- **升級寫實 3D 季節晝夜天空背景**：
+  - Three.js 氛圍層依月份自動切換春（落櫻花瓣）、夏（晴朗雲嵐／雷雨漣漪）、秋（脈紋楓葉／暖霞）、冬（六角雪晶）粒子效果，並結合 Rayleigh/Mie 大氣天光著色器與太陽／月亮光暈隨晨曦、晴空、落日與星空自然漸變。
+
 ## [1.2.15] - 2026-11-24
 
 ### Added & Fixed (CI Release Publishing, Feminine Time-Reactive 3D Background & New Feminine Themes)

@@ -34,6 +34,7 @@ import {
 import { useI18n } from '../services/i18n';
 
 interface InternalStoragePanelProps {
+  mode?: 'all' | 'sdcard' | 'cache';
   termuxConfig: TermuxConfig;
   files: PythonFile[];
   activeFile: PythonFile;
@@ -49,6 +50,7 @@ function formatSize(bytes: number): string {
 }
 
 export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
+  mode = 'all',
   termuxConfig,
   files,
   activeFile,
@@ -227,81 +229,87 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
   const rootDisplay = status?.rootPath || window.DroidPyNative?.getInternalStoragePath?.() || '/storage/emulated/0';
   const fullDisplayPath = currentPath ? `${rootDisplay}/${currentPath}` : rootDisplay;
 
+  const showSdcard = mode === 'all' || mode === 'sdcard';
+  const showCache = mode === 'all' || mode === 'cache';
+
   return (
-    <div className="md-card p-4 sm:p-5 space-y-4">
+    <div className="md-card p-3.5 sm:p-5 space-y-4 min-w-0">
       {/* Header & Permission Status */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-semibold flex items-center gap-2 text-[var(--ide-text)]">
-            <HardDrive className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
-            <span>{t('sd_title')}</span>
-          </h3>
-          <p className="text-xs text-[var(--ide-text-muted)] mt-1 leading-relaxed">
-            {t('sd_desc')}
-          </p>
-        </div>
+      {showSdcard && (
+        <>
+          <div className="flex flex-wrap items-start justify-between gap-2.5">
+            <div className="min-w-0 flex-1">
+              <h3 className="text-sm font-semibold flex items-center gap-2 text-[var(--ide-text)]">
+                <HardDrive className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
+                <span className="truncate">{t('sd_title')}</span>
+              </h3>
+              <p className="text-xs text-[var(--ide-text-muted)] mt-0.5 leading-snug">
+                {t('sd_desc')}
+              </p>
+            </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-          <span
-            className={`text-xs font-semibold inline-flex items-center gap-1.5 ${
-              isGranted
-                ? 'text-emerald-600 dark:text-emerald-400'
-                : 'text-amber-600 dark:text-amber-400'
-            }`}
-          >
-            {isGranted ? <ShieldCheck className="w-3.5 h-3.5" /> : <ShieldAlert className="w-3.5 h-3.5" />}
-            <span>{isGranted ? t('sd_status_ok') : t('sd_status_no')}</span>
-          </span>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <span
+                className={`text-xs font-semibold inline-flex items-center gap-1 ${
+                  isGranted
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-amber-600 dark:text-amber-400'
+                }`}
+              >
+                {isGranted ? <ShieldCheck className="w-3.5 h-3.5" /> : <ShieldAlert className="w-3.5 h-3.5" />}
+                <span>{isGranted ? t('sd_status_ok') : t('sd_status_no')}</span>
+              </span>
 
-          <button
-            type="button"
-            onClick={() => void loadDirectory(currentPath)}
-            disabled={loading}
-            className="min-h-[40px] px-3.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium inline-flex items-center gap-1.5 hover:border-[var(--ide-accent)] transition-colors"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            <span>{t('sd_refresh_btn')}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Permission Warning Callout if not granted */}
-      {!isGranted && (
-        <div className="rounded-xl border border-amber-400/50 bg-amber-50/70 dark:bg-amber-950/25 p-3.5 flex flex-wrap items-center justify-between gap-3">
-          <div className="text-xs text-amber-800 dark:text-amber-200 leading-relaxed min-w-0 flex-1">
-            {t('sd_status_no')}
+              <button
+                type="button"
+                onClick={() => void loadDirectory(currentPath)}
+                disabled={loading}
+                className="min-h-[38px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium inline-flex items-center gap-1.5 hover:border-[var(--ide-accent)] transition-colors"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                <span>{t('sd_refresh_btn')}</span>
+              </button>
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={handleRequestPermission}
-            className="min-h-[38px] px-4 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold inline-flex items-center gap-1.5 shrink-0 transition-colors"
-          >
-            <ShieldCheck className="w-4 h-4" />
-            <span>{t('sd_grant_btn')}</span>
-          </button>
-        </div>
+
+          {!isGranted && (
+            <div className="rounded-xl border border-amber-400/50 bg-amber-50/70 dark:bg-amber-950/25 p-3 flex flex-wrap items-center justify-between gap-2.5">
+              <div className="text-xs text-amber-800 dark:text-amber-200 leading-snug min-w-0 flex-1">
+                {t('sd_status_no')}
+              </div>
+              <button
+                type="button"
+                onClick={handleRequestPermission}
+                className="min-h-[38px] px-3.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold inline-flex items-center gap-1.5 shrink-0 transition-colors"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                <span>{t('sd_grant_btn')}</span>
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {/* App Private Runtime & Reclaimable Cache Cleanup */}
-      {appUsage && (
+      {showCache && (appUsage || mode === 'cache') && (
         <div className="rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] p-3.5 flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0 flex-1 space-y-1">
             <div className="text-xs font-semibold text-[var(--ide-text)]">
               {t('sd_app_cache_title')}
             </div>
-            <p className="text-[11px] text-[var(--ide-text-muted)] leading-relaxed">
+            <p className="text-[11px] text-[var(--ide-text-muted)] leading-snug">
               {t('sd_app_cache_desc')}
             </p>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-mono tabular-nums text-[var(--ide-text-muted)]">
-              <span>{t('sd_app_cache_usr')}: {formatSize(appUsage.usrBytes)}</span>
-              <span className={appUsage.reclaimableBytes > 0 ? 'text-amber-600 dark:text-amber-400 font-semibold' : ''}>
-                {t('sd_app_cache_reclaimable')}: {formatSize(appUsage.reclaimableBytes)}
+              <span>{t('sd_app_cache_usr')}: {formatSize(appUsage?.usrBytes ?? 0)}</span>
+              <span className={(appUsage?.reclaimableBytes ?? 0) > 0 ? 'text-amber-600 dark:text-amber-400 font-semibold' : ''}>
+                {t('sd_app_cache_reclaimable')}: {formatSize(appUsage?.reclaimableBytes ?? 0)}
               </span>
             </div>
           </div>
           <button
             type="button"
-            disabled={cleaningCache}
+            disabled={cleaningCache || !appUsage}
             onClick={() => void handleCleanupAppCache()}
             className="min-h-[38px] px-3.5 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5 shrink-0 transition-colors"
           >
@@ -316,41 +324,43 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
       )}
 
       {/* Action Buttons: Save Active & Backup Project */}
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => void handleSaveActiveHere()}
-          disabled={!!busyAction || !isGranted}
-          className="min-h-[44px] max-w-full px-3.5 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-45 text-white text-xs font-medium inline-flex items-center gap-1.5 transition-colors"
-        >
-          {busyAction === 'save' ? <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" /> : <Save className="w-3.5 h-3.5 shrink-0" />}
-          <span className="truncate">{t('sd_save_active_btn')} ({activeFile?.name})</span>
-        </button>
+      {showSdcard && (
+        <>
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
+            <button
+              type="button"
+              onClick={() => void handleSaveActiveHere()}
+              disabled={!!busyAction || !isGranted}
+              className="min-h-[42px] min-w-0 max-w-full overflow-hidden px-3.5 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-45 text-white text-xs font-medium inline-flex items-center gap-1.5 transition-colors"
+            >
+              {busyAction === 'save' ? <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" /> : <Save className="w-3.5 h-3.5 shrink-0" />}
+              <span className="truncate">{t('sd_save_active_btn')} ({activeFile?.name})</span>
+            </button>
 
-        <button
-          type="button"
-          onClick={() => void handleBackupAllToDroidPy()}
-          disabled={!!busyAction || !isGranted}
-          className="min-h-[44px] px-3.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] disabled:opacity-45 text-xs font-medium inline-flex items-center gap-1.5 transition-colors"
-        >
-          {busyAction === 'backup' ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--ide-accent)] shrink-0" />
-          ) : (
-            <FolderSync className="w-3.5 h-3.5 text-[var(--ide-accent)] shrink-0" />
-          )}
-          <span>{t('sd_export_proj_btn')}</span>
-        </button>
+            <button
+              type="button"
+              onClick={() => void handleBackupAllToDroidPy()}
+              disabled={!!busyAction || !isGranted}
+              className="min-h-[42px] min-w-0 max-w-full px-3.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] disabled:opacity-45 text-xs font-medium inline-flex items-center gap-1.5 transition-colors"
+            >
+              {busyAction === 'backup' ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--ide-accent)] shrink-0" />
+              ) : (
+                <FolderSync className="w-3.5 h-3.5 text-[var(--ide-accent)] shrink-0" />
+              )}
+              <span className="truncate">{t('sd_export_proj_btn')}</span>
+            </button>
 
-        {isGranted && (
-          <button
-            type="button"
-            onClick={() => void loadDirectory('DroidPy')}
-            className="min-h-[44px] px-3.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] text-xs font-mono text-[var(--ide-accent-text)] transition-colors"
-          >
-            /sdcard/DroidPy
-          </button>
-        )}
-      </div>
+            {isGranted && (
+              <button
+                type="button"
+                onClick={() => void loadDirectory('DroidPy')}
+                className="min-h-[42px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] text-xs font-mono text-[var(--ide-accent-text)] transition-colors shrink-0"
+              >
+                /sdcard/DroidPy
+              </button>
+            )}
+          </div>
 
       {/* Path Bar + Mkdir */}
       <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)]">
@@ -478,6 +488,8 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
           ))
         )}
       </div>
+        </>
+      )}
     </div>
   );
 };

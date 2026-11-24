@@ -76,8 +76,8 @@ if __name__ == "__main__":
 try:
     import matplotlib.pyplot as plt
 except ModuleNotFoundError:
-    print("提示：目前「Python 直譯器」尚未安裝 matplotlib。")
-    print("您可在設定啟用「Pyodide 沙盒附加功能」後繪製互動圖表，或於「工具箱 → 套件」安裝。")
+    print("提示：目前「內建 Python」尚未安裝 matplotlib。")
+    print("您可在設定啟用「Pyodide 沙盒」後繪製互動圖表，或於「工具箱 → 套件」安裝。")
     raise SystemExit(0)
 
 # 產生感測器訊號模擬波形圖

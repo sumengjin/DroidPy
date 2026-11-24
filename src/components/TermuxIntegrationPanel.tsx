@@ -47,7 +47,17 @@ import {
   fuzzyMatchPackages,
 } from '../data/packageCatalog';
 
+export type TermuxVisibleSection =
+  | 'all'
+  | 'conn'
+  | 'init'
+  | 'shell'
+  | 'maintenance'
+  | 'bridge'
+  | 'packages';
+
 interface TermuxIntegrationPanelProps {
+  visibleSection?: TermuxVisibleSection;
   engine: ExecutionEngine;
   onChangeEngine: (engine: ExecutionEngine) => void;
   config: TermuxConfig;
@@ -83,6 +93,7 @@ interface TermuxIntegrationPanelProps {
 }
 
 export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
+  visibleSection = 'all',
   engine,
   onChangeEngine,
   config,
@@ -240,55 +251,67 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
 
   const isConnected = connectionState === 'connected';
   const isChecking = connectionState === 'checking';
+  const isAll = visibleSection === 'all';
+  const showConn = isAll || visibleSection === 'conn';
+  const showBridge = isAll || visibleSection === 'bridge';
+  const showInit = isAll || visibleSection === 'init';
+  const showMaintenance = isAll || visibleSection === 'maintenance';
+  const showPackages = isAll || visibleSection === 'packages';
+  const showShell = isAll || visibleSection === 'shell';
 
   return (
-    <section className="space-y-5">
-      {/* Section Header + Engine Switcher */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Terminal className="w-5 h-5 text-[var(--ide-accent)]" />
-            <span>{t('tmx_title')}</span>
-          </h2>
-          <p className="text-xs text-[var(--ide-text-muted)] mt-0.5">
-            {t('tmx_desc')}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--ide-surface-alt)] border border-[var(--ide-border)]">
-          {(enableSandboxAddon || engine === 'pyodide') && (
-            <button
-              type="button"
-              onClick={() => onChangeEngine('pyodide')}
-              className={`min-h-[38px] px-3.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-                engine === 'pyodide'
-                  ? 'bg-[var(--ide-surface)] text-[var(--ide-text)] shadow-sm'
-                  : 'text-[var(--ide-text-muted)]'
-              }`}
-            >
-              {t('tmx_engine_py')}
-            </button>
+    <section className="space-y-4">
+      {/* Section Header + Engine Switcher (in full view or when sandbox toggle applies in conn) */}
+      {(isAll || (showConn && (enableSandboxAddon || engine === 'pyodide'))) && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {isAll && (
+            <div className="min-w-0 flex-1">
+              <h2 className="text-base font-semibold flex items-center gap-2">
+                <Terminal className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
+                <span className="truncate">{t('tmx_title')}</span>
+              </h2>
+              <p className="text-xs text-[var(--ide-text-muted)] mt-0.5 leading-snug">
+                {t('tmx_desc')}
+              </p>
+            </div>
           )}
-          <button
-            type="button"
-            onClick={() => onChangeEngine('termux')}
-            className={`min-h-[38px] px-3.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-              engine === 'termux'
-                ? 'bg-[var(--ide-accent)] text-white shadow-sm'
-                : 'text-[var(--ide-text-muted)]'
-            }`}
-          >
-            {t('tmx_engine_tmx')}
-          </button>
+
+          {(enableSandboxAddon || engine === 'pyodide') && (
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--ide-surface-alt)] border border-[var(--ide-border)] shrink-0">
+              <button
+                type="button"
+                onClick={() => onChangeEngine('pyodide')}
+                className={`min-h-[36px] px-3 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+                  engine === 'pyodide'
+                    ? 'bg-[var(--ide-surface)] text-[var(--ide-text)] shadow-sm'
+                    : 'text-[var(--ide-text-muted)]'
+                }`}
+              >
+                {t('tmx_engine_py')}
+              </button>
+              <button
+                type="button"
+                onClick={() => onChangeEngine('termux')}
+                className={`min-h-[36px] px-3 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+                  engine === 'termux'
+                    ? 'bg-[var(--ide-accent)] text-white shadow-sm'
+                    : 'text-[var(--ide-text-muted)]'
+                }`}
+              >
+                {t('tmx_engine_tmx')}
+              </button>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {/* Package Backup Restore Banner (when reinstall/update cleared missing packages) */}
-      {backupStatus?.hasBackup &&
+      {(isAll || showConn || showPackages) &&
+        backupStatus?.hasBackup &&
         ((backupStatus.missingPipPackages?.length ?? 0) > 0 ||
           (backupStatus.missingPkgPackages?.length ?? 0) > 0) &&
         onRestoreBackedUpPackages && (
-          <div className="md-card-tonal border-amber-400/70 p-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="md-card-tonal border-amber-400/70 p-3.5 flex flex-wrap items-center justify-between gap-2.5">
             <div className="min-w-0 flex-1 space-y-1">
               <div className="text-sm font-semibold text-amber-900 dark:text-amber-200 flex flex-wrap items-center gap-2">
                 <PackagePlus className="w-4 h-4 shrink-0" />
@@ -330,7 +353,9 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
         )}
 
       {/* Connection Config & Live Health Card */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {(showConn || showBridge) && (
+      <div className={`grid grid-cols-1 ${isAll ? 'lg:grid-cols-2' : ''} gap-4`}>
+        {showConn && (
         <div className="md-card p-3.5 sm:p-5 space-y-4 min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-semibold flex items-center gap-2 min-w-0">
@@ -542,15 +567,17 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
               type="button"
               onClick={onRunInTermux}
               disabled={!!busyAction || upgradingTermux}
-              className="min-h-[42px] px-4 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium inline-flex items-center gap-2 hover:border-[var(--ide-accent)] transition-colors max-w-full"
+              className="min-h-[42px] min-w-0 max-w-full overflow-hidden px-4 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium inline-flex items-center gap-2 hover:border-[var(--ide-accent)] transition-colors"
             >
               <Play className="w-3.5 h-3.5 text-[var(--ide-accent)] shrink-0" />
               <span className="truncate">{t('tmx_run_file_btn', { name: activeFile.name })}</span>
             </button>
           </div>
         </div>
+        )}
 
         {/* One-line Bootstrap Setup Card */}
+        {showBridge && (
         <div className="md-card p-3.5 sm:p-5 space-y-4 min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-semibold">{t('tmx_bootstrap_title')}</h3>
@@ -592,9 +619,12 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
             </button>
           </div>
         </div>
+        )}
       </div>
+      )}
 
       {/* One-Tap Embedded APK Python + Crawler Initialization Card */}
+      {showInit && (
       <div className="md-card p-3.5 sm:p-5 space-y-4 min-w-0">
         <div className="space-y-1">
           <h3 className="text-sm font-semibold flex items-center gap-2">
@@ -642,9 +672,11 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
           </button>
         </div>
       </div>
+      )}
 
       {/* 30-Min Python Watchdog & pip SSL (certifi / truststore) Maintenance Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {showMaintenance && (
+      <div className={`grid grid-cols-1 ${isAll ? 'lg:grid-cols-2' : ''} gap-4`}>
         <div className="md-card p-3.5 sm:p-5 space-y-3 min-w-0">
           <div className="space-y-1">
             <h3 className="text-sm font-semibold flex items-center gap-2">
@@ -741,9 +773,13 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
           )}
         </div>
       </div>
+      )}
 
       {/* Termux Remote Package & Tool Installer */}
+      {(showPackages || showShell) && (
       <div className="md-card p-3.5 sm:p-5 space-y-4 min-w-0">
+        {showPackages && (
+        <>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <h3 className="text-sm font-semibold flex items-center gap-2">
@@ -1076,28 +1112,54 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
             );
           })}
         </div>
+        </>
+        )}
 
         {/* Direct Termux Shell Command Runner */}
-        <form onSubmit={handleShellSubmit} className="pt-2 border-t border-[var(--ide-border)] flex items-center gap-2">
-          <span className="font-mono text-xs font-semibold text-[var(--ide-accent-text)] shrink-0">
-            $
-          </span>
-          <input
-            type="text"
-            value={shellCmd}
-            onChange={(e) => setShellCmd(e.target.value)}
-            placeholder={t('tmx_shell_placeholder')}
-            className="flex-1 min-w-0 min-h-[42px] px-3 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
-          />
-          <button
-            type="submit"
-            disabled={!shellCmd.trim() || !!busyAction || upgradingTermux}
-            className="min-h-[42px] px-4 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] text-xs font-medium whitespace-nowrap shrink-0 disabled:opacity-40"
-          >
-            {busyAction === 'shell' ? t('tmx_shell_running') : t('tmx_shell_btn')}
-          </button>
-        </form>
+        {showShell && (
+          <div className={showPackages ? 'pt-2 border-t border-[var(--ide-border)] space-y-3' : 'space-y-3'}>
+            <form onSubmit={handleShellSubmit} className="flex items-center gap-2">
+              <span className="font-mono text-xs font-semibold text-[var(--ide-accent-text)] shrink-0">
+                $
+              </span>
+              <input
+                type="text"
+                value={shellCmd}
+                onChange={(e) => setShellCmd(e.target.value)}
+                placeholder={t('tmx_shell_placeholder')}
+                className="flex-1 min-w-0 min-h-[42px] px-3 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
+              />
+              <button
+                type="submit"
+                disabled={!shellCmd.trim() || !!busyAction || upgradingTermux}
+                className="min-h-[42px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium whitespace-nowrap shrink-0 disabled:opacity-40 transition-colors"
+              >
+                {busyAction === 'shell' ? t('tmx_shell_running') : t('tmx_shell_btn')}
+              </button>
+            </form>
+
+            {visibleSection === 'shell' && (
+              <div className="flex flex-wrap gap-1.5">
+                {['python3 --version', 'pip list', 'pip list --outdated', 'pkg list-installed', 'df -h'].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    disabled={!!busyAction || upgradingTermux}
+                    onClick={() => {
+                      setBusyAction('shell');
+                      void onRunShellInTermux(preset).finally(() => setBusyAction(null));
+                    }}
+                    className="min-h-[32px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] font-mono text-[11px] text-[var(--ide-text)] disabled:opacity-40 transition-colors"
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
+      )}
     </section>
   );
 };

@@ -1679,29 +1679,22 @@ export default function App() {
       return;
     }
     const cmd = [
-      'mkdir -p "$PREFIX/tmp"',
+      'mkdir -p "$PREFIX/tmp" "$HOME/.droidpy_lib" "$HOME/.config/pip" "$PREFIX/etc"',
       "python3 - <<'EOF'",
-      'import os, shutil, sys',
-      'src = None',
-      'try:',
-      '    import certifi',
-      '    p = certifi.where()',
-      '    if p and os.path.isfile(p):',
-      '        src = p',
-      'except Exception:',
-      '    pass',
-      'if not src:',
+      'import os, shutil, ssl, sys',
+      'base = os.environ.get("PREFIX", "") or os.path.dirname(os.path.dirname(sys.executable))',
+      'home = os.environ.get("HOME", os.path.expanduser("~"))',
+      'cands = []',
+      'for modname in ("certifi", "pip._vendor.certifi"):',
       '    try:',
-      '        from pip._vendor import certifi as pc',
-      '        p = pc.where()',
-      '        if p and os.path.isfile(p):',
-      '            src = p',
+      '        m = __import__(modname, fromlist=["where"])',
+      '        p = m.where()',
+      '        if p and os.path.isfile(p): cands.append(p)',
       '    except Exception:',
       '        pass',
-      'for c in ("/etc/tls/cert.pem", "/etc/ssl/certs/ca-certificates.crt"):',
-      '    if not src and os.path.isfile(c):',
-      '        src = c',
-      'base = os.environ.get("PREFIX", "") or os.path.dirname(os.path.dirname(sys.executable))',
+      'for c in (os.path.join(base, "etc/tls/cert.pem"), os.path.join(base, "etc/ssl/certs/ca-certificates.crt"), "/etc/ssl/certs/ca-certificates.crt"):',
+      '    if os.path.isfile(c): cands.append(c)',
+      'src = next((p for p in cands if os.path.isfile(p) and os.path.getsize(p) > 0), None)',
       'dst_dir = os.path.join(base, "tmp")',
       'os.makedirs(dst_dir, exist_ok=True)',
       'dst = os.path.join(dst_dir, "cacert.pem")',
@@ -1709,13 +1702,24 @@ export default function App() {
       '    shutil.copyfile(src, dst)',
       '    os.chmod(dst, 0o644)',
       '    print("SSL_CERT_FILE=" + dst)',
+      '    for cfg_path in (os.path.join(base, "etc/pip.conf"), os.path.join(home, ".config/pip/pip.conf")):',
+      '        try:',
+      '            os.makedirs(os.path.dirname(cfg_path), exist_ok=True)',
+      '            with open(cfg_path, "w", encoding="utf-8") as fp:',
+      '                fp.write(f"[global]\\nno-cache-dir = true\\nbreak-system-packages = true\\ndisable-pip-version-check = true\\ncert = {dst}\\n")',
+      '            os.chmod(cfg_path, 0o644)',
+      '        except Exception:',
+      '            pass',
       'else:',
       '    print("NO_CERT_SOURCE_FOUND")',
       'EOF',
+      'if [ -f "$HOME/.droidpy_lib/sitecustomize.py" ]; then for sp in "$PREFIX"/lib/python3.*/site-packages; do [ -d "$sp" ] && cp -f "$HOME/.droidpy_lib/sitecustomize.py" "$sp/sitecustomize.py" 2>/dev/null || true; done; fi',
+      'chmod -R u+rwX,go+rX "$PREFIX/etc" "$PREFIX/tmp" "$PREFIX"/lib/python3.*/site-packages/certifi "$PREFIX"/lib/python3.*/site-packages/pip/_vendor/certifi 2>/dev/null || true',
+      'python3 -m pip --version',
     ].join('\n');
     const ok = await handleRunShellInTermux(cmd);
     if (ok) {
-      appLog('package', 'Rebuilt writable certifi CA bundle in $PREFIX/tmp/cacert.pem');
+      appLog('package', 'Rebuilt writable certifi CA bundle, permissions & truststore hook');
       showToast(t('tmx_pip_ssl_done'));
     }
   }, [termuxRunning, handleRunShellInTermux, showToast, t]);

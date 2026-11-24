@@ -301,7 +301,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     <div className="flex flex-col h-full bg-[var(--ide-surface-alt)] text-[var(--ide-text)] overflow-hidden">
       {/* Sub-header */}
       <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 px-2.5 sm:px-3 py-2 border-b border-[var(--ide-border)] bg-[var(--ide-surface)] shrink-0">
-        <div className="flex items-center gap-1.5 sm:gap-2 text-xs text-[var(--ide-text-muted)] min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 sm:gap-2 text-xs text-[var(--ide-text-muted)] min-w-0 flex-1 overflow-hidden">
           <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-[var(--ide-surface-alt)] border border-[var(--ide-border)] shrink-0">
             {(enableSandboxAddon || engine === 'pyodide') && (
               <button
@@ -328,16 +328,18 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
               {t('tmx_engine_short')}
             </button>
           </div>
-          <span className="truncate max-w-[125px] sm:max-w-none">{statusLabel}</span>
+          <span className="truncate min-w-0">{statusLabel}</span>
           {status === 'running' && runStartedAt != null ? (
             <>
-              <span aria-hidden="true">·</span>
-              <LiveElapsedTimer runStartedAt={runStartedAt} />
+              <span aria-hidden="true" className="shrink-0">·</span>
+              <span className="shrink-0">
+                <LiveElapsedTimer runStartedAt={runStartedAt} />
+              </span>
             </>
           ) : lastDurationMs !== null ? (
             <>
-              <span aria-hidden="true">·</span>
-              <span className="font-mono tabular-nums whitespace-nowrap">
+              <span aria-hidden="true" className="shrink-0">·</span>
+              <span className="font-mono tabular-nums whitespace-nowrap shrink-0">
                 {formatDurationHMS(lastDurationMs)}
               </span>
             </>

@@ -128,7 +128,7 @@ jobs:
             REL_TAG="v\${VNAME}"
           fi
 
-          SEMVER_PART=\$(echo "\$VNAME" | grep -oE '^[0-9]+\\.[0-9]+\\.[0-9]+' || echo "1.2.15")
+          SEMVER_PART=\$(echo "\$VNAME" | grep -oE '^[0-9]+\\.[0-9]+\\.[0-9]+' || echo "1.2.16")
           IFS='.' read -r CMAJ CMIN CPAT <<< "\$SEMVER_PART"
           VCODE=\$(( \${CMAJ:-1} * 10000 + \${CMIN:-0} * 100 + \${CPAT:-0} ))
 
@@ -249,8 +249,8 @@ android {
         minSdk = 24
         // targetSdk = 28 讓內嵌 Termux bootstrap 能在 App 私有目錄自由執行 pkg / python / clang（GitHub 發佈專用）
         targetSdk = 28
-        versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 10215
-        versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.15"
+        versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 10216
+        versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.16"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -1339,6 +1339,35 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        // Normalize directory & cert bundle permissions inside usrDir to prevent Errno 13 Permission denied
+        fun fixReadableTree(dir: File, depth: Int) {
+            if (depth > 8 || !dir.isDirectory) return
+            dir.setReadable(true, false)
+            dir.setExecutable(true, false)
+            dir.listFiles()?.forEach { child ->
+                try {
+                    if (java.nio.file.Files.isSymbolicLink(child.toPath())) return@forEach
+                    if (child.isDirectory) {
+                        fixReadableTree(child, depth + 1)
+                    } else {
+                        child.setReadable(true, false)
+                    }
+                } catch (_: Exception) {
+                }
+            }
+        }
+        listOf(
+            File(usrDir, "etc"),
+            File(usrDir, "tmp"),
+            File(usrDir, "share/ca-certificates")
+        ).forEach { fixReadableTree(it, 0) }
+        libDir.listFiles()?.filter { it.isDirectory && it.name.startsWith("python3.") }?.forEach { pyLib ->
+            pyLib.setReadable(true, false)
+            pyLib.setExecutable(true, false)
+            listOf(File(pyLib, "site-packages/certifi"), File(pyLib, "site-packages/pip/_vendor/certifi")).forEach { certDir ->
+                fixReadableTree(certDir, 0)
+            }
+        }
     }
 
     private fun seedDefaultWorkspaceFiles(workspaceDir: File) {
@@ -1937,6 +1966,255 @@ class EmbeddedTermuxBridge(
             }
         }
 
+        val droidLibDir = File(homeDir, ".droidpy_lib").apply {
+            mkdirs()
+            setReadable(true, false)
+            setExecutable(true, false)
+        }
+        val pipConfDir = File(homeDir, ".config/pip").apply { mkdirs() }
+        val sysPipConf = File(usrDir, "etc/pip.conf")
+        val userPipConf = File(pipConfDir, "pip.conf")
+        val pipConfBody = buildString {
+            append("[global]\\n")
+            append("no-cache-dir = true\\n")
+            append("break-system-packages = true\\n")
+            append("disable-pip-version-check = true\\n")
+            if (certFile != null && certFile.exists() && certFile.length() > 0L) {
+                append("cert = \${certFile.absolutePath}\\n")
+            }
+        }
+        listOf(sysPipConf, userPipConf).forEach { cfg ->
+            try {
+                cfg.parentFile?.mkdirs()
+                cfg.writeText(pipConfBody, Charsets.UTF_8)
+                cfg.setReadable(true, false)
+            } catch (_: Exception) {
+            }
+        }
+
+        // Write sitecustomize.py so BOTH pip wrapper and direct python -m pip calls:
+        // 1) Resolve a verified readable PEM bundle (and cache text in RAM via cadata)
+        // 2) Bypass pip's truststore SSL context (preventing truststore/_api.py Errno 13)
+        // 3) Fallback ssl.SSLContext.load_verify_locations to in-memory cadata on PermissionError
+        val siteCustomizePy = """
+import importlib.abc
+import os
+import shutil
+import ssl
+import sys
+
+_DROIDPY_CA_FILE = None
+_DROIDPY_CA_TEXT = None
+
+def _droidpy_read_pem(path):
+    if not path or not os.path.isfile(path):
+        return None
+    try:
+        if os.path.getsize(path) <= 0:
+            return None
+        with open(path, "r", encoding="utf-8", errors="ignore") as fp:
+            txt = fp.read()
+        if "BEGIN CERTIFICATE" in txt:
+            return txt
+    except Exception:
+        return None
+    return None
+
+def _droidpy_prepare_ca():
+    global _DROIDPY_CA_FILE, _DROIDPY_CA_TEXT
+    prefix = os.environ.get("PREFIX", "$prefix")
+    home = os.environ.get("HOME", os.path.expanduser("~"))
+    cands = [
+        os.environ.get("SSL_CERT_FILE", ""),
+        os.environ.get("PIP_CERT", ""),
+        os.path.join(prefix, "tmp", "cacert.pem") if prefix else "",
+        os.path.join(home, "tmp", "droidpy-cacert.pem") if home else "",
+        os.path.join(prefix, "etc", "tls", "cert.pem") if prefix else "",
+        os.path.join(prefix, "etc", "ssl", "cert.pem") if prefix else "",
+        os.path.join(prefix, "etc", "ssl", "certs", "ca-certificates.crt") if prefix else "",
+        os.path.join(prefix, "share", "ca-certificates", "cacert.pem") if prefix else "",
+    ]
+    for root in (prefix, os.path.join(home, ".local")):
+        lib_dir = os.path.join(root, "lib") if root else ""
+        if lib_dir and os.path.isdir(lib_dir):
+            try:
+                for entry in os.listdir(lib_dir):
+                    if entry.startswith("python3."):
+                        for sp in ("site-packages", "dist-packages"):
+                            cands.append(os.path.join(lib_dir, entry, sp, "certifi", "cacert.pem"))
+                            cands.append(os.path.join(lib_dir, entry, sp, "pip", "_vendor", "certifi", "cacert.pem"))
+            except Exception:
+                pass
+    pem_text = None
+    src_path = None
+    for cand in cands:
+        if not cand or cand in (src_path,):
+            continue
+        txt = _droidpy_read_pem(cand)
+        if txt:
+            pem_text = txt
+            src_path = cand
+            break
+    if not pem_text:
+        return None, None
+    _DROIDPY_CA_TEXT = pem_text
+    targets = []
+    if prefix:
+        targets.append(os.path.join(prefix, "tmp", "cacert.pem"))
+    if home:
+        targets.append(os.path.join(home, "tmp", "droidpy-cacert.pem"))
+    chosen = src_path
+    for dst in targets:
+        try:
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            if os.path.abspath(dst) != os.path.abspath(src_path) or not _droidpy_read_pem(dst):
+                with open(dst, "w", encoding="utf-8") as fp:
+                    fp.write(pem_text)
+            os.chmod(dst, 0o644)
+            if _droidpy_read_pem(dst):
+                chosen = dst
+                break
+        except Exception:
+            continue
+    _DROIDPY_CA_FILE = chosen
+    if chosen:
+        for k in ("SSL_CERT_FILE", "PIP_CERT", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"):
+            os.environ[k] = chosen
+    return chosen, pem_text
+
+def _droidpy_patch_ssl():
+    _orig_load = ssl.SSLContext.load_verify_locations
+    def _safe_load_verify_locations(self, cafile=None, capath=None, cadata=None):
+        try:
+            return _orig_load(self, cafile=cafile, capath=capath, cadata=cadata)
+        except (PermissionError, OSError):
+            if cadata is not None:
+                raise
+            pem = None
+            if cafile:
+                pem = _droidpy_read_pem(cafile)
+            if not pem:
+                pem = _DROIDPY_CA_TEXT
+            if pem:
+                return _orig_load(self, cafile=None, capath=None, cadata=pem)
+            if _DROIDPY_CA_FILE and _DROIDPY_CA_FILE != cafile:
+                return _orig_load(self, cafile=_DROIDPY_CA_FILE, capath=None, cadata=None)
+            raise
+    ssl.SSLContext.load_verify_locations = _safe_load_verify_locations
+
+def _droidpy_patch_module(name, mod):
+    if mod is None:
+        return
+    if name in ("certifi", "pip._vendor.certifi") and _DROIDPY_CA_FILE:
+        try:
+            mod.where = lambda: _DROIDPY_CA_FILE
+            if hasattr(mod, "core"):
+                mod.core.where = lambda: _DROIDPY_CA_FILE
+        except Exception:
+            pass
+    elif name == "pip._vendor.truststore._api":
+        try:
+            cls = getattr(mod, "SSLContext", None)
+            if cls is not None and not getattr(cls, "_droidpy_patched", False):
+                orig_ts_load = cls.load_verify_locations
+                def _safe_ts_load(self, cafile=None, capath=None, cadata=None):
+                    try:
+                        return orig_ts_load(self, cafile=cafile, capath=capath, cadata=cadata)
+                    except (PermissionError, OSError):
+                        pem = _droidpy_read_pem(cafile) or _DROIDPY_CA_TEXT
+                        if pem:
+                            return orig_ts_load(self, cafile=None, capath=None, cadata=pem)
+                        if _DROIDPY_CA_FILE and _DROIDPY_CA_FILE != cafile:
+                            return orig_ts_load(self, cafile=_DROIDPY_CA_FILE, capath=None, cadata=None)
+                        raise
+                cls.load_verify_locations = _safe_ts_load
+                cls._droidpy_patched = True
+        except Exception:
+            pass
+    elif name == "pip._internal.cli.index_command":
+        try:
+            def _droidpy_create_ssl_context():
+                pem = _DROIDPY_CA_TEXT
+                if pem:
+                    return ssl.create_default_context(cadata=pem)
+                if _DROIDPY_CA_FILE:
+                    return ssl.create_default_context(cafile=_DROIDPY_CA_FILE)
+                return ssl.create_default_context()
+            mod._create_truststore_ssl_context = _droidpy_create_ssl_context
+        except Exception:
+            pass
+
+class _DroidPyHookLoader(importlib.abc.Loader):
+    def __init__(self, orig_spec):
+        self._orig_spec = orig_spec
+    def create_module(self, spec):
+        loader = self._orig_spec.loader
+        if loader is not None and hasattr(loader, "create_module"):
+            return loader.create_module(spec)
+        return None
+    def exec_module(self, module):
+        loader = self._orig_spec.loader
+        if loader is not None:
+            loader.exec_module(module)
+        _droidpy_patch_module(module.__name__, module)
+
+class _DroidPySslImportHook(importlib.abc.MetaPathFinder):
+    _TARGETS = frozenset({
+        "certifi",
+        "pip._vendor.certifi",
+        "pip._vendor.truststore._api",
+        "pip._internal.cli.index_command",
+    })
+    def __init__(self):
+        self._in_progress = set()
+    def find_spec(self, fullname, path, target=None):
+        if fullname not in self._TARGETS or fullname in self._in_progress:
+            return None
+        self._in_progress.add(fullname)
+        try:
+            for finder in sys.meta_path:
+                if finder is self:
+                    continue
+                try:
+                    spec = finder.find_spec(fullname, path, target)
+                except Exception:
+                    spec = None
+                if spec is not None and spec.loader is not None:
+                    spec.loader = _DroidPyHookLoader(spec)
+                    return spec
+        finally:
+            self._in_progress.discard(fullname)
+        return None
+
+_droidpy_prepare_ca()
+_droidpy_patch_ssl()
+for _mod_name in ("certifi", "pip._vendor.certifi", "pip._vendor.truststore._api", "pip._internal.cli.index_command"):
+    if _mod_name in sys.modules:
+        _droidpy_patch_module(_mod_name, sys.modules[_mod_name])
+if not any(isinstance(f, _DroidPySslImportHook) for f in sys.meta_path):
+    sys.meta_path.insert(0, _DroidPySslImportHook())
+""".trimIndent() + "\\n"
+
+        try {
+            File(droidLibDir, "sitecustomize.py").apply {
+                writeText(siteCustomizePy, Charsets.UTF_8)
+                setReadable(true, false)
+            }
+        } catch (_: Exception) {
+        }
+        File(usrDir, "lib").listFiles()?.filter { it.isDirectory && it.name.startsWith("python3.") }?.forEach { pyLib ->
+            try {
+                val spDir = File(pyLib, "site-packages")
+                if (spDir.isDirectory) {
+                    File(spDir, "sitecustomize.py").apply {
+                        writeText(siteCustomizePy, Charsets.UTF_8)
+                        setReadable(true, false)
+                    }
+                }
+            } catch (_: Exception) {
+            }
+        }
+
         val pipScript = listOf(
             "#!/system/bin/sh",
             "PY_BIN=\\"$prefix/bin/python\\"",
@@ -1953,6 +2231,9 @@ class EmbeddedTermuxBridge(
             "  \\"\${d}PY_BIN\\" -m ensurepip --upgrade >/dev/null 2>&1 || true",
             "fi",
             "rm -f \\"$prefix/lib/python3.\\"*/EXTERNALLY-MANAGED 2>/dev/null || true",
+            "DROID_LIB=\\"\${droidLibDir.absolutePath}\\"",
+            "case \\":\${d}PYTHONPATH:\\" in *\\":\${d}DROID_LIB:\\"*) ;; *) export PYTHONPATH=\\"\${d}DROID_LIB:\${d}PYTHONPATH\\" ;; esac",
+            "export PIP_CONFIG_FILE=\\"\${sysPipConf.absolutePath}\\"",
             "CA_RAW=\\"\${d}(\\"\${d}PY_BIN\\" -c 'import certifi; print(certifi.where())' 2>/dev/null || true)\\"",
             "if [ -z \\"\${d}CA_RAW\\" ] || [ ! -s \\"\${d}CA_RAW\\" ]; then",
             "  CA_RAW=\\"\${d}(\\"\${d}PY_BIN\\" -c 'import pip._vendor.certifi as c; print(c.where())' 2>/dev/null || true)\\"",
@@ -1980,9 +2261,6 @@ class EmbeddedTermuxBridge(
             "  export PIP_CERT=\\"\${d}CA_FOUND\\" SSL_CERT_FILE=\\"\${d}CA_FOUND\\" REQUESTS_CA_BUNDLE=\\"\${d}CA_FOUND\\" CURL_CA_BUNDLE=\\"\${d}CA_FOUND\\"",
             "else",
             "  unset PIP_CERT SSL_CERT_FILE REQUESTS_CA_BUNDLE CURL_CA_BUNDLE",
-            "fi",
-            "if \\"\${d}PY_BIN\\" -m pip install --help 2>/dev/null | grep -q \\"legacy-certs\\"; then",
-            "  export PIP_USE_DEPRECATED=legacy-certs",
             "fi",
             "if [ -d \\"$prefix/etc/tls/certs\\" ]; then export SSL_CERT_DIR=\\"$prefix/etc/tls/certs\\"; else export SSL_CERT_DIR=\\"\${d}HOME/tmp\\"; fi",
             "export PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_USER=0 PIP_BREAK_SYSTEM_PACKAGES=1 PIP_NO_CACHE_DIR=1",
@@ -2018,7 +2296,6 @@ class EmbeddedTermuxBridge(
         }
 
         // Write native droid.py bridge module for Embedded Termux Python scripts
-        val droidLibDir = File(homeDir, ".droidpy_lib").apply { mkdirs() }
         val sdcardPath = Environment.getExternalStorageDirectory().absolutePath
         val droidPy = """
 import json
@@ -2369,6 +2646,8 @@ def clipboard_set(text):
             "PIP_USER" to "0",
             "PIP_BREAK_SYSTEM_PACKAGES" to "1",
             "PIP_DISABLE_PIP_VERSION_CHECK" to "1",
+            "PIP_CONFIG_FILE" to File(usrDir, "etc/pip.conf").absolutePath,
+            "DROIDPY_DISABLE_TRUSTSTORE" to "1",
             "SSL_CERT_DIR" to (if (certDir.isDirectory) certDir.absolutePath else tmpDir),
             "PYTHONUNBUFFERED" to "1",
             "PYTHONUTF8" to "1",
@@ -3605,6 +3884,12 @@ def clipboard_set(text):
 `;
 
   const changelogContent = `# Changelog / 更新日誌
+
+## [1.2.16] - 2026-11-24
+- **深度修復 \`pip\` \`truststore\` \`Errno 13\`、選項獨立視窗設計、手機文字防溢出與寫實 3D 四季天光**：
+  - 於 \`sitecustomize.py\` 植入記憶體備援 certifi CA 憑證與攔截 \`truststore\` / \`load_verify_locations\`，配合 \`pip.conf\` 與目錄權限規範徹底根除 Android Python 3.14 \`PermissionError: [Errno 13]\`。
+  - 工具箱抽屜改採「選項目錄 → 獨立操作視窗（頂部附返回按鈕）」，全面精簡「Python／內建 Python」文案並修復 360px 手機版文字按鈕溢出問題。
+  - 升級 Three.js 寫實 3D 背景支援春櫻／夏雨／秋楓／冬雪與真實晨昏星月天光漸變。
 
 ## [1.2.14] - 2026-11-23
 - **修復「已安裝套件為空」、安裝失敗暫存清理、亂碼淨化、\`/shell\` 404 與長時使用卡頓**：

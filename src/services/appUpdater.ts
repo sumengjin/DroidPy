@@ -117,6 +117,21 @@ function mapGitHubReleases(rawList: RawGitHubRelease[]): AppReleaseInfo[] {
 
 export const BUILTIN_LOCAL_RELEASES: AppReleaseInfo[] = [
   {
+    tagName: 'v1.2.16',
+    version: '1.2.16',
+    name: 'DroidPy v1.2.16',
+    publishedAt: '2026-11-24',
+    htmlUrl: '',
+    prerelease: false,
+    apkAssets: [],
+    body: [
+      '• 深度修復 pip truststore PermissionError (Errno 13)：於 sitecustomize.py 植入記憶體備援 certifi CA 憑證文本、攔截 truststore _create_truststore_ssl_context 與 load_verify_locations、設定 pip.conf 與規範 usr/etc/lib/tmp 讀寫執行權限',
+      '• 重新設計工具箱操作架構為「精簡選項目錄 → 獨立操作視窗」：Python、套件、儲存、設定內每個功能皆具備獨立視窗與頂部返回列，不再堆疊長牆頁面',
+      '• 精簡全域冗長說明文字（將「Python 直譯器」統一精簡為「Python／內建 Python」），並全面修復手機窄螢幕按鈕與狀態列文字溢出截斷問題',
+      '• 升級「寫實 3D 季節晝夜背景」：隨目前月份自動切換春（櫻吹雪）、夏（晴空陣雨）、秋（楓葉暮嵐）、冬（靜夜雪晶）大氣粒子，並依日出／正午／黃昏／深夜變化漸層天光',
+    ].join('\n'),
+  },
+  {
     tagName: 'v1.2.15',
     version: '1.2.15',
     name: 'DroidPy v1.2.15',

@@ -285,14 +285,14 @@ def __droidpy_install_process_guards__():
             cmd_preview = " ".join(args) if isinstance(args, (list, tuple)) else str(args)
             raise OSError(
                 138,
-                f"emscripten does not support processes（無法在瀏覽器沙盒執行外部指令：{cmd_preview}；請改用「Python 直譯器」原生引擎）"
+                f"emscripten does not support processes（沙盒無法執行外部指令：{cmd_preview}；請改用「原生 Python」執行）"
             )
 
         def _guarded_run(args, *a, **kw):
             cmd_preview = " ".join(args) if isinstance(args, (list, tuple)) else str(args)
             raise OSError(
                 138,
-                f"emscripten does not support processes（無法在瀏覽器沙盒執行外部指令：{cmd_preview}；請改用「Python 直譯器」原生引擎）"
+                f"emscripten does not support processes（沙盒無法執行外部指令：{cmd_preview}；請改用「原生 Python」執行）"
             )
 
         if _orig_popen is not None:
@@ -308,7 +308,7 @@ def __droidpy_install_process_guards__():
         def _guarded_system(cmd):
             raise OSError(
                 138,
-                f"emscripten does not support processes（os.system 無法於沙盒執行：{cmd}；請改用「Python 直譯器」原生引擎）"
+                f"emscripten does not support processes（os.system 無法於沙盒執行：{cmd}；請改用「原生 Python」執行）"
             )
         os.system = _guarded_system
     except Exception:
@@ -329,7 +329,7 @@ function formatPyodideError(rawMsg: string, contextHint?: string): string {
       `${clean}\n\n` +
       '【環境說明】Pyodide 瀏覽器 WebAssembly 沙盒受限於單執行緒 Emscripten 環境，不支援建立外部子行程（如 subprocess.run / pip / os.system）。\n' +
       '建議解法：\n' +
-      '1. 切回「Python 直譯器（原生環境）」執行此腳本（支援完整 subprocess 與系統指令）。\n' +
+      '1. 切回「內建 Python」執行此腳本（支援完整 subprocess 與系統指令）。\n' +
       '2. 若僅為學習測試，可將腳本中自動呼叫 pip / subprocess 的段落包在 try...except (OSError, NotImplementedError) 中跳過。'
     );
   }
@@ -341,7 +341,7 @@ function formatPyodideError(rawMsg: string, contextHint?: string): string {
     return (
       `${clean}\n\n` +
       `【環境說明】${contextHint ? `套件「${contextHint}」或其相依套件` : '目標套件'}包含 C/C++ 原生擴充原始碼（例如 parsel / lxml 等）且缺少 WebAssembly (wasm32) 預編譯 wheel，無法在瀏覽器沙盒中編譯。\n` +
-      '建議改用「Python 直譯器（原生環境）」執行 pip / pkg 安裝。'
+      '建議改用「內建 Python」執行 pip / pkg 安裝。'
     );
   }
   if (
@@ -350,7 +350,7 @@ function formatPyodideError(rawMsg: string, contextHint?: string): string {
   ) {
     return (
       `${clean}\n\n` +
-      '【路徑提示】目前在 Pyodide 瀏覽器沙盒中無法直接存取手機 /storage/emulated/0 目錄，建議改用預設的「Python 直譯器（原生環境）」執行。'
+      '【路徑提示】Pyodide 瀏覽器沙盒無法直接存取 /storage/emulated/0，請改用預設「內建 Python」執行。'
     );
   }
   return clean;

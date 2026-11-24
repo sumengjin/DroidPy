@@ -11,13 +11,41 @@ export type AtmospherePhaseKey =
   | 'bg3d_phase_evening'
   | 'bg3d_phase_night';
 
+export type AtmosphereSeasonId = 'spring' | 'summer' | 'autumn' | 'winter';
+
+export type AtmosphereSeasonKey =
+  | 'bg3d_season_spring'
+  | 'bg3d_season_summer'
+  | 'bg3d_season_autumn'
+  | 'bg3d_season_winter';
+
 export type AtmosphereEffectKind = 'petals' | 'snow' | 'rain' | 'starlight';
 
 export interface ActiveAtmosphereState {
   phaseKey: AtmospherePhaseKey;
+  season: AtmosphereSeasonId;
+  seasonKey: AtmosphereSeasonKey;
   activeEffect: AtmosphereEffectKind;
   hour: number;
+  solarProgress: number; // 0..24 fractional hour
   phaseTintHex: string;
+}
+
+export function getSeasonForDate(date: Date = new Date()): {
+  season: AtmosphereSeasonId;
+  seasonKey: AtmosphereSeasonKey;
+} {
+  const m = date.getMonth(); // 0 = Jan .. 11 = Dec
+  if (m >= 2 && m <= 4) {
+    return { season: 'spring', seasonKey: 'bg3d_season_spring' };
+  }
+  if (m >= 5 && m <= 7) {
+    return { season: 'summer', seasonKey: 'bg3d_season_summer' };
+  }
+  if (m >= 8 && m <= 10) {
+    return { season: 'autumn', seasonKey: 'bg3d_season_autumn' };
+  }
+  return { season: 'winter', seasonKey: 'bg3d_season_winter' };
 }
 
 export function getActiveAtmosphereState(
@@ -25,36 +53,52 @@ export function getActiveAtmosphereState(
   date: Date = new Date()
 ): ActiveAtmosphereState {
   const hour = date.getHours();
+  const solarProgress = hour + date.getMinutes() / 60;
+  const { season, seasonKey } = getSeasonForDate(date);
+
   let phaseKey: AtmospherePhaseKey;
   let naturalEffect: AtmosphereEffectKind;
   let phaseTintHex: string;
 
-  if (hour >= 5 && hour < 11) {
+  if (hour >= 5 && hour < 10) {
     phaseKey = 'bg3d_phase_dawn';
-    naturalEffect = 'petals';
-    phaseTintHex = '#ffb7d5';
-  } else if (hour >= 11 && hour < 15) {
+    phaseTintHex = season === 'autumn' ? '#fdba74' : season === 'winter' ? '#e0e7ff' : '#fbcfe8';
+    naturalEffect = season === 'winter' ? 'snow' : 'petals';
+  } else if (hour >= 10 && hour < 16) {
     phaseKey = 'bg3d_phase_noon';
-    naturalEffect = 'rain';
-    phaseTintHex = '#e6c8f5';
-  } else if (hour >= 15 && hour < 19) {
+    phaseTintHex = season === 'autumn' ? '#fbbf24' : season === 'winter' ? '#bae6fd' : '#e0f2fe';
+    naturalEffect =
+      season === 'summer'
+        ? 'rain'
+        : season === 'winter'
+        ? 'snow'
+        : 'petals';
+  } else if (hour >= 16 && hour < 19) {
     phaseKey = 'bg3d_phase_sunset';
-    naturalEffect = 'petals';
-    phaseTintHex = '#f9a8d4';
+    phaseTintHex = season === 'winter' ? '#f5d0fe' : '#fb923c';
+    naturalEffect = season === 'winter' ? 'snow' : 'petals';
   } else if (hour >= 19 && hour < 22) {
     phaseKey = 'bg3d_phase_evening';
-    naturalEffect = 'rain';
-    phaseTintHex = '#c084fc';
+    phaseTintHex = season === 'summer' ? '#a5b4fc' : '#c084fc';
+    naturalEffect =
+      season === 'winter'
+        ? 'snow'
+        : season === 'autumn' || season === 'summer'
+        ? 'rain'
+        : 'starlight';
   } else {
     phaseKey = 'bg3d_phase_night';
-    naturalEffect = 'snow';
-    phaseTintHex = '#d8b4fe';
+    phaseTintHex = season === 'winter' ? '#c7d2fe' : '#a78bfa';
+    naturalEffect = season === 'winter' ? 'snow' : 'starlight';
   }
 
   return {
     phaseKey,
+    season,
+    seasonKey,
     activeEffect: mode === 'auto' ? naturalEffect : mode,
     hour,
+    solarProgress,
     phaseTintHex,
   };
 }
@@ -70,25 +114,126 @@ interface DynamicAtmosphere3DProps {
 
 function createCuppedSakuraPetalGeometry(): THREE.BufferGeometry {
   const shape = new THREE.Shape();
-  // Notched sakura petal silhouette centered near origin
   shape.moveTo(0, -0.22);
-  shape.bezierCurveTo(-0.13, -0.14, -0.19, 0.04, -0.12, 0.18);
-  shape.bezierCurveTo(-0.07, 0.24, -0.025, 0.21, 0, 0.145);
-  shape.bezierCurveTo(0.025, 0.21, 0.07, 0.24, 0.12, 0.18);
-  shape.bezierCurveTo(0.19, 0.04, 0.13, -0.14, 0, -0.22);
+  shape.bezierCurveTo(-0.135, -0.14, -0.195, 0.04, -0.125, 0.185);
+  shape.bezierCurveTo(-0.075, 0.24, -0.025, 0.21, 0, 0.14);
+  shape.bezierCurveTo(0.025, 0.21, 0.075, 0.24, 0.125, 0.185);
+  shape.bezierCurveTo(0.195, 0.04, 0.135, -0.14, 0, -0.22);
 
-  const geo = new THREE.ShapeGeometry(shape, 10);
+  const geo = new THREE.ShapeGeometry(shape, 12);
   const pos = geo.attributes.position;
+  const uvs = geo.attributes.uv;
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
     const y = pos.getY(i);
-    // Gentle 3D bowl curvature + curled tip
-    const cupZ = 0.045 * Math.cos((x / 0.18) * 1.4) - 0.055 * (y * y * 8.0);
+    const cupZ = 0.048 * Math.cos((x / 0.19) * 1.45) - 0.055 * (y * y * 8.0);
     pos.setZ(i, cupZ);
+    if (uvs) {
+      uvs.setXY(i, (x + 0.2) / 0.4, (y + 0.23) / 0.48);
+    }
   }
   pos.needsUpdate = true;
+  if (uvs) uvs.needsUpdate = true;
   geo.computeVertexNormals();
   return geo;
+}
+
+function createMapleLeafGeometry(): THREE.BufferGeometry {
+  const shape = new THREE.Shape();
+  // Stylized 5-lobe Japanese maple leaf silhouette
+  shape.moveTo(0, -0.26);
+  shape.lineTo(-0.02, -0.16);
+  shape.lineTo(-0.16, -0.19);
+  shape.lineTo(-0.12, -0.10);
+  shape.lineTo(-0.27, -0.02);
+  shape.lineTo(-0.16, 0.04);
+  shape.lineTo(-0.22, 0.16);
+  shape.lineTo(-0.09, 0.11);
+  shape.lineTo(-0.05, 0.27);
+  shape.lineTo(0, 0.19);
+  shape.lineTo(0.05, 0.27);
+  shape.lineTo(0.09, 0.11);
+  shape.lineTo(0.22, 0.16);
+  shape.lineTo(0.16, 0.04);
+  shape.lineTo(0.27, -0.02);
+  shape.lineTo(0.12, -0.10);
+  shape.lineTo(0.16, -0.19);
+  shape.lineTo(0.02, -0.16);
+  shape.closePath();
+
+  const geo = new THREE.ShapeGeometry(shape, 4);
+  const pos = geo.attributes.position;
+  const uvs = geo.attributes.uv;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const curl = 0.04 * Math.sin(x * 7.5) + 0.03 * (y * y * 5.0);
+    pos.setZ(i, curl);
+    if (uvs) {
+      uvs.setXY(i, (x + 0.28) / 0.56, (y + 0.27) / 0.55);
+    }
+  }
+  pos.needsUpdate = true;
+  if (uvs) uvs.needsUpdate = true;
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function createBotanicalPetalTexture(mode: 'sakura' | 'maple'): THREE.CanvasTexture {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    if (mode === 'sakura') {
+      const grad = ctx.createLinearGradient(0, size, 0, 0);
+      grad.addColorStop(0, '#f472b6');
+      grad.addColorStop(0.35, '#fbcfe8');
+      grad.addColorStop(0.85, '#fff1f2');
+      grad.addColorStop(1, '#ffffff');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, size, size);
+
+      // Subtle translucent petal veins radiating from stem
+      ctx.strokeStyle = 'rgba(219, 39, 119, 0.16)';
+      ctx.lineWidth = 1.5;
+      for (let i = -3; i <= 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(size * 0.5, size * 0.95);
+        ctx.quadraticCurveTo(size * (0.5 + i * 0.07), size * 0.52, size * (0.5 + i * 0.12), size * 0.1);
+        ctx.stroke();
+      }
+    } else {
+      const grad = ctx.createRadialGradient(size * 0.5, size * 0.72, 6, size * 0.5, size * 0.45, size * 0.65);
+      grad.addColorStop(0, '#fbbf24');
+      grad.addColorStop(0.42, '#ea580c');
+      grad.addColorStop(0.82, '#be123c');
+      grad.addColorStop(1, '#881337');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, size, size);
+
+      ctx.strokeStyle = 'rgba(254, 240, 138, 0.35)';
+      ctx.lineWidth = 1.6;
+      const tips: [number, number][] = [
+        [0.5, 0.08],
+        [0.2, 0.25],
+        [0.8, 0.25],
+        [0.14, 0.58],
+        [0.86, 0.58],
+      ];
+      for (const [tx, ty] of tips) {
+        ctx.beginPath();
+        ctx.moveTo(size * 0.5, size * 0.85);
+        ctx.lineTo(size * tx, size * ty);
+        ctx.stroke();
+      }
+    }
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  return tex;
 }
 
 function createSnowCrystalTexture(): THREE.CanvasTexture {
@@ -101,41 +246,39 @@ function createSnowCrystalTexture(): THREE.CanvasTexture {
     const c = size / 2;
     ctx.clearRect(0, 0, size, size);
 
-    // Soft outer halo
-    const grad = ctx.createRadialGradient(c, c, 2, c, c, c - 4);
+    const grad = ctx.createRadialGradient(c, c, 2, c, c, c - 3);
     grad.addColorStop(0, 'rgba(255, 255, 255, 0.98)');
-    grad.addColorStop(0.32, 'rgba(255, 232, 246, 0.65)');
-    grad.addColorStop(0.7, 'rgba(244, 212, 255, 0.18)');
+    grad.addColorStop(0.28, 'rgba(235, 245, 255, 0.72)');
+    grad.addColorStop(0.68, 'rgba(224, 231, 255, 0.22)');
     grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
     ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.arc(c, c, c - 4, 0, Math.PI * 2);
+    ctx.arc(c, c, c - 3, 0, Math.PI * 2);
     ctx.fill();
 
-    // 6-arm crystalline star filament
     ctx.save();
     ctx.translate(c, c);
-    ctx.strokeStyle = 'rgba(255, 250, 255, 0.95)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.96)';
     ctx.lineCap = 'round';
     for (let i = 0; i < 6; i++) {
       ctx.save();
       ctx.rotate((i * Math.PI) / 3);
-      ctx.lineWidth = 2.6;
+      ctx.lineWidth = 2.4;
       ctx.beginPath();
       ctx.moveTo(0, 0);
-      ctx.lineTo(0, -c * 0.72);
+      ctx.lineTo(0, -c * 0.76);
       ctx.stroke();
 
-      ctx.lineWidth = 1.8;
+      ctx.lineWidth = 1.6;
       ctx.beginPath();
-      ctx.moveTo(0, -c * 0.34);
-      ctx.lineTo(-c * 0.15, -c * 0.49);
-      ctx.moveTo(0, -c * 0.34);
-      ctx.lineTo(c * 0.15, -c * 0.49);
-      ctx.moveTo(0, -c * 0.54);
-      ctx.lineTo(-c * 0.1, -c * 0.64);
-      ctx.moveTo(0, -c * 0.54);
-      ctx.lineTo(c * 0.1, -c * 0.64);
+      ctx.moveTo(0, -c * 0.30);
+      ctx.lineTo(-c * 0.16, -c * 0.45);
+      ctx.moveTo(0, -c * 0.30);
+      ctx.lineTo(c * 0.16, -c * 0.45);
+      ctx.moveTo(0, -c * 0.52);
+      ctx.lineTo(-c * 0.12, -c * 0.65);
+      ctx.moveTo(0, -c * 0.52);
+      ctx.lineTo(c * 0.12, -c * 0.65);
       ctx.stroke();
       ctx.restore();
     }
@@ -147,7 +290,7 @@ function createSnowCrystalTexture(): THREE.CanvasTexture {
   return tex;
 }
 
-function createSoftGlowTexture(): THREE.CanvasTexture {
+function createSoftBokehTexture(): THREE.CanvasTexture {
   const size = 64;
   const canvas = document.createElement('canvas');
   canvas.width = size;
@@ -157,8 +300,8 @@ function createSoftGlowTexture(): THREE.CanvasTexture {
     const c = size / 2;
     const grad = ctx.createRadialGradient(c, c, 0, c, c, c);
     grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
-    grad.addColorStop(0.28, 'rgba(255, 224, 244, 0.78)');
-    grad.addColorStop(0.65, 'rgba(244, 180, 232, 0.22)');
+    grad.addColorStop(0.24, 'rgba(255, 236, 248, 0.85)');
+    grad.addColorStop(0.62, 'rgba(244, 210, 240, 0.25)');
     grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, size, size);
@@ -177,42 +320,90 @@ const SKY_VERTEX_SHADER = `
   }
 `;
 
+// Photorealistic atmospheric Rayleigh/Mie sky scattering + volumetric FBM cloud deck
 const SKY_FRAGMENT_SHADER = `
   uniform float uTime;
+  uniform float uRainWeight;
+  uniform float uDayFactor;    // 0 = deep night, 0.5 = twilight/dawn/sunset, 1 = bright noon
+  uniform float uTwilightFactor;
+  uniform float uIsDark;
+  uniform vec2 uSunUv;
+  uniform vec3 uZenithColor;
+  uniform vec3 uHorizonColor;
+  uniform vec3 uSunColor;
   uniform vec3 uBgColor;
   uniform vec3 uAccentColor;
-  uniform vec3 uPhaseColor;
-  uniform float uIsDark;
+  uniform float uCloudOctaves;
   varying vec2 vUv;
 
-  float ribbonWave(vec2 uv, float freq, float speed, float offset) {
-    float wave = sin(uv.x * freq + uTime * speed + offset) * 0.11
-               + cos(uv.x * (freq * 0.55) - uTime * (speed * 0.7) + offset * 1.7) * 0.08;
-    float band = 1.0 - smoothstep(0.0, 0.36, abs(uv.y - (0.52 + wave)));
-    return band * band;
+  float hash(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+  }
+
+  float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash(i);
+    float b = hash(i + vec2(1.0, 0.0));
+    float c = hash(i + vec2(0.0, 1.0));
+    float d = hash(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+  }
+
+  float fbm(vec2 p) {
+    float v = 0.0;
+    float amp = 0.52;
+    mat2 rot = mat2(0.80, -0.60, 0.60, 0.80);
+    for (int i = 0; i < 4; i++) {
+      if (float(i) >= uCloudOctaves) break;
+      v += amp * noise(p);
+      p = rot * p * 2.05 + vec2(13.1, 7.7);
+      amp *= 0.5;
+    }
+    return v;
   }
 
   void main() {
     vec2 uv = vUv;
-    float gradY = smoothstep(0.0, 1.0, uv.y);
+    float alt = clamp(uv.y, 0.0, 1.0);
 
-    // Delicate top-to-bottom feminine silk gradient anchored to active theme background
-    vec3 topTint = mix(uBgColor, mix(uPhaseColor, uAccentColor, 0.42), uIsDark > 0.5 ? 0.34 : 0.24);
-    vec3 bottomTint = mix(uBgColor, uAccentColor, uIsDark > 0.5 ? 0.16 : 0.11);
-    vec3 col = mix(bottomTint, topTint, gradY);
+    // 1. Atmospheric gradient anchored smoothly to current time-of-day & season
+    float horizonCurve = pow(1.0 - alt, 1.65);
+    vec3 atmo = mix(uZenithColor, uHorizonColor, horizonCurve);
 
-    // Two drifting pastel aurora ribbons
-    float r1 = ribbonWave(uv, 3.4, 0.22, 0.4);
-    float r2 = ribbonWave(vec2(uv.x + 0.35, 1.0 - uv.y * 0.85), 2.7, -0.17, 2.1);
+    // 2. Solar / Lunar Mie scattering disc & atmospheric glow halo
+    vec2 aspectDelta = (uv - uSunUv) * vec2(1.45, 1.0);
+    float sunDist = length(aspectDelta);
+    float mieGlow = exp(-sunDist * sunDist * 6.5) * (0.45 + 0.55 * uTwilightFactor);
+    float bodyDisc = smoothstep(0.068, 0.022, sunDist);
+    atmo += uSunColor * (mieGlow * 0.52 + bodyDisc * 0.42);
 
-    float ribbonStrength = uIsDark > 0.5 ? 0.24 : 0.18;
-    col = mix(col, mix(uAccentColor, uPhaseColor, 0.5), r1 * ribbonStrength);
-    col = mix(col, uPhaseColor, r2 * (ribbonStrength * 0.85));
+    // 3. Soft realistic FBM cloud deck moving in atmospheric perspective
+    vec2 cloudUv = vec2(uv.x * 2.6 + uTime * 0.012, uv.y * 4.2 + 0.15);
+    float cBase = fbm(cloudUv + fbm(cloudUv * 0.7 - uTime * 0.005));
+    float cloudHeightMask = smoothstep(0.18, 0.45, uv.y) * (1.0 - smoothstep(0.82, 1.0, uv.y));
+    float cloudDensity = smoothstep(0.46 - uRainWeight * 0.14, 0.84, cBase) * cloudHeightMask;
+    vec3 cloudLit = mix(uHorizonColor, uSunColor, 0.32 + 0.35 * exp(-sunDist * 2.4));
+    cloudLit = mix(cloudLit, vec3(0.42, 0.47, 0.58), uRainWeight * 0.52);
+    atmo = mix(atmo, cloudLit, cloudDensity * (0.42 + 0.25 * uDayFactor));
 
-    // Soft radial moon/rose glow in the upper right quadrant
-    float glowDist = length(uv - vec2(0.76, 0.78));
-    float halo = exp(-glowDist * glowDist * 5.2);
-    col += mix(uPhaseColor, vec3(1.0, 0.92, 0.97), 0.45) * halo * (uIsDark > 0.5 ? 0.16 : 0.14);
+    // 4. Distant soft misty mountain/horizon silhouette at bottom edge
+    float ridge1 = 0.13 + 0.035 * sin(uv.x * 5.2 + 0.4) + 0.018 * cos(uv.x * 13.0);
+    float ridge2 = 0.085 + 0.024 * sin(uv.x * 7.8 + 2.1) + 0.014 * sin(uv.x * 18.0);
+    float m1 = 1.0 - smoothstep(ridge1 - 0.012, ridge1 + 0.012, uv.y);
+    float m2 = 1.0 - smoothstep(ridge2 - 0.009, ridge2 + 0.009, uv.y);
+    vec3 farHillCol = mix(uZenithColor * 0.58, uHorizonColor * 0.85, 0.48);
+    vec3 nearHillCol = mix(uZenithColor * 0.38, uBgColor, 0.45);
+    atmo = mix(atmo, farHillCol, m1 * 0.55);
+    atmo = mix(atmo, nearHillCol, m2 * 0.72);
+
+    // 5. Harmonize gently with active IDE theme canvas so code contrast stays high
+    float themeAnchor = uIsDark > 0.5 ? 0.42 : 0.36;
+    vec3 col = mix(atmo, uBgColor, themeAnchor);
+    col = mix(col, mix(col, uAccentColor, 0.12), 0.35);
 
     gl_FragColor = vec4(col, 1.0);
   }
@@ -229,7 +420,6 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [webglUnavailable, setWebglUnavailable] = useState(false);
 
-  // Live theme / mode refs so WebGL context stays alive across theme or mode switches
   const livePropsRef = useRef({
     mode,
     themeId,
@@ -248,7 +438,6 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
     const container = containerRef.current;
     if (!container) return;
 
-    // Probe WebGL support and detect software rasterizer cleanly
     let probeCanvas: HTMLCanvasElement | null = document.createElement('canvas');
     let glProbe: WebGLRenderingContext | WebGL2RenderingContext | null = null;
     try {
@@ -274,7 +463,6 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
     } catch {
       isSoftwareGl = false;
     }
-    // Release probe reference before creating the real renderer
     glProbe = null;
     probeCanvas = null;
 
@@ -298,7 +486,7 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
     renderer.setSize(width, height);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.06;
+    renderer.toneMappingExposure = 1.04;
     renderer.domElement.style.width = '100%';
     renderer.domElement.style.height = '100%';
     renderer.domElement.style.display = 'block';
@@ -306,36 +494,41 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
     container.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(46, width / height, 0.1, 45);
-    camera.position.set(0, 0, 9.5);
+    const camera = new THREE.PerspectiveCamera(46, width / height, 0.1, 48);
+    camera.position.set(0, 0, 9.6);
 
-    // Subtle PBR environment for glossy sakura petals
     const pmremGenerator = new THREE.PMREMGenerator(renderer);
     const roomEnv = new RoomEnvironment();
     const envTarget = pmremGenerator.fromScene(roomEnv, 0.04);
     scene.environment = envTarget.texture;
-    scene.environmentIntensity = 0.55;
+    scene.environmentIntensity = 0.65;
     roomEnv.dispose();
 
-    // Soft feminine studio lighting for petals
-    const hemiLight = new THREE.HemisphereLight(0xffeaf6, 0x8b5cf6, 0.9);
+    const hemiLight = new THREE.HemisphereLight(0xfff1f6, 0x6d28d9, 0.95);
     scene.add(hemiLight);
-    const keyLight = new THREE.DirectionalLight(0xfff1f5, 1.35);
+    const keyLight = new THREE.DirectionalLight(0xfff7ed, 1.45);
     keyLight.position.set(4, 6, 7);
     scene.add(keyLight);
-    const rimLight = new THREE.DirectionalLight(0xe879f9, 0.55);
+    const rimLight = new THREE.DirectionalLight(0xf9a8d4, 0.58);
     rimLight.position.set(-5, -2, 4);
     scene.add(rimLight);
 
-    // 1. Custom GLSL Feminine Aurora Sky Dome
+    // 1. Photorealistic Time & Season Atmospheric Sky Dome
     const skyUniforms = {
       uTime: { value: 0 },
+      uRainWeight: { value: 0 },
+      uDayFactor: { value: 0.7 },
+      uTwilightFactor: { value: 0.4 },
+      uIsDark: { value: isDarkTheme ? 1.0 : 0.0 },
+      uSunUv: { value: new THREE.Vector2(0.76, 0.78) },
+      uZenithColor: { value: new THREE.Color('#3b82f6') },
+      uHorizonColor: { value: new THREE.Color('#fed7aa') },
+      uSunColor: { value: new THREE.Color('#fffbeb') },
       uBgColor: { value: new THREE.Color(bgHex) },
       uAccentColor: { value: new THREE.Color(accentHex) },
-      uPhaseColor: { value: new THREE.Color(getActiveAtmosphereState(mode).phaseTintHex) },
-      uIsDark: { value: isDarkTheme ? 1.0 : 0.0 },
+      uCloudOctaves: { value: isSoftwareGl ? 3.0 : 4.0 },
     };
-    const skyGeo = new THREE.PlaneGeometry(46, 30);
+    const skyGeo = new THREE.PlaneGeometry(48, 32);
     const skyMat = new THREE.ShaderMaterial({
       vertexShader: SKY_VERTEX_SHADER,
       fragmentShader: SKY_FRAGMENT_SHADER,
@@ -343,67 +536,92 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
       depthWrite: false,
     });
     const skyMesh = new THREE.Mesh(skyGeo, skyMat);
-    skyMesh.position.set(0, 0, -11);
+    skyMesh.position.set(0, 0, -11.5);
     skyMesh.renderOrder = -10;
     scene.add(skyMesh);
 
-    // 2. Cupped 3D Sakura Petals (InstancedMesh)
-    const PETAL_COUNT = 64;
+    // 2. Botanical Petals (Spring/Summer Sakura) + Maple Leaves (Autumn)
+    const FOLIAGE_COUNT = isSoftwareGl ? 42 : 64;
+    const sakuraTex = createBotanicalPetalTexture('sakura');
+    const mapleTex = createBotanicalPetalTexture('maple');
+
     const petalGeo = createCuppedSakuraPetalGeometry();
     const petalMat = new THREE.MeshStandardMaterial({
+      map: sakuraTex,
       color: 0xffffff,
-      roughness: 0.36,
-      metalness: 0.06,
-      envMapIntensity: 0.9,
+      roughness: 0.42,
+      metalness: 0.04,
+      envMapIntensity: 0.85,
       side: THREE.DoubleSide,
       transparent: true,
-      opacity: 0.9,
+      opacity: 0.92,
     });
-    const petalMesh = new THREE.InstancedMesh(petalGeo, petalMat, PETAL_COUNT);
+    const petalMesh = new THREE.InstancedMesh(petalGeo, petalMat, FOLIAGE_COUNT);
     petalMesh.frustumCulled = false;
 
-    const petalPalette = [
+    const mapleGeo = createMapleLeafGeometry();
+    const mapleMat = new THREE.MeshStandardMaterial({
+      map: mapleTex,
+      color: 0xffffff,
+      roughness: 0.48,
+      metalness: 0.03,
+      envMapIntensity: 0.8,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.92,
+    });
+    const mapleMesh = new THREE.InstancedMesh(mapleGeo, mapleMat, FOLIAGE_COUNT);
+    mapleMesh.frustumCulled = false;
+
+    const sakuraPalette = [
+      new THREE.Color('#ffffff'),
+      new THREE.Color('#ffe4e6'),
       new THREE.Color('#fbcfe8'),
       new THREE.Color('#f9a8d4'),
-      new THREE.Color('#fda4af'),
-      new THREE.Color('#ffe4e6'),
-      new THREE.Color('#f5d0fe'),
-      new THREE.Color('#fff1f2'),
+    ];
+    const maplePalette = [
+      new THREE.Color('#ffffff'),
+      new THREE.Color('#fed7aa'),
+      new THREE.Color('#fca5a5'),
+      new THREE.Color('#fde68a'),
     ];
 
-    const petalX = new Float32Array(PETAL_COUNT);
-    const petalY = new Float32Array(PETAL_COUNT);
-    const petalZ = new Float32Array(PETAL_COUNT);
-    const petalFallSpeed = new Float32Array(PETAL_COUNT);
-    const petalDriftAmp = new Float32Array(PETAL_COUNT);
-    const petalPhase = new Float32Array(PETAL_COUNT);
-    const petalRotX = new Float32Array(PETAL_COUNT);
-    const petalRotY = new Float32Array(PETAL_COUNT);
-    const petalRotZ = new Float32Array(PETAL_COUNT);
-    const petalSpinX = new Float32Array(PETAL_COUNT);
-    const petalSpinY = new Float32Array(PETAL_COUNT);
-    const petalScale = new Float32Array(PETAL_COUNT);
+    const foliageX = new Float32Array(FOLIAGE_COUNT);
+    const foliageY = new Float32Array(FOLIAGE_COUNT);
+    const foliageZ = new Float32Array(FOLIAGE_COUNT);
+    const foliageFallSpeed = new Float32Array(FOLIAGE_COUNT);
+    const foliageDriftAmp = new Float32Array(FOLIAGE_COUNT);
+    const foliagePhase = new Float32Array(FOLIAGE_COUNT);
+    const foliageRotX = new Float32Array(FOLIAGE_COUNT);
+    const foliageRotY = new Float32Array(FOLIAGE_COUNT);
+    const foliageRotZ = new Float32Array(FOLIAGE_COUNT);
+    const foliageSpinX = new Float32Array(FOLIAGE_COUNT);
+    const foliageSpinY = new Float32Array(FOLIAGE_COUNT);
+    const foliageScale = new Float32Array(FOLIAGE_COUNT);
 
-    for (let i = 0; i < PETAL_COUNT; i++) {
-      petalX[i] = (Math.random() - 0.5) * 16;
-      petalY[i] = (Math.random() - 0.5) * 13;
-      petalZ[i] = (Math.random() - 0.5) * 6.5;
-      petalFallSpeed[i] = 0.55 + Math.random() * 0.65;
-      petalDriftAmp[i] = 0.25 + Math.random() * 0.55;
-      petalPhase[i] = Math.random() * Math.PI * 2;
-      petalRotX[i] = Math.random() * Math.PI * 2;
-      petalRotY[i] = Math.random() * Math.PI * 2;
-      petalRotZ[i] = Math.random() * Math.PI * 2;
-      petalSpinX[i] = (Math.random() - 0.5) * 1.4;
-      petalSpinY[i] = (Math.random() - 0.5) * 1.8;
-      petalScale[i] = 0.58 + Math.random() * 0.62;
-      petalMesh.setColorAt(i, petalPalette[i % petalPalette.length]);
+    for (let i = 0; i < FOLIAGE_COUNT; i++) {
+      foliageX[i] = (Math.random() - 0.5) * 16;
+      foliageY[i] = (Math.random() - 0.5) * 13;
+      foliageZ[i] = (Math.random() - 0.5) * 6.5;
+      foliageFallSpeed[i] = 0.52 + Math.random() * 0.62;
+      foliageDriftAmp[i] = 0.28 + Math.random() * 0.55;
+      foliagePhase[i] = Math.random() * Math.PI * 2;
+      foliageRotX[i] = Math.random() * Math.PI * 2;
+      foliageRotY[i] = Math.random() * Math.PI * 2;
+      foliageRotZ[i] = Math.random() * Math.PI * 2;
+      foliageSpinX[i] = (Math.random() - 0.5) * 1.45;
+      foliageSpinY[i] = (Math.random() - 0.5) * 1.75;
+      foliageScale[i] = 0.58 + Math.random() * 0.62;
+      petalMesh.setColorAt(i, sakuraPalette[i % sakuraPalette.length]);
+      mapleMesh.setColorAt(i, maplePalette[i % maplePalette.length]);
     }
     if (petalMesh.instanceColor) petalMesh.instanceColor.needsUpdate = true;
+    if (mapleMesh.instanceColor) mapleMesh.instanceColor.needsUpdate = true;
     scene.add(petalMesh);
+    scene.add(mapleMesh);
 
-    // 3. Crystalline Feminine Snowflakes (InstancedMesh + Bokeh Points)
-    const SNOW_CRYSTAL_COUNT = 72;
+    // 3. Crystalline Winter Snowflakes + Soft Bokeh
+    const SNOW_COUNT = isSoftwareGl ? 50 : 76;
     const snowTex = createSnowCrystalTexture();
     const snowGeo = new THREE.PlaneGeometry(0.32, 0.32);
     const snowMat = new THREE.MeshBasicMaterial({
@@ -415,43 +633,43 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
       depthWrite: false,
       side: THREE.DoubleSide,
     });
-    const snowMesh = new THREE.InstancedMesh(snowGeo, snowMat, SNOW_CRYSTAL_COUNT);
+    const snowMesh = new THREE.InstancedMesh(snowGeo, snowMat, SNOW_COUNT);
     snowMesh.frustumCulled = false;
 
     const snowPalette = [
       new THREE.Color('#ffffff'),
-      new THREE.Color('#fce7f3'),
-      new THREE.Color('#f3e8ff'),
+      new THREE.Color('#f0f9ff'),
       new THREE.Color('#fdf2f8'),
+      new THREE.Color('#eef2ff'),
     ];
-    const snowX = new Float32Array(SNOW_CRYSTAL_COUNT);
-    const snowY = new Float32Array(SNOW_CRYSTAL_COUNT);
-    const snowZ = new Float32Array(SNOW_CRYSTAL_COUNT);
-    const snowSpeed = new Float32Array(SNOW_CRYSTAL_COUNT);
-    const snowPhase = new Float32Array(SNOW_CRYSTAL_COUNT);
-    const snowSpin = new Float32Array(SNOW_CRYSTAL_COUNT);
-    const snowScale = new Float32Array(SNOW_CRYSTAL_COUNT);
+    const snowX = new Float32Array(SNOW_COUNT);
+    const snowY = new Float32Array(SNOW_COUNT);
+    const snowZ = new Float32Array(SNOW_COUNT);
+    const snowSpeed = new Float32Array(SNOW_COUNT);
+    const snowPhase = new Float32Array(SNOW_COUNT);
+    const snowSpin = new Float32Array(SNOW_COUNT);
+    const snowScale = new Float32Array(SNOW_COUNT);
 
-    for (let i = 0; i < SNOW_CRYSTAL_COUNT; i++) {
+    for (let i = 0; i < SNOW_COUNT; i++) {
       snowX[i] = (Math.random() - 0.5) * 16;
       snowY[i] = (Math.random() - 0.5) * 13;
       snowZ[i] = (Math.random() - 0.5) * 7.0;
-      snowSpeed[i] = 0.45 + Math.random() * 0.7;
+      snowSpeed[i] = 0.42 + Math.random() * 0.68;
       snowPhase[i] = Math.random() * Math.PI * 2;
-      snowSpin[i] = (Math.random() - 0.5) * 0.9;
+      snowSpin[i] = (Math.random() - 0.5) * 0.85;
       snowScale[i] = 0.55 + Math.random() * 0.95;
       snowMesh.setColorAt(i, snowPalette[i % snowPalette.length]);
     }
     if (snowMesh.instanceColor) snowMesh.instanceColor.needsUpdate = true;
     scene.add(snowMesh);
 
-    // 4. Pastel Rain Streaks + Expanding Water Ripples
-    const RAIN_COUNT = 88;
-    const rainGeo = new THREE.CylinderGeometry(0.005, 0.014, 0.62, 6);
+    // 4. Realistic Rain Streaks + Water Ripples
+    const RAIN_COUNT = isSoftwareGl ? 60 : 96;
+    const rainGeo = new THREE.CylinderGeometry(0.0045, 0.012, 0.66, 6);
     const rainMat = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       transparent: true,
-      opacity: 0.62,
+      opacity: 0.56,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
@@ -459,10 +677,10 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
     rainMesh.frustumCulled = false;
 
     const rainPalette = [
+      new THREE.Color('#e0f2fe'),
       new THREE.Color('#f5d0fe'),
       new THREE.Color('#e0e7ff'),
       new THREE.Color('#fbcfe8'),
-      new THREE.Color('#ddd6fe'),
     ];
     const rainX = new Float32Array(RAIN_COUNT);
     const rainY = new Float32Array(RAIN_COUNT);
@@ -474,19 +692,19 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
       rainX[i] = (Math.random() - 0.5) * 17;
       rainY[i] = (Math.random() - 0.5) * 14;
       rainZ[i] = (Math.random() - 0.5) * 6.5;
-      rainSpeed[i] = 6.2 + Math.random() * 4.5;
-      rainScale[i] = 0.75 + Math.random() * 0.65;
+      rainSpeed[i] = 6.5 + Math.random() * 4.8;
+      rainScale[i] = 0.72 + Math.random() * 0.65;
       rainMesh.setColorAt(i, rainPalette[i % rainPalette.length]);
     }
     if (rainMesh.instanceColor) rainMesh.instanceColor.needsUpdate = true;
     scene.add(rainMesh);
 
-    const RIPPLE_COUNT = 24;
+    const RIPPLE_COUNT = 26;
     const rippleGeo = new THREE.RingGeometry(0.16, 0.195, 28);
     const rippleMat = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       transparent: true,
-      opacity: 0.45,
+      opacity: 0.42,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       side: THREE.DoubleSide,
@@ -504,53 +722,83 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
       rippleX[i] = (Math.random() - 0.5) * 12;
       rippleY[i] = -3.4 - Math.random() * 1.9;
       rippleZ[i] = (Math.random() - 0.5) * 5.0;
-      rippleLife[i] = 1.4 + Math.random() * 1.1;
+      rippleLife[i] = 1.35 + Math.random() * 1.0;
       rippleAge[i] = Math.random() * rippleLife[i];
       rippleMesh.setColorAt(i, rainPalette[i % rainPalette.length]);
     }
     if (rippleMesh.instanceColor) rippleMesh.instanceColor.needsUpdate = true;
     scene.add(rippleMesh);
 
-    // 5. Rose-Gold Stardust & Fireflies (Points)
-    const STAR_COUNT = 56;
-    const glowTex = createSoftGlowTexture();
-    const starPositions = new Float32Array(STAR_COUNT * 3);
-    const starColors = new Float32Array(STAR_COUNT * 3);
-    const starBaseX = new Float32Array(STAR_COUNT);
-    const starBaseY = new Float32Array(STAR_COUNT);
-    const starBaseZ = new Float32Array(STAR_COUNT);
-    const starPhase = new Float32Array(STAR_COUNT);
-    const starSpeed = new Float32Array(STAR_COUNT);
-
-    const starPalette = [
-      new THREE.Color('#fde68a'),
-      new THREE.Color('#fbcfe8'),
-      new THREE.Color('#f5d0fe'),
-      new THREE.Color('#fda4af'),
+    // 5. Realistic Multi-Magnitude Sky Stars + Foreground Fireflies
+    const STAR_COUNT = 120;
+    const bokehTex = createSoftBokehTexture();
+    const skyStarPositions = new Float32Array(STAR_COUNT * 3);
+    const skyStarColors = new Float32Array(STAR_COUNT * 3);
+    const skyStarPalette = [
+      new THREE.Color('#ffffff'),
+      new THREE.Color('#dbeafe'),
+      new THREE.Color('#fef3c7'),
+      new THREE.Color('#fce7f3'),
     ];
     for (let i = 0; i < STAR_COUNT; i++) {
-      starBaseX[i] = (Math.random() - 0.5) * 14.5;
-      starBaseY[i] = (Math.random() - 0.5) * 11.5;
-      starBaseZ[i] = (Math.random() - 0.5) * 5.5;
-      starPhase[i] = Math.random() * Math.PI * 2;
-      starSpeed[i] = 0.45 + Math.random() * 0.75;
-
-      starPositions[i * 3] = starBaseX[i];
-      starPositions[i * 3 + 1] = starBaseY[i];
-      starPositions[i * 3 + 2] = starBaseZ[i];
-
-      const sc = starPalette[i % starPalette.length];
-      starColors[i * 3] = sc.r;
-      starColors[i * 3 + 1] = sc.g;
-      starColors[i * 3 + 2] = sc.b;
+      skyStarPositions[i * 3] = (Math.random() - 0.5) * 24;
+      skyStarPositions[i * 3 + 1] = -0.5 + Math.random() * 8.5; // above horizon
+      skyStarPositions[i * 3 + 2] = -7.5 - Math.random() * 2.5;
+      const sc = skyStarPalette[i % skyStarPalette.length];
+      skyStarColors[i * 3] = sc.r;
+      skyStarColors[i * 3 + 1] = sc.g;
+      skyStarColors[i * 3 + 2] = sc.b;
     }
+    const skyStarGeo = new THREE.BufferGeometry();
+    skyStarGeo.setAttribute('position', new THREE.BufferAttribute(skyStarPositions, 3));
+    skyStarGeo.setAttribute('color', new THREE.BufferAttribute(skyStarColors, 3));
+    const skyStarMat = new THREE.PointsMaterial({
+      map: bokehTex,
+      size: 0.24,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const skyStars = new THREE.Points(skyStarGeo, skyStarMat);
+    skyStars.frustumCulled = false;
+    scene.add(skyStars);
 
-    const starGeo = new THREE.BufferGeometry();
-    const starPosAttr = new THREE.BufferAttribute(starPositions, 3);
-    starGeo.setAttribute('position', starPosAttr);
-    starGeo.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
-    const starMat = new THREE.PointsMaterial({
-      map: glowTex,
+    const FIREFLY_COUNT = 48;
+    const ffPositions = new Float32Array(FIREFLY_COUNT * 3);
+    const ffColors = new Float32Array(FIREFLY_COUNT * 3);
+    const ffBaseX = new Float32Array(FIREFLY_COUNT);
+    const ffBaseY = new Float32Array(FIREFLY_COUNT);
+    const ffBaseZ = new Float32Array(FIREFLY_COUNT);
+    const ffPhase = new Float32Array(FIREFLY_COUNT);
+    const ffSpeed = new Float32Array(FIREFLY_COUNT);
+    const ffPalette = [
+      new THREE.Color('#fde68a'),
+      new THREE.Color('#fbcfe8'),
+      new THREE.Color('#d9f99d'),
+      new THREE.Color('#f5d0fe'),
+    ];
+    for (let i = 0; i < FIREFLY_COUNT; i++) {
+      ffBaseX[i] = (Math.random() - 0.5) * 14.5;
+      ffBaseY[i] = (Math.random() - 0.5) * 11.5;
+      ffBaseZ[i] = (Math.random() - 0.5) * 5.2;
+      ffPhase[i] = Math.random() * Math.PI * 2;
+      ffSpeed[i] = 0.42 + Math.random() * 0.72;
+      ffPositions[i * 3] = ffBaseX[i];
+      ffPositions[i * 3 + 1] = ffBaseY[i];
+      ffPositions[i * 3 + 2] = ffBaseZ[i];
+      const fc = ffPalette[i % ffPalette.length];
+      ffColors[i * 3] = fc.r;
+      ffColors[i * 3 + 1] = fc.g;
+      ffColors[i * 3 + 2] = fc.b;
+    }
+    const ffGeo = new THREE.BufferGeometry();
+    const ffPosAttr = new THREE.BufferAttribute(ffPositions, 3);
+    ffGeo.setAttribute('position', ffPosAttr);
+    ffGeo.setAttribute('color', new THREE.BufferAttribute(ffColors, 3));
+    const ffMat = new THREE.PointsMaterial({
+      map: bokehTex,
       size: 0.34,
       vertexColors: true,
       transparent: true,
@@ -558,18 +806,21 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
-    const starPoints = new THREE.Points(starGeo, starMat);
-    starPoints.frustumCulled = false;
-    scene.add(starPoints);
+    const ffPoints = new THREE.Points(ffGeo, ffMat);
+    ffPoints.frustumCulled = false;
+    scene.add(ffPoints);
 
-    // Pre-allocated scratch math objects (zero allocations in frame loop)
+    // Pre-allocated scratch colors/objects (zero per-frame heap allocations)
     const dummy = new THREE.Object3D();
     const targetBg = new THREE.Color(bgHex);
     const targetAccent = new THREE.Color(accentHex);
-    const targetPhase = new THREE.Color(getActiveAtmosphereState(mode).phaseTintHex);
+    const targetZenith = new THREE.Color();
+    const targetHorizon = new THREE.Color();
+    const targetSun = new THREE.Color();
+    const targetSunUv = new THREE.Vector2(0.75, 0.78);
 
-    // Smoothly damped layer weights
-    let wPetals = 0;
+    let wSakura = 0;
+    let wMaple = 0;
     let wSnow = 0;
     let wRain = 0;
     let wStars = 0.25;
@@ -614,16 +865,76 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
         bgHex: curBg,
       } = livePropsRef.current;
 
-      const state = getActiveAtmosphereState(curMode);
+      const st = getActiveAtmosphereState(curMode);
 
-      // Update sky uniforms cleanly without rebuilding shader
+      // Compute realistic sky scattering colors based on time phase & season
+      let dayFactor = 0.5;
+      let twilightFactor = 0.4;
+      if (st.phaseKey === 'bg3d_phase_dawn') {
+        dayFactor = 0.65;
+        twilightFactor = 0.9;
+        targetSunUv.set(0.72, 0.58);
+        targetZenith.set(st.season === 'winter' ? '#64748b' : '#6366f1');
+        targetHorizon.set(st.season === 'autumn' ? '#fdba74' : '#fbcfe8');
+        targetSun.set('#fff1f2');
+      } else if (st.phaseKey === 'bg3d_phase_noon') {
+        dayFactor = 1.0;
+        twilightFactor = 0.2;
+        targetSunUv.set(0.68, 0.84);
+        targetZenith.set(
+          st.season === 'winter'
+            ? '#38bdf8'
+            : st.season === 'autumn'
+            ? '#2563eb'
+            : '#60a5fa'
+        );
+        targetHorizon.set(
+          st.season === 'autumn'
+            ? '#fed7aa'
+            : st.season === 'summer'
+            ? '#bae6fd'
+            : '#fce7f3'
+        );
+        targetSun.set('#fffbeb');
+      } else if (st.phaseKey === 'bg3d_phase_sunset') {
+        dayFactor = 0.55;
+        twilightFactor = 1.0;
+        targetSunUv.set(0.28, 0.46);
+        targetZenith.set(st.season === 'autumn' ? '#7c2d12' : '#6d28d9');
+        targetHorizon.set(st.season === 'winter' ? '#e879f9' : '#fb923c');
+        targetSun.set('#fde68a');
+      } else if (st.phaseKey === 'bg3d_phase_evening') {
+        dayFactor = 0.2;
+        twilightFactor = 0.55;
+        targetSunUv.set(0.74, 0.72);
+        targetZenith.set('#1e1b4b');
+        targetHorizon.set(st.season === 'autumn' ? '#881337' : '#581c87');
+        targetSun.set('#f5d0fe');
+      } else {
+        dayFactor = 0.05;
+        twilightFactor = 0.25;
+        targetSunUv.set(0.76, 0.78);
+        targetZenith.set('#090d1f');
+        targetHorizon.set(st.season === 'winter' ? '#1e3a5f' : '#2e1065');
+        targetSun.set('#e0e7ff');
+      }
+
       targetBg.set(curBg);
       targetAccent.set(curAccent);
-      targetPhase.set(state.phaseTintHex);
       skyUniforms.uTime.value = elapsed;
       skyUniforms.uBgColor.value.lerp(targetBg, Math.min(1, dt * 4));
       skyUniforms.uAccentColor.value.lerp(targetAccent, Math.min(1, dt * 4));
-      skyUniforms.uPhaseColor.value.lerp(targetPhase, Math.min(1, dt * 3));
+      skyUniforms.uZenithColor.value.lerp(targetZenith, Math.min(1, dt * 2.5));
+      skyUniforms.uHorizonColor.value.lerp(targetHorizon, Math.min(1, dt * 2.5));
+      skyUniforms.uSunColor.value.lerp(targetSun, Math.min(1, dt * 2.5));
+      skyUniforms.uSunUv.value.lerp(targetSunUv, Math.min(1, dt * 2.5));
+      skyUniforms.uDayFactor.value = THREE.MathUtils.damp(skyUniforms.uDayFactor.value, dayFactor, 2.5, dt);
+      skyUniforms.uTwilightFactor.value = THREE.MathUtils.damp(
+        skyUniforms.uTwilightFactor.value,
+        twilightFactor,
+        2.5,
+        dt
+      );
       skyUniforms.uIsDark.value = THREE.MathUtils.damp(
         skyUniforms.uIsDark.value,
         curDark ? 1.0 : 0.0,
@@ -631,42 +942,51 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
         dt
       );
 
-      // Smooth crossfade weights between atmospheric modes
-      const tgtPetals = state.activeEffect === 'petals' ? 1.0 : 0.0;
-      const tgtSnow = state.activeEffect === 'snow' ? 1.0 : 0.0;
-      const tgtRain = state.activeEffect === 'rain' ? 1.0 : 0.0;
-      const tgtStars = state.activeEffect === 'starlight' ? 1.0 : curDark ? 0.38 : 0.22;
+      // Foliage: render Autumn maple leaves when in autumn season & petals active, else sakura petals
+      const showPetals = st.activeEffect === 'petals';
+      const isAutumnFoliage = st.season === 'autumn' && curMode === 'auto';
+      const tgtSakura = showPetals && !isAutumnFoliage ? 1.0 : 0.0;
+      const tgtMaple = showPetals && isAutumnFoliage ? 1.0 : 0.0;
+      const tgtSnow = st.activeEffect === 'snow' ? 1.0 : 0.0;
+      const tgtRain = st.activeEffect === 'rain' ? 1.0 : 0.0;
+      const isNightish = st.phaseKey === 'bg3d_phase_night' || st.phaseKey === 'bg3d_phase_evening';
+      const tgtStars = st.activeEffect === 'starlight' ? 1.0 : isNightish || curDark ? 0.45 : 0.14;
 
-      wPetals = THREE.MathUtils.damp(wPetals, tgtPetals, 2.8, dt);
+      wSakura = THREE.MathUtils.damp(wSakura, tgtSakura, 2.8, dt);
+      wMaple = THREE.MathUtils.damp(wMaple, tgtMaple, 2.8, dt);
       wSnow = THREE.MathUtils.damp(wSnow, tgtSnow, 2.8, dt);
       wRain = THREE.MathUtils.damp(wRain, tgtRain, 3.2, dt);
       wStars = THREE.MathUtils.damp(wStars, tgtStars, 2.6, dt);
+      skyUniforms.uRainWeight.value = wRain;
 
-      // Keep opacity high enough on light themes without overwhelming editor text
-      const themeAlphaFactor = curDark ? 1.0 : 0.78;
-
-      // Update Petals
-      petalMesh.visible = wPetals > 0.015;
-      if (petalMesh.visible) {
-        petalMat.opacity = 0.9 * wPetals * themeAlphaFactor;
-        const windX = Math.sin(elapsed * 0.35) * 0.45 + 0.22;
-        for (let i = 0; i < PETAL_COUNT; i++) {
-          petalY[i] -= petalFallSpeed[i] * dt;
-          petalX[i] += (windX + Math.sin(elapsed * 0.95 + petalPhase[i]) * petalDriftAmp[i]) * dt;
-          if (petalY[i] < -6.6) {
-            petalY[i] = 6.6;
-            petalX[i] = (Math.random() - 0.5) * 16;
+      const themeAlphaFactor = curDark ? 1.0 : 0.82;
+      const anyFoliage = wSakura > 0.015 || wMaple > 0.015;
+      if (anyFoliage) {
+        const windX = Math.sin(elapsed * 0.38) * 0.48 + (isAutumnFoliage ? 0.34 : 0.22);
+        for (let i = 0; i < FOLIAGE_COUNT; i++) {
+          foliageY[i] -= foliageFallSpeed[i] * dt;
+          foliageX[i] +=
+            (windX + Math.sin(elapsed * 0.95 + foliagePhase[i]) * foliageDriftAmp[i]) * dt;
+          if (foliageY[i] < -6.6) {
+            foliageY[i] = 6.6;
+            foliageX[i] = (Math.random() - 0.5) * 16;
           }
-          if (petalX[i] > 8.6) petalX[i] = -8.6;
-          if (petalX[i] < -8.6) petalX[i] = 8.6;
+          if (foliageX[i] > 8.6) foliageX[i] = -8.6;
+          if (foliageX[i] < -8.6) foliageX[i] = 8.6;
 
-          petalRotX[i] += petalSpinX[i] * dt;
-          petalRotY[i] += petalSpinY[i] * dt;
-          petalRotZ[i] += Math.sin(elapsed + petalPhase[i]) * 0.65 * dt;
+          foliageRotX[i] += foliageSpinX[i] * dt;
+          foliageRotY[i] += foliageSpinY[i] * dt;
+          foliageRotZ[i] += Math.sin(elapsed + foliagePhase[i]) * 0.65 * dt;
+        }
+      }
 
-          const s = petalScale[i] * (0.45 + 0.55 * wPetals);
-          dummy.position.set(petalX[i], petalY[i], petalZ[i]);
-          dummy.rotation.set(petalRotX[i], petalRotY[i], petalRotZ[i]);
+      petalMesh.visible = wSakura > 0.015;
+      if (petalMesh.visible) {
+        petalMat.opacity = 0.92 * wSakura * themeAlphaFactor;
+        for (let i = 0; i < FOLIAGE_COUNT; i++) {
+          const s = foliageScale[i] * (0.45 + 0.55 * wSakura);
+          dummy.position.set(foliageX[i], foliageY[i], foliageZ[i]);
+          dummy.rotation.set(foliageRotX[i], foliageRotY[i], foliageRotZ[i]);
           dummy.scale.set(s, s, s);
           dummy.updateMatrix();
           petalMesh.setMatrixAt(i, dummy.matrix);
@@ -674,18 +994,30 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
         petalMesh.instanceMatrix.needsUpdate = true;
       }
 
-      // Update Snowflakes
+      mapleMesh.visible = wMaple > 0.015;
+      if (mapleMesh.visible) {
+        mapleMat.opacity = 0.94 * wMaple * themeAlphaFactor;
+        for (let i = 0; i < FOLIAGE_COUNT; i++) {
+          const s = foliageScale[i] * 1.12 * (0.45 + 0.55 * wMaple);
+          dummy.position.set(foliageX[i], foliageY[i], foliageZ[i]);
+          dummy.rotation.set(foliageRotX[i], foliageRotY[i], foliageRotZ[i]);
+          dummy.scale.set(s, s, s);
+          dummy.updateMatrix();
+          mapleMesh.setMatrixAt(i, dummy.matrix);
+        }
+        mapleMesh.instanceMatrix.needsUpdate = true;
+      }
+
       snowMesh.visible = wSnow > 0.015;
       if (snowMesh.visible) {
-        snowMat.opacity = (curDark ? 0.88 : 0.76) * wSnow;
-        for (let i = 0; i < SNOW_CRYSTAL_COUNT; i++) {
+        snowMat.opacity = (curDark ? 0.9 : 0.78) * wSnow;
+        for (let i = 0; i < SNOW_COUNT; i++) {
           snowY[i] -= snowSpeed[i] * dt;
           snowX[i] += Math.sin(elapsed * 0.65 + snowPhase[i]) * 0.36 * dt;
           if (snowY[i] < -6.6) {
             snowY[i] = 6.6;
             snowX[i] = (Math.random() - 0.5) * 16;
           }
-
           const s = snowScale[i] * (0.4 + 0.6 * wSnow);
           dummy.position.set(snowX[i], snowY[i], snowZ[i]);
           dummy.rotation.set(0, 0, elapsed * snowSpin[i] + snowPhase[i]);
@@ -696,13 +1028,12 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
         snowMesh.instanceMatrix.needsUpdate = true;
       }
 
-      // Update Rain & Ripples
       const rainActive = wRain > 0.015;
       rainMesh.visible = rainActive;
       rippleMesh.visible = rainActive;
       if (rainActive) {
-        rainMat.opacity = (curDark ? 0.62 : 0.45) * wRain;
-        const slant = -0.15;
+        rainMat.opacity = (curDark ? 0.62 : 0.44) * wRain;
+        const slant = -0.14;
         for (let i = 0; i < RAIN_COUNT; i++) {
           rainY[i] -= rainSpeed[i] * dt;
           rainX[i] += slant * rainSpeed[i] * dt;
@@ -721,7 +1052,7 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
         }
         rainMesh.instanceMatrix.needsUpdate = true;
 
-        rippleMat.opacity = (curDark ? 0.42 : 0.3) * wRain;
+        rippleMat.opacity = (curDark ? 0.44 : 0.32) * wRain;
         for (let i = 0; i < RIPPLE_COUNT; i++) {
           rippleAge[i] += dt;
           if (rippleAge[i] >= rippleLife[i]) {
@@ -731,7 +1062,7 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
             rippleZ[i] = (Math.random() - 0.5) * 5.0;
           }
           const progress = rippleAge[i] / rippleLife[i];
-          const ringScale = (0.25 + progress * 1.8) * (1.0 - progress * 0.15) * wRain;
+          const ringScale = (0.25 + progress * 1.85) * (1.0 - progress * 0.15) * wRain;
           dummy.position.set(rippleX[i], rippleY[i], rippleZ[i]);
           dummy.rotation.set(-Math.PI / 2.25, 0, 0);
           dummy.scale.set(ringScale, ringScale, ringScale);
@@ -741,21 +1072,28 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
         rippleMesh.instanceMatrix.needsUpdate = true;
       }
 
-      // Update Rose-Gold Stardust / Fireflies
-      starMat.opacity = (curDark ? 0.85 : 0.58) * wStars;
-      starMat.size = 0.28 + 0.14 * wStars + Math.sin(elapsed * 1.8) * 0.025;
-      for (let i = 0; i < STAR_COUNT; i++) {
-        const p = starPhase[i];
-        const sp = starSpeed[i];
-        starPositions[i * 3] = starBaseX[i] + Math.sin(elapsed * sp + p) * 0.55;
-        starPositions[i * 3 + 1] = starBaseY[i] + Math.cos(elapsed * sp * 0.8 + p) * 0.48;
-        starPositions[i * 3 + 2] = starBaseZ[i] + Math.sin(elapsed * 0.45 + p) * 0.35;
+      // Upper sky pinpoint stars appear cleanly during night/evening/starlight
+      const starVis = (1.0 - dayFactor) * wStars;
+      skyStars.visible = starVis > 0.04;
+      if (skyStars.visible) {
+        skyStarMat.opacity = Math.min(0.88, starVis * (curDark ? 1.1 : 0.55));
+        skyStars.rotation.z = elapsed * 0.008;
       }
-      starPosAttr.needsUpdate = true;
 
-      // Subtle breathing camera sway
-      camera.position.x = Math.sin(elapsed * 0.16) * 0.22;
-      camera.position.y = Math.cos(elapsed * 0.13) * 0.16;
+      // Foreground fireflies & stardust
+      ffMat.opacity = (curDark ? 0.85 : 0.52) * wStars;
+      ffMat.size = 0.26 + 0.16 * wStars + Math.sin(elapsed * 1.9) * 0.025;
+      for (let i = 0; i < FIREFLY_COUNT; i++) {
+        const p = ffPhase[i];
+        const sp = ffSpeed[i];
+        ffPositions[i * 3] = ffBaseX[i] + Math.sin(elapsed * sp + p) * 0.55;
+        ffPositions[i * 3 + 1] = ffBaseY[i] + Math.cos(elapsed * sp * 0.8 + p) * 0.48;
+        ffPositions[i * 3 + 2] = ffBaseZ[i] + Math.sin(elapsed * 0.45 + p) * 0.35;
+      }
+      ffPosAttr.needsUpdate = true;
+
+      camera.position.x = Math.sin(elapsed * 0.15) * 0.22;
+      camera.position.y = Math.cos(elapsed * 0.12) * 0.16;
       camera.lookAt(0, 0, 0);
 
       renderer.render(scene, camera);
@@ -787,6 +1125,10 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
       skyMat.dispose();
       petalGeo.dispose();
       petalMat.dispose();
+      sakuraTex.dispose();
+      mapleGeo.dispose();
+      mapleMat.dispose();
+      mapleTex.dispose();
       snowGeo.dispose();
       snowMat.dispose();
       snowTex.dispose();
@@ -794,9 +1136,11 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
       rainMat.dispose();
       rippleGeo.dispose();
       rippleMat.dispose();
-      starGeo.dispose();
-      starMat.dispose();
-      glowTex.dispose();
+      skyStarGeo.dispose();
+      skyStarMat.dispose();
+      ffGeo.dispose();
+      ffMat.dispose();
+      bokehTex.dispose();
       envTarget.dispose();
       pmremGenerator.dispose();
       renderer.dispose();
@@ -805,7 +1149,6 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
         container.removeChild(renderer.domElement);
       }
     };
-    // Only re-initialize WebGL pipeline when enabled flag toggles
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled]);
 

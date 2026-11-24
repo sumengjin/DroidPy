@@ -23,7 +23,7 @@ interface HelpTutorialModalProps {
 }
 
 const CROSS_ENV_DEMO_CODE = `"""
-DroidPy 手機環境偵測範例 (原生 Python 直譯器 / 獨立 APK / 瀏覽器沙盒)
+DroidPy 手機環境偵測範例 (內建 Python / 獨立 APK / 瀏覽器沙盒)
 預設以手機 (Android) 環境為主進行偵測與執行
 """
 import os
@@ -116,8 +116,8 @@ const GUIDE_TEXT: Record<LocaleId, GuideContent> = {
   'zh-TW': {
     quickSteps: [
       {
-        title: '1. 預設使用「Python 直譯器」（可另開沙盒附加功能）',
-        body: 'DroidPy 預設直接使用原生 ARM64「Python 直譯器」（支援 requests/bs4 爬蟲、subprocess 與完整 pip/pkg 套件）；若需在純網頁環境離線繪製 matplotlib 圖表，可於「設定」開啟「Pyodide 瀏覽器沙盒」附加功能。',
+        title: '1. 預設使用「內建 Python」（可另開沙盒備援）',
+        body: 'DroidPy 預設直接使用原生 ARM64「內建 Python」（支援 requests/bs4 爬蟲、subprocess 與完整 pip/pkg 套件）；若需純網頁離線繪圖，可於「設定」開啟「Pyodide 沙盒」。',
       },
       {
         title: '2. 預設以手機（Android）為偵測環境',
@@ -135,11 +135,11 @@ const GUIDE_TEXT: Record<LocaleId, GuideContent> = {
       },
       {
         title: '2. 其他快速取 Cookie 方式（網頁 / Chrome）',
-        body: '連上橋接後可用「Python 直譯器探測」抓取 Set-Cookie；或切到「匯入 cURL / 標頭」，直接貼上 DevTools 的 Copy as cURL、Cookie 標頭，或複製內建 Chrome 書籤小工具回貼。',
+        body: '連上橋接後可用「Python 探測」抓取 Set-Cookie；或切到「匯入 cURL / 標頭」，直接貼上 DevTools 的 Copy as cURL、Cookie 標頭，或複製內建 Chrome 書籤小工具回貼。',
       },
       {
         title: '3. 寫入 cookies.json 並一鍵生成爬蟲',
-        body: '在 Cookie 分頁勾選需要的項目，點「寫入 cookies.json」或「產生 crawler_session.py」，即可透過原生 Python 直譯器帶著登入態高速抓取資料。',
+        body: '在 Cookie 分頁勾選需要的項目，點「寫入 cookies.json」或「產生 crawler_session.py」，即可透過內建 Python 帶著登入態高速抓取資料。',
       },
     ],
     apkSteps: [
@@ -153,7 +153,7 @@ const GUIDE_TEXT: Record<LocaleId, GuideContent> = {
       },
       {
         title: '3. 手機開啟 APK 一鍵初始化爬蟲環境',
-        body: '安裝後開啟 App，進入「Python 環境」點擊「一鍵初始化 Python + 爬蟲環境」，系統會自動安裝 python、clang、libxml2 與 requests/bs4/lxml/httpx。',
+        body: '安裝後開啟 App，進入「Python」點擊「一鍵安裝 Python + 爬蟲環境」，系統會自動安裝 python、clang、libxml2 與 requests/bs4/lxml/httpx。',
       },
     ],
     faqs: [
@@ -163,11 +163,11 @@ const GUIDE_TEXT: Record<LocaleId, GuideContent> = {
       },
       {
         q: '為什麼在沙盒模式下 subprocess 或部分套件（如 parsel）會失敗？',
-        a: '瀏覽器 WebAssembly 沙盒受限於單執行緒 Emscripten（無 fork/exec，亦不支援編譯 C/C++ 原生擴充）。請改用預設的「Python 直譯器」即可完整執行。',
+        a: '瀏覽器 WebAssembly 沙盒受限於單執行緒 Emscripten（無 fork/exec，亦不支援編譯 C/C++ 原生擴充）。請改用預設「內建 Python」即可完整執行。',
       },
       {
         q: '為什麼在瀏覽器沙盒無法直接讀取 /storage/emulated/0 路徑？',
-        a: '瀏覽器 WebAssembly 沙盒無法直接存取手機實體儲存空間，請切換使用預設的「Python 直譯器（原生環境）」並授權手機儲存權限即可正常讀寫。',
+        a: '瀏覽器 WebAssembly 沙盒無法直接存取手機實體儲存空間，請切換使用預設「內建 Python」並授權手機儲存權限即可正常讀寫。',
       },
       {
         q: '更新或重裝程式後，已安裝的套件會不見嗎？',
