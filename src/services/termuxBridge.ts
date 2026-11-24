@@ -668,6 +668,12 @@ def _probe_url_safely(target_url, request_headers):
             response = conn.getresponse()
             status_code = response.status
             response_headers = response.getheaders()
+            transfer_encoding = response.getheader("Transfer-Encoding", "").lower()
+            content_length = response.getheader("Content-Length")
+            if transfer_encoding and content_length:
+                raise ValueError("Ambiguous HTTP response framing")
+            if transfer_encoding and transfer_encoding.strip() != "chunked":
+                raise ValueError("Unsupported HTTP transfer encoding")
             raw_bytes = response.read(24000)
         finally:
             conn.close()
