@@ -14,8 +14,22 @@ import { stripAnsi } from '../utils/ansiParser';
 
 export const DEFAULT_TERMUX_CONFIG: TermuxConfig = {
   endpointUrl: 'http://127.0.0.1:8765',
-  token: 'droidpy-local',
+  token: '',
 };
+
+export function createSecureBridgeToken(): string {
+  const cryptoApi = globalThis.crypto;
+  if (!cryptoApi?.getRandomValues) {
+    throw new Error('安全亂數產生器不可用，已停止建立橋接權杖。');
+  }
+  const bytes = new Uint8Array(32);
+  cryptoApi.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+export function isSecureBridgeToken(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-f0-9]{64}$/i.test(value);
+}
 
 export interface TermuxExecResult {
   exitCode: number;
@@ -28,10 +42,24 @@ export interface TermuxStreamCallbacks {
   onChunk: (chunk: string) => void;
 }
 
-export function buildTermuxBridgeScript(token: string): string {
-  const safeToken = token.replace(/["'\\]/g, '') || 'droidpy-local';
+export function buildTermuxBridgeScript(token: string, allowedOrigin: string): string {
+  if (!isSecureBridgeToken(token)) {
+    throw new Error('橋接權杖無效；請重新產生安全權杖後再匯出橋接程式。');
+  }
+  let safeOrigin = '';
+  try {
+    const parsedOrigin = new URL(allowedOrigin);
+    if ((parsedOrigin.protocol !== 'http:' && parsedOrigin.protocol !== 'https:') || parsedOrigin.origin === 'null') {
+      throw new Error('Unsupported origin');
+    }
+    safeOrigin = JSON.stringify(parsedOrigin.origin);
+  } catch {
+    throw new Error('無法確認 DroidPy 網頁來源；已停止匯出橋接程式。');
+  }
+  const safeToken = token;
   return `import codecs
 import json
+import hmac
 import os
 import platform
 import pty
@@ -50,6 +78,8 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 TOKEN = "${safeToken}"
+ALLOWED_ORIGIN = ${safeOrigin}
+MAX_REQUEST_BYTES = 8 * 1024 * 1024
 WORKSPACE = os.path.expanduser("~/droidpy_workspace")
 os.makedirs(WORKSPACE, exist_ok=True)
 
@@ -586,11 +616,26 @@ def _watchdog_loop():
 class DroidPyBridgeHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
+    def setup(self):
+        super().setup()
+        self.connection.settimeout(15)
+
+    def _origin_allowed(self):
+        origin = self.headers.get("Origin")
+        return origin is None or origin == ALLOWED_ORIGIN
+
+    def _host_allowed(self):
+        host = self.headers.get("Host", "").lower()
+        return host in ("127.0.0.1:8765", "localhost:8765")
+
     def _send_cors(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Private-Network", "true")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-DroidPy-Token")
+        if self.headers.get("Origin") == ALLOWED_ORIGIN:
+            self.send_header("Access-Control-Allow-Origin", ALLOWED_ORIGIN)
+            self.send_header("Vary", "Origin")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-DroidPy-Token")
+            if self.headers.get("Access-Control-Request-Private-Network", "").lower() == "true":
+                self.send_header("Access-Control-Allow-Private-Network", "true")
 
     def _send_json(self, status, payload):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -615,15 +660,29 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
         self.wfile.flush()
 
     def _check_auth(self):
-        return self.headers.get("X-DroidPy-Token", "") == TOKEN
+        return hmac.compare_digest(self.headers.get("X-DroidPy-Token", ""), TOKEN)
 
     def do_OPTIONS(self):
+        if not self._host_allowed() or not self._origin_allowed():
+            return self._send_json(403, {"error": "Untrusted Host or Origin"})
+        requested_method = self.headers.get("Access-Control-Request-Method", "").upper()
+        if requested_method and requested_method not in ("GET", "POST"):
+            return self._send_json(403, {"error": "Requested method is not allowed"})
+        requested_headers = {
+            item.strip().lower()
+            for item in self.headers.get("Access-Control-Request-Headers", "").split(",")
+            if item.strip()
+        }
+        if not requested_headers.issubset({"content-type", "x-droidpy-token"}):
+            return self._send_json(403, {"error": "Requested headers are not allowed"})
         self.send_response(204)
         self._send_cors()
         self.send_header("Content-Length", "0")
         self.end_headers()
 
     def do_GET(self):
+        if not self._host_allowed() or not self._origin_allowed():
+            return self._send_json(403, {"error": "Untrusted Host or Origin"})
         parsed_path = self.path.split("?", 1)[0]
         if parsed_path == "/health":
             if not self._check_auth():
@@ -770,11 +829,25 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
             pass
 
     def do_POST(self):
+        if not self._host_allowed() or not self._origin_allowed():
+            return self._send_json(403, {"error": "Untrusted Host or Origin"})
         if not self._check_auth():
             return self._send_json(401, {"error": "Invalid X-DroidPy-Token"})
-        length = int(self.headers.get("Content-Length", "0"))
-        raw = self.rfile.read(length).decode("utf-8") if length > 0 else "{}"
-        data = json.loads(raw)
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except (TypeError, ValueError):
+            return self._send_json(400, {"error": "Invalid Content-Length"})
+        if length < 0 or length > MAX_REQUEST_BYTES:
+            return self._send_json(413, {"error": "Request body exceeds the 8 MiB limit"})
+        try:
+            raw_bytes = self.rfile.read(length) if length > 0 else b"{}"
+            if length > 0 and len(raw_bytes) != length:
+                return self._send_json(400, {"error": "Incomplete request body"})
+            data = json.loads(raw_bytes.decode("utf-8"))
+            if not isinstance(data, dict):
+                return self._send_json(400, {"error": "JSON body must be an object"})
+        except (UnicodeDecodeError, json.JSONDecodeError, TimeoutError, OSError):
+            return self._send_json(400, {"error": "Invalid or incomplete JSON request body"})
 
         if self.path == "/stdin":
             text = str(data.get("data", ""))
@@ -935,8 +1008,8 @@ if __name__ == "__main__":
 `;
 }
 
-export function buildTermuxOneLineCommand(token: string): string {
-  const script = buildTermuxBridgeScript(token);
+export function buildTermuxOneLineCommand(token: string, allowedOrigin: string): string {
+  const script = buildTermuxBridgeScript(token, allowedOrigin);
   const bytes = new TextEncoder().encode(script);
   let binary = '';
   for (let i = 0; i < bytes.length; i++) {
