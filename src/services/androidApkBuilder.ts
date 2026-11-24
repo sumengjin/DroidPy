@@ -3196,7 +3196,7 @@ def clipboard_set(text):
                 return
             }
 
-            val len = headers["content-length"]?.toIntOrNull()
+            val len = (headers["content-length"] ?: "0").toIntOrNull()
             if (len == null || len < 0 || len > 8 * 1024 * 1024) {
                 writeJson(out, 413, JSONObject().put("error", "Invalid or oversized request body"))
                 return
