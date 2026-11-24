@@ -22,8 +22,8 @@ const token = 'a'.repeat(64);
 const origin = 'https://droidpy-ci.example';
 const generated = buildTermuxBridgeScript(token, origin);
 
-assert.match(generated, new RegExp(`TOKEN = "\${token}"`));
-assert.ok(generated.includes(`ALLOWED_ORIGIN = "\${origin}"`));
+assert.ok(generated.includes('TOKEN = "' + token + '"'));
+assert.ok(generated.includes('ALLOWED_ORIGIN = "' + origin + '"'));
 assert.ok(generated.includes('MAX_REQUEST_BYTES = 8 * 1024 * 1024'));
 assert.ok(generated.includes('Access-Control-Allow-Origin", ALLOWED_ORIGIN'));
 assert.ok(!generated.includes('Access-Control-Allow-Origin", "*"'));
