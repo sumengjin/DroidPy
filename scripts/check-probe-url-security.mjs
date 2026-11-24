@@ -49,7 +49,7 @@ const tempDir = await mkdtemp(path.join(os.tmpdir(), 'droidpy-probe-security-'))
 try {
   const pythonFile = path.join(tempDir, 'droidpy_bridge.py');
   await writeFile(pythonFile, generated, 'utf8');
-  const unitTests = String.raw\`import runpy, socket, sys
+  const unitTests = String.raw`import runpy, socket, sys
 ns = runpy.run_path(sys.argv[1], run_name="droidpy_probe_test")
 is_public = ns["_is_public_probe_address"]
 for address in ("127.0.0.1", "10.0.0.1", "169.254.169.254", "192.168.1.1", "::1", "fc00::1", "fe80::1", "::ffff:127.0.0.1", "192.0.0.9", "192.88.99.1", "2001:db8::1", "2001:20::1", "64:ff9b::1", "3fff::1"):
@@ -131,7 +131,7 @@ try:
         socket.socket = original_socket
 finally:
     socket.getaddrinfo = original_getaddrinfo
-\`;
+`;
   const testResult = spawnSync('python3', ['-c', unitTests, pythonFile], { encoding: 'utf8' });
   if (testResult.status !== 0) {
     throw new Error('URL probe security unit tests failed:\\n' + testResult.stdout + '\\n' + testResult.stderr);
