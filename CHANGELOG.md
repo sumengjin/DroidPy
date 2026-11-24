@@ -6,7 +6,7 @@ All notable changes to **DroidPy** are documented in this file.
 
 ### Fixed — Python Process Safety and Bridge Lifecycle
 - **停止以執行時間自動終止 Python 工作**：移除 Python／pip 子行程 30 分鐘看門狗與定時清理；程序檢查改為唯讀診斷，不會因執行時間或殭屍狀態自行發送終止訊號。
-- **修復 Bridge 停止時誤殺使用者工作**：停止內嵌 Bridge 不再強制終止目前 Python 程序；只有使用者明確執行停止操作才會終止工作。
+- **修復 Bridge 停止時誤殺使用者工作**：停止內嵌 Bridge 不再強制終止目前 Python 程序，並保留程序控制代碼，讓 Bridge 重新啟動後仍可由使用者明確停止該工作。
 - **同步更新繁中、簡中、英文與日文介面文案**，明確標示程序檢查不會自動終止工作。
 - **加入 watchdog 安全回歸檢查**，防止未來重新引入依執行時間清理程序的邏輯。
 
