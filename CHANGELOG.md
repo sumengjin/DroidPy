@@ -16,7 +16,7 @@ All notable changes to **DroidPy** are documented in this file.
 - **保護套件備份清單**：一般掃描只合併清單，不會因不完整結果縮短備份；只有明確解除安裝，而且 Python 與 dpkg 兩份盤點都確認完整時，才允許縮減清單。
 - **保護既有 `usr/`**：若啟動時核心標記或二進位檔遺失，但 `usr/` 仍有資料或無法安全讀取，就跳過破壞性的重新解壓，先嘗試修復並提示使用者，不會自動刪除原套件資料。
 - **修正套件安裝後無法匯入**：兩套 Python `sitecustomize.py` 都會明確啟用 `PYTHONUSERBASE` 的 site-packages 路徑。
-- **正規化 CA 憑證**：處理 UTF-8 BOM／非 ASCII 註解，重新組合並驗證 PEM 憑證區塊；保留 TLS 憑證驗證，不會因找不到 CA 而關閉驗證。
+- **正規化 Python SSL CA 憑證**：處理 UTF-8 BOM／非 ASCII 註解，重新組合並驗證 PEM 憑證區塊；保留 TLS 憑證驗證，不會因找不到 CA 而關閉驗證。
 - **強化 APT 套件來源驗證**：移除允許未驗證套件與不安全來源的選項，停止新增 `[trusted=yes]`，並清理舊版留下的設定；缺少可信 CA 時安全失敗，不會降級成不驗證 HTTPS。
 - **加入 CI 回歸檢查**：涵蓋套件雙來源盤點、子程序限制、備份清單完整性、部分 `usr/` 保護、使用者套件路徑、CA 正規化與 APT／TLS 驗證。
 
