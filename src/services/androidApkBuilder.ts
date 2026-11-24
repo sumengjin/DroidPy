@@ -2056,7 +2056,7 @@ def _droidpy_read_pem(path):
         # comments. ssl.SSLContext(cadata=...) accepts ASCII PEM only.
         txt = raw.decode("utf-8-sig", errors="ignore")
         blocks = re.findall(
-            r"-----BEGIN CERTIFICATE-----([\s\\S]*?)-----END CERTIFICATE-----",
+            r"-----BEGIN CERTIFICATE-----([\s\S]*?)-----END CERTIFICATE-----",
             txt,
         )
         clean_blocks = []
