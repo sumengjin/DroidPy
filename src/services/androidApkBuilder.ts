@@ -2993,11 +2993,14 @@ def clipboard_set(text):
     private val defaultUserPkgCandidates = setOf("python", "python-pip", "python-lxml", "libxml2", "libxslt", "clang", "ffmpeg", "git", "nodejs", "openssh")
 
     private fun savePackageBackupSnapshot(
-        pipNames: List<String> = collectInstalledPipNames(),
-        pkgNames: List<String> = collectInstalledPkgNames(),
+        pipInventory: PipInventory = collectInstalledPipInventory(),
+        pkgInventory: PkgInventory = collectInstalledPkgInventory(),
         forceShrink: Boolean = false
     ) {
         try {
+            val pipNames = pipInventory.names
+            val pkgNames = pkgInventory.names
+            val canShrink = forceShrink && pipInventory.complete && pkgInventory.complete
             val currentUserPip = pipNames.filter { it !in corePipSet }
             val currentUserPkg = pkgNames.filter { it in defaultUserPkgCandidates }
             val existing = readBackupManifest()
@@ -3020,15 +3023,15 @@ def clipboard_set(text):
             // Prevent baseline APT-only packages (pip + lxml) from overwriting a richer backup snapshot
             val hasCustomNow = currentUserPip.any { it !in aptDefaultPipSet }
             val hadCustomBefore = prevPipList.any { it !in aptDefaultPipSet }
-            if (!forceShrink && !hasCustomNow && hadCustomBefore) {
+            if (!canShrink && !hasCustomNow && hadCustomBefore) {
                 return
             }
-            val mergedPip = if (forceShrink) {
+            val mergedPip = if (canShrink) {
                 currentUserPip
             } else {
                 (prevPipList + currentUserPip).distinct().sorted()
             }
-            val mergedPkg = if (forceShrink) {
+            val mergedPkg = if (canShrink) {
                 currentUserPkg
             } else {
                 (prevPkgList + currentUserPkg).distinct().sorted()
@@ -3181,12 +3184,14 @@ def clipboard_set(text):
                         }
                     val hasPython = pyBin != null
 
-                    val pipList = collectInstalledPipNames()
+                    val pipInventory = collectInstalledPipInventory()
+                    val pipList = pipInventory.names
                     val pipArr = JSONArray(pipList)
-                    val pkgList = collectInstalledPkgNames()
+                    val pkgInventory = collectInstalledPkgInventory()
+                    val pkgList = pkgInventory.names
                     val pkgArr = JSONArray(pkgList)
                     if (hasPython && pipList.isNotEmpty()) {
-                        savePackageBackupSnapshot(pipList, pkgList)
+                        savePackageBackupSnapshot(pipInventory, pkgInventory)
                     }
 
                     val res = JSONObject()
