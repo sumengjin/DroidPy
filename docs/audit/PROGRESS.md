@@ -59,10 +59,11 @@
 - Found a concrete script-backup defect: quota handling silently dropped old snapshots, and backup creation still returned success even if every write failed. The restore path also proceeded without verifying its pre-restore rollback snapshot.
 - Created PR #9: [fix(storage): preserve existing script backups on quota failure](https://github.com/sumengjin/DroidPy/pull/9)
   - Branch: `fix/durable-script-backups`
-  - Head: `41c4b42fca03b09e9d298125bf44ca6df11b819b`
-  - Commits: `ad1215a12d7e470c386bbc7bf0b7e62001bca963`, `ce6185191e599ec68d94f6d25f61b185310a46e1`, `41c4b42fca03b09e9d298125bf44ca6df11b819b`
+  - Latest head at this update: `1d252d655d94ba8b4b332abc2631f03883269213`
+  - Commits include `ad1215a12d7e470c386bbc7bf0b7e62001bca963`, `ce6185191e599ec68d94f6d25f61b185310a46e1`, `41c4b42fca03b09e9d298125bf44ca6df11b819b`, `1fb47baf1512ef811cdad72b808fab575d1f3f09`, `dd395d2818765a9dee017eb204575591491b9840`, `739ef6b7b4e9e48150de33143fe4458f6431e753`, `1d252d655d94ba8b4b332abc2631f03883269213`
   - Changes: no automatic eviction of old snapshots; write errors propagate; malformed backup stores are not overwritten; manual backup/delete failures are reported; restore is blocked unless the current workspace rollback snapshot is saved.
-  - CI run `45470462368` completed successfully. The run exposes only the PR test/web-build check; the current main workflow condition skips Android APK build on pull requests. Thus TypeScript/lint/web build passed, but Android compilation and device acceptance are still unverified.
+  - CI run `45470462368` completed successfully for the earlier head `41c4b42...`. After follow-up localization/error-handling commits, the latest head is `1d252d6...`; its check-runs had not yet appeared at the last poll. The current main workflow condition skips Android APK build on pull requests, so Android compilation and device acceptance remain unverified.
 - No change to main, signing key, Termux usr/, installed packages, workspace data, or Release artifacts.
 - PR #9 CI check `測試與網頁建置`: SUCCESS; no Android APK job was run for this PR.
 - Next: complete PR #9 CI review; inspect the exposed signing material against the current v1.2.18 APK signer without rotating any key; then continue Bridge security audit and implementation.
+\n- Follow-up hardening: localized backup failure messages in all four supported languages; storage exceptions are converted to stable internal error codes; latest PR #9 head is `1d252d655d94ba8b4b332abc2631f03883269213`.
