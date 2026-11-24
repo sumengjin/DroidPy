@@ -146,3 +146,9 @@
 - Debug APK artifact: `DroidPy-arm64-debug-194-a1`. Production Release build, production signer verification and GitHub Release were correctly skipped for the pull request.
 - PR #27 is the sole consolidated integration PR. Superseded PRs #11, #17, #26, #24, #6, #5 and #4 were closed without merging; their relevant code is already in current main or consolidated PR #27.
 - PR Debug APKs use the workflow's ephemeral Debug signer. This is not evidence of the production Release signer or installed-app upgrade compatibility. Android 10+ device acceptance remains required before merge, especially package install/import, `pkg update/install`, partial `usr/` preservation, public HTTP/HTTPS probe behavior, Bridge saturation/restart and backup restore.
+
+
+### 2026-11-25 — APK updater signer compatibility and download hardening (PR #27)
+- Replaced the updater's hard-coded legacy certificate fingerprint with a comparison against the currently installed app's signing certificate. On Android 9+, single-signer updates may use a valid signing-certificate rotation history; multi-signer apps require an exact signer set. Android 7–8 uses exact legacy signer comparison.
+- Restricts every updater URL/redirect to HTTPS GitHub release asset hosts; redirects are followed manually. Caps APK downloads at 300 MiB, checks declared versus received length, writes to a .part file and fsyncs before verification, and retains the previous downloaded APK until the candidate passes package-ID and signer checks.
+- Added scripts/check-apk-updater.mjs and CI command check:apk-updater. CI and Android ARM64 Debug compile pending.
