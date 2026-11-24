@@ -12,6 +12,7 @@ const [pythonBridge, androidBuilder] = await Promise.all([
 
 assert.match(pythonBridge, /def _resolve_public_probe_address\(/);
 assert.match(pythonBridge, /ipaddress\.ip_address/);
+assert.match(pythonBridge, /ipaddress\.ip_network/);
 assert.match(pythonBridge, /socket\.getaddrinfo/);
 assert.match(pythonBridge, /sock\.connect\(self\._pinned_sockaddr\)/);
 assert.match(pythonBridge, /self\._context\.wrap_socket\(raw, server_hostname=self\.host\)/);
@@ -21,6 +22,7 @@ assert.doesNotMatch(pythonBridge, /urllib\.request\.urlopen/);
 assert.match(pythonBridge, /key\.lower\(\) not in \("cookie", "authorization", "proxy-authorization"\)/);
 
 assert.match(androidBuilder, /private fun isPublicProbeAddress\(/);
+assert.match(androidBuilder, /b\[2\] == 0x00 && b\[3\] == 0x20/);
 assert.match(androidBuilder, /InetAddress\.getAllByName\(host\)/);
 assert.match(androidBuilder, /addresses\.any \{ !isPublicProbeAddress\(it\) \}/);
 assert.match(androidBuilder, /rawSocket\.connect\(InetSocketAddress\(pinnedAddress, port\), 15000\)/);
@@ -50,7 +52,7 @@ try {
   const unitTests = String.raw\`import runpy, socket, sys
 ns = runpy.run_path(sys.argv[1], run_name="droidpy_probe_test")
 is_public = ns["_is_public_probe_address"]
-for address in ("127.0.0.1", "10.0.0.1", "169.254.169.254", "192.168.1.1", "::1", "fc00::1", "fe80::1", "::ffff:127.0.0.1"):
+for address in ("127.0.0.1", "10.0.0.1", "169.254.169.254", "192.168.1.1", "::1", "fc00::1", "fe80::1", "::ffff:127.0.0.1", "192.0.0.9", "192.88.99.1", "2001:db8::1", "2001:20::1", "64:ff9b::1", "3fff::1"):
     assert not is_public(address), "private/reserved address was allowed: " + address
 assert is_public("8.8.8.8")
 assert is_public("2606:4700:4700::1111")
