@@ -13,7 +13,6 @@ export interface GitHubApkBundleOptions {
   packageId: string;
   includeStoragePermission: boolean;
   files: PythonFile[];
-  bridgeToken: string;
 }
 
 export async function generateGitHubApkProjectZip(opts: GitHubApkBundleOptions): Promise<Blob> {
@@ -22,8 +21,6 @@ export async function generateGitHubApkProjectZip(opts: GitHubApkBundleOptions):
   const safeKotlinTitle = safeTitle.replace(/["\\]/g, '');
   const safePkg = opts.packageId.trim() || 'org.droidpy.app';
   const pkgPath = safePkg.replace(/\./g, '/');
-  const safeToken = opts.bridgeToken.replace(/["'\\]/g, '') || 'droidpy-local';
-
   const appSlug = safeTitle.replace(/\s+/g, '-') || 'DroidPy';
 
   // 1. GitHub Actions Workflow — builds standalone ARM64 APK with embedded Termux bootstrap
@@ -457,6 +454,35 @@ class MainActivity : AppCompatActivity() {
     private var lastBackPressedAt: Long = 0L
     private var exitToast: Toast? = null
     private val stateIoExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private val bridgeToken: String by lazy { loadOrCreateBridgeToken() }
+
+    private fun loadOrCreateBridgeToken(): String {
+        val tokenFile = File(filesDir, "droidpy_bridge_token")
+        val existing = try {
+            tokenFile.readText(Charsets.US_ASCII).trim()
+        } catch (_: Exception) {
+            ""
+        }
+        if (Regex("^[a-fA-F0-9]{64}$").matches(existing)) {
+            return existing.lowercase()
+        }
+
+        val randomBytes = ByteArray(32)
+        java.security.SecureRandom().nextBytes(randomBytes)
+        val token = randomBytes.joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+        val tempFile = File(filesDir, "droidpy_bridge_token.tmp")
+        try {
+            tempFile.writeText(token, Charsets.US_ASCII)
+            if (!tempFile.renameTo(tokenFile)) {
+                tokenFile.writeText(token, Charsets.US_ASCII)
+                tempFile.delete()
+            }
+        } catch (error: Exception) {
+            tempFile.delete()
+            throw IllegalStateException("Unable to persist the per-install DroidPy bridge token", error)
+        }
+        return token
+    }
 
     private val mobileUaString =
         "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
@@ -466,6 +492,9 @@ class MainActivity : AppCompatActivity() {
     inner class NativeDownloadBridge {
         @JavascriptInterface
         fun isNativeApp(): Boolean = true
+
+        @JavascriptInterface
+        fun getBridgeToken(): String = bridgeToken
 
         @JavascriptInterface
         fun getAppVersionName(): String {
@@ -1134,7 +1163,7 @@ class MainActivity : AppCompatActivity() {
                 appContext = applicationContext,
                 usrDir = usrDir,
                 workspaceDir = workspaceDir,
-                token = "${safeToken}",
+                token = bridgeToken,
                 assetManager = assets
             ).also { it.start() }
 
