@@ -78,7 +78,8 @@ try:
         type("Response", (), {"status": 200, "getheaders": lambda self: [("Content-Type", "text/plain")], "read": lambda self, n: b"ok"})(),
     ]
     requests = []
-    original_http_connection = ns["_PinnedHTTPConnection"]
+    probe_globals = ns["_probe_url_safely"].__globals__
+    original_http_connection = probe_globals["_PinnedHTTPConnection"]
     class FakeConnection:
         def __init__(self, host, port, family, sockaddr, timeout, *args):
             self.host = host
@@ -88,7 +89,7 @@ try:
             return responses.pop(0)
         def close(self):
             pass
-    ns["_PinnedHTTPConnection"] = FakeConnection
+    probe_globals["_PinnedHTTPConnection"] = FakeConnection
     status, final_url, body, cookies, headers = ns["_probe_url_safely"](
         "http://public.example/start",
         {"Cookie": "session=secret", "Authorization": "Bearer secret"}
@@ -114,7 +115,7 @@ try:
     except ValueError:
         pass
 
-    ns["_PinnedHTTPConnection"] = original_http_connection
+    probe_globals["_PinnedHTTPConnection"] = original_http_connection
     connected = []
     class FakeSocket:
         def settimeout(self, value):
