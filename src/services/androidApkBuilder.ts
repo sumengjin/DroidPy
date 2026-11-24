@@ -3111,6 +3111,7 @@ def clipboard_set(text):
 
     private fun handleClient(socket: Socket) {
         socket.use { sock ->
+            sock.soTimeout = 15000
             val bis = BufferedInputStream(sock.getInputStream())
             val headerBuf = ByteArrayOutputStream()
             var p3 = 0
@@ -3195,7 +3196,11 @@ def clipboard_set(text):
                 return
             }
 
-            val len = headers["content-length"]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+            val len = headers["content-length"]?.toIntOrNull()
+            if (len == null || len < 0 || len > 8 * 1024 * 1024) {
+                writeJson(out, 413, JSONObject().put("error", "Invalid or oversized request body"))
+                return
+            }
             val bodyBytes = ByteArray(len)
             var readTotal = 0
             while (readTotal < len) {
