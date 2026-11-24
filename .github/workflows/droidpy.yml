@@ -132,11 +132,11 @@ jobs:
           INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           INPUT_TAG="${INPUT_RELEASE_TAG:-}"
-          if [ -n "$INPUT_TAG" ] && ! [[ "$INPUT_TAG" =~ ^v?[0-9]+\\.[0-9]+\\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+          if [ -n "$INPUT_TAG" ] && ! [[ "$INPUT_TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
             echo "::error::release_tag 必須是有效的版本標籤，例如 v1.2.3"
             exit 1
           fi
-          VER=$(grep -m1 -oE '\\[[0-9]+\\.[0-9]+\\.[0-9]+' CHANGELOG.md 2>/dev/null | tr -d '[' || true)
+          VER=$(grep -m1 -oE '\[[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md 2>/dev/null | tr -d '[' || true)
           if [ -z "$VER" ]; then
             VER="1.2.${GITHUB_RUN_NUMBER:-1}"
           fi
@@ -160,9 +160,9 @@ jobs:
             fi
             printf '%s' "$CUSTOM_KS_B64" | base64 --decode > android/app/droidpy-custom.keystore
             echo "DROIDPY_KEYSTORE_FILE=droidpy-custom.keystore" >> "$GITHUB_ENV"
-            printf 'DROIDPY_STORE_PASSWORD=%s\\n' "$CUSTOM_STORE_PASS" >> "$GITHUB_ENV"
-            printf 'DROIDPY_KEY_ALIAS=%s\\n' "$CUSTOM_KEY_ALIAS" >> "$GITHUB_ENV"
-            printf 'DROIDPY_KEY_PASSWORD=%s\\n' "$CUSTOM_KEY_PASS" >> "$GITHUB_ENV"
+            printf 'DROIDPY_STORE_PASSWORD=%s\n' "$CUSTOM_STORE_PASS" >> "$GITHUB_ENV"
+            printf 'DROIDPY_KEY_ALIAS=%s\n' "$CUSTOM_KEY_ALIAS" >> "$GITHUB_ENV"
+            printf 'DROIDPY_KEY_PASSWORD=%s\n' "$CUSTOM_KEY_PASS" >> "$GITHUB_ENV"
             echo "使用受保護的 GitHub Actions signing secrets"
           else
             echo "::error::正式 Release 必須設定受保護的 DROIDPY_KEYSTORE_BASE64、DROIDPY_STORE_PASSWORD、DROIDPY_KEY_ALIAS 與 DROIDPY_KEY_PASSWORD。拒絕使用公開原始碼中的私鑰 fallback。"
@@ -265,7 +265,7 @@ jobs:
             cp android/app/build/outputs/apk/debug/*.apk "release-apk/DroidPy-arm64-debug-${GITHUB_RUN_NUMBER}.apk"
           else
             REL_TAG="${DROIDPY_RESOLVED_TAG}"
-            SAFE_TAG="${REL_TAG//\\//-}"
+            SAFE_TAG="${REL_TAG//\//-}"
             ART_NAME="DroidPy-arm64-apk-${SAFE_TAG}-r${GITHUB_RUN_NUMBER}-a${GITHUB_RUN_ATTEMPT:-1}"
             cp android/app/build/outputs/apk/release/*.apk "release-apk/DroidPy-arm64-${SAFE_TAG}.apk"
           fi
