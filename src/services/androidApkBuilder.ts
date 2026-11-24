@@ -2840,7 +2840,8 @@ def clipboard_set(text):
             try {
                 pyExe.setExecutable(true, false)
                 val homeTmp = File(homeDir, "tmp").apply { mkdirs() }
-                inventoryFile = File.createTempFile("pip-inventory-", ".json", homeTmp)
+                val outputFile = File.createTempFile("pip-inventory-", ".json", homeTmp)
+                inventoryFile = outputFile
                 val pb = ProcessBuilder(
                     pyExe.absolutePath,
                     "-c",
@@ -2848,15 +2849,19 @@ def clipboard_set(text):
                 )
                 pb.directory(workspaceDir)
                 pb.redirectErrorStream(true)
-                pb.redirectOutput(inventoryFile)
+                pb.redirectOutput(outputFile)
                 pb.environment().putAll(buildEnv())
                 proc = pb.start()
-                val finished = proc.waitFor(8, java.util.concurrent.TimeUnit.SECONDS)
+                val finished = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    proc.waitFor(8, java.util.concurrent.TimeUnit.SECONDS)
+                } else {
+                    proc.waitFor() == 0
+                }
                 if (!finished) {
                     proc.destroyForcibly()
-                } else if (proc.exitValue() == 0 && inventoryFile.isFile &&
-                    inventoryFile.length() in 1L..(1024L * 1024L)) {
-                    val txt = inventoryFile.readText(Charsets.UTF_8)
+                } else if (proc.exitValue() == 0 && outputFile.isFile &&
+                    outputFile.length() in 1L..(1024L * 1024L)) {
+                    val txt = outputFile.readText(Charsets.UTF_8)
                     val marker = "DROIDPY_PIP_INVENTORY:"
                     val idx = txt.indexOf(marker)
                     if (idx >= 0) {
@@ -2871,7 +2876,12 @@ def clipboard_set(text):
                 }
             } catch (_: Exception) {
             } finally {
-                try { proc?.destroyForcibly() } catch (_: Exception) {}
+                try {
+                    proc?.destroyForcibly()
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        proc?.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
+                    }
+                } catch (_: Exception) {}
                 try { proc?.inputStream?.close() } catch (_: Exception) {}
                 try { proc?.errorStream?.close() } catch (_: Exception) {}
                 try { proc?.outputStream?.close() } catch (_: Exception) {}
