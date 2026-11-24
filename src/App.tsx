@@ -1663,7 +1663,7 @@ export default function App() {
         setLastCleanupResult(res);
         appLog(
           'termux',
-          `Python process watchdog check (manual=${manual}): scanned=${res.scannedCount}, killed=${res.killedCount}`
+          `Python process read-only scan (manual=${manual}): scanned=${res.scannedCount}, killed=${res.killedCount}`
         );
         if (res.killedCount > 0) {
           const list = res.killed
@@ -1690,16 +1690,6 @@ export default function App() {
     },
     [cleaningProcesses, appendEntry, showToast, t]
   );
-
-  useEffect(() => {
-    if (termuxConnectionState !== 'connected') return;
-    const intervalId = window.setInterval(() => {
-      if (!termuxRunning) {
-        void handleCleanupStuckProcesses(false);
-      }
-    }, 30 * 60 * 1000);
-    return () => window.clearInterval(intervalId);
-  }, [termuxConnectionState, termuxRunning, handleCleanupStuckProcesses]);
 
   const handleRebuildPipCertifi = useCallback(async () => {
     if (termuxRunning) {
