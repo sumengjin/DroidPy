@@ -11,6 +11,7 @@
     "lint": "tsc --noEmit",
     "check:bridge": "node scripts/check-bridge.mjs",
     "check:script-backup": "node scripts/check-script-backup.mjs",
+    "check:apk-updater": "node scripts/check-apk-updater.mjs",
     "check:watchdog-safety": "node scripts/check-watchdog-safety.mjs",
     "check:probe-url-security": "node scripts/check-probe-url-security.mjs",
     "check:package-inventory": "node scripts/check-package-inventory.mjs",
