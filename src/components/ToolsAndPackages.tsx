@@ -500,7 +500,6 @@ python ${entryFile}
       packageId: appPackageName || 'org.droidpy.app',
       includeStoragePermission: true,
       files,
-      bridgeToken: termuxConfig.token,
     });
     await downloadBlob(
       blob,
