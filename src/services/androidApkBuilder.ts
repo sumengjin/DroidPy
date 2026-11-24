@@ -565,6 +565,40 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                     conn.disconnect()
+
+                    // Verify package identity and the original DroidPy signing certificate before
+                    // handing the downloaded APK to Android's package installer.
+                    @Suppress("DEPRECATION")
+                    val apkInfo = packageManager.getPackageArchiveInfo(
+                        outFile.absolutePath,
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            PackageManager.GET_SIGNING_CERTIFICATES
+                        } else {
+                            PackageManager.GET_SIGNATURES
+                        }
+                    )
+                    val apkSignatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        apkInfo?.signingInfo?.apkContentsSigners
+                    } else {
+                        @Suppress("DEPRECATION")
+                        apkInfo?.signatures
+                    }
+                    val actualFingerprint = apkSignatures?.firstOrNull()?.toByteArray()?.let { certBytes ->
+                        java.security.MessageDigest.getInstance("SHA-256")
+                            .digest(certBytes)
+                            .joinToString("") { byte -> "%02X".format(java.util.Locale.US, byte) }
+                    }
+                    val expectedFingerprint = "29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA"
+                    if (apkInfo?.packageName != packageName || actualFingerprint != expectedFingerprint) {
+                        outFile.delete()
+                        emitProgress(
+                            "error",
+                            0,
+                            message = "更新 APK 驗證失敗：應用程式識別或簽名憑證不符，已拒絕安裝"
+                        )
+                        return@thread
+                    }
+
                     emitProgress("installing", 100, downloaded, if (totalBytes > 0L) totalBytes else downloaded)
 
                     runOnUiThread {
