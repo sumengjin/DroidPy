@@ -79,6 +79,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 TOKEN = "${safeToken}"
 ALLOWED_ORIGIN = ${safeOrigin}
+MAX_REQUEST_BYTES = 8 * 1024 * 1024
 WORKSPACE = os.path.expanduser("~/droidpy_workspace")
 os.makedirs(WORKSPACE, exist_ok=True)
 
