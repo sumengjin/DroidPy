@@ -92,3 +92,5 @@
 - Earlier PR #14 code-equivalent build run `45474774819` passed PWA/TypeScript and Android ARM64 Debug APK compilation; this new branch requires its own CI because it is rebased onto latest main.
 - This is resource-exhaustion mitigation only. Static token, CORS/Origin, SSRF and watchdog risks remain open or in separate PRs.
 - No user data, Termux usr/, installed packages, workspace, backups, signing key, or Release artifact was changed.
+
+- PR #17 opened on latest main: https://github.com/sumengjin/DroidPy/pull/17. PR #14 was closed as superseded after its equivalent application code passed web and Android Debug APK CI; PR #17 is the authoritative current branch and must receive its own CI validation.
