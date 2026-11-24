@@ -76,6 +76,10 @@ import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import http.client
+import ipaddress
+import socket
+import urllib.parse
 
 TOKEN = "${safeToken}"
 ALLOWED_ORIGIN = ${safeOrigin}
@@ -594,6 +598,233 @@ def cleanup_stuck_python_processes(manual=False):
         "message": "Read-only process scan; no Python process is terminated based on age.",
     }
 
+def _is_public_probe_address(value):
+    try:
+        address = ipaddress.ip_address(str(value).split("%", 1)[0])
+        if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
+            address = address.ipv4_mapped
+        if not address.is_global:
+            return False
+        if isinstance(address, ipaddress.IPv4Address):
+            blocked = (
+                "192.0.0.0/16",
+                "192.88.99.0/24",
+                "192.31.196.0/24",
+                "192.52.193.0/24",
+                "192.175.48.0/24",
+            )
+            return not any(address in ipaddress.ip_network(network) for network in blocked)
+        if isinstance(address, ipaddress.IPv6Address):
+            return (
+                not address.is_reserved
+                and address in ipaddress.ip_network("2000::/3")
+                and address not in ipaddress.ip_network("2001:20::/28")
+            )
+        return False
+    except ValueError:
+        return False
+
+
+def _resolve_public_probe_address(host, port):
+    normalized = str(host).rstrip(".").lower()
+    if (
+        not normalized
+        or normalized == "localhost"
+        or normalized.endswith((".localhost", ".local", ".internal", ".test"))
+        or "%" in normalized
+    ):
+        raise ValueError("Local hostnames and scoped IP addresses are not allowed")
+    try:
+        ascii_host = normalized.encode("idna").decode("ascii")
+        records = socket.getaddrinfo(ascii_host, port, type=socket.SOCK_STREAM)
+    except Exception as exc:
+        raise ValueError("Unable to resolve the target host") from exc
+    if not records:
+        raise ValueError("Target host did not resolve")
+    validated = []
+    seen = set()
+    for family, socktype, proto, canonname, sockaddr in records:
+        address = sockaddr[0]
+        if not _is_public_probe_address(address):
+            raise ValueError("Target resolves to a non-public IP address")
+        key = (family, address)
+        if key not in seen:
+            seen.add(key)
+            validated.append((family, sockaddr))
+    if not validated:
+        raise ValueError("Target has no public IP address")
+    return ascii_host, validated
+
+
+class _PinnedHTTPConnection(http.client.HTTPConnection):
+    def __init__(self, host, port, family, sockaddr, timeout):
+        super().__init__(host, port, timeout=timeout)
+        self._pinned_family = family
+        self._pinned_sockaddr = sockaddr
+
+    def connect(self):
+        sock = socket.socket(self._pinned_family, socket.SOCK_STREAM)
+        sock.settimeout(self.timeout)
+        try:
+            sock.connect(self._pinned_sockaddr)
+        except Exception:
+            sock.close()
+            raise
+        self.sock = sock
+
+
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    def __init__(self, host, port, family, sockaddr, timeout, context):
+        super().__init__(host, port, timeout=timeout, context=context)
+        self._pinned_family = family
+        self._pinned_sockaddr = sockaddr
+
+    def connect(self):
+        raw = socket.socket(self._pinned_family, socket.SOCK_STREAM)
+        raw.settimeout(self.timeout)
+        try:
+            raw.connect(self._pinned_sockaddr)
+            self.sock = self._context.wrap_socket(raw, server_hostname=self.host)
+        except Exception:
+            raw.close()
+            raise
+
+
+def _probe_origin(parts, port):
+    return (parts.scheme.lower(), (parts.hostname or "").lower(), port)
+
+
+def _probe_url_safely(target_url, request_headers):
+    if not target_url or len(target_url) > 4096 or any(ch.isspace() for ch in target_url):
+        raise ValueError("Invalid or oversized URL")
+    current_url = target_url
+    headers = dict(request_headers)
+    for redirect_count in range(6):
+        try:
+            parts = urllib.parse.urlsplit(current_url)
+            scheme = parts.scheme.lower()
+            if scheme not in ("http", "https") or not parts.hostname:
+                raise ValueError("Only absolute HTTP and HTTPS URLs are allowed")
+            if parts.username is not None or parts.password is not None:
+                raise ValueError("URLs containing credentials are not allowed")
+            port = parts.port or (443 if scheme == "https" else 80)
+            if port < 1 or port > 65535:
+                raise ValueError("Invalid target port")
+        except ValueError:
+            raise
+        except Exception as exc:
+            raise ValueError("Invalid target URL") from exc
+
+        host, pinned_addresses = _resolve_public_probe_address(parts.hostname, port)
+        request_target = parts.path or "/"
+        if parts.query:
+            request_target += "?" + parts.query
+        response = None
+        last_connection_error = None
+        for family, sockaddr in pinned_addresses:
+            context = ssl.create_default_context()
+            if scheme == "https":
+                conn = _PinnedHTTPSConnection(host, port, family, sockaddr, 18, context)
+            else:
+                conn = _PinnedHTTPConnection(host, port, family, sockaddr, 18)
+            try:
+                conn.request("GET", request_target, headers=headers)
+                response = conn.getresponse()
+                status_code = response.status
+                response_headers = response.getheaders()
+                transfer_encoding = response.getheader("Transfer-Encoding", "").lower()
+                content_length = response.getheader("Content-Length")
+                if transfer_encoding and content_length:
+                    raise ValueError("Ambiguous HTTP response framing")
+                if transfer_encoding and transfer_encoding.strip() != "chunked":
+                    raise ValueError("Unsupported HTTP transfer encoding")
+                raw_bytes = response.read(24000)
+                break
+            except (OSError, ssl.SSLError, http.client.HTTPException) as exc:
+                response = None
+                last_connection_error = exc
+                continue
+            finally:
+                conn.close()
+        if response is None:
+            raise last_connection_error or OSError("No reachable public address for target")
+
+        location = next((value for key, value in response_headers if key.lower() == "location"), None)
+        if status_code in (301, 302, 303, 307, 308) and location and redirect_count < 5:
+            next_url = urllib.parse.urljoin(current_url, location)
+            next_parts = urllib.parse.urlsplit(next_url)
+            try:
+                next_port = next_parts.port or (443 if next_parts.scheme.lower() == "https" else 80)
+            except ValueError as exc:
+                raise ValueError("Invalid redirect target") from exc
+            if _probe_origin(parts, port) != _probe_origin(next_parts, next_port):
+                headers = {
+                    key: value for key, value in headers.items()
+                    if key.lower() not in ("cookie", "authorization", "proxy-authorization", "referer")
+                }
+            current_url = next_url
+            continue
+
+        set_cookies = []
+        response_headers_out = {}
+        for key, value in response_headers:
+            if key.lower() == "set-cookie":
+                set_cookies.append(value[:4096])
+            elif len(response_headers_out) < 80:
+                response_headers_out[key] = value[:2048]
+        body_text = raw_bytes.decode("utf-8", errors="replace")
+        return status_code, current_url, body_text, set_cookies, response_headers_out
+
+    raise ValueError("Too many redirects")
+
+
+def _build_probe_headers(data):
+    user_agent = str(data.get("userAgent", "")).strip()
+    if not user_agent:
+        user_agent = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36"
+    if len(user_agent) > 512 or any(ord(ch) < 32 and ord(ch) != 9 for ch in user_agent) or any(ord(ch) == 127 for ch in user_agent):
+        raise ValueError("Invalid User-Agent header")
+    headers = {
+        "User-Agent": user_agent,
+        "Accept": "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
+        "Accept-Encoding": "identity",
+    }
+    cookie_header = str(data.get("cookieHeader", "")).strip()
+    if cookie_header:
+        if len(cookie_header) > 8192 or any(ord(ch) < 32 and ord(ch) != 9 for ch in cookie_header) or any(ord(ch) == 127 for ch in cookie_header):
+            raise ValueError("Invalid Cookie header")
+        headers["Cookie"] = cookie_header
+
+    forbidden = {
+        "host", "connection", "content-length", "transfer-encoding",
+        "proxy-authorization", "proxy-connection", "keep-alive",
+        "upgrade", "te", "trailer", "cookie", "accept-encoding",
+    }
+    extra_headers = data.get("extraHeaders") or {}
+    if isinstance(extra_headers, dict):
+        if len(extra_headers) > 32:
+            raise ValueError("Too many custom headers")
+        for raw_name, raw_value in extra_headers.items():
+            if raw_name is None or raw_value is None:
+                continue
+            name = str(raw_name).strip()
+            value = str(raw_value)
+            if (
+                not name
+                or len(name) > 128
+                or len(value) > 4096
+                or not re.fullmatch(r"[A-Za-z0-9!#$%&'*+.^_|~-]+", name)
+                or any(ord(ch) < 32 and ord(ch) != 9 for ch in value)
+                or any(ord(ch) == 127 for ch in value)
+                or name.lower() in forbidden
+            ):
+                raise ValueError("Invalid or restricted custom header")
+            existing_name = next((key for key in headers if key.lower() == name.lower()), None)
+            headers[existing_name or name] = value
+    return headers
+
+
+
 class DroidPyBridgeHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -930,40 +1161,16 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
 
         if self.path == "/probe-url":
             target_url = str(data.get("url", "")).strip()
-            if not target_url or not (target_url.startswith("http://") or target_url.startswith("https://")):
-                return self._send_json(400, {"error": "Invalid or missing http(s) URL"})
-            ua = str(data.get("userAgent", "")).strip() or "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36"
-            cookie_hdr = str(data.get("cookieHeader", "")).strip()
-            req_headers = {"User-Agent": ua, "Accept": "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8"}
-            if cookie_hdr:
-                req_headers["Cookie"] = cookie_hdr
-            extra_headers = data.get("extraHeaders") or {}
-            if isinstance(extra_headers, dict):
-                for hk, hv in extra_headers.items():
-                    if hk and hv is not None:
-                        req_headers[str(hk)] = str(hv)
-            req = urllib.request.Request(target_url, headers=req_headers, method="GET")
-            ctx = ssl.create_default_context()
             try:
-                with urllib.request.urlopen(req, timeout=18, context=ctx) as resp:
-                    status_code = getattr(resp, "status", 200)
-                    final_url = resp.geturl()
-                    raw_bytes = resp.read(24000)
-                    body_text = raw_bytes.decode("utf-8", errors="replace")
-                    set_cookies = resp.headers.get_all("Set-Cookie") or []
-                    resp_headers = {k: v for k, v in resp.headers.items() if k.lower() != "set-cookie"}
-            except urllib.error.HTTPError as exc:
-                status_code = exc.code
-                final_url = exc.geturl() or target_url
-                raw_bytes = exc.read(16000) if exc.fp else b""
-                body_text = raw_bytes.decode("utf-8", errors="replace")
-                set_cookies = exc.headers.get_all("Set-Cookie") or [] if exc.headers else []
-                resp_headers = {k: v for k, v in exc.headers.items() if k.lower() != "set-cookie"} if exc.headers else {}
-            except Exception as exc:
-                return self._send_json(502, {"error": str(exc)})
+                req_headers = _build_probe_headers(data)
+                status_code, final_url, body_text, set_cookies, resp_headers = _probe_url_safely(target_url, req_headers)
+            except ValueError as exc:
+                return self._send_json(400, {"error": str(exc)})
+            except Exception:
+                return self._send_json(502, {"error": "Unable to safely probe target URL"})
 
             m = re.search(r"<title[^>]*>(.*?)</title>", body_text, flags=re.IGNORECASE | re.DOTALL)
-            title = re.sub(r"\\s+", " ", m.group(1)).strip() if m else ""
+            title = re.sub(r"\s+", " ", m.group(1)).strip() if m else ""
             return self._send_json(200, {
                 "ok": 200 <= status_code < 400,
                 "url": target_url,
