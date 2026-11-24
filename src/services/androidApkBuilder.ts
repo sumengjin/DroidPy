@@ -3799,80 +3799,87 @@ def clipboard_set(text):
         if (addresses.isEmpty() || addresses.any { !isPublicProbeAddress(it) }) {
             throw IllegalArgumentException("Target resolves to a non-public IP address")
         }
-        val pinnedAddress = addresses.first()
-        val rawSocket = Socket()
-        try {
-            rawSocket.connect(InetSocketAddress(pinnedAddress, port), 15000)
-            rawSocket.soTimeout = 18000
-        } catch (error: Exception) {
-            try { rawSocket.close() } catch (_: Exception) {}
-            throw error
-        }
-        val activeSocket: Socket = if (url.protocol.equals("https", true)) {
+        var lastError: Exception? = null
+        for (pinnedAddress in addresses) {
             try {
-                val factory = SSLSocketFactory.getDefault() as SSLSocketFactory
-                val ssl = factory.createSocket(rawSocket, host, port, true) as SSLSocket
-                val parameters = ssl.sslParameters
-                parameters.endpointIdentificationAlgorithm = "HTTPS"
-                if (!host.contains(":") && !host.matches(Regex("^[0-9.]+$"))) {
-                    parameters.serverNames = listOf(SNIHostName(host))
+                val rawSocket = Socket()
+                try {
+                    rawSocket.connect(InetSocketAddress(pinnedAddress, port), 15000)
+                    rawSocket.soTimeout = 18000
+                } catch (error: Exception) {
+                    try { rawSocket.close() } catch (_: Exception) {}
+                    throw error
                 }
-                ssl.sslParameters = parameters
-                ssl.startHandshake()
-                ssl
+                val activeSocket: Socket = if (url.protocol.equals("https", true)) {
+                    try {
+                        val factory = SSLSocketFactory.getDefault() as SSLSocketFactory
+                        val ssl = factory.createSocket(rawSocket, host, port, true) as SSLSocket
+                        val parameters = ssl.sslParameters
+                        parameters.endpointIdentificationAlgorithm = "HTTPS"
+                        if (!host.contains(":") && !host.matches(Regex("^[0-9.]+$"))) {
+                            parameters.serverNames = listOf(SNIHostName(host))
+                        }
+                        ssl.sslParameters = parameters
+                        ssl.startHandshake()
+                        ssl
+                    } catch (error: Exception) {
+                        try { rawSocket.close() } catch (_: Exception) {}
+                        throw error
+                    }
+                } else {
+                    rawSocket
+                }
+
+                activeSocket.use { socket ->
+                    val hostHeader = if (host.contains(":")) "[$host]" else host
+                    val authority = if ((url.protocol.equals("https", true) && port == 443) ||
+                        (url.protocol.equals("http", true) && port == 80)) hostHeader else "$hostHeader:$port"
+                    val requestTarget = (url.path.ifBlank { "/" }) + (url.query?.let { "?" + it } ?: "")
+                    if (requestTarget.contains("\r") || requestTarget.contains("\n")) {
+                        throw IllegalArgumentException("Invalid request path")
+                    }
+                    val request = StringBuilder()
+                        .append("GET ").append(requestTarget).append(" HTTP/1.1\r\n")
+                        .append("Host: ").append(authority).append("\r\n")
+                        .append("Connection: close\r\n")
+                        .append("Accept-Encoding: identity\r\n")
+                    for ((name, value) in requestHeaders) {
+                        request.append(name).append(": ").append(value).append("\r\n")
+                    }
+                    request.append("\r\n")
+                    socket.getOutputStream().write(request.toString().toByteArray(Charsets.ISO_8859_1))
+                    socket.getOutputStream().flush()
+
+                    val input = BufferedInputStream(socket.getInputStream())
+                    val statusLine = readProbeLine(input)
+                    val statusParts = statusLine.split(" ", limit = 3)
+                    val statusCode = statusParts.getOrNull(1)?.toIntOrNull()
+                        ?: throw IllegalArgumentException("Invalid HTTP status line")
+                    val responseHeaders = linkedMapOf<String, MutableList<String>>()
+                    var totalHeaderBytes = statusLine.length
+                    var headerCount = 0
+                    while (true) {
+                        val line = readProbeLine(input)
+                        if (line.isEmpty()) break
+                        totalHeaderBytes += line.length
+                        headerCount++
+                        if (totalHeaderBytes > 32768 || headerCount > 100) {
+                            throw IllegalArgumentException("HTTP response headers too large")
+                        }
+                        val separator = line.indexOf(':')
+                        if (separator <= 0) throw IllegalArgumentException("Invalid HTTP response header")
+                        val name = line.substring(0, separator).trim().lowercase()
+                        val value = line.substring(separator + 1).trim()
+                        responseHeaders.getOrPut(name) { mutableListOf() }.add(value)
+                    }
+                    val body = readProbeBody(input, responseHeaders)
+                    return SafeProbeResponse(statusCode, responseHeaders, body)
+                }
             } catch (error: Exception) {
-                try { rawSocket.close() } catch (_: Exception) {}
-                throw error
+                lastError = error
             }
-        } else {
-            rawSocket
         }
-
-        activeSocket.use { socket ->
-            val hostHeader = if (host.contains(":")) "[$host]" else host
-            val authority = if ((url.protocol.equals("https", true) && port == 443) ||
-                (url.protocol.equals("http", true) && port == 80)) hostHeader else "$hostHeader:$port"
-            val requestTarget = (url.path.ifBlank { "/" }) + (url.query?.let { "?" + it } ?: "")
-            if (requestTarget.contains("\r") || requestTarget.contains("\n")) {
-                throw IllegalArgumentException("Invalid request path")
-            }
-            val request = StringBuilder()
-                .append("GET ").append(requestTarget).append(" HTTP/1.1\r\n")
-                .append("Host: ").append(authority).append("\r\n")
-                .append("Connection: close\r\n")
-                .append("Accept-Encoding: identity\r\n")
-            for ((name, value) in requestHeaders) {
-                request.append(name).append(": ").append(value).append("\r\n")
-            }
-            request.append("\r\n")
-            socket.getOutputStream().write(request.toString().toByteArray(Charsets.ISO_8859_1))
-            socket.getOutputStream().flush()
-
-            val input = BufferedInputStream(socket.getInputStream())
-            val statusLine = readProbeLine(input)
-            val statusParts = statusLine.split(" ", limit = 3)
-            val statusCode = statusParts.getOrNull(1)?.toIntOrNull()
-                ?: throw IllegalArgumentException("Invalid HTTP status line")
-            val responseHeaders = linkedMapOf<String, MutableList<String>>()
-            var totalHeaderBytes = statusLine.length
-            var headerCount = 0
-            while (true) {
-                val line = readProbeLine(input)
-                if (line.isEmpty()) break
-                totalHeaderBytes += line.length
-                headerCount++
-                if (totalHeaderBytes > 32768 || headerCount > 100) {
-                    throw IllegalArgumentException("HTTP response headers too large")
-                }
-                val separator = line.indexOf(':')
-                if (separator <= 0) throw IllegalArgumentException("Invalid HTTP response header")
-                val name = line.substring(0, separator).trim().lowercase()
-                val value = line.substring(separator + 1).trim()
-                responseHeaders.getOrPut(name) { mutableListOf() }.add(value)
-            }
-            val body = readProbeBody(input, responseHeaders)
-            return SafeProbeResponse(statusCode, responseHeaders, body)
-        }
+        throw lastError ?: java.io.IOException("No reachable public address for target")
     }
 
     private fun probeOrigin(url: URL): String {
