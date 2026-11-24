@@ -26,7 +26,9 @@ assert.doesNotMatch(androidBuilder, /watchdogScheduler|scheduleAtFixedRate|thres
 const nativeStopStart = androidBuilder.indexOf('fun stop() {');
 const nativeStopEnd = androidBuilder.indexOf('private fun ensurePrefixWrappers()', nativeStopStart);
 assert.ok(nativeStopStart >= 0 && nativeStopEnd > nativeStopStart, 'Native Bridge stop function must exist');
-assert.doesNotMatch(androidBuilder.slice(nativeStopStart, nativeStopEnd), /activeProcess\?\.destroyForcibly|killProcess\s*\(/);
+const nativeStop = androidBuilder.slice(nativeStopStart, nativeStopEnd);
+assert.doesNotMatch(nativeStop, /activeProcess\?\.destroyForcibly|killProcess\s*\(/);
+assert.doesNotMatch(nativeStop, /activeProcess\s*=\s*null/, 'Bridge shutdown must retain the process handle for explicit user Stop after restart');
 
 assert.doesNotMatch(app, /handleCleanupStuckProcesses\(false\)/, 'App must not run a periodic process-kill scan');
 assert.match(app, /read-only scan/, 'UI log should identify the process scan as read-only');
