@@ -182,6 +182,7 @@ export interface AppStorageCleanupResult {
 export interface DroidPyNativeBridge {
   isNativeApp?: () => boolean;
   getAppVersionName?: () => string;
+  getBridgeToken?: () => string;
   downloadAndInstallApk?: (apkUrl: string, fileName: string) => void;
   readPersistedState?: () => string;
   writePersistedState?: (json: string) => void;
