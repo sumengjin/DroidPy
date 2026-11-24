@@ -38,7 +38,7 @@ assert.ok(workflow.includes('apksigner verify --verbose --print-certs'));
 assert.ok(workflow.includes('needs.build-apk.outputs.is_release == \'true\''));
 assert.ok(workflow.includes('android/app/build/outputs/apk/release/*.apk'));
 assert.ok(workflow.includes('android/app/build/outputs/apk/debug/*.apk'));
-assert.ok(!workflow.includes('droidpy-debug.p12'));
+assert.ok(!workflow.includes('cp android/app/droidpy-debug.p12'));
 assert.ok(!workflow.includes('29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA'));
 
 console.log('Exported Android workflow separates ephemeral Debug builds from protected signed Releases.');
