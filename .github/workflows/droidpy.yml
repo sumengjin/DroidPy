@@ -60,6 +60,7 @@ jobs:
           npm run lint
           npm run check:bridge
           npm run check:watchdog-safety
+          npm run check:apt-security
           npm run build
 
       - name: 上傳離線前端建置產物
