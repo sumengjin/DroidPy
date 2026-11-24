@@ -2033,8 +2033,10 @@ class EmbeddedTermuxBridge(
         // 2) Bypass pip's truststore SSL context (preventing truststore/_api.py Errno 13)
         // 3) Fallback ssl.SSLContext.load_verify_locations to in-memory cadata on PermissionError
         val siteCustomizePy = """
+import base64
 import importlib.abc
 import os
+import re
 import shutil
 import ssl
 import sys
@@ -2048,10 +2050,32 @@ def _droidpy_read_pem(path):
     try:
         if os.path.getsize(path) <= 0:
             return None
-        with open(path, "r", encoding="utf-8", errors="ignore") as fp:
-            txt = fp.read()
-        if "BEGIN CERTIFICATE" in txt:
-            return txt
+        with open(path, "rb") as fp:
+            raw = fp.read()
+        # Android/Termux CA bundles may contain a UTF-8 BOM or non-ASCII
+        # comments. ssl.SSLContext(cadata=...) accepts ASCII PEM only.
+        txt = raw.decode("utf-8-sig", errors="ignore")
+        blocks = re.findall(
+            r"-----BEGIN CERTIFICATE-----([\\s\\S]*?)-----END CERTIFICATE-----",
+            txt,
+        )
+        clean_blocks = []
+        for body in blocks:
+            payload = "".join(body.split())
+            if not payload or not re.fullmatch(r"[A-Za-z0-9+/=]+", payload):
+                continue
+            try:
+                der = base64.b64decode(payload, validate=True)
+            except Exception:
+                continue
+            encoded = base64.b64encode(der).decode("ascii")
+            wrapped = "\\n".join(encoded[i:i + 64] for i in range(0, len(encoded), 64))
+            clean_blocks.append(
+                "-----BEGIN CERTIFICATE-----\\n" + wrapped +
+                "\\n-----END CERTIFICATE-----"
+            )
+        if clean_blocks:
+            return "\\n".join(clean_blocks) + "\\n"
     except Exception:
         return None
     return None
