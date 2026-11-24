@@ -12,6 +12,7 @@ All notable changes to **DroidPy** are documented in this file.
 - 新增備份儲存回歸測試：驗證 localStorage quota 失敗與資料損壞時不覆蓋舊備份、匯入／刪除保留其他快照，以及還原前必須先成功保存 pre-restore 回復點。
 - **強化 APK 更新下載與簽名相容性驗證**：僅接受 GitHub 官方 HTTPS 資產網域並逐跳驗證重新導向；下載上限 300 MiB、先寫入並同步暫存檔，確認完整性後才替換舊 APK；比對套件 ID 與目前安裝版本的簽名憑證／有效單簽名輪替歷史，不再硬編碼已過時的舊憑證指紋。
 - **Release 簽名驗證改為跟隨受保護 keystore**：不再固定比對已過時的舊憑證指紋；CI 會從本次 Release 使用的 GitHub Actions secret keystore 匯出憑證指紋，再與 APK 簽名比對，允許安全輪替簽名金鑰，同時保留缺少／不匹配金鑰即阻止發布的 fail-closed 行為。
+- **修正匯出 Android 專案的自動發布流程**：Debug 使用臨時 Gradle 簽名並只上傳 Artifact；正式 Release 必須使用受保護 GitHub Secrets keystore、建置 Release APK 並驗證 APK 憑證與該 keystore 一致；Release 發布移至獨立 write 權限工作，移除不存在的內嵌簽名檔 fallback。
 
 
 ### Security — URL Probe SSRF Protection (pending Android validation)
