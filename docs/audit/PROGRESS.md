@@ -82,3 +82,13 @@
 - Created PR #12 `security/ci: remove public signing key and build Android debug APKs on PRs` (branch `security/contain-signing-key-and-pr-debug-build`). It removes the PKCS#12/Base64 private key from the current source tree and generated project ZIP, removes the public-key fallback from release signing (protected Actions secrets are now mandatory), gives `contents: write` only to the Release job, and enables Android Debug APK compilation on PRs using Gradle's ephemeral debug signer. Because no signing secrets are configured (v1.2.18 log used the public fallback), production Release builds will fail closed until a secure new signer/lineage is provisioned. CI pending.
 
 - PR #12 CI run `45473569491` completed SUCCESS: PWA/TypeScript build passed and the generated Android ARM64 Debug APK compiled successfully with Gradle's ephemeral debug signer. Release build, production signer verification and Release job were correctly skipped for this pull request. This validates generated Android Kotlin/Gradle compilation for the PR #12 source state, not runtime behavior on devices.
+
+
+### 2026-11-25 — Bridge resource-exhaustion hardening (PR #16)
+- Base: `450232e8a4d4ff1e4dc6ab14296433a0e498ace2`; branch: `security/bridge-resource-limits-v2`.
+- Opened as a new branch from the latest main after the earlier PR #14 base became stale due to CI workflow changes.
+- Python Bridge: 4 MiB request body cap; validates Content-Length, rejects Transfer-Encoding, incomplete bodies, invalid UTF-8/JSON and non-object JSON; 10-second socket read timeout; 8 concurrent handler slots and backlog 16.
+- EmbeddedTermuxBridge: 16 KiB header cap; 4 MiB body cap; rejects Transfer-Encoding, invalid/incomplete lengths and malformed JSON; 10-second socket timeout; bounded ThreadPoolExecutor (8 workers, 16 queued tasks), rejects excess accepted sockets.
+- Earlier PR #14 code-equivalent build run `45474774819` passed PWA/TypeScript and Android ARM64 Debug APK compilation; this new branch requires its own CI because it is rebased onto latest main.
+- This is resource-exhaustion mitigation only. Static token, CORS/Origin, SSRF and watchdog risks remain open or in separate PRs.
+- No user data, Termux usr/, installed packages, workspace, backups, signing key, or Release artifact was changed.
