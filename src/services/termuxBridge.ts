@@ -733,12 +733,20 @@ def _probe_url_safely(target_url, request_headers):
                 response = conn.getresponse()
                 status_code = response.status
                 response_headers = response.getheaders()
-                transfer_encoding = response.getheader("Transfer-Encoding", "").lower()
-                content_length = response.getheader("Content-Length")
+                if len(response_headers) > 100 or sum(len(str(k)) + len(str(v)) for k, v in response_headers) > 32768:
+                    raise ValueError("HTTP response headers too large")
+                transfer_encodings = [v for k, v in response_headers if k.lower() == "transfer-encoding"]
+                content_lengths = [v for k, v in response_headers if k.lower() == "content-length"]
+                if len(transfer_encodings) > 1 or len(content_lengths) > 1:
+                    raise ValueError("Ambiguous HTTP response framing")
+                transfer_encoding = transfer_encodings[0].lower().strip() if transfer_encodings else ""
+                content_length = content_lengths[0].strip() if content_lengths else ""
                 if transfer_encoding and content_length:
                     raise ValueError("Ambiguous HTTP response framing")
-                if transfer_encoding and transfer_encoding.strip() != "chunked":
+                if transfer_encoding and transfer_encoding != "chunked":
                     raise ValueError("Unsupported HTTP transfer encoding")
+                if content_length and not content_length.isdigit():
+                    raise ValueError("Invalid Content-Length")
                 raw_bytes = response.read(24000)
                 break
             except (OSError, ssl.SSLError, http.client.HTTPException) as exc:
