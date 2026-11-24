@@ -21,11 +21,13 @@
 
 ## 1. 已知問題與初步發現
 
-### P0 — 簽名私鑰暴露（安全事件）
+### P0 — 簽名私鑰暴露（已確認正式簽名金鑰外洩）
 初步檢查發現公開儲存庫中存在 `signing/droidpy-debug.p12`，且 `src/services/androidSigningAsset.ts` 包含對應 Base64 金鑰素材；APK 建置程式亦有從內嵌素材產生簽名檔的流程。這代表私鑰素材曾進入公開 Git 歷史，不能只刪除目前檔案就視為未洩露。
 
 必做：
-- 確認該金鑰是否等同於正式 Release 實際使用的原始憑證；以現有正式 APK 的 signer SHA-256 與私鑰派生憑證比對，禁止只憑檔名判斷。
+- [x] 已由 v1.2.18 GitHub Actions run `45444107279` 確認：建置使用公開 repository fallback keystore，且 apksigner 回報的 V2 signer SHA-256 與公開 Base64 PKCS#12 憑證指紋完全相同。正式 APK 的 production signer 私鑰已公開外洩。
+- [x] 已建立 `docs/audit/SIGNING-INCIDENT-AND-ROTATION-ANALYSIS.md`，記錄 Android v3/v3.1 輪替限制、Android 10/11/13 驗收要求與安全處置方案。
+- 不得把刪除最新檔案或改寫 Git 歷史當成私鑰已重新保密。
 - 確認 Git 歷史、所有分支、Release artifact、workflow log、產生的 Android 專案 ZIP 是否含私鑰或密碼。
 - 盤點 Android APK 簽名輪替/Proof-of-Rotation、既有安裝更新相容性及回退策略。
 - 在不破壞現有安裝的前提下，提出可驗證的密鑰事件處置方案。若無法安全輪替，必須清楚記錄風險與可行限制，不得假稱風險已消失。
