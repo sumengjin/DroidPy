@@ -564,6 +564,9 @@ def _is_public_probe_address(value):
             blocked = (
                 "192.0.0.0/16",
                 "192.88.99.0/24",
+                "192.31.196.0/24",
+                "192.52.193.0/24",
+                "192.175.48.0/24",
             )
             return not any(address in ipaddress.ip_network(network) for network in blocked)
         if isinstance(address, ipaddress.IPv6Address):
