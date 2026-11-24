@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import os from 'node:os';
+import path from 'node:path';
+import { build } from 'esbuild';
 
 const [pythonBridge, androidBuilder] = await Promise.all([
   readFile(new URL('../src/services/termuxBridge.ts', import.meta.url), 'utf8'),
@@ -27,4 +31,95 @@ assert.match(androidBuilder, /headers\.keys\.removeAll/);
 assert.match(androidBuilder, /private fun buildProbeHeaders\(/);
 assert.doesNotMatch(androidBuilder, /instanceFollowRedirects\s*=\s*true/);
 
+// Exercise the generated Python helpers without opening any network connection.
+const bundle = await build({
+  entryPoints: ['src/services/termuxBridge.ts'],
+  bundle: true,
+  platform: 'node',
+  format: 'esm',
+  target: 'node20',
+  write: false,
+});
+const moduleUrl = 'data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0].text).toString('base64');
+const { buildTermuxBridgeScript } = await import(moduleUrl);
+const generated = buildTermuxBridgeScript('a'.repeat(64), 'https://droidpy-ci.example');
+const tempDir = await mkdtemp(path.join(os.tmpdir(), 'droidpy-probe-security-'));
+try {
+  const pythonFile = path.join(tempDir, 'droidpy_bridge.py');
+  await writeFile(pythonFile, generated, 'utf8');
+  const unitTests = String.raw\`import runpy, socket, sys
+ns = runpy.run_path(sys.argv[1], run_name="droidpy_probe_test")
+is_public = ns["_is_public_probe_address"]
+for address in ("127.0.0.1", "10.0.0.1", "169.254.169.254", "192.168.1.1", "::1", "fc00::1", "fe80::1", "::ffff:127.0.0.1"):
+    assert not is_public(address), "private/reserved address was allowed: " + address
+assert is_public("8.8.8.8")
+assert is_public("2606:4700:4700::1111")
+
+original_getaddrinfo = socket.getaddrinfo
+def fake_getaddrinfo(host, port, type=None):
+    if host in ("public.example", "other.example"):
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", port))]
+    if host == "127.0.0.1":
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", port))]
+    return original_getaddrinfo(host, port, type=type)
+
+socket.getaddrinfo = fake_getaddrinfo
+try:
+    try:
+        ns["_resolve_public_probe_address"]("127.0.0.1", 80)
+        raise AssertionError("loopback DNS result was accepted")
+    except ValueError:
+        pass
+
+    responses = [
+        type("Response", (), {"status": 302, "getheaders": lambda self: [("Location", "http://other.example/final")], "read": lambda self, n: b""})(),
+        type("Response", (), {"status": 200, "getheaders": lambda self: [("Content-Type", "text/plain")], "read": lambda self, n: b"ok"})(),
+    ]
+    requests = []
+    class FakeConnection:
+        def __init__(self, host, port, family, sockaddr, timeout, *args):
+            self.host = host
+        def request(self, method, target, headers):
+            requests.append(dict(headers))
+        def getresponse(self):
+            return responses.pop(0)
+        def close(self):
+            pass
+    ns["_PinnedHTTPConnection"] = FakeConnection
+    status, final_url, body, cookies, headers = ns["_probe_url_safely"](
+        "http://public.example/start",
+        {"Cookie": "session=secret", "Authorization": "Bearer secret"}
+    )
+    assert status == 200 and final_url == "http://other.example/final"
+    assert body == "ok"
+    assert "Cookie" not in requests[1] and "Authorization" not in requests[1], "credentials leaked across redirect origin"
+
+    connected = []
+    class FakeSocket:
+        def settimeout(self, value):
+            pass
+        def connect(self, address):
+            connected.append(address)
+        def close(self):
+            pass
+    original_socket = socket.socket
+    socket.socket = lambda family, kind: FakeSocket()
+    try:
+        conn = ns["_PinnedHTTPConnection"]("public.example", 80, socket.AF_INET, ("8.8.8.8", 80), 18)
+        conn.connect()
+        assert connected == [("8.8.8.8", 80)], "HTTP connection did not use the validated pinned IP"
+    finally:
+        socket.socket = original_socket
+finally:
+    socket.getaddrinfo = original_getaddrinfo
+\`;
+  const testResult = spawnSync('python3', ['-c', unitTests, pythonFile], { encoding: 'utf8' });
+  if (testResult.status !== 0) {
+    throw new Error('URL probe security unit tests failed:\\n' + testResult.stdout + '\\n' + testResult.stderr);
+  }
+} finally {
+  await rm(tempDir, { recursive: true, force: true });
+}
+
 console.log('URL probe SSRF guards passed: public DNS pinning, TLS hostname validation, safe redirects and header filtering.');
+
