@@ -2861,7 +2861,7 @@ def clipboard_set(text):
                     val idx = txt.indexOf(marker)
                     if (idx >= 0) {
                         val jsonStart = idx + marker.length
-                        val jsonEnd = txt.indexOf('\n', jsonStart).let { if (it < 0) txt.length else it }
+                        val jsonEnd = txt.indexOf('\\n', jsonStart).let { if (it < 0) txt.length else it }
                         val arr = JSONArray(txt.substring(jsonStart, jsonEnd).trim())
                         for (i in 0 until arr.length()) {
                             val raw = arr.optString(i, "").trim()
