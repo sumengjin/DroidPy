@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../src/services/androidApkBuilder.ts', import.meta.url), 'utf8');
+const [source, bridgeSource] = await Promise.all([
+  readFile(new URL('../src/services/androidApkBuilder.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/services/termuxBridge.ts', import.meta.url), 'utf8'),
+]);
 const start = source.indexOf('private fun collectInstalledPipInventory()');
 const end = source.indexOf('private fun calcDirSize', start);
 assert.ok(start >= 0 && end > start, 'package inventory function must exist');
@@ -17,6 +20,12 @@ assert.match(inventory, /outputFile\.length\(\) in 1L\.\.\(1024L \* 1024L\)/);
 assert.match(inventory, /DROIDPY_PIP_INVENTORY:/);
 assert.match(inventory, /metadataComplete = true/);
 assert.match(source, /PkgInventory\(pkgSet\.sorted\(\), pkgSet\.isNotEmpty\(\)\)/);
+assert.match(source, /site\.addsitedir\(_droidpy_site\)/);
+assert.match(bridgeSource, /site\.addsitedir\(_droidpy_site\)/);
+assert.match(source, /decode\("utf-8-sig"/);
+assert.match(bridgeSource, /decode\("utf-8-sig"/);
+assert.match(source, /base64\.b64decode\(payload, validate=True\)/);
+assert.match(bridgeSource, /base64\.b64decode\(payload, validate=True\)/);
 assert.match(inventory, /inventoryFile\?\.delete\(\)/);
 assert.match(inventory, /proc\?\.destroyForcibly\(\)/);
 
