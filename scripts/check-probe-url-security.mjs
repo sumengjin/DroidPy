@@ -25,6 +25,9 @@ assert.doesNotMatch(pythonBridge, /urllib\.request\.urlopen/);
 assert.match(pythonBridge, /key\.lower\(\) not in \("cookie", "authorization", "proxy-authorization", "referer"\)/);
 
 assert.match(androidBuilder, /private fun isPublicProbeAddress\(/);
+assert.match(androidBuilder, /a0 == 192 && a1 == 31 && a2 == 196/);
+assert.match(androidBuilder, /a0 == 192 && a1 == 52 && a2 == 193/);
+assert.match(androidBuilder, /a0 == 192 && a1 == 175 && a2 == 48/);
 assert.match(androidBuilder, /b\[2\] == 0x00 && b\[3\] == 0x20/);
 assert.match(androidBuilder, /InetAddress\.getAllByName\(host\)/);
 assert.match(androidBuilder, /addresses\.any \{ !isPublicProbeAddress\(it\) \}/);
