@@ -693,6 +693,7 @@ def _probe_url_safely(target_url, request_headers):
                 raw_bytes = response.read(24000)
                 break
             except (OSError, ssl.SSLError, http.client.HTTPException) as exc:
+                response = None
                 last_connection_error = exc
                 continue
             finally:
