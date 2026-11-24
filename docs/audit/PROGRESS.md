@@ -62,6 +62,7 @@
   - Head: `41c4b42fca03b09e9d298125bf44ca6df11b819b`
   - Commits: `ad1215a12d7e470c386bbc7bf0b7e62001bca963`, `ce6185191e599ec68d94f6d25f61b185310a46e1`, `41c4b42fca03b09e9d298125bf44ca6df11b819b`
   - Changes: no automatic eviction of old snapshots; write errors propagate; malformed backup stores are not overwritten; manual backup/delete failures are reported; restore is blocked unless the current workspace rollback snapshot is saved.
-  - CI run `45470462368` was still in progress at the last check. No Android device test has been performed for this PR.
+  - CI run `45470462368` completed successfully. The run exposes only the PR test/web-build check; the current main workflow condition skips Android APK build on pull requests. Thus TypeScript/lint/web build passed, but Android compilation and device acceptance are still unverified.
 - No change to main, signing key, Termux usr/, installed packages, workspace data, or Release artifacts.
+- PR #9 CI check `測試與網頁建置`: SUCCESS; no Android APK job was run for this PR.
 - Next: complete PR #9 CI review; inspect the exposed signing material against the current v1.2.18 APK signer without rotating any key; then continue Bridge security audit and implementation.
