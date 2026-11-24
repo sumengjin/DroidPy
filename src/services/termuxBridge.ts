@@ -173,10 +173,31 @@ def _supports_legacy_certs():
 def _ensure_droidpy_sitecustomize(ca_path):
     droid_lib = os.path.expanduser("~/.droidpy_lib")
     os.makedirs(droid_lib, exist_ok=True)
-    hook_code = '''import importlib.abc
+    hook_code = '''import base64
+import importlib.abc
 import os
 import ssl
 import sys
+
+# Explicitly activate pip's configured user base so installed distributions remain importable.
+try:
+    import site
+    _droidpy_user_base = os.environ.get("PYTHONUSERBASE")
+    if _droidpy_user_base:
+        _droidpy_user_site = site.getusersitepackages()
+        if isinstance(_droidpy_user_site, (list, tuple)):
+            _droidpy_user_sites = list(_droidpy_user_site)
+        else:
+            _droidpy_user_sites = [_droidpy_user_site]
+        _droidpy_user_sites.append(os.path.join(
+            _droidpy_user_base, "lib",
+            "python%d.%d" % sys.version_info[:2], "site-packages"
+        ))
+        for _droidpy_site in _droidpy_user_sites:
+            if _droidpy_site and os.path.isdir(_droidpy_site):
+                site.addsitedir(_droidpy_site)
+except Exception:
+    pass
 
 _DROIDPY_CA_FILE = None
 _DROIDPY_CA_TEXT = None
@@ -187,10 +208,32 @@ def _droidpy_read_pem(path):
     try:
         if os.path.getsize(path) <= 0:
             return None
-        with open(path, "r", encoding="utf-8", errors="ignore") as fp:
-            txt = fp.read()
-        if "BEGIN CERTIFICATE" in txt:
-            return txt
+        with open(path, "rb") as fp:
+            raw = fp.read()
+        txt = raw.decode("utf-8-sig", errors="ignore")
+        blocks = []
+        in_cert = False
+        body = []
+        for line in txt.splitlines():
+            line = line.strip()
+            if line == "-----BEGIN CERTIFICATE-----":
+                in_cert = True
+                body = []
+            elif line == "-----END CERTIFICATE-----" and in_cert:
+                payload = "".join(body)
+                try:
+                    der = base64.b64decode(payload, validate=True)
+                    encoded = base64.b64encode(der).decode("ascii")
+                    wrapped = [encoded[i:i + 64] for i in range(0, len(encoded), 64)]
+                    blocks.append("-----BEGIN CERTIFICATE-----" + chr(10) + chr(10).join(wrapped) + chr(10) + "-----END CERTIFICATE-----")
+                except Exception:
+                    pass
+                in_cert = False
+                body = []
+            elif in_cert:
+                body.append(line)
+        if blocks:
+            return chr(10).join(blocks) + chr(10)
     except Exception:
         return None
     return None
