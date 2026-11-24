@@ -144,7 +144,8 @@ def _supports_legacy_certs():
 def _ensure_droidpy_sitecustomize(ca_path):
     droid_lib = os.path.expanduser("~/.droidpy_lib")
     os.makedirs(droid_lib, exist_ok=True)
-    hook_code = '''import importlib.abc
+    hook_code = '''import base64
+import importlib.abc
 import os
 import ssl
 import sys
@@ -158,10 +159,34 @@ def _droidpy_read_pem(path):
     try:
         if os.path.getsize(path) <= 0:
             return None
-        with open(path, "r", encoding="utf-8", errors="ignore") as fp:
-            txt = fp.read()
-        if "BEGIN CERTIFICATE" in txt:
-            return txt
+        with open(path, "rb") as fp:
+            raw = fp.read()
+        # ssl cadata accepts ASCII PEM only; discard BOM/comments and
+        # rebuild each certificate from validated DER bytes.
+        txt = raw.decode("utf-8-sig", errors="ignore")
+        blocks = []
+        in_cert = False
+        body = []
+        for line in txt.splitlines():
+            line = line.strip()
+            if line == "-----BEGIN CERTIFICATE-----":
+                in_cert = True
+                body = []
+            elif line == "-----END CERTIFICATE-----" and in_cert:
+                payload = "".join(body)
+                try:
+                    der = base64.b64decode(payload, validate=True)
+                    encoded = base64.b64encode(der).decode("ascii")
+                    wrapped = [encoded[i:i + 64] for i in range(0, len(encoded), 64)]
+                    blocks.append("-----BEGIN CERTIFICATE-----" + chr(10) + chr(10).join(wrapped) + chr(10) + "-----END CERTIFICATE-----")
+                except Exception:
+                    pass
+                in_cert = False
+                body = []
+            elif in_cert:
+                body.append(line)
+        if blocks:
+            return chr(10).join(blocks) + chr(10)
     except Exception:
         return None
     return None
