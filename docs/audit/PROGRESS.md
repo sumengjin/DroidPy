@@ -157,3 +157,11 @@
 
 - Reworked the generated Android export workflow: Debug runs use an ephemeral Gradle signer and produce artifacts only; main/master/tag pushes or an explicitly supplied workflow_dispatch release_tag require all protected signing secrets, build a Release APK, and compare its certificate to the configured keystore. Release publication is a separate job with contents:write; the build job is read-only. No missing embedded-key fallback remains.
 - Added scripts/check-export-workflow.mjs and CI command check:export-workflow to generate the project ZIP and assert the exported workflow keeps Debug and protected Release paths separate.
+
+
+### 2026-11-25 — Final consolidated security CI pass
+- CI run `45499820682` completed SUCCESS on the signer/updater/export-workflow changes: Python syntax/unit tests, TypeScript/PWA build, Bridge resource/token/origin checks, backup persistence tests, APK updater checks, generated Android export workflow checks, watchdog, SSRF, package inventory and APT security checks all passed.
+- Android ARM64 Debug APK compiled and uploaded as `DroidPy-arm64-debug-222-a1`; web artifact `droidpy-web-dist` also uploaded. Production Release build and signer verification were skipped as expected for a PR.
+- Closed obsolete signer PRs #2 and #3 after replacing their hard-coded legacy fingerprint checks with protected-keystore-derived Release verification and installed-app signer/lineage validation.
+- The latest Debug artifact uses an ephemeral CI signer; it is a test build, not a production Release. A different signer cannot update an existing installation unless Android accepts a valid signing lineage. Do not uninstall an app that contains needed private Termux data/workspace without first securing a backup.
+- PR #27 remains open and unmerged pending Android 10+ device acceptance. Target SDK remains 28 until Termux executable/private-path compatibility is validated on device.
