@@ -5,7 +5,7 @@ import { build } from 'esbuild';
 const bundle = await build({
   entryPoints: ['src/services/androidApkBuilder.ts'],
   bundle: true,
-  platform: 'node',
+  platform: 'browser',
   format: 'esm',
   target: 'node20',
   write: false,
