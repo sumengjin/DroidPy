@@ -84,3 +84,5 @@
 - PR #12 CI run `45473569491` completed SUCCESS: PWA/TypeScript build passed and the generated Android ARM64 Debug APK compiled successfully with Gradle's ephemeral debug signer. Release build, production signer verification and Release job were correctly skipped for this pull request. This validates generated Android Kotlin/Gradle compilation for the PR #12 source state, not runtime behavior on devices.
 
 - PR #10 WebView hardening branch `security/restrict-main-webview-origin` adds exact scheme/host/port navigation matching, exact local entry-file fallback, blocks child-frame navigation, disables file-origin cross-file/universal access and adds CSP frame/object restrictions. Workflow updated to include Android Debug PR builds; validation pending.
+
+- Post-merge main push run `45474451656`: tests and PWA build SUCCESS; Android APK job stopped at signing configuration because protected signing secrets are absent; Debug/Release compile and Release job were skipped. This is the intended fail-closed behavior after PR #12, not an application-code failure.
