@@ -1748,8 +1748,8 @@ export default function App() {
         createScriptBackup(filesRef.current, undefined, 'pre-restore');
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        appLog('storage', `Restore blocked: pre-restore backup failed: ${message}`, { level: 'error' });
-        showToast(`還原已取消，無法安全保存目前工作區：${message}`);
+        appLog('storage', `Restore blocked: pre-restore backup failed (${message})`, { level: 'error' });
+        showToast(t('bak_restore_blocked'));
         return;
       }
       setFiles(nextFiles);
