@@ -10,6 +10,7 @@ All notable changes to **DroidPy** are documented in this file.
 - **嚴格檢查請求框架**：拒絕 Transfer-Encoding、重複 Content-Length、無效長度、不完整本文及無效 JSON；Bridge 停止時只關閉請求處理器，不會終止使用者正在執行的 Python 工作。
 - 加入 Python 產生碼與 Android 原生 Bridge 的資源上限及生命週期回歸檢查；Android 實機驗證仍待完成。
 - 新增備份儲存回歸測試：驗證 localStorage quota 失敗與資料損壞時不覆蓋舊備份、匯入／刪除保留其他快照，以及還原前必須先成功保存 pre-restore 回復點。
+- **強化 APK 更新下載與簽名相容性驗證**：僅接受 GitHub 官方 HTTPS 資產網域並逐跳驗證重新導向；下載上限 300 MiB、先寫入並同步暫存檔，確認完整性後才替換舊 APK；比對套件 ID 與目前安裝版本的簽名憑證／有效單簽名輪替歷史，不再硬編碼已過時的舊憑證指紋。
 
 
 ### Security — URL Probe SSRF Protection (pending Android validation)
