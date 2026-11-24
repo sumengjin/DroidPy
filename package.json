@@ -10,7 +10,8 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "check:bridge": "node scripts/check-bridge.mjs",
-    "check:watchdog-safety": "node scripts/check-watchdog-safety.mjs"
+    "check:watchdog-safety": "node scripts/check-watchdog-safety.mjs",
+    "check:package-inventory": "node scripts/check-package-inventory.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.4",
