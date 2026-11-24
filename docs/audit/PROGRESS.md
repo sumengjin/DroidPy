@@ -49,3 +49,19 @@
 - 建立專用分支：`project/comprehensive-hardening-plan`
 - 本次只完成計畫文件與初步審核；沒有修改產品程式碼、沒有合併 PR、沒有發布 APK。
 - 下一步：完成全庫檔案清單與風險登錄，然後按 P0 安全問題開始實作。
+
+
+### 2026-11-25 — inventory and first data-safety repair
+- Refreshed main branch tree; GitHub recursive tree was not truncated. Added `docs/audit/REPOSITORY-INVENTORY.md` covering tracked source, build, workflow, assets and generated Android code entry point.
+- Added `docs/audit/RISK-REGISTER.md` with 16 prioritized risks and evidence policy.
+- Verified PR #8 docs-only CI run `45468570013` completed successfully. PR #8 remains open/draft; no product code is in that PR.
+- Confirmed PRs #2–#8 are still open at the latest repository snapshot; PR #9 is newly opened for the script-backup data-safety fix.
+- Found a concrete script-backup defect: quota handling silently dropped old snapshots, and backup creation still returned success even if every write failed. The restore path also proceeded without verifying its pre-restore rollback snapshot.
+- Created PR #9: [fix(storage): preserve existing script backups on quota failure](https://github.com/sumengjin/DroidPy/pull/9)
+  - Branch: `fix/durable-script-backups`
+  - Head: `41c4b42fca03b09e9d298125bf44ca6df11b819b`
+  - Commits: `ad1215a12d7e470c386bbc7bf0b7e62001bca963`, `ce6185191e599ec68d94f6d25f61b185310a46e1`, `41c4b42fca03b09e9d298125bf44ca6df11b819b`
+  - Changes: no automatic eviction of old snapshots; write errors propagate; malformed backup stores are not overwritten; manual backup/delete failures are reported; restore is blocked unless the current workspace rollback snapshot is saved.
+  - CI run `45470462368` was still in progress at the last check. No Android device test has been performed for this PR.
+- No change to main, signing key, Termux usr/, installed packages, workspace data, or Release artifacts.
+- Next: complete PR #9 CI review; inspect the exposed signing material against the current v1.2.18 APK signer without rotating any key; then continue Bridge security audit and implementation.
