@@ -98,3 +98,11 @@
 - Process inspection is read-only. Bridge shutdown leaves active user Python work alive and retains the native `Process` handle so explicit Stop remains available after Bridge restart. UI labels updated in Traditional Chinese, Simplified Chinese, English and Japanese. Added CI regression checks for age-based termination and explicit Stop preservation.
 - CI run `45479438842` passed Python tests, PWA/TypeScript build, Android ARM64 Debug APK compilation and artifact upload. Follow-up run `45480204247` also passed the full Debug build. Run `45480787105` completed SUCCESS, including Python tests, PWA/TypeScript build and Android ARM64 Debug APK compilation/artifact upload. Latest run `45481122921` passed Python tests and PWA/TypeScript build after restoring the `signal` import and adding an explicit-Stop regression assertion; its Android build is running, while the Kotlin source was already compiled successfully in run `45480787105`. Production Release APK, production signer verification and GitHub Release are skipped for PR builds; no production APK was published.
 - Device verification remains required for Android 10+ process survival and explicit Stop behavior. No `usr/`, installed packages, workspace, backups or signing material was changed.
+
+
+### 2026-11-25 — APT repository and TLS hardening (current PR branch)
+- Created `security/apt-authentication-fail-closed-v4` from main after PR #21 merged, preserving the latest watchdog and explicit Stop fixes.
+- Removed APT options that allow unauthenticated packages or insecure repository metadata; stopped adding `[trusted=yes]` and strips the legacy option from existing source lines.
+- Removed the fallback that disabled HTTPS peer/host verification when no CA bundle is discovered. APT now retains normal verification and fails closed if trust material is unavailable.
+- Added `scripts/check-apt-security.mjs` and wired it into CI alongside the existing Bridge/watchdog checks.
+- CI and Android ARM64 Debug build are pending on this rebased branch. Device validation of the existing Termux keyring/CA and `pkg update` / `pkg install` on Android 11/13 is required before merge. No `usr/`, installed packages, workspace, backups, signing material or Release artifacts were modified.
