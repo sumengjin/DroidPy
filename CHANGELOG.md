@@ -4,10 +4,15 @@ All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
 
-### Fixed — Python package inventory reliability (pending validation)
-- Always reconcile filesystem `.dist-info` / `.egg-info` discovery with `importlib.metadata`, including when filesystem scanning already finds one or more packages; this catches packages installed under `PYTHONUSERBASE`.
-- Redirect inventory output to a private temporary file instead of a pipe, enforce an 8-second process timeout and 1 MiB output cap, parse a marked JSON payload, and always clean up the temporary file/process.
-- Keep backup-manifest package lists monotonic during ordinary scans; only an explicit uninstall path may shrink the manifest. Existing `usr/`, packages, workspaces and backups are not moved or deleted.
+### Fixed — Termux package inventory, user-site, backups and data preservation (pending Android validation)
+- Always reconcile filesystem `.dist-info` / `.egg-info` discovery with Python's `importlib.metadata.distributions()`, including when the filesystem scan already finds one or more packages; this catches packages installed under `PYTHONUSERBASE`.
+- Redirect inventory output to an app-private temporary file instead of a pipe, enforce an 8-second timeout on Android 8+ (legacy behavior retained for API 24–25), cap output at 1 MiB, parse a marked JSON payload, and always clean up the process and temporary file.
+- Keep backup-manifest package lists additive during ordinary scans. An explicit uninstall may shrink the manifest only when both Python metadata and dpkg inventories are complete; incomplete scans preserve the previous snapshot.
+- Preserve partial or unreadable `usr/` data. If bootstrap markers/core binaries are missing but the directory contains data or cannot be safely listed, skip destructive bootstrap extraction, attempt runtime repair, and show a warning rather than deleting the directory.
+- Explicitly activate the configured `PYTHONUSERBASE` site-packages path in both generated Python environments so pip-installed packages remain importable.
+- Normalize CA bundles into validated ASCII PEM blocks (including BOM/non-ASCII comment handling) while keeping TLS certificate verification enabled.
+- Remove APT unauthenticated/insecure overrides and `[trusted=yes]` source injection; strip legacy `[trusted=yes]` entries. Missing CA trust now fails closed instead of disabling HTTPS peer/host verification.
+- Added CI regression checks for dual-source inventory, bounded subprocess output, completeness-gated manifest shrink, partial-`usr/` preservation, user-site activation, CA normalization, and APT repository/TLS verification.
 
 ### Fixed — Python Process Safety and Bridge Lifecycle
 - **停止以執行時間自動終止 Python 工作**：移除 Python／pip 子行程 30 分鐘看門狗與定時清理；程序檢查改為唯讀診斷，不會因執行時間或殭屍狀態自行發送終止訊號。
