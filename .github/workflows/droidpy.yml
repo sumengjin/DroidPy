@@ -68,7 +68,8 @@ jobs:
   build-apk:
     name: 打包 Android APK (ARM64)
     needs: test
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    # Compile and verify a debug APK on PRs, but keep Release publishing limited to trusted pushes/tags.
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     outputs:
       release_tag: ${{ steps.resolve_tag.outputs.release_tag }}
