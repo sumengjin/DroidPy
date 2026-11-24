@@ -3,7 +3,7 @@
 > 本文件搭配 [COMPREHENSIVE-REPAIR-PLAN.md](./COMPREHENSIVE-REPAIR-PLAN.md) 使用。
 > 最後更新：2026-11-25
 > 計畫分支：`project/comprehensive-hardening-plan`
-> 基準主分支：建立計畫時為 `e8956f09d1463cd665322edd5dc7821df0fcd014`；續作時必須重新查詢最新 SHA。
+> 最新主分支：`6266f67016dd173dd422b545d7565e5c9954ba24`（PR #9 已合併）；續作時仍須重新查詢。
 
 ## 目前狀態
 
@@ -74,3 +74,5 @@
 - **P0 signing incident confirmed:** inspected v1.2.18 workflow run `45444107279`, build job `138623421863`. Log explicitly shows the fixed repository fallback key was used, and successful `apksigner` output reports the certificate SHA-256 fingerprint matching the exposed `androidSigningAsset.ts` material. The public source therefore contains the production APK signer private key. No key was rotated or removed and no APK was published. Available GitHub connector does not expose repository Actions Secrets; no claim that a secret exists or was changed. Next: design safe Android signing lineage/rotation for Android 10+ while preserving existing installs; block any unverified key change.
 
 - PR #9 latest head `923bab90d26d22d2640a64d1695578937be90959` CI run `45471301643`: TypeScript/lint and web build SUCCESS. Android APK build and Release jobs were SKIPPED by the current workflow's pull-request condition; no device test yet.
+
+- PR #9 merged successfully via squash: merge commit `6266f67016dd173dd422b545d7565e5c9954ba24`; main now points to this commit. Web CI for the final PR head passed; Android APK job was skipped by workflow policy and device acceptance remains pending.
