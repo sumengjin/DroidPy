@@ -1070,6 +1070,18 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {
             false
         }
+        val remoteUrl = "${typeof window !== 'undefined' ? window.location.origin : 'https://localhost'}"
+        val bridgeAllowedOrigin = when {
+            hasBundledWww -> "http://127.0.0.1:8765"
+            localWeb.exists() -> "null"
+            else -> {
+                val remoteUri = Uri.parse(remoteUrl)
+                val scheme = remoteUri.scheme ?: "https"
+                val host = remoteUri.host ?: "localhost"
+                val port = if (remoteUri.port >= 0) remoteUri.port else if (scheme == "https") 443 else 80
+                "$scheme://$host:$port"
+            }
+        }
 
         thread {
             val usrDir = File(filesDir, "usr")
@@ -1164,6 +1176,7 @@ class MainActivity : AppCompatActivity() {
                 usrDir = usrDir,
                 workspaceDir = workspaceDir,
                 token = bridgeToken,
+                allowedOrigin = bridgeAllowedOrigin,
                 assetManager = assets
             ).also { it.start() }
 
@@ -1175,7 +1188,6 @@ class MainActivity : AppCompatActivity() {
                     appOriginHost = null
                     webView.loadUrl("file://" + localWeb.absolutePath)
                 } else {
-                    val remoteUrl = "${typeof window !== 'undefined' ? window.location.origin : 'https://localhost'}"
                     appOriginHost = Uri.parse(remoteUrl).host
                     webView.loadUrl(remoteUrl)
                 }
@@ -1518,6 +1530,7 @@ class EmbeddedTermuxBridge(
     private val usrDir: File,
     private val workspaceDir: File,
     private val token: String,
+    private val allowedOrigin: String,
     private val port: Int = 8765,
     private val assetManager: AssetManager? = null
 ) {
@@ -3132,8 +3145,19 @@ def clipboard_set(text):
             }
 
             val out = sock.getOutputStream()
+            val requestHost = headers["host"]?.lowercase()
+            if (requestHost != "127.0.0.1:$port" && requestHost != "localhost:$port") {
+                writeJson(out, 403, JSONObject().put("error", "Untrusted Host"))
+                return
+            }
+            val requestOrigin = headers["origin"]
+            if (requestOrigin != null && requestOrigin != allowedOrigin) {
+                writeJson(out, 403, JSONObject().put("error", "Untrusted Origin"))
+                return
+            }
             if (method == "OPTIONS") {
-                writeHeaders(out, 204, "text/plain", 0)
+                val allowPrivateNetwork = headers["access-control-request-private-network"].equals("true", ignoreCase = true)
+                writeHeaders(out, 204, "text/plain", 0, allowPrivateNetwork)
                 return
             }
 
@@ -3903,11 +3927,14 @@ def clipboard_set(text):
         }
     }
 
-    private fun corsHeaders(): String =
-        "Access-Control-Allow-Origin: *\\r\\n" +
-        "Access-Control-Allow-Private-Network: true\\r\\n" +
-        "Access-Control-Allow-Methods: GET, POST, OPTIONS\\r\\n" +
-        "Access-Control-Allow-Headers: Content-Type, X-DroidPy-Token\\r\\n"
+    private fun corsHeaders(allowPrivateNetwork: Boolean = false): String {
+        val pnaHeader = if (allowPrivateNetwork) "Access-Control-Allow-Private-Network: true\\r\\n" else ""
+        return "Access-Control-Allow-Origin: $allowedOrigin\\r\\n" +
+            "Vary: Origin\\r\\n" +
+            pnaHeader +
+            "Access-Control-Allow-Methods: GET, POST, OPTIONS\\r\\n" +
+            "Access-Control-Allow-Headers: Content-Type, X-DroidPy-Token\\r\\n"
+    }
 
     private fun serveBundledWebAsset(out: OutputStream, requestPath: String): Boolean {
         val mgr = assetManager ?: return false
@@ -3964,10 +3991,16 @@ def clipboard_set(text):
         else -> "OK"
     }
 
-    private fun writeHeaders(out: OutputStream, status: Int, contentType: String, length: Int) {
+    private fun writeHeaders(
+        out: OutputStream,
+        status: Int,
+        contentType: String,
+        length: Int,
+        allowPrivateNetwork: Boolean = false
+    ) {
         out.write((
             "HTTP/1.1 $status \${statusReason(status)}\\r\\n" +
-            corsHeaders() +
+            corsHeaders(allowPrivateNetwork) +
             "Content-Type: $contentType\\r\\n" +
             "Content-Length: $length\\r\\n" +
             "Connection: close\\r\\n\\r\\n"
