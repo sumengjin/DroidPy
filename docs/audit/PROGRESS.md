@@ -152,3 +152,5 @@
 - Replaced the updater's hard-coded legacy certificate fingerprint with a comparison against the currently installed app's signing certificate. On Android 9+, single-signer updates may use a valid signing-certificate rotation history; multi-signer apps require an exact signer set. Android 7–8 uses exact legacy signer comparison.
 - Restricts every updater URL/redirect to HTTPS GitHub release asset hosts; redirects are followed manually. Caps APK downloads at 300 MiB, checks declared versus received length, writes to a .part file and fsyncs before verification, and retains the previous downloaded APK until the candidate passes package-ID and signer checks.
 - Added scripts/check-apk-updater.mjs and CI command check:apk-updater. CI and Android ARM64 Debug compile pending.
+
+- Updated the main repository Release workflow to derive the expected APK certificate SHA-256 from the same protected keystore secret used by Gradle, then compare it to apksigner output. This removes the obsolete hard-coded legacy fingerprint while still failing closed on missing or mismatched signing material; no private key is reintroduced into source control.
