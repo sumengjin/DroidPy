@@ -205,9 +205,20 @@ jobs:
         working-directory: android
         run: gradle assembleDebug --no-daemon
 
+      - name: 編譯正式 Release APK (arm64-v8a)
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') || startsWith(github.ref, 'refs/tags/v')
+        working-directory: android
+        run: gradle assembleRelease --no-daemon
+
       - name: 驗證 APK 簽名指紋
         run: |
-          APK_PATH=$(ls android/app/build/outputs/apk/debug/*.apk | head -n1)
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -z "${{ inputs.release_tag }}" ]; then
+            APK_PATH=$(ls android/app/build/outputs/apk/debug/*.apk | head -n1)
+          elif [[ "$GITHUB_REF" == refs/pull/* ]]; then
+            APK_PATH=$(ls android/app/build/outputs/apk/debug/*.apk | head -n1)
+          else
+            APK_PATH=$(ls android/app/build/outputs/apk/release/*.apk | head -n1)
+          fi
           APKSIGNER=$(find "${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/build-tools" -name apksigner 2>/dev/null | sort -V | tail -n1 || true)
           if [ -n "$APKSIGNER" ]; then
             "$APKSIGNER" verify --print-certs "$APK_PATH"
@@ -222,7 +233,11 @@ jobs:
           REL_TAG="${DROIDPY_RESOLVED_TAG}"
           SAFE_TAG="${REL_TAG//\//-}"
           ART_NAME="DroidPy-arm64-apk-${SAFE_TAG}-r${GITHUB_RUN_NUMBER}-a${GITHUB_RUN_ATTEMPT:-1}"
-          cp android/app/build/outputs/apk/debug/*.apk "release-apk/DroidPy-arm64-${SAFE_TAG}.apk"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -z "${{ inputs.release_tag }}" ]; then
+            cp android/app/build/outputs/apk/debug/*.apk "release-apk/DroidPy-arm64-${SAFE_TAG}.apk"
+          else
+            cp android/app/build/outputs/apk/release/*.apk "release-apk/DroidPy-arm64-${SAFE_TAG}.apk"
+          fi
           echo "release_tag=${REL_TAG}" >> "$GITHUB_OUTPUT"
           echo "safe_tag=${SAFE_TAG}" >> "$GITHUB_OUTPUT"
           echo "artifact_name=${ART_NAME}" >> "$GITHUB_OUTPUT"
