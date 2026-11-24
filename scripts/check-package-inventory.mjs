@@ -12,7 +12,7 @@ assert.doesNotMatch(inventory, /hasNonCoreFromFs/, 'a partial filesystem result 
 assert.match(inventory, /File\.createTempFile\("pip-inventory-"/);
 assert.match(inventory, /redirectOutput\(inventoryFile\)/);
 assert.match(inventory, /waitFor\(8, java\.util\.concurrent\.TimeUnit\.SECONDS\)/);
-assert.match(inventory, /inventoryFile\.length\(\) in 1L\.\.\(1024L \* 1024L\)/);
+assert.match(inventory, /outputFile.length() in 1L\.\.\(1024L \* 1024L\)/);
 assert.match(inventory, /DROIDPY_PIP_INVENTORY:/);
 assert.match(inventory, /inventoryFile\?\.delete\(\)/);
 assert.match(inventory, /proc\?\.destroyForcibly\(\)/);
