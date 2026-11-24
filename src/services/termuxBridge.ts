@@ -618,6 +618,7 @@ def _is_public_probe_address(value):
             return (
                 not address.is_reserved
                 and address in ipaddress.ip_network("2000::/3")
+                and address not in ipaddress.ip_network("2001::/23")
                 and address not in ipaddress.ip_network("2001:20::/28")
             )
         return False
