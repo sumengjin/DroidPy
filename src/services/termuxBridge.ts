@@ -59,6 +59,7 @@ export function buildTermuxBridgeScript(token: string, allowedOrigin: string): s
   const safeToken = token;
   return `import codecs
 import json
+import hmac
 import os
 import platform
 import pty
@@ -77,6 +78,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 TOKEN = "${safeToken}"
+ALLOWED_ORIGIN = ${safeOrigin}
 WORKSPACE = os.path.expanduser("~/droidpy_workspace")
 os.makedirs(WORKSPACE, exist_ok=True)
 
@@ -989,8 +991,8 @@ if __name__ == "__main__":
 `;
 }
 
-export function buildTermuxOneLineCommand(token: string): string {
-  const script = buildTermuxBridgeScript(token);
+export function buildTermuxOneLineCommand(token: string, allowedOrigin: string): string {
+  const script = buildTermuxBridgeScript(token, allowedOrigin);
   const bytes = new TextEncoder().encode(script);
   let binary = '';
   for (let i = 0; i < bytes.length; i++) {
