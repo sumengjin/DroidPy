@@ -13,6 +13,7 @@ const [pythonBridge, androidBuilder] = await Promise.all([
 assert.match(pythonBridge, /def _resolve_public_probe_address\(/);
 assert.match(pythonBridge, /ipaddress\.ip_address/);
 assert.match(pythonBridge, /ipaddress\.ip_network/);
+assert.match(pythonBridge, /2001::\/23/);
 assert.match(pythonBridge, /socket\.getaddrinfo/);
 assert.match(pythonBridge, /sock\.connect\(self\._pinned_sockaddr\)/);
 assert.match(pythonBridge, /self\._context\.wrap_socket\(raw, server_hostname=self\.host\)/);
