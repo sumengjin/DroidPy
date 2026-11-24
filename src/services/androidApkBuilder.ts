@@ -1795,10 +1795,7 @@ class EmbeddedTermuxBridge(
             "Dir::Bin::dpkg \\"$prefix/bin/dpkg\\";",
             "Dir::Bin::apt-key \\"$prefix/bin/apt-key\\";",
             "Dir::Bin::gpg \\"$prefix/bin/gpgv\\";",
-            "APT::Sandbox::User \\"root\\";",
-            "Acquire::AllowInsecureRepositories \\"true\\";",
-            "Acquire::AllowDowngradeToInsecureRepositories \\"true\\";",
-            "APT::Get::AllowUnauthenticated \\"true\\";"
+            "APT::Sandbox::User \\"root\\";"
         )
         if (certFile != null) {
             aptConfLines.add("Acquire::https::CaInfo \\"\${certFile.absolutePath}\\";")
