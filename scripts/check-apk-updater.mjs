@@ -9,6 +9,7 @@ const updater = source.slice(start, end);
 
 // Redirects must remain HTTPS and on the official GitHub asset delivery hosts.
 assert.ok(updater.includes('fun validateGithubAssetUrl(raw: String): URL'));
+assert.ok(source.includes('import java.net.URL\\nimport javax.net.ssl.HttpsURLConnection'));
 assert.ok(updater.includes('uri.scheme != "https"'));
 assert.ok(updater.includes('uri.rawUserInfo != null'));
 assert.ok(updater.includes('host == "github.com"'));
