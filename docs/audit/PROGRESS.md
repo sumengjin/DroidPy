@@ -110,3 +110,5 @@
 - Additional R-008 data-preservation guard added to the same branch: startup now treats non-empty, unreadable or non-directory `usr/` as existing data; when core markers are missing it attempts non-destructive runtime repair, does not write a false bootstrap-success marker, and shows a warning instead of deleting/re-extracting the directory. CI regression checks cover this branch.
 
 - Additional R-009 fix ported into this branch: both generated `sitecustomize.py` implementations now explicitly activate the configured `PYTHONUSERBASE` and normalize CA bundles into validated ASCII PEM blocks (BOM/comments removed; invalid blocks skipped). Certificate verification is not disabled. Android 10+ pip install/import and TLS acceptance remain pending.
+
+- Additional R-018 hardening ported from the APT security review: removed `AllowInsecureRepositories`, `AllowDowngradeToInsecureRepositories`, `AllowUnauthenticated`, all `Verify-Peer/Verify-Host=false` fallbacks and `[trusted=yes]` source injection. Legacy trusted source options are stripped. Added `check:apt-security`; Android package operations now fail closed if verified trust material is unavailable.
