@@ -98,3 +98,11 @@
 - Process inspection is read-only. Bridge shutdown leaves active user Python work alive and retains the native `Process` handle so explicit Stop remains available after Bridge restart. UI labels updated in Traditional Chinese, Simplified Chinese, English and Japanese. Added CI regression checks for age-based termination and explicit Stop preservation.
 - CI run `45479438842` passed Python tests, PWA/TypeScript build, Android ARM64 Debug APK compilation and artifact upload. Follow-up run `45480204247` also passed the full Debug build. Run `45480787105` completed SUCCESS, including Python tests, PWA/TypeScript build and Android ARM64 Debug APK compilation/artifact upload. Latest run `45481122921` passed Python tests and PWA/TypeScript build after restoring the `signal` import and adding an explicit-Stop regression assertion; its Android build is running, while the Kotlin source was already compiled successfully in run `45480787105`. Production Release APK, production signer verification and GitHub Release are skipped for PR builds; no production APK was published.
 - Device verification remains required for Android 10+ process survival and explicit Stop behavior. No `usr/`, installed packages, workspace, backups or signing material was changed.
+
+
+### 2026-11-25 — Package inventory and manifest safety (current branch)
+- Created `fix/package-inventory-manifest-safety-v2` from current main; ported PR #6's core fix instead of merging its stale-base branch.
+- Filesystem package scanning is now always cross-checked against `importlib.metadata.distributions()`, so finding one visible package no longer suppresses discovery from `PYTHONUSERBASE`.
+- Inventory subprocess output is redirected to an app-private temporary file (not a pipe), limited to 8 seconds and 1 MiB, parsed using a unique marker, and cleaned up on success, failure or timeout. Existing `pip-` temp cleanup already covers this filename.
+- Ordinary backup-manifest writes remain additive; explicit uninstall remains the only caller allowed to shrink package lists. No package directories, `usr/`, workspace or backup snapshots are deleted or overwritten by inventory.
+- Added a CI regression guard for always-on metadata discovery, bounded file output/timeout/cleanup and monotonic manifest behavior. CI and Android ARM64 Debug compile pending.
