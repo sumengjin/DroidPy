@@ -19,7 +19,7 @@ assert.match(pythonBridge, /self\._context\.wrap_socket\(raw, server_hostname=se
 assert.match(pythonBridge, /urllib\.parse\.urljoin/);
 assert.match(pythonBridge, /response_headers = response\.getheaders\(\)/);
 assert.doesNotMatch(pythonBridge, /urllib\.request\.urlopen/);
-assert.match(pythonBridge, /key\.lower\(\) not in \("cookie", "authorization", "proxy-authorization"\)/);
+assert.match(pythonBridge, /key\.lower\(\) not in \("cookie", "authorization", "proxy-authorization", "referer"\)/);
 
 assert.match(androidBuilder, /private fun isPublicProbeAddress\(/);
 assert.match(androidBuilder, /b\[2\] == 0x00 && b\[3\] == 0x20/);
