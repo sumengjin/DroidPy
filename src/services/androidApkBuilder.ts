@@ -4573,7 +4573,7 @@ def clipboard_set(text):
   // 8. README.md (rendered automatically by GitHub) + README_GITHUB_APK.md
   const githubApkReadme = `# ${safeTitle} 獨立 Android APK（GitHub 自動打包專案）
 
-本專案已預先配置好 **GitHub Actions 自動編譯流程**、**內嵌 Termux Bootstrap 環境**、**一致性 APK 簽名金鑰** 與 **原生爬蟲瀏覽器（Cookie 擷取）**：
+本專案已預先配置好 **GitHub Actions 自動編譯流程**、**內嵌 Termux Bootstrap 環境**、**受保護的 APK Release 簽名流程** 與 **原生爬蟲瀏覽器（Cookie 擷取）**：
 打包成 APK 安裝至手機後，**無須另外安裝 Termux App**，也不受瀏覽器 CORS 限制，可直接執行 Python 網路爬蟲（\`requests\`、\`beautifulsoup4\`、\`lxml\`、\`yt-dlp\`）、\`ffmpeg\` 與 \`clang\` 原生套件。
 
 ## 發布與自動打包步驟
@@ -4581,8 +4581,8 @@ def clipboard_set(text):
 1. 在 GitHub 建立一個新的公開或私人倉庫（Repository）。
 2. 將本壓縮檔解壓縮後的所有檔案（包含 \`.github/\` 與 \`android/\`）上傳／Push 到該倉庫的 \`main\` 分支。
    - 若倉庫同時包含前端原始碼（\`package.json\`），Workflow 會自動執行 \`npm ci && npm run build\` 並複製進 \`android/app/src/main/assets/www/\` 打包為完全離線 APK。
-3. 點擊 GitHub 倉庫上方的 **Actions** 頁籤，等待 **Build DroidPy Android APK** 工作流程跑完（雲端會自動下載最新版 \`bootstrap-aarch64.zip\` 並使用固定的 \`android/app/droidpy-debug.p12\` 簽名金鑰編譯 ARM64 APK；若需改用個人正式簽名金鑰，可於 Repository Secrets 設定 \`DROIDPY_KEYSTORE_BASE64\`、\`DROIDPY_STORE_PASSWORD\`、\`DROIDPY_KEY_ALIAS\` 與 \`DROIDPY_KEY_PASSWORD\`）。
-4. 在 Actions 執行結果頁面最下方的 **Artifacts** 下載 \`.apk\` 檔案（或推送 \`v1.0.0\` Tag 自動發佈至 **GitHub Releases**），傳到 Android 手機即可直接覆蓋升級安裝、保留所有工作區程式碼。
+3. 在 GitHub Repository → Settings → Secrets and variables → Actions，設定受保護的簽名 Secrets：\`DROIDPY_KEYSTORE_BASE64\`（原有 keystore 的 Base64）、\`DROIDPY_STORE_PASSWORD\`、\`DROIDPY_KEY_ALIAS\` 與 \`DROIDPY_KEY_PASSWORD\`。正式 Release 只會使用這組 Secrets；專案不再附帶私鑰，也不會退回公開的內嵌簽名金鑰。若尚未設定 Secrets，正式 Release 會安全失敗，不會發布使用新簽名的 APK。
+4. 推送一般分支可取得臨時簽名的 Debug APK Artifact；它只供測試，不能保證覆蓋安裝既有版本。推送版本 Tag 或手動輸入 Release 標籤會執行正式簽名與 GitHub Release 發布。**要保留既有安裝與資料，必須使用與手機目前安裝版本相同的原有簽名 keystore**；不要自行產生新金鑰或刪除舊金鑰。
 
 ## 首次開啟 App 初始化說明
 
