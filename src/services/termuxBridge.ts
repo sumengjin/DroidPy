@@ -683,7 +683,7 @@ def _probe_url_safely(target_url, request_headers):
             if _probe_origin(parts, port) != _probe_origin(next_parts, next_port):
                 headers = {
                     key: value for key, value in headers.items()
-                    if key.lower() not in ("cookie", "authorization", "proxy-authorization")
+                    if key.lower() not in ("cookie", "authorization", "proxy-authorization", "referer")
                 }
             current_url = next_url
             continue
@@ -721,7 +721,7 @@ def _build_probe_headers(data):
     forbidden = {
         "host", "connection", "content-length", "transfer-encoding",
         "proxy-authorization", "proxy-connection", "keep-alive",
-        "upgrade", "te", "trailer", "cookie",
+        "upgrade", "te", "trailer", "cookie", "accept-encoding",
     }
     extra_headers = data.get("extraHeaders") or {}
     if isinstance(extra_headers, dict):
@@ -742,7 +742,8 @@ def _build_probe_headers(data):
                 or name.lower() in forbidden
             ):
                 raise ValueError("Invalid or restricted custom header")
-            headers[name] = value
+            existing_name = next((key for key in headers if key.lower() == name.lower()), None)
+            headers[existing_name or name] = value
     return headers
 
 
