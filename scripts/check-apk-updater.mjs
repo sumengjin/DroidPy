@@ -45,7 +45,7 @@ assert.ok(!updater.includes('expectedFingerprint'));
 // for this build, not a stale hard-coded certificate fingerprint.
 const workflow = await readFile('.github/workflows/droidpy.yml', 'utf8');
 assert.ok(workflow.includes('keytool -exportcert -keystore "$KEYSTORE_PATH"'));
-assert.ok(workflow.includes('KEYSTORE_PATH="android/${DROIDPY_KEYSTORE_FILE:-droidpy-custom.keystore}"'));
+assert.ok(workflow.includes('KEYSTORE_PATH="android/app/${DROIDPY_KEYSTORE_FILE:-droidpy-custom.keystore}"'));
 assert.ok(workflow.includes('APK 簽名與本次受保護 keystore 不一致'));
 assert.ok(!workflow.includes('29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA'));
 
