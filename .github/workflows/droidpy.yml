@@ -60,6 +60,7 @@ jobs:
           npm run lint
           npm run check:bridge
           npm run check:watchdog-safety
+          npm run check:probe-url-security
           npm run check:package-inventory
           npm run check:apt-security
           npm run build
