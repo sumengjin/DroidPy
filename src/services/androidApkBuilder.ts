@@ -2878,7 +2878,7 @@ def clipboard_set(text):
                     proc.destroyForcibly()
                 } else if (proc.exitValue() == 0 && inventoryFile.isFile) {
                     val txt = inventoryFile.readText(Charsets.UTF_8).trim()
-                    val idx = txt.indexOf('[')
+                    val idx = txt.lastIndexOf('[')
                     if (idx >= 0) {
                         val arr = JSONArray(txt.substring(idx))
                         for (i in 0 until arr.length()) {
