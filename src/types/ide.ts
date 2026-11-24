@@ -44,14 +44,42 @@ export interface EditorSettings {
   githubRepo?: string;
   enableSandboxAddon?: boolean;
   cleanTextMode?: boolean;
+  pipTrustedHostEmergency?: boolean;
 }
 
 export type MobileTab = 'editor' | 'console' | 'browser' | 'files';
 export type NegativeScreenSection = 'termux' | 'packages' | 'android' | 'settings';
-export type DeviceClass = 'phone' | 'tablet' | 'desktop';
+export type DeviceClass = 'phone' | 'tablet';
 export type TabletPaneTab = 'terminal' | 'browser' | 'files';
-export type DesktopSection = 'workspace' | 'termux' | 'packages' | 'android' | 'settings';
-export type DesktopRightPane = 'terminal' | 'browser';
+
+export interface ProcessCleanupItem {
+  pid: number;
+  name: string;
+  state: string;
+  elapsedSec: number;
+  reason: string;
+  signal: string;
+}
+
+export interface ProcessCleanupResult {
+  ok: boolean;
+  checkedAt: number;
+  manual: boolean;
+  scannedCount: number;
+  killedCount: number;
+  killed: ProcessCleanupItem[];
+  message?: string;
+}
+
+export interface ScriptBackupSnapshot {
+  id: string;
+  createdAt: number;
+  label: string;
+  reason: 'manual' | 'pre-restore' | 'import';
+  fileCount: number;
+  totalBytes: number;
+  files: PythonFile[];
+}
 
 export type ExecutionEngine = 'pyodide' | 'termux';
 export type TermuxConnectionState = 'disconnected' | 'checking' | 'connected' | 'error';

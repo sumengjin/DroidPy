@@ -113,11 +113,11 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
   const levelColor = (level: AppLogLevel) => {
     switch (level) {
       case 'error':
-        return 'text-red-500 border-red-500/30 bg-red-500/10';
+        return 'text-red-600 dark:text-red-400';
       case 'warn':
-        return 'text-amber-500 border-amber-500/30 bg-amber-500/10';
+        return 'text-amber-600 dark:text-amber-400';
       default:
-        return 'text-[var(--ide-accent-text)] border-[var(--ide-border)] bg-[var(--ide-bg)]';
+        return 'text-[var(--ide-accent-text)]';
     }
   };
 
@@ -161,8 +161,9 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full sm:max-w-3xl h-[88vh] sm:h-[82vh] rounded-t-3xl sm:rounded-2xl bg-[var(--ide-surface)] border border-[var(--ide-border)] text-[var(--ide-text)] shadow-2xl flex flex-col overflow-hidden"
+        className="w-full sm:max-w-3xl h-[88vh] sm:h-[82vh] md-sheet rounded-b-none sm:rounded-b-[1.75rem] text-[var(--ide-text)] flex flex-col overflow-hidden"
       >
+        <div className="w-10 h-1 bg-[var(--ide-border)] rounded-full mx-auto mt-2.5 sm:hidden shrink-0" />
         {/* Header */}
         <div className="px-4 py-3 border-b border-[var(--ide-border)] flex items-center justify-between gap-3 shrink-0">
           <div className="min-w-0">
@@ -302,17 +303,18 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
               filteredAppLogs.map((entry) => (
                 <div
                   key={entry.id}
-                  className="rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] px-3 py-2 space-y-1"
+                  className="md-card px-3 py-2.5 space-y-1"
                 >
                   <div className="flex items-center justify-between gap-2 text-[11px]">
                     <div className="flex items-center gap-1.5 min-w-0">
                       <span
-                        className={`px-1.5 py-0.5 rounded border text-[10px] font-semibold uppercase shrink-0 ${levelColor(entry.level)}`}
+                        className={`text-[10px] font-semibold uppercase shrink-0 ${levelColor(entry.level)}`}
                       >
                         {entry.level}
                       </span>
+                      <span aria-hidden="true" className="text-[var(--ide-text-muted)]">·</span>
                       <span className="text-[var(--ide-text-muted)] uppercase shrink-0">
-                        [{entry.category}]
+                        {entry.category}
                       </span>
                     </div>
                     <span className="text-[var(--ide-text-muted)] tabular-nums shrink-0">
@@ -323,7 +325,7 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
                     {entry.message}
                   </div>
                   {entry.detail && (
-                    <pre className="selectable-text text-[11px] text-[var(--ide-text-muted)] whitespace-pre-wrap break-words bg-[var(--ide-bg)] rounded-lg p-2 border border-[var(--ide-border)]">
+                    <pre className="selectable-text text-[11px] text-[var(--ide-text-muted)] whitespace-pre-wrap break-words bg-[var(--ide-bg)] rounded-xl p-2 border border-[var(--ide-border)]">
                       {entry.detail}
                     </pre>
                   )}

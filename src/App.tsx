@@ -17,8 +17,6 @@ import {
   X,
   Globe,
   Maximize2,
-  Minimize2,
-  BookOpen,
   PanelLeft,
   Columns2,
   Menu,
@@ -28,16 +26,16 @@ import { registerSW } from 'virtual:pwa-register';
 import { DEFAULT_FILES } from './data/defaultFiles';
 import {
   CrawlerSessionData,
-  DesktopRightPane,
-  DesktopSection,
   EditorSettings,
   ExecutionEngine,
   InstalledPackage,
   MobileTab,
   NegativeScreenSection,
   PackageBackupStatus,
+  ProcessCleanupResult,
   PyodideStatus,
   PythonFile,
+  ScriptBackupSnapshot,
   TabletPaneTab,
   TerminalEntry,
   TermuxConfig,
@@ -48,9 +46,7 @@ import { CodeEditor, CodeEditorHandle } from './components/CodeEditor';
 import { AndroidSymbolBar } from './components/AndroidSymbolBar';
 import { TerminalPanel } from './components/TerminalPanel';
 import { FileExplorer } from './components/FileExplorer';
-import { ToolsAndPackages } from './components/ToolsAndPackages';
 import { NegativeScreenDrawer } from './components/NegativeScreenDrawer';
-import { PWAInstallButton } from './components/PWAInstallButton';
 import { CrawlerBrowserPanel } from './components/CrawlerBrowserPanel';
 import { HelpTutorialModal } from './components/HelpTutorialModal';
 import { AppExecutionLogModal } from './components/AppExecutionLogModal';
@@ -63,6 +59,7 @@ import {
   setAutoUpdatePackagesPref,
 } from './version';
 import { AppUpdateCheckResult, checkForAppUpdates } from './services/appUpdater';
+import { createScriptBackup, exportScriptBackupJson } from './services/scriptBackup';
 import {
   DEFAULT_CRAWLER_SESSION,
   buildCookiesJsonContent,
@@ -71,12 +68,11 @@ import {
 } from './utils/crawlerSession';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useDeviceLayout } from './hooks/useDeviceLayout';
-import { IDE_THEMES, getThemeMeta } from './services/themes';
+import { getThemeMeta } from './services/themes';
 import {
   I18nProvider,
   LOCALE_OPTIONS,
   TranslationKey,
-  getLocalizedThemeText,
   translate,
 } from './services/i18n';
 import { formatDurationHMS } from './utils/formatDuration';
@@ -91,6 +87,7 @@ import {
   buildTermuxPipUpgradeCommand,
   buildTermuxUninstallCommand,
   checkTermuxHealth,
+  cleanupTermuxProcesses,
   execTermuxShell,
   fetchTermuxWorkspaceFiles,
   getBackupStatus,
@@ -103,6 +100,7 @@ import {
   streamRestoreBackedUpPackages,
   streamRunInTermux,
   streamShellInTermux,
+  writeSdcardFile,
 } from './services/termuxBridge';
 import {
   DirectoryHandleLike,
@@ -151,6 +149,7 @@ const DEFAULT_SETTINGS: EditorSettings = {
   autoUpdatePackages: getAutoUpdatePackagesPref(),
   githubRepo: getSavedGithubRepo(),
   enableSandboxAddon: false,
+  pipTrustedHostEmergency: false,
 };
 
 interface PersistedIdeSnapshot {
@@ -255,7 +254,6 @@ function mergeTerminalChunk(prev: string, chunk: string): string {
 
 export default function App() {
   const { deviceClass, isLandscape } = useDeviceLayout();
-  const isDesktop = deviceClass === 'desktop';
   const [files, setFiles] = useState<PythonFile[]>(() => {
     const nativeSnap = getInitialNativeSnapshot();
     if (nativeSnap?.files && Array.isArray(nativeSnap.files) && nativeSnap.files.length > 0) {
@@ -310,9 +308,6 @@ export default function App() {
   const [negativeSection, setNegativeSection] = useState<NegativeScreenSection>('termux');
   const [tabletSplit, setTabletSplit] = useState(true);
   const [tabletPaneTab, setTabletPaneTab] = useState<TabletPaneTab>('terminal');
-  const [desktopSection, setDesktopSection] = useState<DesktopSection>('workspace');
-  const [desktopRightPane, setDesktopRightPane] = useState<DesktopRightPane>('terminal');
-  const [browserWide, setBrowserWide] = useState<boolean>(false);
   const [crawlerSession, setCrawlerSession] = useState<CrawlerSessionData>(() => {
     const nativeSnap = getInitialNativeSnapshot();
     if (nativeSnap?.crawlerSession) {
@@ -354,8 +349,6 @@ export default function App() {
   const [cursorPos, setCursorPos] = useState<{ line: number; col: number }>({ line: 1, col: 1 });
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [pendingInputPrompt, setPendingInputPrompt] = useState<string | null>(null);
-  const [showThemePicker, setShowThemePicker] = useState(false);
-  const [showLangPicker, setShowLangPicker] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showLogsModal, setShowLogsModal] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
@@ -410,6 +403,8 @@ export default function App() {
   const [termuxRunning, setTermuxRunning] = useState(false);
   const [backupStatus, setBackupStatus] = useState<PackageBackupStatus | null>(null);
   const [restoringBackup, setRestoringBackup] = useState(false);
+  const [cleaningProcesses, setCleaningProcesses] = useState(false);
+  const [lastCleanupResult, setLastCleanupResult] = useState<ProcessCleanupResult | null>(null);
   const ansiStreamBuffersRef = useRef<Map<string, ReturnType<typeof createAnsiStreamBuffer>>>(
     new Map()
   );
@@ -442,8 +437,6 @@ export default function App() {
     showHelpModal,
     showLogsModal,
     showUpdateModal,
-    showThemePicker,
-    showLangPicker,
     negativeOpen,
     mobileNewFileOpen,
   });
@@ -451,8 +444,6 @@ export default function App() {
     showHelpModal,
     showLogsModal,
     showUpdateModal,
-    showThemePicker,
-    showLangPicker,
     negativeOpen,
     mobileNewFileOpen,
   };
@@ -637,14 +628,6 @@ export default function App() {
       }
       if (ov.showHelpModal) {
         setShowHelpModal(false);
-        return true;
-      }
-      if (ov.showThemePicker) {
-        setShowThemePicker(false);
-        return true;
-      }
-      if (ov.showLangPicker) {
-        setShowLangPicker(false);
         return true;
       }
       if (ov.negativeOpen) {
@@ -1178,8 +1161,6 @@ export default function App() {
 
   const focusOutputPane = useCallback(
     (pane: 'terminal' | 'browser' = 'terminal') => {
-      setDesktopSection('workspace');
-      setDesktopRightPane(pane);
       setTabletSplit(true);
       setTabletPaneTab(pane);
       setMobileTab(pane === 'browser' ? 'browser' : 'console');
@@ -1309,15 +1290,21 @@ export default function App() {
       let tailBuf = '';
       const tailAnsiBuf = createAnsiStreamBuffer();
       try {
-        const res = await streamInstallInTermux(termuxConfig, mode, target, {
-          onChunk: (chunk) => {
-            appendStreamChunk(streamId, chunk);
-            const cleanChunk = stripAnsi(tailAnsiBuf.push(chunk));
-            if (cleanChunk) {
-              tailBuf = (tailBuf + cleanChunk).slice(-1200);
-            }
+        const res = await streamInstallInTermux(
+          termuxConfig,
+          mode,
+          target,
+          {
+            onChunk: (chunk) => {
+              appendStreamChunk(streamId, chunk);
+              const cleanChunk = stripAnsi(tailAnsiBuf.push(chunk));
+              if (cleanChunk) {
+                tailBuf = (tailBuf + cleanChunk).slice(-1200);
+              }
+            },
           },
-        });
+          { trustedHost: Boolean(settingsRef.current.pipTrustedHostEmergency) }
+        );
         const remTail = stripAnsi(tailAnsiBuf.flush());
         if (remTail) {
           tailBuf = (tailBuf + remTail).slice(-1200);
@@ -1635,6 +1622,129 @@ export default function App() {
     }
   }, [termuxConfig, files, showToast, t]);
 
+  const handleCleanupStuckProcesses = useCallback(
+    async (manual = false) => {
+      if (cleaningProcesses) return;
+      setCleaningProcesses(true);
+      try {
+        const res = await cleanupTermuxProcesses(termuxConfigRef.current, manual);
+        setLastCleanupResult(res);
+        appLog(
+          'termux',
+          `Python process watchdog check (manual=${manual}): scanned=${res.scannedCount}, killed=${res.killedCount}`
+        );
+        if (res.killedCount > 0) {
+          const list = res.killed
+            .map((k) => `${k.pid}(${Math.round(k.elapsedSec / 60)}m)`)
+            .join(', ');
+          const msg = t('tmx_cleanup_killed', { count: res.killedCount, list });
+          appendEntry('system', msg);
+          showToast(msg);
+        } else if (manual) {
+          const msg = t('tmx_cleanup_none', { scanned: res.scannedCount });
+          appendEntry('system', msg);
+          showToast(msg);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        appLog('termux', `Python watchdog check failed: ${msg}`, { level: 'warn' });
+        if (manual) {
+          appendEntry('stderr', msg);
+          showToast(msg);
+        }
+      } finally {
+        setCleaningProcesses(false);
+      }
+    },
+    [cleaningProcesses, appendEntry, showToast, t]
+  );
+
+  useEffect(() => {
+    if (termuxConnectionState !== 'connected') return;
+    const intervalId = window.setInterval(() => {
+      if (!termuxRunning) {
+        void handleCleanupStuckProcesses(false);
+      }
+    }, 30 * 60 * 1000);
+    return () => window.clearInterval(intervalId);
+  }, [termuxConnectionState, termuxRunning, handleCleanupStuckProcesses]);
+
+  const handleRebuildPipCertifi = useCallback(async () => {
+    if (termuxRunning) {
+      showToast(t('cta_running'));
+      return;
+    }
+    const cmd = [
+      'mkdir -p "$PREFIX/tmp"',
+      "python3 - <<'EOF'",
+      'import os, shutil, sys',
+      'src = None',
+      'try:',
+      '    import certifi',
+      '    p = certifi.where()',
+      '    if p and os.path.isfile(p):',
+      '        src = p',
+      'except Exception:',
+      '    pass',
+      'if not src:',
+      '    try:',
+      '        from pip._vendor import certifi as pc',
+      '        p = pc.where()',
+      '        if p and os.path.isfile(p):',
+      '            src = p',
+      '    except Exception:',
+      '        pass',
+      'for c in ("/etc/tls/cert.pem", "/etc/ssl/certs/ca-certificates.crt"):',
+      '    if not src and os.path.isfile(c):',
+      '        src = c',
+      'base = os.environ.get("PREFIX", "") or os.path.dirname(os.path.dirname(sys.executable))',
+      'dst_dir = os.path.join(base, "tmp")',
+      'os.makedirs(dst_dir, exist_ok=True)',
+      'dst = os.path.join(dst_dir, "cacert.pem")',
+      'if src:',
+      '    shutil.copyfile(src, dst)',
+      '    os.chmod(dst, 0o644)',
+      '    print("SSL_CERT_FILE=" + dst)',
+      'else:',
+      '    print("NO_CERT_SOURCE_FOUND")',
+      'EOF',
+    ].join('\n');
+    const ok = await handleRunShellInTermux(cmd);
+    if (ok) {
+      appLog('package', 'Rebuilt writable certifi CA bundle in $PREFIX/tmp/cacert.pem');
+      showToast(t('tmx_pip_ssl_done'));
+    }
+  }, [termuxRunning, handleRunShellInTermux, showToast, t]);
+
+  const handleRestoreScriptBackup = useCallback(
+    (nextFiles: PythonFile[], label: string) => {
+      if (!nextFiles || nextFiles.length === 0) return;
+      createScriptBackup(filesRef.current, undefined, 'pre-restore');
+      setFiles(nextFiles);
+      setActiveFileId(nextFiles[0].id);
+      setMobileTab('editor');
+      appLog('storage', `Restored script snapshot "${label}" (${nextFiles.length} file(s))`);
+      showToast(t('bak_restored_toast', { label }));
+    },
+    [showToast, t]
+  );
+
+  const handleSyncBackupToSdcard = useCallback(
+    async (snapshot: ScriptBackupSnapshot) => {
+      try {
+        const relPath = `DroidPy/backups/${snapshot.id}.json`;
+        await writeSdcardFile(termuxConfigRef.current, relPath, exportScriptBackupJson(snapshot));
+        appLog('storage', `Synced script backup to /sdcard/${relPath}`);
+        showToast(t('bak_exported_toast', { name: `/sdcard/${relPath}` }));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        appLog('storage', `Sync script backup to /sdcard failed: ${msg}`, { level: 'error' });
+        showToast(msg);
+      }
+    },
+    [showToast, t]
+  );
+
   const handleRunCode = useCallback(async () => {
     if (!activeFile || pyodideStatus === 'running' || termuxRunning) return;
 
@@ -1832,7 +1942,6 @@ export default function App() {
     setFiles((prev) => [...prev, newFile]);
     setActiveFileId(newFile.id);
     setMobileTab('editor');
-    setDesktopSection('workspace');
   }, []);
 
   const handleRenameFile = useCallback((id: string, nextName: string) => {
@@ -1878,7 +1987,6 @@ export default function App() {
       });
       if (openInEditor) {
         setActiveFileId(targetId);
-        setDesktopSection('workspace');
         setMobileTab('editor');
       }
     },
@@ -2182,7 +2290,12 @@ export default function App() {
             showToast(t('pkg_up_to_date'));
             return;
           }
-          const ok = await handleRunShellInTermux(buildTermuxPipUpgradeCommand(outdatedTargets));
+          const ok = await handleRunShellInTermux(
+            buildTermuxPipUpgradeCommand(
+              outdatedTargets,
+              Boolean(settingsRef.current.pipTrustedHostEmergency)
+            )
+          );
           if (ok) {
             setOutdatedTermuxPips([]);
             showToast(t('pkg_upgraded_toast', { count: outdatedTargets.length }));
@@ -2207,7 +2320,10 @@ export default function App() {
       if (!clean) return;
       setUpgradingTermux(true);
       try {
-        const ok = await handleRunShellInTermux(`pip install --upgrade ${clean}`);
+        const hostFlags = settingsRef.current.pipTrustedHostEmergency
+          ? ' --trusted-host pypi.org --trusted-host files.pythonhosted.org'
+          : '';
+        const ok = await handleRunShellInTermux(`pip install --upgrade${hostFlags} ${clean}`);
         if (ok) {
           const normClean = normalizeTermuxPkgName(clean);
           setOutdatedTermuxPips((prev) =>
@@ -2279,7 +2395,12 @@ export default function App() {
         }
         const cmds: string[] = [];
         if (pipTargets.length > 0) {
-          cmds.push(buildTermuxPipUpgradeCommand(pipTargets));
+          cmds.push(
+            buildTermuxPipUpgradeCommand(
+              pipTargets,
+              Boolean(settingsRef.current.pipTrustedHostEmergency)
+            )
+          );
         }
         cmds.push(buildTermuxAptUpgradeCommand());
         const ok = await handleRunShellInTermux(cmds.join(' && '));
@@ -2421,7 +2542,10 @@ export default function App() {
           appLog('package', 'Startup Termux pip check: all packages are already latest');
           return;
         }
-        const cmd = buildTermuxPipUpgradeCommand(targetNames);
+        const cmd = buildTermuxPipUpgradeCommand(
+          targetNames,
+          Boolean(settingsRef.current.pipTrustedHostEmergency)
+        );
         appLog('package', `Startup auto-updating Termux pip packages: ${targetNames.join(', ')}`);
         const res = await streamShellInTermux(termuxConfigRef.current, cmd, {
           onChunk: (chunk) => appendStreamChunk(streamId, chunk),
@@ -2518,23 +2642,70 @@ export default function App() {
 
   useEffect(() => {
     if (
-      (desktopSection === 'packages' || (negativeOpen && negativeSection === 'packages')) &&
+      negativeOpen &&
+      negativeSection === 'packages' &&
       pyodideStatus === 'ready' &&
       installedPackages.length === 0
     ) {
       void handleRefreshPackages();
     }
-  }, [desktopSection, negativeOpen, negativeSection, pyodideStatus, installedPackages.length, handleRefreshPackages]);
+  }, [negativeOpen, negativeSection, pyodideStatus, installedPackages.length, handleRefreshPackages]);
 
   const isRunning = pyodideStatus === 'running' || termuxRunning;
   const isCoreLoading = executionEngine === 'pyodide' && pyodideStatus === 'loading';
-  const activeThemeLabel = getLocalizedThemeText(settings.theme, settings.locale);
-  const activeLocaleMeta = LOCALE_OPTIONS.find((item) => item.id === settings.locale) ?? LOCALE_OPTIONS[0];
 
   const openNegativeDrawer = useCallback((sec: NegativeScreenSection = 'termux') => {
     setNegativeSection(sec);
     setNegativeOpen(true);
   }, []);
+
+  const renderInlineNewFileBar = () => (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        let name = sanitizeFileName(mobileNewFileName);
+        if (!name) return;
+        if (!name.includes('.')) name += '.py';
+        if (files.some((f) => f.name.toLowerCase() === name.toLowerCase())) {
+          showToast(t('files_exists', { name }));
+          return;
+        }
+        const starter = name.toLowerCase().endsWith('.json')
+          ? '{\n  "app": "DroidPy"\n}\n'
+          : name.toLowerCase().endsWith('.py')
+          ? `# ${name}\n\ndef main():\n    print("Hello from ${name}")\n\nif __name__ == "__main__":\n    main()\n`
+          : '';
+        handleCreateFile(name, starter);
+        setMobileNewFileName('');
+        setMobileNewFileOpen(false);
+      }}
+      className="flex items-center gap-1.5 px-2.5 py-2 border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] shrink-0"
+    >
+      <input
+        type="text"
+        autoFocus
+        value={mobileNewFileName}
+        onChange={(e) => setMobileNewFileName(e.target.value)}
+        placeholder={t('files_new_placeholder')}
+        className="flex-1 min-w-0 min-h-[44px] px-3 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
+      />
+      <button
+        type="submit"
+        className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl bg-[var(--ide-accent)] text-white"
+        aria-label={t('files_new_btn')}
+      >
+        <Check className="w-4 h-4" />
+      </button>
+      <button
+        type="button"
+        onClick={() => setMobileNewFileOpen(false)}
+        className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl border border-[var(--ide-border)] text-[var(--ide-text-muted)]"
+        aria-label={t('files_cancel')}
+      >
+        <X className="w-4 h-4" />
+      </button>
+    </form>
+  );
 
   return (
     <I18nProvider
@@ -2543,7 +2714,7 @@ export default function App() {
     >
       <div
         onTouchStart={(e) => {
-          if (isDesktop || e.touches.length !== 1) return;
+          if (e.touches.length !== 1) return;
           const touch = e.touches[0];
           if (touch.clientX <= 28) {
             edgeSwipeStartRef.current = { x: touch.clientX, y: touch.clientY };
@@ -2552,7 +2723,7 @@ export default function App() {
           }
         }}
         onTouchEnd={(e) => {
-          if (!edgeSwipeStartRef.current || isDesktop) return;
+          if (!edgeSwipeStartRef.current) return;
           const touch = e.changedTouches[0];
           const dx = touch.clientX - edgeSwipeStartRef.current.x;
           const dy = Math.abs(touch.clientY - edgeSwipeStartRef.current.y);
@@ -2561,102 +2732,11 @@ export default function App() {
             setNegativeOpen(true);
           }
         }}
-        className="h-dvh flex flex-col bg-[var(--ide-bg)] text-[var(--ide-text)] overflow-hidden"
+        className="h-dvh flex flex-col bg-[var(--ide-bg)] text-[var(--ide-text)] overflow-hidden relative"
       >
-      {/* Desktop Top Bar (3-zone contract: Brand — Nav Links — Primary CTA) */}
-      {deviceClass === 'desktop' && (
-      <header className="flex items-center justify-between gap-8 h-[52px] px-5 border-b border-[var(--ide-border)] bg-[var(--ide-surface)] shrink-0">
-        {/* Zone 1: Brand Wordmark */}
-        <a
-          href="#workspace"
-          onClick={(e) => {
-            e.preventDefault();
-            setDesktopSection('workspace');
-          }}
-          className="flex items-center gap-2.5 text-base font-bold tracking-tight text-[var(--ide-text)] whitespace-nowrap shrink-0"
-        >
-          <img
-            src="/icon.svg"
-            alt="DroidPy"
-            className="w-6 h-6 rounded-md shrink-0"
-            referrerPolicy="no-referrer"
-          />
-          <span>DroidPy</span>
-        </a>
-
-        {/* Zone 2: 5 Clean Single-Line Nav Links */}
-        <nav className="flex items-center gap-6 text-sm font-medium" aria-label={t('nav_workspace')}>
-          {(
-            [
-              { id: 'workspace', label: t('nav_workspace') },
-              { id: 'termux', label: t('nav_termux') },
-              { id: 'packages', label: t('nav_packages') },
-              { id: 'android', label: t('nav_android') },
-              { id: 'settings', label: t('nav_settings') },
-            ] as const
-          ).map((item) => {
-            const active = desktopSection === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setDesktopSection(item.id)}
-                className={`py-3.5 border-b-2 transition-colors whitespace-nowrap shrink-0 ${
-                  active
-                    ? 'border-[var(--ide-accent)] text-[var(--ide-accent-text)]'
-                    : 'border-transparent text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
-                }`}
-              >
-                {item.label}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* Zone 3: 1 Primary CTA */}
-        <div className="shrink-0">
-          {pendingInputPrompt !== null ? (
-            <button
-              type="button"
-              onClick={handleCancelInput}
-              className="min-h-[38px] px-4 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-semibold inline-flex items-center gap-2 whitespace-nowrap shrink-0 transition-colors"
-            >
-              <Square className="w-3.5 h-3.5 fill-current" />
-              <span>{t('cta_abort_input')}</span>
-            </button>
-          ) : termuxRunning ? (
-            <button
-              type="button"
-              onClick={() => void handleStopTermux()}
-              className="min-h-[38px] px-4 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-semibold inline-flex items-center gap-2 whitespace-nowrap shrink-0 transition-colors"
-            >
-              <Square className="w-3.5 h-3.5 fill-current" />
-              <span>{t('cta_stop_run')}</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleRunCode}
-              disabled={isRunning || isCoreLoading}
-              className="min-h-[38px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-2 whitespace-nowrap shrink-0 transition-colors"
-            >
-              {isRunning || isCoreLoading ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Play className="w-3.5 h-3.5 fill-current" />
-              )}
-              <span>
-                {isCoreLoading ? t('cta_loading_core') : isRunning ? t('cta_running') : t('cta_run_program')}
-              </span>
-            </button>
-          )}
-        </div>
-      </header>
-      )}
-
       {/* Tablet Top Bar: Negative Screen Trigger + File Tabs + Split Toggle + Primary CTA */}
       {deviceClass === 'tablet' && (
-      <header className="flex items-center justify-between gap-3 h-12 px-3 pt-safe border-b border-[var(--ide-border)] bg-[var(--ide-surface)] shrink-0">
+      <header className="flex items-center justify-between gap-3 h-13 px-3 pt-safe border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] shrink-0">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <button
             type="button"
@@ -2755,17 +2835,17 @@ export default function App() {
       </header>
       )}
 
-      {/* Phone Compact Top App Bar (Negative Screen button + Title/File + Primary Run CTA only) */}
+      {/* Phone Compact MD3 Top App Bar (Negative Screen drawer trigger + Title/File + Conditional CTA outside editor/console) */}
       {deviceClass === 'phone' && (
-      <header className="flex items-center justify-between gap-2 h-12 px-2.5 pt-safe border-b border-[var(--ide-border)] bg-[var(--ide-surface)] shrink-0">
+      <header className="flex items-center justify-between gap-2 h-13 px-2.5 pt-safe border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] shrink-0">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <button
             type="button"
             onClick={() => setNegativeOpen(true)}
             aria-label={t('neg_open_aria')}
-            className="min-h-[42px] min-w-[42px] flex items-center justify-center rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-[var(--ide-text)] active:scale-95 transition-transform shrink-0"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full border border-[var(--ide-border)] bg-[var(--ide-bg)] text-[var(--ide-text)] active:scale-95 transition-transform shrink-0"
           >
-            <Menu className="w-4.5 h-4.5" />
+            <Menu className="w-5 h-5" />
           </button>
           <img
             src="/icon.svg"
@@ -2780,357 +2860,51 @@ export default function App() {
           </span>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
-          {pendingInputPrompt !== null ? (
-            <button
-              type="button"
-              onClick={handleCancelInput}
-              className="min-h-[40px] px-4 rounded-xl bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
-            >
-              <Square className="w-3.5 h-3.5 fill-current" />
-              <span>{t('cta_abort_short')}</span>
-            </button>
-          ) : termuxRunning ? (
-            <button
-              type="button"
-              onClick={() => void handleStopTermux()}
-              className="min-h-[40px] px-4 rounded-xl bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
-            >
-              <Square className="w-3.5 h-3.5 fill-current" />
-              <span>{t('cta_stop_short')}</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleRunCode}
-              disabled={isRunning || isCoreLoading}
-              className="min-h-[40px] px-4 rounded-xl bg-[var(--ide-accent)] active:scale-[0.98] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-transform"
-            >
-              {isRunning || isCoreLoading ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Play className="w-3.5 h-3.5 fill-current" />
-              )}
-              <span>
-                {isCoreLoading ? t('cta_loading_short') : isRunning ? t('cta_running') : t('cta_run_short')}
-              </span>
-            </button>
-          )}
-        </div>
+        {mobileTab !== 'editor' && mobileTab !== 'console' && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            {pendingInputPrompt !== null ? (
+              <button
+                type="button"
+                onClick={handleCancelInput}
+                className="min-h-[44px] px-4 rounded-full bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
+              >
+                <Square className="w-3.5 h-3.5 fill-current" />
+                <span>{t('cta_abort_short')}</span>
+              </button>
+            ) : termuxRunning ? (
+              <button
+                type="button"
+                onClick={() => void handleStopTermux()}
+                className="min-h-[44px] px-4 rounded-full bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
+              >
+                <Square className="w-3.5 h-3.5 fill-current" />
+                <span>{t('cta_stop_short')}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleRunCode}
+                disabled={isRunning || isCoreLoading}
+                className="min-h-[44px] px-4 rounded-full bg-[var(--ide-accent)] active:scale-[0.98] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-transform"
+              >
+                {isRunning || isCoreLoading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                )}
+                <span>
+                  {isCoreLoading ? t('cta_loading_short') : isRunning ? t('cta_running') : t('cta_run_short')}
+                </span>
+              </button>
+            )}
+          </div>
+        )}
       </header>
       )}
 
-      {/* Main Content Area */}
+      {/* Main Content Area (Mobile & Tablet Only) */}
       <main className="flex-1 min-h-0 flex overflow-hidden">
-        {deviceClass === 'desktop' ? (
-          <div className="flex flex-1 min-h-0 overflow-hidden">
-            {desktopSection === 'workspace' ? (
-              <>
-                {/* Left File Explorer */}
-                <aside className="w-64 shrink-0 border-r border-[var(--ide-border)] overflow-hidden">
-                  <FileExplorer
-                    files={files}
-                    activeFileId={activeFile.id}
-                    linkedDirName={linkedDirHandle?.name ?? null}
-                    termuxConnected={termuxConnectionState === 'connected'}
-                    termuxEmbedded={Boolean(termuxHealth?.embedded)}
-                    onOpenSdcardManager={() => setDesktopSection('android')}
-                    onBackupToSdcard={handleBackupToSdcard}
-                    onPullFromTermux={() => syncFilesFromTermux(true)}
-                    onLinkDirectory={handleLinkDirectory}
-                    onSaveToDirectory={handleSaveToDirectory}
-                    onSelectFile={(id) => setActiveFileId(id)}
-                    onCreateFile={handleCreateFile}
-                    onRenameFile={handleRenameFile}
-                    onDeleteFile={handleDeleteFile}
-                    onNotify={showToast}
-                  />
-                </aside>
-
-                {/* Center Code Editor */}
-                <section className="flex-1 min-w-0 flex flex-col overflow-hidden bg-[var(--ide-surface)]">
-                  {/* Workspace Editor Toolbar */}
-                  <div className="flex items-center justify-between gap-4 px-3 h-11 border-b border-[var(--ide-border)] bg-[var(--ide-surface-alt)] shrink-0">
-                    <div className="flex items-center gap-1 overflow-x-auto no-scrollbar min-w-0">
-                      {files.map((file) => {
-                        const isActive = file.id === activeFile.id;
-                        return (
-                          <button
-                            key={file.id}
-                            type="button"
-                            onClick={() => setActiveFileId(file.id)}
-                            className={`min-h-[32px] px-3 rounded-lg font-mono text-xs transition-colors whitespace-nowrap shrink-0 ${
-                              isActive
-                                ? 'bg-[var(--ide-surface)] text-[var(--ide-accent-text)] font-semibold border border-[var(--ide-border)]'
-                                : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
-                            }`}
-                          >
-                            {file.name}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <PWAInstallButton compact />
-                      <button
-                        type="button"
-                        onClick={() => setShowHelpModal(true)}
-                        aria-label={t('toolbar_help_title')}
-                        title={t('toolbar_help_title')}
-                        className="min-h-[34px] px-2.5 flex items-center gap-1.5 rounded-lg text-xs font-medium text-[var(--ide-text)] border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] transition-colors whitespace-nowrap"
-                      >
-                        <BookOpen className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
-                        <span>{t('toolbar_help_title')}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowLangPicker(true)}
-                        aria-label={t('toolbar_choose_lang')}
-                        title={t('toolbar_choose_lang')}
-                        className="min-h-[34px] px-2.5 flex items-center gap-1.5 rounded-lg text-xs font-medium text-[var(--ide-text)] border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] transition-colors whitespace-nowrap"
-                      >
-                        <Languages className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
-                        <span>{activeLocaleMeta.nativeName}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowThemePicker(true)}
-                        aria-label={t('toolbar_choose_theme')}
-                        title={activeThemeLabel.name}
-                        className="min-h-[34px] px-2.5 flex items-center gap-1.5 rounded-lg text-xs font-medium text-[var(--ide-text)] border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] transition-colors whitespace-nowrap"
-                      >
-                        <Palette className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
-                        <span>{activeThemeLabel.name}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleFormatActiveFile}
-                        aria-label={t('toolbar_format_title')}
-                        title={t('toolbar_format_title')}
-                        className="min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-accent-soft)]"
-                      >
-                        <AlignLeft className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => editorRef.current?.openSearch()}
-                        aria-label={t('toolbar_search_title')}
-                        title={t('toolbar_search_title')}
-                        className="min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-accent-soft)]"
-                      >
-                        <Search className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateSettings({ showSymbolBar: !settings.showSymbolBar })}
-                        aria-label={t('toolbar_symbol_bar_title')}
-                        title={t('toolbar_symbol_bar_title')}
-                        className={`min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg transition-colors ${
-                          settings.showSymbolBar
-                            ? 'text-[var(--ide-accent-text)] bg-[var(--ide-accent-soft)]'
-                            : 'text-[var(--ide-text-muted)] hover:bg-[var(--ide-accent-soft)]'
-                        }`}
-                      >
-                        <Keyboard className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* CodeMirror Canvas */}
-                  <div className="flex-1 min-h-0 overflow-hidden">
-                    <CodeEditor
-                      key={activeFile.id}
-                      ref={editorRef}
-                      value={activeFile.content}
-                      filename={activeFile.name}
-                      onChange={handleCodeChange}
-                      onRunShortcut={handleRunCode}
-                      onCursorChange={(line, col) => setCursorPos({ line, col })}
-                      fontSize={settings.fontSize}
-                      tabSize={settings.tabSize}
-                      wordWrap={settings.wordWrap}
-                      theme={settings.theme}
-                      pyodideReady={pyodideStatus === 'ready'}
-                    />
-                  </div>
-
-                  {/* Optional Android Quick-Symbol Bar */}
-                  {settings.showSymbolBar && (
-                    <AndroidSymbolBar
-                      tabSize={settings.tabSize}
-                      onInsert={(txt, offset) => editorRef.current?.insertText(txt, offset)}
-                      onMoveCursor={(delta) => editorRef.current?.moveCursor(delta)}
-                      onUndo={() => editorRef.current?.undo()}
-                      onRedo={() => editorRef.current?.redo()}
-                    />
-                  )}
-
-                  {/* Quiet Unboxed Editor Metadata Bar */}
-                  <div className="flex items-center justify-between px-4 py-1.5 border-t border-[var(--ide-border)] bg-[var(--ide-surface-alt)] text-[11px] text-[var(--ide-text-muted)] shrink-0">
-                    <div className="flex items-center gap-2">
-                      <span>Python 3.12</span>
-                      <span aria-hidden="true">·</span>
-                      <span>{activeThemeLabel.name}</span>
-                      <span aria-hidden="true">·</span>
-                      <span>{t('status_tab_size', { n: settings.tabSize })}</span>
-                    </div>
-                    <div className="font-mono tabular-nums">
-                      {t('status_cursor', { line: cursorPos.line, col: cursorPos.col })}
-                    </div>
-                  </div>
-                </section>
-
-                {/* Right Pane: Terminal / REPL Output or Crawler Browser */}
-                <aside
-                  className={`${
-                    desktopRightPane === 'browser' && browserWide
-                      ? 'w-[580px] xl:w-[680px]'
-                      : desktopRightPane === 'browser'
-                      ? 'w-[460px] xl:w-[520px]'
-                      : 'w-[420px] xl:w-[460px]'
-                  } shrink-0 border-l border-[var(--ide-border)] flex flex-col overflow-hidden transition-[width] duration-150`}
-                >
-                  <div className="flex items-center justify-between gap-2 px-3 h-11 border-b border-[var(--ide-border)] bg-[var(--ide-surface-alt)] shrink-0">
-                    <div className="flex items-center gap-1 p-0.5 rounded-lg bg-[var(--ide-bg)] border border-[var(--ide-border)]">
-                      <button
-                        type="button"
-                        onClick={() => setDesktopRightPane('terminal')}
-                        className={`min-h-[30px] px-3 rounded-md text-xs font-medium inline-flex items-center gap-1.5 whitespace-nowrap transition-colors ${
-                          desktopRightPane === 'terminal'
-                            ? 'bg-[var(--ide-surface)] text-[var(--ide-accent-text)] font-semibold shadow-sm'
-                            : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
-                        }`}
-                      >
-                        <TerminalIcon className="w-3.5 h-3.5" />
-                        <span>{t('pane_terminal')}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDesktopRightPane('browser')}
-                        className={`min-h-[30px] px-3 rounded-md text-xs font-medium inline-flex items-center gap-1.5 whitespace-nowrap transition-colors ${
-                          desktopRightPane === 'browser'
-                            ? 'bg-[var(--ide-surface)] text-[var(--ide-accent-text)] font-semibold shadow-sm'
-                            : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
-                        }`}
-                      >
-                        <Globe className="w-3.5 h-3.5" />
-                        <span>{t('pane_browser')}</span>
-                      </button>
-                    </div>
-                    {desktopRightPane === 'browser' && (
-                      <button
-                        type="button"
-                        onClick={() => setBrowserWide((v) => !v)}
-                        aria-label={browserWide ? t('files_collapse') : t('files_expand')}
-                        className="min-h-[32px] min-w-[32px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-accent-soft)]"
-                      >
-                        {browserWide ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="flex-1 min-h-0 overflow-hidden">
-                    <div className={desktopRightPane === 'terminal' ? 'h-full' : 'hidden'}>
-                      <TerminalPanel
-                        entries={entries}
-                        status={termuxRunning ? 'running' : pyodideStatus}
-                        engine={executionEngine}
-                        onChangeEngine={setExecutionEngine}
-                        termuxConnected={termuxConnectionState === 'connected'}
-                        embeddedMissingPython={Boolean(termuxHealth?.embedded && termuxHealth.hasPython === false)}
-                        onQuickInitEmbedded={() => void handleInitializeEmbeddedEnv(true)}
-                        runStartedAt={runStartedAt}
-                        lastDurationMs={lastDurationMs}
-                        pendingInputPrompt={pendingInputPrompt}
-                        onSubmitInput={handleSubmitInput}
-                        onRunRepl={handleRunRepl}
-                        onSendTermuxStdin={handleSendTermuxStdin}
-                        onStopTermux={handleStopTermux}
-                        onOpenLogs={() => setShowLogsModal(true)}
-                        enableSandboxAddon={Boolean(settings.enableSandboxAddon)}
-                        isDark={getThemeMeta(settings.theme).isDark}
-                        onClear={handleClearTerminal}
-                      />
-                    </div>
-                    <div className={desktopRightPane === 'browser' ? 'h-full' : 'hidden'}>
-                      <CrawlerBrowserPanel
-                        session={crawlerSession}
-                        onChangeSession={setCrawlerSession}
-                        termuxConfig={termuxConfig}
-                        termuxConnected={termuxConnectionState === 'connected'}
-                        onSaveWorkspaceFile={handleSaveWorkspaceFile}
-                        onNotify={showToast}
-                      />
-                    </div>
-                  </div>
-                </aside>
-              </>
-            ) : (
-              <div className="flex-1 min-h-0 overflow-hidden">
-                <ToolsAndPackages
-                  activeSubView={desktopSection}
-                  files={files}
-                  activeFile={activeFile}
-                  settings={settings}
-                  onUpdateSettings={handleUpdateSettings}
-                  onResetWorkspace={handleResetWorkspace}
-                  pyodideStatus={pyodideStatus}
-                  installedPackages={installedPackages}
-                  onInstallPackage={handleInstallPackage}
-                  onRefreshPackages={handleRefreshPackages}
-                  outdatedPackages={outdatedPyPackages}
-                  checkingOutdated={checkingOutdatedPkgs}
-                  upgradingPackages={upgradingPyPackages}
-                  onUpgradePackage={handleUpgradePyPackage}
-                  onUninstallPackage={handleUninstallPyPackage}
-                  onCheckAndUpgradeAll={handleCheckAndUpgradeAllPy}
-                  onUpgradeAllPackages={handleUpgradeAllPackages}
-                  onUpgradeAllTermux={handleUpgradeAllTermux}
-                  onUpgradeSingleTermuxPip={handleUpgradeSingleTermuxPip}
-                  outdatedTermuxPips={outdatedTermuxPips}
-                  checkingTermuxOutdated={checkingTermuxOutdated}
-                  onCheckTermuxOutdated={handleCheckTermuxOutdated}
-                  onUninstallInTermux={handleUninstallInTermux}
-                  upgradingTermux={upgradingTermux}
-                  appUpdateResult={appUpdateResult}
-                  checkingAppUpdate={checkingAppUpdate}
-                  onOpenUpdateModal={() => {
-                    setShowUpdateModal(true);
-                    if (!appUpdateResult && githubRepo) {
-                      void handleCheckAppUpdates(githubRepo, true);
-                    }
-                  }}
-                  linkedDirName={linkedDirHandle?.name ?? null}
-                  onLinkDirectory={handleLinkDirectory}
-                  onImportFromDirectory={handleImportFromDirectory}
-                  onSaveToDirectory={handleSaveToDirectory}
-                  engine={executionEngine}
-                  onChangeEngine={setExecutionEngine}
-                  termuxConfig={termuxConfig}
-                  onUpdateTermuxConfig={handleUpdateTermuxConfig}
-                  termuxConnectionState={termuxConnectionState}
-                  termuxError={termuxError}
-                  termuxHealth={termuxHealth}
-                  onTestTermuxConnection={handleTestTermuxConnection}
-                  onInstallInTermux={handleInstallInTermux}
-                  onRunInTermux={handleRunInTermux}
-                  onRunShellInTermux={handleRunShellInTermux}
-                  onInitializeEmbeddedEnv={handleInitializeEmbeddedEnv}
-                  onGenerateRequirements={handleGenerateRequirements}
-                  onInstallRequirements={handleInstallRequirements}
-                  onSaveWorkspaceFile={handleSaveWorkspaceFile}
-                  onOpenHelp={() => setShowHelpModal(true)}
-                  onOpenLogs={() => setShowLogsModal(true)}
-                  backupStatus={backupStatus}
-                  onRestoreBackedUpPackages={handleRestoreBackedUpPackages}
-                  restoringBackup={restoringBackup}
-                  onNotify={showToast}
-                />
-              </div>
-            )}
-          </div>
-        ) : deviceClass === 'tablet' ? (
+        {deviceClass === 'tablet' ? (
           <div className={`flex-1 min-h-0 flex ${isLandscape ? 'flex-row' : 'flex-col'} overflow-hidden`}>
             {/* Tablet Primary Editor Pane */}
             <section
@@ -3182,53 +2956,7 @@ export default function App() {
                 </div>
               </div>
 
-              {mobileNewFileOpen && (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    let name = sanitizeFileName(mobileNewFileName);
-                    if (!name) return;
-                    if (!name.includes('.')) name += '.py';
-                    if (files.some((f) => f.name.toLowerCase() === name.toLowerCase())) {
-                      showToast(t('files_exists', { name }));
-                      return;
-                    }
-                    const starter = name.toLowerCase().endsWith('.json')
-                      ? '{\n  "app": "DroidPy"\n}\n'
-                      : name.toLowerCase().endsWith('.py')
-                      ? `# ${name}\n\ndef main():\n    print("Hello from ${name}")\n\nif __name__ == "__main__":\n    main()\n`
-                      : '';
-                    handleCreateFile(name, starter);
-                    setMobileNewFileName('');
-                    setMobileNewFileOpen(false);
-                  }}
-                  className="flex items-center gap-1.5 px-2.5 py-2 border-b border-[var(--ide-border)] bg-[var(--ide-surface)] shrink-0"
-                >
-                  <input
-                    type="text"
-                    autoFocus
-                    value={mobileNewFileName}
-                    onChange={(e) => setMobileNewFileName(e.target.value)}
-                    placeholder={t('files_new_placeholder')}
-                    className="flex-1 min-w-0 min-h-[38px] px-3 rounded-lg bg-[var(--ide-bg)] border border-[var(--ide-border)] text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
-                  />
-                  <button
-                    type="submit"
-                    className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg bg-[var(--ide-accent)] text-white"
-                    aria-label={t('files_new_btn')}
-                  >
-                    <Check className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMobileNewFileOpen(false)}
-                    className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg border border-[var(--ide-border)] text-[var(--ide-text-muted)]"
-                    aria-label={t('files_cancel')}
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </form>
-              )}
+              {mobileNewFileOpen && renderInlineNewFileBar()}
 
               <div className="flex-1 min-h-0 overflow-hidden">
                 <CodeEditor
@@ -3329,6 +3057,8 @@ export default function App() {
                       onCreateFile={handleCreateFile}
                       onRenameFile={handleRenameFile}
                       onDeleteFile={handleDeleteFile}
+                      onRestoreFiles={handleRestoreScriptBackup}
+                      onSyncBackupSdcard={handleSyncBackupToSdcard}
                       onNotify={showToast}
                     />
                   </div>
@@ -3420,53 +3150,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {mobileNewFileOpen && (
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      let name = sanitizeFileName(mobileNewFileName);
-                      if (!name) return;
-                      if (!name.includes('.')) name += '.py';
-                      if (files.some((f) => f.name.toLowerCase() === name.toLowerCase())) {
-                        showToast(t('files_exists', { name }));
-                        return;
-                      }
-                      const starter = name.toLowerCase().endsWith('.json')
-                        ? '{\n  "app": "DroidPy"\n}\n'
-                        : name.toLowerCase().endsWith('.py')
-                        ? `# ${name}\n\ndef main():\n    print("Hello from ${name}")\n\nif __name__ == "__main__":\n    main()\n`
-                        : '';
-                      handleCreateFile(name, starter);
-                      setMobileNewFileName('');
-                      setMobileNewFileOpen(false);
-                    }}
-                    className="flex items-center gap-1.5 px-2.5 py-2 border-b border-[var(--ide-border)] bg-[var(--ide-surface)] shrink-0"
-                  >
-                    <input
-                      type="text"
-                      autoFocus
-                      value={mobileNewFileName}
-                      onChange={(e) => setMobileNewFileName(e.target.value)}
-                      placeholder={t('files_new_placeholder')}
-                      className="flex-1 min-w-0 min-h-[38px] px-3 rounded-lg bg-[var(--ide-bg)] border border-[var(--ide-border)] text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
-                    />
-                    <button
-                      type="submit"
-                      className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg bg-[var(--ide-accent)] text-white"
-                      aria-label={t('files_new_btn')}
-                    >
-                      <Check className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMobileNewFileOpen(false)}
-                      className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg border border-[var(--ide-border)] text-[var(--ide-text-muted)]"
-                      aria-label={t('files_cancel')}
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </form>
-                )}
+                {mobileNewFileOpen && renderInlineNewFileBar()}
 
                 <div className="flex-1 min-h-0 overflow-hidden">
                   <CodeEditor
@@ -3552,6 +3236,8 @@ export default function App() {
                   onCreateFile={handleCreateFile}
                   onRenameFile={handleRenameFile}
                   onDeleteFile={handleDeleteFile}
+                  onRestoreFiles={handleRestoreScriptBackup}
+                  onSyncBackupSdcard={handleSyncBackupToSdcard}
                   onNotify={showToast}
                 />
               </div>
@@ -3560,11 +3246,60 @@ export default function App() {
         )}
       </main>
 
-      {/* Phone Thumb-Zone Bottom Navigation Bar (4 focused workspace tabs; low-frequency tools live in Negative Screen) */}
+      {/* Phone Thumb-Zone MD3 FAB on Editor / Console tabs (single dominant primary CTA) */}
+      {deviceClass === 'phone' && (mobileTab === 'editor' || mobileTab === 'console') && (
+        <div
+          className={`fixed right-3.5 z-30 ${
+            mobileTab === 'console'
+              ? 'bottom-[132px]'
+              : settings.showSymbolBar
+              ? 'bottom-[118px]'
+              : 'bottom-[76px]'
+          }`}
+        >
+          {pendingInputPrompt !== null ? (
+            <button
+              type="button"
+              onClick={handleCancelInput}
+              className="min-h-[56px] px-4 rounded-[1rem] bg-red-600 text-white text-xs font-semibold shadow-lg inline-flex items-center gap-2 active:scale-95 transition-transform"
+            >
+              <Square className="w-4 h-4 fill-current" />
+              <span>{t('cta_abort_short')}</span>
+            </button>
+          ) : termuxRunning ? (
+            <button
+              type="button"
+              onClick={() => void handleStopTermux()}
+              className="min-h-[56px] px-4 rounded-[1rem] bg-red-600 text-white text-xs font-semibold shadow-lg inline-flex items-center gap-2 active:scale-95 transition-transform"
+            >
+              <Square className="w-4 h-4 fill-current" />
+              <span>{t('cta_stop_short')}</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleRunCode}
+              disabled={isRunning || isCoreLoading}
+              className="min-h-[56px] px-5 md-fab disabled:opacity-50 text-xs font-semibold inline-flex items-center gap-2 active:scale-95 transition-transform"
+            >
+              {isRunning || isCoreLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Play className="w-4 h-4 fill-current" />
+              )}
+              <span>
+                {isCoreLoading ? t('cta_loading_short') : isRunning ? t('cta_running') : t('cta_run_short')}
+              </span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Phone MD3 Bottom Navigation Bar (Icon-only pill indicator) */}
       {deviceClass === 'phone' && (
       <nav
         aria-label={t('nav_workspace')}
-        className="shrink-0 h-14 pb-safe bg-[var(--ide-surface)]/95 backdrop-blur-md border-t border-[var(--ide-border)] grid grid-cols-4"
+        className="shrink-0 h-[64px] pb-safe bg-[var(--md-surface-container-low)]/95 backdrop-blur-md border-t border-[var(--ide-border)] grid grid-cols-4"
       >
         {(
           [
@@ -3580,11 +3315,17 @@ export default function App() {
               key={id}
               type="button"
               onClick={() => setMobileTab(id)}
-              className={`min-h-[44px] flex flex-col items-center justify-center gap-0.5 transition-colors ${
+              className={`min-h-[48px] flex flex-col items-center justify-center gap-1 transition-colors ${
                 active ? 'text-[var(--ide-accent-text)]' : 'text-[var(--ide-text-muted)]'
               }`}
             >
-              <Icon className="w-5 h-5" />
+              <span
+                className={`w-14 h-7 rounded-full flex items-center justify-center transition-colors ${
+                  active ? 'md-nav-pill' : ''
+                }`}
+              >
+                <Icon className="w-5 h-5" />
+              </span>
               <span className="text-[11px] font-medium tracking-tight">{label}</span>
             </button>
           );
@@ -3593,196 +3334,72 @@ export default function App() {
       )}
 
       {/* Negative Screen Slide-Over Drawer for Phone & Tablet (Termux, Packages, Storage, System & Export) */}
-      {!isDesktop && (
-        <NegativeScreenDrawer
-          open={negativeOpen}
-          section={negativeSection}
-          onChangeSection={setNegativeSection}
-          onClose={() => setNegativeOpen(false)}
-          files={files}
-          activeFile={activeFile}
-          settings={settings}
-          onUpdateSettings={handleUpdateSettings}
-          onResetWorkspace={handleResetWorkspace}
-          pyodideStatus={pyodideStatus}
-          installedPackages={installedPackages}
-          onInstallPackage={handleInstallPackage}
-          onRefreshPackages={handleRefreshPackages}
-          outdatedPackages={outdatedPyPackages}
-          checkingOutdated={checkingOutdatedPkgs}
-          upgradingPackages={upgradingPyPackages}
-          onUpgradePackage={handleUpgradePyPackage}
-          onUninstallPackage={handleUninstallPyPackage}
-          onCheckAndUpgradeAll={handleCheckAndUpgradeAllPy}
-          onUpgradeAllPackages={handleUpgradeAllPackages}
-          onUpgradeAllTermux={handleUpgradeAllTermux}
-          onUpgradeSingleTermuxPip={handleUpgradeSingleTermuxPip}
-          outdatedTermuxPips={outdatedTermuxPips}
-          checkingTermuxOutdated={checkingTermuxOutdated}
-          onCheckTermuxOutdated={handleCheckTermuxOutdated}
-          onUninstallInTermux={handleUninstallInTermux}
-          upgradingTermux={upgradingTermux}
-          appUpdateResult={appUpdateResult}
-          checkingAppUpdate={checkingAppUpdate}
-          onOpenUpdateModal={() => {
-            setShowUpdateModal(true);
-            if (!appUpdateResult && githubRepo) {
-              void handleCheckAppUpdates(githubRepo, true);
-            }
-          }}
-          linkedDirName={linkedDirHandle?.name ?? null}
-          onLinkDirectory={handleLinkDirectory}
-          onImportFromDirectory={handleImportFromDirectory}
-          onSaveToDirectory={handleSaveToDirectory}
-          engine={executionEngine}
-          onChangeEngine={setExecutionEngine}
-          termuxConfig={termuxConfig}
-          onUpdateTermuxConfig={handleUpdateTermuxConfig}
-          termuxConnectionState={termuxConnectionState}
-          termuxError={termuxError}
-          termuxHealth={termuxHealth}
-          onTestTermuxConnection={handleTestTermuxConnection}
-          onInstallInTermux={handleInstallInTermux}
-          onRunInTermux={handleRunInTermux}
-          onRunShellInTermux={handleRunShellInTermux}
-          onInitializeEmbeddedEnv={handleInitializeEmbeddedEnv}
-          onGenerateRequirements={handleGenerateRequirements}
-          onInstallRequirements={handleInstallRequirements}
-          onSaveWorkspaceFile={handleSaveWorkspaceFile}
-          onOpenHelp={() => setShowHelpModal(true)}
-          onOpenLogs={() => setShowLogsModal(true)}
-          backupStatus={backupStatus}
-          onRestoreBackedUpPackages={handleRestoreBackedUpPackages}
-          restoringBackup={restoringBackup}
-          onNotify={showToast}
-        />
-      )}
-
-      {/* Quick Theme Picker Modal (accessible from Toolbar / Mobile Header) */}
-      {showThemePicker && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/55 backdrop-blur-sm p-0 sm:p-4"
-          onClick={() => setShowThemePicker(false)}
-        >
-          <div
-            className="w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl bg-[var(--ide-surface)] border border-[var(--ide-border)] p-5 shadow-xl text-[var(--ide-text)]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="w-10 h-1.5 bg-[var(--ide-border)] rounded-full mx-auto mb-4 sm:hidden" />
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h3 className="text-base font-semibold">{t('modal_theme_title')}</h3>
-                <p className="text-xs text-[var(--ide-text-muted)]">{t('modal_theme_desc')}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowThemePicker(false)}
-                className="min-h-[36px] px-3 rounded-lg text-xs font-medium text-[var(--ide-text-muted)] hover:bg-[var(--ide-accent-soft)]"
-              >
-                {t('btn_done')}
-              </button>
-            </div>
-            <div className="space-y-2 max-h-[60vh] overflow-y-auto ide-scroll">
-              {IDE_THEMES.map((item) => {
-                const selected = settings.theme === item.id;
-                const themeText = getLocalizedThemeText(item.id, settings.locale);
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      handleUpdateSettings({ theme: item.id });
-                      showToast(t('toast_theme_applied', { name: themeText.name }));
-                      setShowThemePicker(false);
-                    }}
-                    className={`w-full min-h-[58px] px-3.5 py-2.5 rounded-xl border flex items-center justify-between gap-3 text-left transition-colors ${
-                      selected
-                        ? 'border-[var(--ide-accent)] bg-[var(--ide-accent-soft)]'
-                        : 'border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)]'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div
-                        className="w-9 h-9 rounded-lg border border-black/10 dark:border-white/10 shrink-0 overflow-hidden grid grid-cols-2"
-                        style={{ backgroundColor: item.swatchBg }}
-                        aria-hidden="true"
-                      >
-                        <div style={{ backgroundColor: item.swatchSurface }} />
-                        <div style={{ backgroundColor: item.swatchAccent }} />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold truncate">{themeText.name}</div>
-                        <div className="text-xs text-[var(--ide-text-muted)] truncate">
-                          {item.category === 'feminine'
-                            ? t('theme_cat_feminine')
-                            : t('theme_cat_classic')}{' '}
-                          · {themeText.subtitle}
-                        </div>
-                      </div>
-                    </div>
-                    {selected && <Check className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Quick Language Picker Modal (accessible from Toolbar / Mobile Header) */}
-      {showLangPicker && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/55 backdrop-blur-sm p-0 sm:p-4"
-          onClick={() => setShowLangPicker(false)}
-        >
-          <div
-            className="w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl bg-[var(--ide-surface)] border border-[var(--ide-border)] p-5 shadow-xl text-[var(--ide-text)]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="w-10 h-1.5 bg-[var(--ide-border)] rounded-full mx-auto mb-4 sm:hidden" />
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h3 className="text-base font-semibold">{t('modal_lang_title')}</h3>
-                <p className="text-xs text-[var(--ide-text-muted)]">{t('modal_lang_desc')}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowLangPicker(false)}
-                className="min-h-[36px] px-3 rounded-lg text-xs font-medium text-[var(--ide-text-muted)] hover:bg-[var(--ide-accent-soft)]"
-              >
-                {t('btn_done')}
-              </button>
-            </div>
-            <div className="space-y-2">
-              {LOCALE_OPTIONS.map((lang) => {
-                const selected = settings.locale === lang.id;
-                return (
-                  <button
-                    key={lang.id}
-                    type="button"
-                    onClick={() => {
-                      handleUpdateSettings({ locale: lang.id });
-                      showToast(translate(lang.id, 'toast_lang_applied', { name: lang.nativeName }));
-                      setShowLangPicker(false);
-                    }}
-                    className={`w-full min-h-[54px] px-3.5 py-2.5 rounded-xl border flex items-center justify-between gap-3 text-left transition-colors ${
-                      selected
-                        ? 'border-[var(--ide-accent)] bg-[var(--ide-accent-soft)]'
-                        : 'border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)]'
-                    }`}
-                  >
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold">{lang.nativeName}</div>
-                      <div className="text-xs text-[var(--ide-text-muted)]">{lang.subtitle}</div>
-                    </div>
-                    {selected && <Check className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
+      <NegativeScreenDrawer
+        open={negativeOpen}
+        section={negativeSection}
+        onChangeSection={setNegativeSection}
+        onClose={() => setNegativeOpen(false)}
+        files={files}
+        activeFile={activeFile}
+        settings={settings}
+        onUpdateSettings={handleUpdateSettings}
+        onResetWorkspace={handleResetWorkspace}
+        pyodideStatus={pyodideStatus}
+        installedPackages={installedPackages}
+        onInstallPackage={handleInstallPackage}
+        onRefreshPackages={handleRefreshPackages}
+        outdatedPackages={outdatedPyPackages}
+        checkingOutdated={checkingOutdatedPkgs}
+        upgradingPackages={upgradingPyPackages}
+        onUpgradePackage={handleUpgradePyPackage}
+        onUninstallPackage={handleUninstallPyPackage}
+        onCheckAndUpgradeAll={handleCheckAndUpgradeAllPy}
+        onUpgradeAllPackages={handleUpgradeAllPackages}
+        onUpgradeAllTermux={handleUpgradeAllTermux}
+        onUpgradeSingleTermuxPip={handleUpgradeSingleTermuxPip}
+        outdatedTermuxPips={outdatedTermuxPips}
+        checkingTermuxOutdated={checkingTermuxOutdated}
+        onCheckTermuxOutdated={handleCheckTermuxOutdated}
+        onUninstallInTermux={handleUninstallInTermux}
+        upgradingTermux={upgradingTermux}
+        appUpdateResult={appUpdateResult}
+        checkingAppUpdate={checkingAppUpdate}
+        onOpenUpdateModal={() => {
+          setShowUpdateModal(true);
+          if (!appUpdateResult && githubRepo) {
+            void handleCheckAppUpdates(githubRepo, true);
+          }
+        }}
+        linkedDirName={linkedDirHandle?.name ?? null}
+        onLinkDirectory={handleLinkDirectory}
+        onImportFromDirectory={handleImportFromDirectory}
+        onSaveToDirectory={handleSaveToDirectory}
+        engine={executionEngine}
+        onChangeEngine={setExecutionEngine}
+        termuxConfig={termuxConfig}
+        onUpdateTermuxConfig={handleUpdateTermuxConfig}
+        termuxConnectionState={termuxConnectionState}
+        termuxError={termuxError}
+        termuxHealth={termuxHealth}
+        onTestTermuxConnection={handleTestTermuxConnection}
+        onInstallInTermux={handleInstallInTermux}
+        onRunInTermux={handleRunInTermux}
+        onRunShellInTermux={handleRunShellInTermux}
+        onInitializeEmbeddedEnv={handleInitializeEmbeddedEnv}
+        onGenerateRequirements={handleGenerateRequirements}
+        onInstallRequirements={handleInstallRequirements}
+        onSaveWorkspaceFile={handleSaveWorkspaceFile}
+        onOpenHelp={() => setShowHelpModal(true)}
+        onOpenLogs={() => setShowLogsModal(true)}
+        backupStatus={backupStatus}
+        onRestoreBackedUpPackages={handleRestoreBackedUpPackages}
+        restoringBackup={restoringBackup}
+        onCleanupProcesses={handleCleanupStuckProcesses}
+        cleaningProcesses={cleaningProcesses}
+        lastCleanupResult={lastCleanupResult}
+        onRebuildPipCertifi={handleRebuildPipCertifi}
+        onNotify={showToast}
+      />
 
       {/* In-App User Guide & Interactive Tutorials */}
       <HelpTutorialModal
@@ -3790,18 +3407,12 @@ export default function App() {
         onClose={() => setShowHelpModal(false)}
         onInsertSampleFile={(filename, content) => handleSaveWorkspaceFile(filename, content, true)}
         onNavigateBrowser={() => {
-          setDesktopSection('workspace');
-          setDesktopRightPane('browser');
           setTabletSplit(true);
           setTabletPaneTab('browser');
           setMobileTab('browser');
         }}
         onNavigateAndroid={() => {
-          if (isDesktop) {
-            setDesktopSection('android');
-          } else {
-            openNegativeDrawer('android');
-          }
+          openNegativeDrawer('android');
         }}
         onNotify={showToast}
       />
@@ -3832,7 +3443,7 @@ export default function App() {
 
       {/* Compact Dismissible New Version Banner */}
       {appUpdateResult?.hasUpdate && appUpdateResult.latest && !updateBannerDismissed && !showUpdateModal && (
-        <div className="fixed bottom-16 lg:bottom-4 right-3 sm:right-4 z-40 flex items-center gap-2 rounded-2xl border border-[var(--ide-accent)] bg-[var(--ide-surface)]/95 backdrop-blur-md px-3 py-2 text-xs shadow-xl max-w-[calc(100vw-24px)]">
+        <div className="fixed bottom-20 sm:bottom-5 right-3 sm:right-4 z-40 flex items-center gap-2 rounded-2xl border border-[var(--ide-accent)] bg-[var(--ide-surface)]/95 backdrop-blur-md px-3 py-2 text-xs shadow-xl max-w-[calc(100vw-24px)]">
           <Sparkles className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
           <span className="font-semibold text-[var(--ide-text)] truncate">
             {t('upd_banner_text', { ver: appUpdateResult.latest.version })}
@@ -3840,7 +3451,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => setShowUpdateModal(true)}
-            className="min-h-[30px] px-2.5 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-[11px] font-semibold whitespace-nowrap shrink-0 transition-colors"
+            className="min-h-[32px] px-2.5 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-[11px] font-semibold whitespace-nowrap shrink-0 transition-colors"
           >
             {t('upd_banner_cta')}
           </button>
@@ -3848,7 +3459,7 @@ export default function App() {
             type="button"
             onClick={() => setUpdateBannerDismissed(true)}
             aria-label={t('btn_done')}
-            className="min-h-[28px] min-w-[28px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] shrink-0"
+            className="min-h-[32px] min-w-[32px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] shrink-0"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -3857,7 +3468,7 @@ export default function App() {
 
       {/* Offline Status Banner */}
       {!isOnline && (
-        <div className="fixed bottom-16 lg:bottom-4 left-3 right-3 sm:right-auto z-50 flex items-center gap-2 rounded-xl bg-amber-600 text-white px-3.5 py-2 text-xs font-medium shadow-lg max-w-[calc(100vw-24px)]">
+        <div className="fixed bottom-20 sm:bottom-5 left-3 right-3 sm:right-auto z-50 flex items-center gap-2 rounded-xl bg-amber-600 text-white px-3.5 py-2 text-xs font-medium shadow-lg max-w-[calc(100vw-24px)]">
           <WifiOff className="w-3.5 h-3.5 shrink-0" />
           <span className="min-w-0 break-words">{t('offline_banner')}</span>
         </div>
@@ -3868,7 +3479,7 @@ export default function App() {
         <div
           role="status"
           aria-live="polite"
-          className="fixed bottom-16 lg:bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none px-4 py-2.5 rounded-2xl bg-slate-900/95 dark:bg-slate-100/95 text-white dark:text-slate-900 text-xs font-medium shadow-xl max-w-[calc(100vw-24px)] text-center break-words"
+          className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none px-4 py-2.5 rounded-2xl bg-slate-900/95 dark:bg-slate-100/95 text-white dark:text-slate-900 text-xs font-medium shadow-xl max-w-[calc(100vw-24px)] text-center break-words"
         >
           {toastMsg}
         </div>

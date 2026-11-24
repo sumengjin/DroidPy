@@ -322,7 +322,7 @@ export const CrawlerBrowserPanel: React.FC<CrawlerBrowserPanelProps> = ({
           />
           <button
             type="submit"
-            className="min-h-[38px] px-2.5 sm:px-3 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium whitespace-nowrap shrink-0 transition-colors"
+            className="min-h-[42px] px-3 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium whitespace-nowrap shrink-0 transition-colors"
           >
             {t('brw_go')}
           </button>
@@ -643,7 +643,7 @@ export const CrawlerBrowserPanel: React.FC<CrawlerBrowserPanelProps> = ({
           </form>
 
           {/* Chrome Bookmarklet Helper */}
-          <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-bg)] p-4 space-y-2.5">
+          <div className="md-card p-4 space-y-2.5">
             <div className="flex items-center gap-2 text-xs font-semibold text-[var(--ide-text)]">
               <Bookmark className="w-4 h-4 text-[var(--ide-accent)]" />
               <span>{t('brw_bookmarklet_title')}</span>

@@ -13,13 +13,24 @@ import {
   FolderSync,
   RefreshCw,
   HardDrive,
+  History,
+  RotateCcw,
+  FileDown,
+  FileUp,
 } from 'lucide-react';
 import JSZip from 'jszip';
-import { PythonFile } from '../types/ide';
+import { PythonFile, ScriptBackupSnapshot } from '../types/ide';
 import { SNIPPET_CATEGORIES, SNIPPET_TEMPLATES, SnippetCategoryId } from '../data/defaultFiles';
 import { useI18n } from '../services/i18n';
 import { copyTextReliable } from '../utils/clipboard';
 import { downloadBlob } from '../utils/downloadBlob';
+import {
+  createScriptBackup,
+  deleteScriptBackup,
+  exportScriptBackupJson,
+  listScriptBackups,
+  parseScriptBackupJson,
+} from '../services/scriptBackup';
 
 interface FileExplorerProps {
   files: PythonFile[];
@@ -36,6 +47,8 @@ interface FileExplorerProps {
   onCreateFile: (name: string, content?: string) => void;
   onRenameFile: (id: string, nextName: string) => void;
   onDeleteFile: (id: string) => void;
+  onRestoreFiles?: (files: PythonFile[], label: string) => void;
+  onSyncBackupSdcard?: (snapshot: ScriptBackupSnapshot) => Promise<void>;
   onNotify: (msg: string) => void;
 }
 
@@ -62,10 +75,13 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   onCreateFile,
   onRenameFile,
   onDeleteFile,
+  onRestoreFiles,
+  onSyncBackupSdcard,
   onNotify,
 }) => {
   const { t } = useI18n();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const backupImportInputRef = useRef<HTMLInputElement | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [newFileName, setNewFileName] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -73,6 +89,10 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [showTemplates, setShowTemplates] = useState(false);
   const [templateCategory, setTemplateCategory] = useState<SnippetCategoryId>('all');
+  const [showBackups, setShowBackups] = useState(false);
+  const [backupLabel, setBackupLabel] = useState('');
+  const [backups, setBackups] = useState<ScriptBackupSnapshot[]>(() => listScriptBackups());
+  const [confirmDeleteBackupId, setConfirmDeleteBackupId] = useState<string | null>(null);
   const isNativeApk = Boolean(termuxEmbedded || window.DroidPyNative?.isNativeApp?.());
   const [nativeStorageGranted, setNativeStorageGranted] = useState<boolean>(() =>
     Boolean(window.DroidPyNative?.hasStoragePermission?.())
@@ -186,6 +206,58 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     } else {
       onNotify(t('files_clipboard_err'));
     }
+  };
+
+  const handleCreateSnapshot = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const snap = createScriptBackup(files, backupLabel, 'manual');
+    setBackups(listScriptBackups());
+    setBackupLabel('');
+    onNotify(t('bak_created_toast', { count: snap.fileCount }));
+  };
+
+  const handleRestoreSnapshot = (snap: ScriptBackupSnapshot) => {
+    if (!onRestoreFiles) return;
+    onRestoreFiles(snap.files, snap.label);
+    setBackups(listScriptBackups());
+  };
+
+  const handleExportSnapshot = async (snap: ScriptBackupSnapshot) => {
+    const json = exportScriptBackupJson(snap);
+    const safeName = snap.label.replace(/[^a-zA-Z0-9_\-\u4e00-\u9fa5]/g, '_').slice(0, 32) || 'snapshot';
+    const fileName = `droidpy-backup-${safeName}.json`;
+    await downloadBlob(new Blob([json], { type: 'application/json;charset=utf-8' }), fileName);
+    onNotify(t('bak_exported_toast', { name: fileName }));
+  };
+
+  const handleImportSnapshotFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = e.target.files?.[0];
+    e.target.value = '';
+    if (!picked) return;
+    try {
+      const text = await picked.text();
+      const imported = parseScriptBackupJson(text);
+      if (!imported) {
+        onNotify(t('bak_import_err'));
+        return;
+      }
+      setBackups(listScriptBackups());
+      onNotify(t('bak_imported_toast', { label: imported.label }));
+    } catch {
+      onNotify(t('bak_import_err'));
+    }
+  };
+
+  const handleDeleteSnapshot = (id: string) => {
+    setBackups(deleteScriptBackup(id));
+    setConfirmDeleteBackupId(null);
+    onNotify(t('bak_deleted_toast'));
+  };
+
+  const backupReasonLabel = (reason: ScriptBackupSnapshot['reason']) => {
+    if (reason === 'pre-restore') return t('bak_reason_prerestore');
+    if (reason === 'import') return t('bak_reason_import');
+    return t('bak_reason_manual');
   };
 
   return (
@@ -448,12 +520,143 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           );
         })}
 
+        {/* Script Backups & Restore Accordion (MD3 Tonal Card) */}
+        <div className="px-3 pt-3">
+          <button
+            type="button"
+            onClick={() => {
+              const next = !showBackups;
+              if (next) setBackups(listScriptBackups());
+              setShowBackups(next);
+            }}
+            className="w-full min-h-[44px] px-3.5 flex items-center justify-between md-card text-xs font-semibold text-[var(--ide-text)] hover:border-[var(--ide-accent)] transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              <History className="w-4 h-4 text-[var(--ide-accent)]" />
+              <span>{t('bak_section_title')}</span>
+            </span>
+            <span className="text-[var(--ide-text-muted)] tabular-nums">
+              {backups.length} · {showBackups ? t('files_collapse') : t('files_expand')}
+            </span>
+          </button>
+
+          {showBackups && (
+            <div className="mt-2.5 md-card p-3 space-y-3">
+              <form onSubmit={handleCreateSnapshot} className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  value={backupLabel}
+                  onChange={(e) => setBackupLabel(e.target.value)}
+                  placeholder={t('bak_label_placeholder')}
+                  className="flex-1 min-w-0 min-h-[44px] px-3 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] text-xs focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
+                />
+                <button
+                  type="submit"
+                  className="min-h-[44px] px-3.5 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-semibold whitespace-nowrap shrink-0 transition-colors"
+                >
+                  {t('bak_create_btn')}
+                </button>
+              </form>
+
+              <div className="flex items-center justify-between gap-2">
+                <input
+                  ref={backupImportInputRef}
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={(e) => void handleImportSnapshotFile(e)}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => backupImportInputRef.current?.click()}
+                  className="min-h-[40px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] text-xs font-medium inline-flex items-center gap-1.5 whitespace-nowrap"
+                >
+                  <FileUp className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
+                  <span>{t('bak_import_btn')}</span>
+                </button>
+              </div>
+
+              {backups.length === 0 ? (
+                <p className="text-xs text-[var(--ide-text-muted)] leading-relaxed py-2">
+                  {t('bak_empty')}
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto ide-scroll pr-0.5">
+                  {backups.map((snap) => (
+                    <div
+                      key={snap.id}
+                      className="rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] p-2.5 space-y-2"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-[var(--ide-text)] truncate">
+                          {snap.label}
+                        </div>
+                        <div className="text-[11px] text-[var(--ide-text-muted)] tabular-nums mt-0.5">
+                          {snap.fileCount} files · {backupReasonLabel(snap.reason)} ·{' '}
+                          {new Date(snap.createdAt).toLocaleString()}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {onRestoreFiles && (
+                          <button
+                            type="button"
+                            onClick={() => handleRestoreSnapshot(snap)}
+                            className="min-h-[38px] px-3 rounded-xl bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] text-xs font-semibold inline-flex items-center gap-1 whitespace-nowrap"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>{t('bak_restore_btn')}</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => void handleExportSnapshot(snap)}
+                          className="min-h-[38px] px-2.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium inline-flex items-center gap-1 whitespace-nowrap"
+                        >
+                          <FileDown className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
+                          <span>{t('bak_export_btn')}</span>
+                        </button>
+                        {isNativeApk && onSyncBackupSdcard && (
+                          <button
+                            type="button"
+                            onClick={() => void onSyncBackupSdcard(snap)}
+                            className="min-h-[38px] px-2.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium whitespace-nowrap"
+                          >
+                            {t('bak_sync_sdcard_btn')}
+                          </button>
+                        )}
+                        {confirmDeleteBackupId === snap.id ? (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSnapshot(snap.id)}
+                            className="min-h-[38px] px-2.5 rounded-xl bg-red-600 text-white text-xs font-medium ml-auto"
+                          >
+                            {t('files_delete')}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteBackupId(snap.id)}
+                            aria-label={t('files_delete')}
+                            className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl text-[var(--ide-text-muted)] hover:text-red-500 ml-auto"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Android Code Templates Accordion */}
         <div className="p-3">
           <button
             type="button"
             onClick={() => setShowTemplates((v) => !v)}
-            className="w-full min-h-[44px] px-3 flex items-center justify-between rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium text-[var(--ide-text)] hover:border-[var(--ide-accent)] transition-colors"
+            className="w-full min-h-[44px] px-3.5 flex items-center justify-between md-card text-xs font-medium text-[var(--ide-text)] hover:border-[var(--ide-accent)] transition-colors"
           >
             <span className="flex items-center gap-2">
               <BookOpen className="w-4 h-4 text-[var(--ide-accent)]" />
@@ -474,7 +677,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                       key={cat.id}
                       type="button"
                       onClick={() => setTemplateCategory(cat.id)}
-                      className={`min-h-[32px] px-2.5 rounded-lg text-[11px] font-medium whitespace-nowrap shrink-0 transition-colors ${
+                      className={`min-h-[36px] px-3 rounded-xl text-[11px] font-medium whitespace-nowrap shrink-0 transition-colors ${
                         active
                           ? 'bg-[var(--ide-accent)] text-white font-semibold'
                           : 'bg-[var(--ide-surface)] border border-[var(--ide-border)] text-[var(--ide-text-muted)] hover:border-[var(--ide-accent)]'
@@ -501,7 +704,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                       onCreateFile(targetName, tpl.code);
                       onNotify(t('files_template_added', { name: targetName }));
                     }}
-                    className="w-full text-left p-3 rounded-xl border border-[var(--ide-border)] hover:border-[var(--ide-accent)] bg-[var(--ide-surface)] transition-colors"
+                    className="w-full text-left p-3.5 md-card hover:border-[var(--ide-accent)] transition-colors"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs font-semibold text-[var(--ide-text)] truncate">{tpl.title}</span>
@@ -530,7 +733,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="min-h-[42px] px-2 flex items-center justify-center gap-1.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium hover:border-[var(--ide-accent)] transition-colors whitespace-nowrap"
+          className="min-h-[44px] px-2 flex items-center justify-center gap-1.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium hover:border-[var(--ide-accent)] transition-colors whitespace-nowrap"
         >
           <Upload className="w-3.5 h-3.5" />
           <span>{t('files_import')}</span>
@@ -538,7 +741,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
         <button
           type="button"
           onClick={handleShareActive}
-          className="min-h-[42px] px-2 flex items-center justify-center gap-1.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium hover:border-[var(--ide-accent)] transition-colors whitespace-nowrap"
+          className="min-h-[44px] px-2 flex items-center justify-center gap-1.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium hover:border-[var(--ide-accent)] transition-colors whitespace-nowrap"
         >
           <Share2 className="w-3.5 h-3.5" />
           <span>{t('files_share')}</span>
@@ -546,7 +749,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
         <button
           type="button"
           onClick={handleExportZip}
-          className="min-h-[42px] px-2 flex items-center justify-center gap-1.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium hover:border-[var(--ide-accent)] transition-colors whitespace-nowrap"
+          className="min-h-[44px] px-2 flex items-center justify-center gap-1.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium hover:border-[var(--ide-accent)] transition-colors whitespace-nowrap"
         >
           <Archive className="w-3.5 h-3.5" />
           <span>{t('files_zip')}</span>

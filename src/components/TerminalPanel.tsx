@@ -71,7 +71,7 @@ const TerminalEntryRow = React.memo<TerminalEntryRowProps>(
 
     if (entry.type === 'plot' && entry.imageDataUrl) {
       return (
-        <div className="my-2 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-3 font-sans">
+        <div className="my-2 md-card p-3 font-sans">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
             <span className="text-xs font-medium text-[var(--ide-text-muted)]">
               {plotTitle}
@@ -349,7 +349,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             <button
               type="button"
               onClick={handleCopySelection}
-              className="min-h-[34px] px-2 flex items-center gap-1 rounded-lg bg-[var(--ide-accent)] text-white text-xs font-semibold transition-colors whitespace-nowrap"
+              className="min-h-[38px] px-2.5 flex items-center gap-1 rounded-xl bg-[var(--ide-accent)] text-white text-xs font-semibold transition-colors whitespace-nowrap"
             >
               {copiedSel ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
               <span>{copiedSel ? t('term_copied_selection') : t('term_copy_selection')}</span>
@@ -359,7 +359,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             <button
               type="button"
               onClick={onOpenLogs}
-              className="min-h-[34px] px-2 flex items-center gap-1 rounded-lg text-xs font-medium text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-accent-soft)] transition-colors whitespace-nowrap"
+              className="min-h-[38px] px-2.5 flex items-center gap-1 rounded-xl text-xs font-medium text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-accent-soft)] transition-colors whitespace-nowrap"
             >
               <FileText className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
               <span>{t('logs_btn')}</span>
@@ -369,7 +369,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             type="button"
             onClick={handleCopyAll}
             disabled={entries.length === 0}
-            className="min-h-[34px] px-2 flex items-center gap-1 rounded-lg text-xs font-medium text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-accent-soft)] disabled:opacity-40 transition-colors whitespace-nowrap"
+            className="min-h-[38px] px-2.5 flex items-center gap-1 rounded-xl text-xs font-medium text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-accent-soft)] disabled:opacity-40 transition-colors whitespace-nowrap"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-[var(--ide-accent)]" /> : <Copy className="w-3.5 h-3.5" />}
             <span>{copied ? t('term_copied') : t('term_copy')}</span>
@@ -378,7 +378,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             type="button"
             onClick={onClear}
             disabled={entries.length === 0}
-            className="min-h-[34px] px-2 flex items-center gap-1 rounded-lg text-xs font-medium text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-accent-soft)] disabled:opacity-40 transition-colors whitespace-nowrap"
+            className="min-h-[38px] px-2.5 flex items-center gap-1 rounded-xl text-xs font-medium text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-accent-soft)] disabled:opacity-40 transition-colors whitespace-nowrap"
           >
             <Trash2 className="w-3.5 h-3.5" />
             <span>{t('term_clear')}</span>
@@ -531,7 +531,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           onClick={() => setExpandedPlot(null)}
         >
           <div
-            className="relative max-w-3xl w-full rounded-2xl bg-[var(--ide-surface)] p-4 border border-[var(--ide-border)]"
+            className="relative max-w-3xl w-full md-sheet p-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-3">
@@ -540,7 +540,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
                 type="button"
                 onClick={() => setExpandedPlot(null)}
                 aria-label={t('pwa_got_it')}
-                className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:bg-[var(--ide-accent-soft)]"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-[var(--ide-text-muted)] hover:bg-[var(--ide-accent-soft)]"
               >
                 <X className="w-5 h-5" />
               </button>

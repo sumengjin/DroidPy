@@ -2,6 +2,7 @@ import {
   AppStorageCleanupResult,
   AppStorageUsageInfo,
   PackageBackupStatus,
+  ProcessCleanupResult,
   PythonFile,
   SdcardEntry,
   SdcardStatusInfo,
@@ -53,19 +54,278 @@ WORKSPACE = os.path.expanduser("~/droidpy_workspace")
 os.makedirs(WORKSPACE, exist_ok=True)
 
 PROC_LOCK = threading.Lock()
-ACTIVE_PROC = {"pid": None, "pgid": None, "master_fd": None}
+ACTIVE_PROC = {"pid": None, "pgid": None, "master_fd": None, "started_at": 0.0}
+WATCHDOG_INTERVAL_SEC = 1800
+_LEGACY_CERTS_SUPPORTED = None
 
 def _set_active(pid, pgid, master_fd):
     with PROC_LOCK:
         ACTIVE_PROC["pid"] = pid
         ACTIVE_PROC["pgid"] = pgid
         ACTIVE_PROC["master_fd"] = master_fd
+        ACTIVE_PROC["started_at"] = time.time()
 
 def _clear_active():
     with PROC_LOCK:
         ACTIVE_PROC["pid"] = None
         ACTIVE_PROC["pgid"] = None
         ACTIVE_PROC["master_fd"] = None
+        ACTIVE_PROC["started_at"] = 0.0
+
+def _find_certifi_source():
+    for getter in (
+        lambda: __import__("certifi").where(),
+        lambda: __import__("pip._vendor.certifi", fromlist=["where"]).where(),
+    ):
+        try:
+            cand = getter()
+            if cand and os.path.isfile(cand) and os.path.getsize(cand) > 0:
+                return cand
+        except Exception:
+            pass
+    try:
+        out = subprocess.check_output(
+            [sys.executable, "-c", "import certifi; print(certifi.where())"],
+            text=True,
+            timeout=4,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        if out and os.path.isfile(out) and os.path.getsize(out) > 0:
+            return out
+    except Exception:
+        pass
+    prefix = os.environ.get("PREFIX", "")
+    for rel in (
+        os.path.join(prefix, "etc", "tls", "cert.pem") if prefix else "",
+        os.path.join(prefix, "etc", "ssl", "cert.pem") if prefix else "",
+        os.path.join(prefix, "etc", "ssl", "certs", "ca-certificates.crt") if prefix else "",
+        "/etc/ssl/certs/ca-certificates.crt",
+    ):
+        if rel and os.path.isfile(rel) and os.path.getsize(rel) > 0:
+            return rel
+    return None
+
+def _ensure_writable_cacert():
+    src = _find_certifi_source()
+    if not src:
+        return None
+    prefix = os.environ.get("PREFIX", "")
+    candidates = []
+    if prefix:
+        candidates.append(os.path.join(prefix, "tmp", "cacert.pem"))
+    candidates.append(os.path.expanduser("~/tmp/droidpy-cacert.pem"))
+    for dst in candidates:
+        try:
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copyfile(src, dst)
+            os.chmod(dst, 0o644)
+            if os.access(dst, os.R_OK) and os.path.getsize(dst) > 0:
+                return dst
+        except Exception:
+            continue
+    return src if os.access(src, os.R_OK) else None
+
+def _supports_legacy_certs():
+    global _LEGACY_CERTS_SUPPORTED
+    if _LEGACY_CERTS_SUPPORTED is not None:
+        return _LEGACY_CERTS_SUPPORTED
+    try:
+        help_out = subprocess.check_output(
+            [sys.executable, "-m", "pip", "install", "--help"],
+            text=True,
+            timeout=5,
+            stderr=subprocess.STDOUT,
+        )
+        _LEGACY_CERTS_SUPPORTED = "legacy-certs" in help_out
+    except Exception:
+        _LEGACY_CERTS_SUPPORTED = False
+    return _LEGACY_CERTS_SUPPORTED
+
+def _resolve_certifi_env(base_env=None):
+    env = dict(base_env) if base_env is not None else os.environ.copy()
+    env.setdefault("PYTHONUNBUFFERED", "1")
+    env.setdefault("TERM", "xterm-256color")
+    env.setdefault("PIP_DISABLE_PIP_VERSION_CHECK", "1")
+    ca_path = _ensure_writable_cacert()
+    if ca_path:
+        env["SSL_CERT_FILE"] = ca_path
+        env["PIP_CERT"] = ca_path
+        env["REQUESTS_CA_BUNDLE"] = ca_path
+        env["CURL_CA_BUNDLE"] = ca_path
+    if _supports_legacy_certs():
+        env["PIP_USE_DEPRECATED"] = "legacy-certs"
+    return env
+
+def _build_pip_cmd(pkgs, trusted_host=False):
+    cmd = [sys.executable, "-m", "pip", "install"]
+    if trusted_host:
+        cmd.extend(["--trusted-host", "pypi.org", "--trusted-host", "files.pythonhosted.org"])
+    cmd.extend(pkgs)
+    return cmd
+
+def _read_clock_ticks_and_uptime():
+    try:
+        clk = os.sysconf(os.sysconf_names["SC_CLK_TCK"])
+    except Exception:
+        clk = 100
+    uptime = 0.0
+    try:
+        with open("/proc/uptime", "r", encoding="utf-8") as fp:
+            uptime = float(fp.read().split()[0])
+    except Exception:
+        pass
+    return clk, uptime
+
+def _scan_python_processes():
+    pids = set()
+    try:
+        out = subprocess.check_output(
+            ["pgrep", "-f", "python|pip"],
+            text=True,
+            timeout=4,
+            stderr=subprocess.DEVNULL,
+        )
+        for line in out.splitlines():
+            s = line.strip()
+            if s.isdigit():
+                pids.add(int(s))
+    except Exception:
+        pass
+    clk, uptime = _read_clock_ticks_and_uptime()
+    results = []
+    # Scan /proc for full metadata and as fallback when pgrep misses entries
+    try:
+        proc_entries = [e for e in os.listdir("/proc") if e.isdigit()]
+    except Exception:
+        proc_entries = []
+    for entry in proc_entries:
+        pid = int(entry)
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as fp:
+                cmd_raw = fp.read().replace(b"\\x00", b" ").decode("utf-8", errors="replace").strip()
+            with open(f"/proc/{pid}/stat", "r", encoding="utf-8", errors="replace") as fp:
+                stat_txt = fp.read()
+            rp = stat_txt.rfind(")")
+            if rp == -1:
+                continue
+            comm = stat_txt[stat_txt.find("(") + 1:rp]
+            rest = stat_txt[rp + 2:].split()
+            state = rest[0] if len(rest) > 0 else "?"
+            ppid = int(rest[1]) if len(rest) > 1 and rest[1].lstrip("-").isdigit() else 0
+            start_ticks = int(rest[19]) if len(rest) > 19 and rest[19].isdigit() else 0
+            elapsed = max(0, int(uptime - (start_ticks / max(1, clk)))) if uptime > 0 and start_ticks > 0 else 0
+            lower_cmd = (cmd_raw + " " + comm).lower()
+            if pid in pids or "python" in lower_cmd or "pip" in lower_cmd:
+                results.append({
+                    "pid": pid,
+                    "ppid": ppid,
+                    "name": (cmd_raw or comm)[:120],
+                    "state": state,
+                    "elapsedSec": elapsed,
+                })
+        except Exception:
+            continue
+    if results:
+        return results
+    # Fallback via ps if /proc is restricted
+    try:
+        ps_out = subprocess.check_output(
+            ["ps", "-eo", "pid=,ppid=,stat=,etimes=,args="],
+            text=True,
+            timeout=4,
+            stderr=subprocess.DEVNULL,
+        )
+        for line in ps_out.splitlines():
+            parts = line.strip().split(None, 4)
+            if len(parts) < 5 or not parts[0].isdigit():
+                continue
+            pid = int(parts[0])
+            cmd = parts[4]
+            if pid in pids or "python" in cmd.lower() or "pip" in cmd.lower():
+                results.append({
+                    "pid": pid,
+                    "ppid": int(parts[1]) if parts[1].isdigit() else 0,
+                    "name": cmd[:120],
+                    "state": parts[2][:1],
+                    "elapsedSec": int(parts[3]) if parts[3].isdigit() else 0,
+                })
+    except Exception:
+        pass
+    return results
+
+def cleanup_stuck_python_processes(manual=False):
+    my_pid = os.getpid()
+    my_ppid = os.getppid()
+    with PROC_LOCK:
+        active_pid = ACTIVE_PROC.get("pid")
+        active_started = ACTIVE_PROC.get("started_at") or 0.0
+    procs = _scan_python_processes()
+    killed = []
+    for p in procs:
+        pid = p["pid"]
+        name = p["name"]
+        if pid == my_pid or pid == my_ppid:
+            continue
+        if "droidpy_bridge.py" in name:
+            continue
+        is_zombie = p["state"] == "Z"
+        is_stalled = p["elapsedSec"] >= WATCHDOG_INTERVAL_SEC
+        if active_pid == pid and not is_zombie and not is_stalled:
+            continue
+        if active_pid == pid and active_started > 0 and (time.time() - active_started) < WATCHDOG_INTERVAL_SEC and not is_zombie:
+            continue
+        if not is_zombie and not is_stalled:
+            continue
+        reason = "zombie (Z)" if is_zombie else f"stalled >= {WATCHDOG_INTERVAL_SEC}s"
+        sig_used = "SIGKILL" if is_zombie else "SIGTERM"
+        try:
+            if is_zombie:
+                if p["ppid"] > 1 and p["ppid"] != my_pid:
+                    try:
+                        os.kill(p["ppid"], signal.SIGCHLD)
+                    except OSError:
+                        pass
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except OSError:
+                    pass
+            else:
+                os.kill(pid, signal.SIGTERM)
+                time.sleep(0.3)
+                try:
+                    os.kill(pid, 0)
+                    os.kill(pid, signal.SIGKILL)
+                    sig_used = "SIGKILL"
+                except OSError:
+                    pass
+            killed.append({
+                "pid": pid,
+                "name": name,
+                "state": p["state"],
+                "elapsedSec": p["elapsedSec"],
+                "reason": reason,
+                "signal": sig_used,
+            })
+        except OSError:
+            continue
+    return {
+        "ok": True,
+        "checkedAt": int(time.time() * 1000),
+        "manual": bool(manual),
+        "scannedCount": len(procs),
+        "killedCount": len(killed),
+        "killed": killed,
+    }
+
+def _watchdog_loop():
+    while True:
+        time.sleep(WATCHDOG_INTERVAL_SEC)
+        try:
+            res = cleanup_stuck_python_processes(manual=False)
+            if res["killedCount"] > 0:
+                print(f"[DroidPy Watchdog] Cleaned {res['killedCount']} zombie/stalled Python process(es)")
+        except Exception:
+            pass
 
 class DroidPyBridgeHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
@@ -185,9 +445,7 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
         self._begin_ndjson()
         t0 = time.perf_counter()
         master_fd, slave_fd = pty.openpty()
-        env = os.environ.copy()
-        env["PYTHONUNBUFFERED"] = "1"
-        env["TERM"] = "xterm-256color"
+        env = _resolve_certifi_env(os.environ.copy())
 
         proc = subprocess.Popen(
             cmd,
@@ -303,6 +561,7 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
             proc = subprocess.run(
                 ["python", "-u", entry],
                 cwd=WORKSPACE,
+                env=_resolve_certifi_env(os.environ.copy()),
                 capture_output=True,
                 text=True,
                 timeout=120,
@@ -317,17 +576,25 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
         if self.path in ("/install", "/install-stream"):
             mode = data.get("mode", "pip")
             target = str(data.get("target", "")).strip()
+            trusted_host = bool(data.get("trustedHost", False))
             if not target:
                 return self._send_json(400, {"error": "Missing package target"})
             pkgs = shlex.split(target)
             if not pkgs:
                 return self._send_json(400, {"error": "Missing package target"})
-            cmd = (["pkg", "install", "-y"] + pkgs) if mode == "pkg" else ([sys.executable, "-m", "pip", "install"] + pkgs)
+            cmd = (["pkg", "install", "-y"] + pkgs) if mode == "pkg" else _build_pip_cmd(pkgs, trusted_host=trusted_host)
             if self.path == "/install-stream":
                 return self._stream_pty_command(cmd, shell=False)
 
             t0 = time.perf_counter()
-            proc = subprocess.run(cmd, cwd=WORKSPACE, capture_output=True, text=True, timeout=300)
+            proc = subprocess.run(
+                cmd,
+                cwd=WORKSPACE,
+                env=_resolve_certifi_env(os.environ.copy()),
+                capture_output=True,
+                text=True,
+                timeout=300,
+            )
             return self._send_json(200, {
                 "exitCode": proc.returncode,
                 "stdout": proc.stdout,
@@ -398,9 +665,15 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
                 "bodyPreview": body_text[:8000],
             })
 
+        if self.path == "/maintenance/cleanup-processes":
+            res = cleanup_stuck_python_processes(manual=bool(data.get("manual", True)))
+            return self._send_json(200, res)
+
         return self._send_json(404, {"error": "Not found"})
 
 if __name__ == "__main__":
+    _watchdog_thread = threading.Thread(target=_watchdog_loop, daemon=True)
+    _watchdog_thread.start()
     print(f"[DroidPy Termux PTY Bridge] Listening on http://127.0.0.1:8765 (Workspace: {WORKSPACE})")
     ThreadingHTTPServer(("127.0.0.1", 8765), DroidPyBridgeHandler).serve_forever()
 `;
@@ -641,14 +914,15 @@ export async function streamRunInTermux(
 export async function installInTermux(
   config: TermuxConfig,
   mode: 'pip' | 'pkg',
-  target: string
+  target: string,
+  options?: { trustedHost?: boolean }
 ): Promise<TermuxExecResult> {
   return termuxFetch<TermuxExecResult>(
     config,
     '/install',
     {
       method: 'POST',
-      body: JSON.stringify({ mode, target }),
+      body: JSON.stringify({ mode, target, trustedHost: Boolean(options?.trustedHost) }),
     },
     305000
   );
@@ -658,9 +932,15 @@ export async function streamInstallInTermux(
   config: TermuxConfig,
   mode: 'pip' | 'pkg',
   target: string,
-  callbacks: TermuxStreamCallbacks
+  callbacks: TermuxStreamCallbacks,
+  options?: { trustedHost?: boolean }
 ): Promise<{ exitCode: number; durationMs: number }> {
-  return termuxStreamRequest(config, '/install-stream', { mode, target }, callbacks);
+  return termuxStreamRequest(
+    config,
+    '/install-stream',
+    { mode, target, trustedHost: Boolean(options?.trustedHost) },
+    callbacks
+  );
 }
 
 export async function execTermuxShell(
@@ -899,6 +1179,18 @@ export async function cleanupAppStorage(
   }
 }
 
+export async function cleanupTermuxProcesses(
+  config: TermuxConfig,
+  manual = false
+): Promise<ProcessCleanupResult> {
+  return termuxFetch<ProcessCleanupResult>(
+    config,
+    '/maintenance/cleanup-processes',
+    { method: 'POST', body: JSON.stringify({ manual }) },
+    10000
+  );
+}
+
 export const CORE_TERMUX_PIP_PACKAGES = new Set(['pip', 'setuptools', 'wheel']);
 export const CORE_TERMUX_PKG_PACKAGES = new Set([
   'apt',
@@ -963,14 +1255,20 @@ export function buildTermuxUninstallCommand(mode: 'pip' | 'pkg', target: string)
     : `pip uninstall -y ${cleaned.join(' ')}`;
 }
 
-export function buildTermuxPipUpgradeCommand(installedPipPackages: string[]): string {
+export function buildTermuxPipUpgradeCommand(
+  installedPipPackages: string[],
+  trustedHost = false
+): string {
+  const hostFlags = trustedHost
+    ? ' --trusted-host pypi.org --trusted-host files.pythonhosted.org'
+    : '';
   const safeTargets = installedPipPackages
     .map((p) => p.replace(/[^a-zA-Z0-9_.-]/g, '').trim())
     .filter((p) => p && !CORE_TERMUX_PIP_PACKAGES.has(p.toLowerCase()));
   if (safeTargets.length === 0) {
-    return 'pip install --upgrade pip';
+    return `pip install --upgrade${hostFlags} pip`;
   }
-  return `pip install --upgrade ${safeTargets.join(' ')}`;
+  return `pip install --upgrade${hostFlags} ${safeTargets.join(' ')}`;
 }
 
 export function buildTermuxAptUpgradeCommand(pkgNames?: string[]): string {

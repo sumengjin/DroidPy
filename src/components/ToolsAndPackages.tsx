@@ -30,6 +30,7 @@ import {
   ExecutionEngine,
   InstalledPackage,
   PackageBackupStatus,
+  ProcessCleanupResult,
   PythonFile,
   PyodideStatus,
   SdcardStatusInfo,
@@ -125,6 +126,10 @@ interface ToolsAndPackagesProps {
   backupStatus?: PackageBackupStatus | null;
   onRestoreBackedUpPackages?: () => Promise<void>;
   restoringBackup?: boolean;
+  onCleanupProcesses?: (manual?: boolean) => Promise<void>;
+  cleaningProcesses?: boolean;
+  lastCleanupResult?: ProcessCleanupResult | null;
+  onRebuildPipCertifi?: () => Promise<void>;
   onNotify: (msg: string) => void;
 }
 
@@ -181,6 +186,10 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
   backupStatus = null,
   onRestoreBackedUpPackages,
   restoringBackup = false,
+  onCleanupProcesses,
+  cleaningProcesses = false,
+  lastCleanupResult = null,
+  onRebuildPipCertifi,
   onNotify,
 }) => {
   const { locale, t } = useI18n();
@@ -327,9 +336,8 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
 
     const pkgList = installedPackages.map((p) => p.name).filter((n) => n !== 'micropip' && n !== 'packaging');
     const reqs = ['python3', 'kivy', ...pkgList].join(',');
-    const perms = settings.androidStoragePermission
-      ? 'INTERNET,VIBRATE,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,MANAGE_EXTERNAL_STORAGE,READ_MEDIA_IMAGES'
-      : 'INTERNET,VIBRATE';
+    const perms =
+      'INTERNET,VIBRATE,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,MANAGE_EXTERNAL_STORAGE,READ_MEDIA_IMAGES,READ_MEDIA_VIDEO,READ_MEDIA_AUDIO';
 
     const buildozerSpec = `[app]
 title = ${appTitle || 'DroidPyApp'}
@@ -355,12 +363,8 @@ warn_on_root = 1
       'README_ANDROID.txt',
       `DroidPy Android APK 與儲存權限 / C++ NDK 打包說明
 ===============================================
-1. 儲存管理權限設定：
-   ${
-     settings.androidStoragePermission
-       ? '已啟用外部儲存權限 (READ/WRITE/MANAGE_EXTERNAL_STORAGE)。Android 11+ 若需完整存取 /sdcard，請在程式啟動後呼叫 android.permissions.request_permissions() 並引導開啟「所有檔案存取權」。'
-       : '目前僅啟用基本權限 (INTERNET, VIBRATE)。'
-   }
+1. 儲存管理權限設定（全面開放）：
+   已全面開放外部儲存權限 (READ/WRITE/MANAGE_EXTERNAL_STORAGE 與 READ_MEDIA_*)。Android 11+ 若需完整存取 /sdcard，請在程式啟動後呼叫 android.permissions.request_permissions() 並引導開啟「所有檔案存取權」。
 
 2. 安裝 Linux / WSL2 C/C++ 與 Android 編譯相依套件（Ubuntu / Debian）：
    sudo apt update
@@ -428,11 +432,8 @@ warn_on_root = 1
     const script = `#!/data/data/com.termux/files/usr/bin/bash
 set -e
 
-${
-  settings.androidStoragePermission
-    ? 'echo "[DroidPy] 正在申請 Android 外部儲存空間存取權限 (/sdcard)..."\ntermux-setup-storage || true'
-    : '# 未勾選外部儲存權限授權'
-}
+echo "[DroidPy] 正在申請 Android 外部儲存空間存取權限 (/sdcard)..."
+termux-setup-storage || true
 
 echo "[DroidPy] 正在配置 Android Termux Python 與 C/C++ 編譯環境 (clang / cmake / NDK headers)..."
 pkg update -y
@@ -457,7 +458,7 @@ python ${entryFile}
     const blob = await generateGitHubApkProjectZip({
       appTitle: appTitle || 'DroidPy',
       packageId: appPackageName || 'org.droidpy.app',
-      includeStoragePermission: settings.androidStoragePermission,
+      includeStoragePermission: true,
       files,
       bridgeToken: termuxConfig.token,
     });
@@ -486,7 +487,7 @@ python ${entryFile}
     <div className="h-full overflow-y-auto ide-scroll bg-[var(--ide-bg)] text-[var(--ide-text)]">
       <div className={`${compactDrawer ? 'p-4 space-y-6' : 'max-w-5xl mx-auto p-4 sm:p-6 space-y-8'}`}>
         {(onOpenHelp || onOpenLogs) && (!compactDrawer || showSettings) && (
-          <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="md-card p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold flex items-center gap-2">
                 <BookOpen className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
@@ -521,7 +522,7 @@ python ${entryFile}
 
         {/* App Version & In-App Update Card */}
         {onOpenUpdateModal && (!compactDrawer || showSettings) && (
-          <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="md-card p-3.5 sm:p-4 flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold flex flex-wrap items-center gap-2">
                 <PackageCheck className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
@@ -581,6 +582,12 @@ python ${entryFile}
             backupStatus={backupStatus}
             onRestoreBackedUpPackages={onRestoreBackedUpPackages}
             restoringBackup={restoringBackup}
+            onCleanupProcesses={onCleanupProcesses}
+            cleaningProcesses={cleaningProcesses}
+            lastCleanupResult={lastCleanupResult}
+            onRebuildPipCertifi={onRebuildPipCertifi}
+            pipTrustedHostEmergency={Boolean(settings.pipTrustedHostEmergency)}
+            onToggleTrustedHost={(next) => onUpdateSettings({ pipTrustedHostEmergency: next })}
             onNotify={onNotify}
           />
         )}
@@ -723,7 +730,7 @@ python ${entryFile}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Persistent Storage & Quota Card */}
-              <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-3.5 sm:p-5 space-y-4 min-w-0">
+              <div className="md-card p-3.5 sm:p-5 space-y-4 min-w-0">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <h3 className="text-sm font-semibold flex items-center gap-2">
@@ -768,7 +775,7 @@ python ${entryFile}
               </div>
 
               {/* Local Device Directory Access Card */}
-              <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-3.5 sm:p-5 space-y-4 min-w-0">
+              <div className="md-card p-3.5 sm:p-5 space-y-4 min-w-0">
                 <div>
                   <h3 className="text-sm font-semibold flex items-center gap-2">
                     <FolderSync className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
@@ -855,7 +862,7 @@ python ${entryFile}
 
         {/* Native Termux Installed Packages Overview (always available in Packages tab even when Sandbox Add-on is off) */}
         {showPackages && (
-          <section className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-3.5 sm:p-5 space-y-4 min-w-0">
+          <section className="md-card p-3.5 sm:p-5 space-y-4 min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-semibold flex items-center gap-2">
@@ -1029,7 +1036,7 @@ python ${entryFile}
 
         {/* PyPI Package Manager (Sandbox Add-on) */}
         {showPackages && !settings.enableSandboxAddon && engine !== 'pyodide' && (
-          <section className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-3.5 sm:p-5 space-y-3 min-w-0">
+          <section className="md-card p-3.5 sm:p-5 space-y-3 min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-semibold flex items-center gap-2">
@@ -1217,7 +1224,7 @@ python ${entryFile}
 
             {/* Auto-update Packages on Startup Toggle + C/C++ Note */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-4 flex items-center justify-between gap-3">
+              <div className="md-card p-4 flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-xs font-semibold text-[var(--ide-text)]">
                     {t('pkg_auto_update_title')}
@@ -1233,17 +1240,17 @@ python ${entryFile}
                   onClick={() =>
                     onUpdateSettings({ autoUpdatePackages: !settings.autoUpdatePackages })
                   }
-                  className={`min-h-[32px] w-12 rounded-full p-1 transition-colors flex items-center shrink-0 ${
+                  className={`min-h-[36px] w-14 rounded-full p-1 transition-colors flex items-center shrink-0 ${
                     settings.autoUpdatePackages
                       ? 'bg-[var(--ide-accent)] justify-end'
                       : 'bg-slate-300 dark:bg-slate-700 justify-start'
                   }`}
                 >
-                  <span className="w-5 h-5 rounded-full bg-white shadow-sm" />
+                  <span className="w-6 h-6 rounded-full bg-white shadow-sm" />
                 </button>
               </div>
 
-              <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-4 text-xs text-[var(--ide-text-muted)] space-y-1">
+              <div className="md-card p-4 text-xs text-[var(--ide-text-muted)] space-y-1">
                 <div className="font-semibold text-[var(--ide-text)]">
                   {t('pkg_cpp_title')}
                 </div>
@@ -1310,7 +1317,7 @@ python ${entryFile}
                   return (
                     <div
                       key={item.id}
-                      className="flex items-center justify-between gap-3 p-3.5 rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)]"
+                      className="md-card flex items-center justify-between gap-3 p-3.5"
                     >
                       <div className="min-w-0">
                         <div className="font-mono text-sm font-semibold text-[var(--ide-text)] truncate flex items-center gap-1.5">
@@ -1366,7 +1373,7 @@ python ${entryFile}
             </div>
 
             {/* Installed Packages Table with Accurate Outdated Upgrade & Uninstall */}
-            <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] overflow-hidden">
+            <div className="md-card overflow-hidden">
               <div className="px-4 py-3 border-b border-[var(--ide-border)] flex items-center justify-between text-xs font-medium text-[var(--ide-text-muted)]">
                 <span>{t('pkg_loaded_title')}</span>
                 <span className="tabular-nums">{t('pkg_loaded_count', { count: installedPackages.length })}</span>
@@ -1471,7 +1478,7 @@ python ${entryFile}
             <>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* PWA Install Card */}
-              <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-5 flex flex-col justify-between gap-4">
+              <div className="md-card p-5 flex flex-col justify-between gap-4">
                 <div>
                   <h3 className="text-sm font-semibold">{t('and_pwa_title')}</h3>
                   <p className="text-xs text-[var(--ide-text-muted)] mt-1.5 leading-relaxed">
@@ -1484,7 +1491,7 @@ python ${entryFile}
               </div>
 
               {/* Buildozer APK & Termux Export Card */}
-              <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-5 space-y-4">
+              <div className="md-card p-5 space-y-4">
                 <div>
                   <h3 className="text-sm font-semibold">{t('and_export_title')}</h3>
                   <p className="text-xs text-[var(--ide-text-muted)] mt-1">
@@ -1517,31 +1524,17 @@ python ${entryFile}
                   </div>
                 </div>
 
-                {/* Android Storage Permission Toggle */}
-                <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)]">
-                  <div className="min-w-0">
-                    <div className="text-xs font-medium">{t('and_perm_title')}</div>
-                    <div className="text-[11px] text-[var(--ide-text-muted)] truncate">
-                      {t('and_perm_desc')}
+                {/* Android Full Storage Permissions (Unconditionally Open) */}
+                <div className="md-card-tonal flex items-start gap-3 p-3.5">
+                  <ShieldCheck className="w-4 h-4 text-[var(--ide-accent)] shrink-0 mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-semibold text-[var(--ide-text)]">
+                      {t('and_perm_open_title')}
                     </div>
+                    <p className="text-[11px] text-[var(--ide-text-muted)] mt-0.5 leading-relaxed">
+                      {t('and_perm_open_desc')}
+                    </p>
                   </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={settings.androidStoragePermission}
-                    onClick={() =>
-                      onUpdateSettings({
-                        androidStoragePermission: !settings.androidStoragePermission,
-                      })
-                    }
-                    className={`min-h-[32px] w-12 rounded-full p-1 transition-colors flex items-center shrink-0 ${
-                      settings.androidStoragePermission
-                        ? 'bg-[var(--ide-accent)] justify-end'
-                        : 'bg-slate-300 dark:bg-slate-700 justify-start'
-                    }`}
-                  >
-                    <span className="w-5 h-5 rounded-full bg-white shadow-sm" />
-                  </button>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -1577,7 +1570,7 @@ python ${entryFile}
             </div>
 
             {/* Built-in droid module reference */}
-            <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-5 space-y-3">
+            <div className="md-card p-5 space-y-3">
               <div className="flex items-center gap-2">
                 <Cpu className="w-4 h-4 text-[var(--ide-accent)]" />
                 <h3 className="text-sm font-semibold">{t('and_droid_title')}</h3>
@@ -1632,7 +1625,7 @@ python ${entryFile}
               </h2>
             </div>
 
-            <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] divide-y divide-[var(--ide-border)]">
+            <div className="md-card divide-y divide-[var(--ide-border)] overflow-hidden">
               {/* Font Size */}
               <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 p-4">
                 <div className="min-w-0 flex-1">

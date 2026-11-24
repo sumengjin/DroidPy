@@ -105,9 +105,9 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full sm:max-w-xl max-h-[88dvh] rounded-t-3xl sm:rounded-2xl bg-[var(--ide-surface)] border border-[var(--ide-border)] shadow-2xl flex flex-col overflow-hidden text-[var(--ide-text)]"
+        className="w-full sm:max-w-xl max-h-[88dvh] md-sheet rounded-b-none sm:rounded-b-[1.75rem] flex flex-col overflow-hidden text-[var(--ide-text)]"
       >
-        <div className="w-10 h-1.5 bg-[var(--ide-border)] rounded-full mx-auto mt-3 sm:hidden shrink-0" />
+        <div className="w-10 h-1 bg-[var(--ide-border)] rounded-full mx-auto mt-2.5 sm:hidden shrink-0" />
 
         {/* Header */}
         <div className="px-5 py-4 border-b border-[var(--ide-border)] flex items-center justify-between gap-3 shrink-0">
@@ -202,7 +202,7 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
 
           {/* New Version Available Card + Changelog */}
           {hasUpdate && latest ? (
-            <div className="rounded-2xl border border-[var(--ide-accent)] bg-[var(--ide-accent-soft)]/60 p-4 space-y-3">
+            <div className="md-card-tonal border-[var(--ide-accent)] p-4 space-y-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="inline-flex items-center gap-1.5 text-xs font-bold text-[var(--ide-accent-text)]">
@@ -219,7 +219,7 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
                     type="button"
                     disabled={dlState?.status === 'downloading'}
                     onClick={() => handleDownloadApk(primaryApk.downloadUrl, primaryApk.name)}
-                    className="min-h-[42px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-colors"
+                    className="min-h-[44px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-colors"
                   >
                     <Download className="w-4 h-4" />
                     <span>{t('upd_download_install')}</span>
@@ -249,7 +249,7 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
               )}
             </div>
           ) : (
-            <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-bg)] p-4 flex items-center justify-between gap-3">
+            <div className="md-card p-4 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 min-w-0">
                 <CheckCircle2 className="w-5 h-5 text-[var(--ide-accent)] shrink-0" />
                 <div className="min-w-0">

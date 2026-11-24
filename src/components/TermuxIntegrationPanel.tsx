@@ -15,10 +15,13 @@ import {
   ArrowUpCircle,
   Search,
   Trash2,
+  Activity,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   ExecutionEngine,
   PackageBackupStatus,
+  ProcessCleanupResult,
   PythonFile,
   TermuxConfig,
   TermuxConnectionState,
@@ -70,6 +73,12 @@ interface TermuxIntegrationPanelProps {
   backupStatus?: PackageBackupStatus | null;
   onRestoreBackedUpPackages?: () => Promise<void>;
   restoringBackup?: boolean;
+  onCleanupProcesses?: (manual?: boolean) => Promise<void>;
+  cleaningProcesses?: boolean;
+  lastCleanupResult?: ProcessCleanupResult | null;
+  onRebuildPipCertifi?: () => Promise<void>;
+  pipTrustedHostEmergency?: boolean;
+  onToggleTrustedHost?: (next: boolean) => void;
   onNotify: (msg: string) => void;
 }
 
@@ -99,6 +108,12 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
   backupStatus = null,
   onRestoreBackedUpPackages,
   restoringBackup = false,
+  onCleanupProcesses,
+  cleaningProcesses = false,
+  lastCleanupResult = null,
+  onRebuildPipCertifi,
+  pipTrustedHostEmergency = false,
+  onToggleTrustedHost,
   onNotify,
 }) => {
   const { t } = useI18n();
@@ -273,12 +288,13 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
         ((backupStatus.missingPipPackages?.length ?? 0) > 0 ||
           (backupStatus.missingPkgPackages?.length ?? 0) > 0) &&
         onRestoreBackedUpPackages && (
-          <div className="rounded-2xl border border-amber-300 dark:border-amber-800 bg-amber-50/90 dark:bg-amber-950/35 p-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="md-card-tonal border-amber-400/70 p-4 flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0 flex-1 space-y-1">
               <div className="text-sm font-semibold text-amber-900 dark:text-amber-200 flex flex-wrap items-center gap-2">
                 <PackagePlus className="w-4 h-4 shrink-0" />
                 <span>{t('backup_banner_title')}</span>
-                <span className="text-[11px] font-normal px-2 py-0.5 rounded-md bg-amber-200/70 dark:bg-amber-900/60">
+                <span aria-hidden="true">·</span>
+                <span className="text-xs font-medium tabular-nums">
                   {t('backup_saved_badge', {
                     pip: backupStatus.pipPackages.length,
                     pkg: backupStatus.pkgPackages.length,
@@ -315,7 +331,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
 
       {/* Connection Config & Live Health Card */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-3.5 sm:p-5 space-y-4 min-w-0">
+        <div className="md-card p-3.5 sm:p-5 space-y-4 min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-semibold flex items-center gap-2 min-w-0">
               <PlugZap className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
@@ -535,7 +551,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
         </div>
 
         {/* One-line Bootstrap Setup Card */}
-        <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-3.5 sm:p-5 space-y-4 min-w-0">
+        <div className="md-card p-3.5 sm:p-5 space-y-4 min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-semibold">{t('tmx_bootstrap_title')}</h3>
             <a
@@ -579,7 +595,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
       </div>
 
       {/* One-Tap Embedded APK Python + Crawler Initialization Card */}
-      <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-3.5 sm:p-5 space-y-4 min-w-0">
+      <div className="md-card p-3.5 sm:p-5 space-y-4 min-w-0">
         <div className="space-y-1">
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <Cpu className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
@@ -627,8 +643,107 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
         </div>
       </div>
 
+      {/* 30-Min Python Watchdog & pip SSL (certifi / truststore) Maintenance Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="md-card p-3.5 sm:p-5 space-y-3 min-w-0">
+          <div className="space-y-1">
+            <h3 className="text-sm font-semibold flex items-center gap-2">
+              <Activity className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
+              <span>{t('tmx_cleanup_title')}</span>
+            </h3>
+            <p className="text-xs text-[var(--ide-text-muted)] leading-relaxed">
+              {t('tmx_cleanup_desc')}
+            </p>
+          </div>
+
+          {lastCleanupResult && (
+            <div className="text-[11px] font-mono tabular-nums text-[var(--ide-text-muted)] rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] px-3 py-2">
+              {t('tmx_cleanup_last', {
+                time: new Date(lastCleanupResult.checkedAt).toLocaleTimeString(),
+                scanned: lastCleanupResult.scannedCount,
+                killed: lastCleanupResult.killedCount,
+              })}
+            </div>
+          )}
+
+          <button
+            type="button"
+            disabled={isChecking || !isConnected || Boolean(cleaningProcesses)}
+            onClick={() => void onCleanupProcesses?.(true)}
+            className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-2 transition-colors"
+          >
+            {cleaningProcesses ? (
+              <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+            ) : (
+              <Activity className="w-4 h-4 shrink-0" />
+            )}
+            <span>{cleaningProcesses ? t('tmx_cleanup_running') : t('tmx_cleanup_btn')}</span>
+          </button>
+        </div>
+
+        <div className="md-card p-3.5 sm:p-5 space-y-3 min-w-0">
+          <div className="space-y-1">
+            <h3 className="text-sm font-semibold flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
+              <span>{t('tmx_pip_ssl_title')}</span>
+            </h3>
+            <p className="text-xs text-[var(--ide-text-muted)] leading-relaxed">
+              {t('tmx_pip_ssl_desc')}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            disabled={!isConnected || !!busyAction || upgradingTermux}
+            onClick={async () => {
+              if (!onRebuildPipCertifi || busyAction) return;
+              setBusyAction('pip-ssl');
+              try {
+                await onRebuildPipCertifi();
+              } finally {
+                setBusyAction(null);
+              }
+            }}
+            className="min-h-[44px] px-4 py-2 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] disabled:opacity-50 text-xs font-medium inline-flex items-center gap-2 transition-colors"
+          >
+            {busyAction === 'pip-ssl' ? (
+              <Loader2 className="w-4 h-4 animate-spin text-[var(--ide-accent)] shrink-0" />
+            ) : (
+              <ShieldCheck className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
+            )}
+            <span>{t('tmx_pip_ssl_btn')}</span>
+          </button>
+
+          {onToggleTrustedHost && (
+            <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)]">
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-semibold text-[var(--ide-text)]">
+                  {t('tmx_trusted_host_title')}
+                </div>
+                <p className="text-[11px] text-[var(--ide-text-muted)] mt-0.5 leading-relaxed">
+                  {t('tmx_trusted_host_desc')}
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={Boolean(pipTrustedHostEmergency)}
+                onClick={() => onToggleTrustedHost(!pipTrustedHostEmergency)}
+                className={`min-h-[36px] w-14 rounded-full p-1 transition-colors flex items-center shrink-0 ${
+                  pipTrustedHostEmergency
+                    ? 'bg-amber-600 justify-end'
+                    : 'bg-slate-300 dark:bg-slate-700 justify-start'
+                }`}
+              >
+                <span className="w-6 h-6 rounded-full bg-white shadow-sm" />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Termux Remote Package & Tool Installer */}
-      <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-3.5 sm:p-5 space-y-4 min-w-0">
+      <div className="md-card p-3.5 sm:p-5 space-y-4 min-w-0">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <h3 className="text-sm font-semibold flex items-center gap-2">

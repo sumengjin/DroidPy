@@ -10,7 +10,7 @@ export interface DeviceLayoutInfo {
 
 function computeLayout(): DeviceLayoutInfo {
   if (typeof window === 'undefined') {
-    return { deviceClass: 'desktop', isLandscape: true, width: 1280, height: 800 };
+    return { deviceClass: 'phone', isLandscape: false, width: 390, height: 844 };
   }
   const width = window.innerWidth;
   const height = window.innerHeight;
@@ -22,10 +22,7 @@ function computeLayout(): DeviceLayoutInfo {
   if (width < 768 || (isCoarsePointer && minSide < 520 && width < 980)) {
     return { deviceClass: 'phone', isLandscape, width, height };
   }
-  if (width < 1180) {
-    return { deviceClass: 'tablet', isLandscape, width, height };
-  }
-  return { deviceClass: 'desktop', isLandscape, width, height };
+  return { deviceClass: 'tablet', isLandscape, width, height };
 }
 
 export function useDeviceLayout(): DeviceLayoutInfo {

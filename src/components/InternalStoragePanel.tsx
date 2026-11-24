@@ -228,7 +228,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
   const fullDisplayPath = currentPath ? `${rootDisplay}/${currentPath}` : rootDisplay;
 
   return (
-    <div className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-4 sm:p-5 space-y-4">
+    <div className="md-card p-4 sm:p-5 space-y-4">
       {/* Header & Permission Status */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
@@ -241,12 +241,12 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
           <span
-            className={`text-xs font-semibold inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border ${
+            className={`text-xs font-semibold inline-flex items-center gap-1.5 ${
               isGranted
-                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                : 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : 'text-amber-600 dark:text-amber-400'
             }`}
           >
             {isGranted ? <ShieldCheck className="w-3.5 h-3.5" /> : <ShieldAlert className="w-3.5 h-3.5" />}
@@ -257,7 +257,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
             type="button"
             onClick={() => void loadDirectory(currentPath)}
             disabled={loading}
-            className="min-h-[36px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium inline-flex items-center gap-1.5 hover:border-[var(--ide-accent)] transition-colors"
+            className="min-h-[40px] px-3.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium inline-flex items-center gap-1.5 hover:border-[var(--ide-accent)] transition-colors"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span>{t('sd_refresh_btn')}</span>
@@ -321,7 +321,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
           type="button"
           onClick={() => void handleSaveActiveHere()}
           disabled={!!busyAction || !isGranted}
-          className="min-h-[40px] max-w-full px-3.5 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-45 text-white text-xs font-medium inline-flex items-center gap-1.5 transition-colors"
+          className="min-h-[44px] max-w-full px-3.5 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-45 text-white text-xs font-medium inline-flex items-center gap-1.5 transition-colors"
         >
           {busyAction === 'save' ? <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" /> : <Save className="w-3.5 h-3.5 shrink-0" />}
           <span className="truncate">{t('sd_save_active_btn')} ({activeFile?.name})</span>
@@ -331,7 +331,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
           type="button"
           onClick={() => void handleBackupAllToDroidPy()}
           disabled={!!busyAction || !isGranted}
-          className="min-h-[40px] px-3.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] disabled:opacity-45 text-xs font-medium inline-flex items-center gap-1.5 transition-colors"
+          className="min-h-[44px] px-3.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] disabled:opacity-45 text-xs font-medium inline-flex items-center gap-1.5 transition-colors"
         >
           {busyAction === 'backup' ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--ide-accent)] shrink-0" />
@@ -345,7 +345,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
           <button
             type="button"
             onClick={() => void loadDirectory('DroidPy')}
-            className="min-h-[40px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] text-xs font-mono text-[var(--ide-accent-text)] transition-colors"
+            className="min-h-[44px] px-3.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] text-xs font-mono text-[var(--ide-accent-text)] transition-colors"
           >
             /sdcard/DroidPy
           </button>

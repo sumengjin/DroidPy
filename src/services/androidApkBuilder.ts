@@ -281,12 +281,13 @@ dependencies {
 `
   );
 
-  // 3. AndroidManifest.xml with full network (crawler) & storage permissions
-  const storagePerms = opts.includeStoragePermission
-    ? `    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+  // 3. AndroidManifest.xml with full network (crawler) & unconditional open storage permissions
+  const storagePerms = `    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />`
-    : '';
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />`;
 
   zip.file(
     'android/app/src/main/AndroidManifest.xml',
@@ -305,6 +306,7 @@ ${storagePerms}
         android:label="${safeTitle}"
         android:usesCleartextTraffic="true"
         android:requestLegacyExternalStorage="true"
+        android:preserveLegacyExternalStorage="true"
         android:theme="@style/Theme.AppCompat.DayNight.NoActionBar">
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -1101,17 +1103,28 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun requestExternalStoragePermissionIfNeeded(force: Boolean = false) {
-        val enabledByConfig = ${opts.includeStoragePermission ? 'true' : 'false'}
-        if (!force && !enabledByConfig) return
-
         val permsToAsk = mutableListOf<String>()
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-            permsToAsk.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            listOf(
+                Manifest.permission.READ_MEDIA_IMAGES,
+                Manifest.permission.READ_MEDIA_VIDEO,
+                Manifest.permission.READ_MEDIA_AUDIO
+            ).forEach { perm ->
+                if (ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) {
+                    permsToAsk.add(perm)
+                }
+            }
+        } else {
+            listOf(
+                Manifest.permission.READ_EXTERNAL_STORAGE,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ).forEach { perm ->
+                if (ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) {
+                    permsToAsk.add(perm)
+                }
+            }
         }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-            permsToAsk.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-        }
-        if (permsToAsk.isNotEmpty() && Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        if (permsToAsk.isNotEmpty()) {
             ActivityCompat.requestPermissions(this, permsToAsk.toTypedArray(), 1001)
         }
 
@@ -1127,8 +1140,6 @@ class MainActivity : AppCompatActivity() {
                 } catch (_: Exception) {
                 }
             }
-        } else if (permsToAsk.isNotEmpty() && force && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ActivityCompat.requestPermissions(this, permsToAsk.toTypedArray(), 1001)
         }
     }
 
@@ -1388,6 +1399,9 @@ import java.net.Socket
 import java.net.URL
 import java.net.URLDecoder
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 class EmbeddedTermuxBridge(
     private val appContext: Context,
@@ -1399,8 +1413,10 @@ class EmbeddedTermuxBridge(
 ) {
     private var serverSocket: ServerSocket? = null
     private val executor = Executors.newCachedThreadPool()
+    private var watchdogScheduler: ScheduledExecutorService? = null
     @Volatile private var running = false
     @Volatile private var activeProcess: Process? = null
+    private val activeProcessStartedAt = AtomicLong(0L)
     private val logLock = Any()
     private val nativeLogFile: File
         get() = File(appContext.filesDir, "droidpy_native.log")
@@ -1510,11 +1526,30 @@ class EmbeddedTermuxBridge(
                 }
             }
         }
+        watchdogScheduler = Executors.newSingleThreadScheduledExecutor().apply {
+            scheduleAtFixedRate(
+                {
+                    try {
+                        val res = cleanupStuckPythonProcesses(manual = false)
+                        val killedCount = res.optInt("killedCount", 0)
+                        if (killedCount > 0) {
+                            appendNativeLog("Watchdog", "30m auto cleanup killed $killedCount stuck/zombie Python process(es)")
+                        }
+                    } catch (_: Exception) {
+                    }
+                },
+                30L,
+                30L,
+                TimeUnit.MINUTES
+            )
+        }
     }
 
     fun stop() {
         running = false
         appendNativeLog("Bridge", "EmbeddedTermuxBridge stopping")
+        try { watchdogScheduler?.shutdownNow() } catch (_: Exception) {}
+        watchdogScheduler = null
         activeProcess?.destroyForcibly()
         try { serverSocket?.close() } catch (_: Exception) {}
     }
@@ -1893,25 +1928,36 @@ class EmbeddedTermuxBridge(
             "  \\"\${d}PY_BIN\\" -m ensurepip --upgrade >/dev/null 2>&1 || true",
             "fi",
             "rm -f \\"$prefix/lib/python3.\\"*/EXTERNALLY-MANAGED 2>/dev/null || true",
+            "CA_RAW=\\"\${d}(\\"\${d}PY_BIN\\" -c 'import certifi; print(certifi.where())' 2>/dev/null || true)\\"",
+            "if [ -z \\"\${d}CA_RAW\\" ] || [ ! -s \\"\${d}CA_RAW\\" ]; then",
+            "  CA_RAW=\\"\${d}(\\"\${d}PY_BIN\\" -c 'import pip._vendor.certifi as c; print(c.where())' 2>/dev/null || true)\\"",
+            "fi",
+            "if [ -z \\"\${d}CA_RAW\\" ] || [ ! -s \\"\${d}CA_RAW\\" ]; then",
+            "  for cf in \\"$prefix/etc/tls/cert.pem\\" \\"$prefix/etc/ssl/cert.pem\\" \\"$prefix/etc/ssl/certs/ca-certificates.crt\\" \\"$prefix/share/ca-certificates/cacert.pem\\"; do",
+            "    if [ -r \\"\${d}cf\\" ] && [ -s \\"\${d}cf\\" ]; then",
+            "      CA_RAW=\\"\${d}cf\\"",
+            "      break",
+            "    fi",
+            "  done",
+            "fi",
             "CA_FOUND=\\"\\"",
-            "for cf in \\"$prefix/etc/tls/cert.pem\\" \\"$prefix/etc/ssl/cert.pem\\" \\"$prefix/etc/ssl/certs/ca-certificates.crt\\" \\"$prefix/share/ca-certificates/cacert.pem\\"; do",
-            "  if [ -r \\"\${d}cf\\" ] && [ -s \\"\${d}cf\\" ]; then",
-            "    CA_FOUND=\\"\${d}cf\\"",
-            "    break",
-            "  fi",
-            "done",
-            "if [ -z \\"\${d}CA_FOUND\\" ]; then",
-            "  CERTIFI_PATH=\\"\${d}(\\"\${d}PY_BIN\\" -c 'import pip._vendor.certifi as c; print(c.where())' 2>/dev/null || true)\\"",
-            "  if [ -n \\"\${d}CERTIFI_PATH\\" ] && [ -r \\"\${d}CERTIFI_PATH\\" ]; then",
-            "    mkdir -p \\"\${d}HOME/tmp\\"",
-            "    cp -f \\"\${d}CERTIFI_PATH\\" \\"\${d}HOME/tmp/droidpy-cacert.pem\\" 2>/dev/null && chmod 644 \\"\${d}HOME/tmp/droidpy-cacert.pem\\" 2>/dev/null || true",
-            "    [ -r \\"\${d}HOME/tmp/droidpy-cacert.pem\\" ] && CA_FOUND=\\"\${d}HOME/tmp/droidpy-cacert.pem\\"",
+            "if [ -n \\"\${d}CA_RAW\\" ] && [ -s \\"\${d}CA_RAW\\" ]; then",
+            "  mkdir -p \\"$prefix/tmp\\" \\"\${d}HOME/tmp\\" 2>/dev/null || true",
+            "  if cp -f \\"\${d}CA_RAW\\" \\"$prefix/tmp/cacert.pem\\" 2>/dev/null && chmod 644 \\"$prefix/tmp/cacert.pem\\" 2>/dev/null && [ -r \\"$prefix/tmp/cacert.pem\\" ]; then",
+            "    CA_FOUND=\\"$prefix/tmp/cacert.pem\\"",
+            "  elif cp -f \\"\${d}CA_RAW\\" \\"\${d}HOME/tmp/droidpy-cacert.pem\\" 2>/dev/null && chmod 644 \\"\${d}HOME/tmp/droidpy-cacert.pem\\" 2>/dev/null && [ -r \\"\${d}HOME/tmp/droidpy-cacert.pem\\" ]; then",
+            "    CA_FOUND=\\"\${d}HOME/tmp/droidpy-cacert.pem\\"",
+            "  elif [ -r \\"\${d}CA_RAW\\" ]; then",
+            "    CA_FOUND=\\"\${d}CA_RAW\\"",
             "  fi",
             "fi",
             "if [ -n \\"\${d}CA_FOUND\\" ]; then",
             "  export PIP_CERT=\\"\${d}CA_FOUND\\" SSL_CERT_FILE=\\"\${d}CA_FOUND\\" REQUESTS_CA_BUNDLE=\\"\${d}CA_FOUND\\" CURL_CA_BUNDLE=\\"\${d}CA_FOUND\\"",
             "else",
             "  unset PIP_CERT SSL_CERT_FILE REQUESTS_CA_BUNDLE CURL_CA_BUNDLE",
+            "fi",
+            "if \\"\${d}PY_BIN\\" -m pip install --help 2>/dev/null | grep -q \\"legacy-certs\\"; then",
+            "  export PIP_USE_DEPRECATED=legacy-certs",
             "fi",
             "if [ -d \\"$prefix/etc/tls/certs\\" ]; then export SSL_CERT_DIR=\\"$prefix/etc/tls/certs\\"; else export SSL_CERT_DIR=\\"\${d}HOME/tmp\\"; fi",
             "export PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_USER=0 PIP_BREAK_SYSTEM_PACKAGES=1 PIP_NO_CACHE_DIR=1",
@@ -2107,19 +2153,159 @@ def clipboard_set(text):
     }
 
     private fun resolveCaBundleFile(): File? {
-        val candidates = listOf(
+        val homeDir = workspaceDir.parentFile!!
+        val candidates = mutableListOf(
             File(usrDir, "etc/tls/cert.pem"),
             File(usrDir, "etc/ssl/cert.pem"),
             File(usrDir, "etc/ssl/certs/ca-certificates.crt"),
             File(usrDir, "share/ca-certificates/cacert.pem")
         )
-        return candidates.firstOrNull { f ->
+        listOf(File(usrDir, "lib"), File(usrDir, "local/lib"), File(homeDir, ".local/lib")).forEach { libRoot ->
+            libRoot.listFiles()?.filter { it.isDirectory && it.name.startsWith("python3.") }?.forEach { pyLib ->
+                listOf("site-packages", "dist-packages").forEach { sp ->
+                    candidates.add(0, File(pyLib, "$sp/certifi/cacert.pem"))
+                    candidates.add(File(pyLib, "$sp/pip/_vendor/certifi/cacert.pem"))
+                }
+            }
+        }
+        val source = candidates.firstOrNull { f ->
             try {
                 f.exists() && f.isFile && f.length() > 0L
             } catch (_: Exception) {
                 false
             }
+        } ?: return null
+
+        val writableTargets = listOf(
+            File(usrDir, "tmp/cacert.pem"),
+            File(homeDir, "tmp/droidpy-cacert.pem")
+        )
+        for (dst in writableTargets) {
+            try {
+                dst.parentFile?.mkdirs()
+                if (source.canonicalPath != dst.canonicalPath) {
+                    source.copyTo(dst, overwrite = true)
+                }
+                dst.setReadable(true, false)
+                if (dst.exists() && dst.canRead() && dst.length() > 0L) {
+                    return dst
+                }
+            } catch (_: Exception) {
+            }
         }
+        return source
+    }
+
+    private fun cleanupStuckPythonProcesses(manual: Boolean): JSONObject {
+        val thresholdSec = 1800L
+        val myPid = android.os.Process.myPid()
+        val uptimeSec = try {
+            File("/proc/uptime").readText(Charsets.UTF_8).trim().split(Regex("\\\\s+")).firstOrNull()?.toDoubleOrNull() ?: 0.0
+        } catch (_: Exception) {
+            0.0
+        }
+        val activeProcRef = activeProcess
+        val activeStarted = activeProcessStartedAt.get()
+        var activePid = -1
+        if (activeProcRef != null) {
+            try {
+                val f = activeProcRef.javaClass.getDeclaredField("pid").apply { isAccessible = true }
+                activePid = (f.get(activeProcRef) as? Int) ?: -1
+            } catch (_: Exception) {
+            }
+        }
+
+        val pgrepPids = mutableSetOf<Int>()
+        val pgrepBin = listOf(File(usrDir, "bin/pgrep"), File("/system/bin/pgrep")).firstOrNull { it.exists() }
+        if (pgrepBin != null) {
+            var pgProc: Process? = null
+            try {
+                pgProc = ProcessBuilder(pgrepBin.absolutePath, "-f", "python|pip").apply {
+                    redirectErrorStream(true)
+                }.start()
+                val out = pgProc.inputStream.bufferedReader(Charsets.UTF_8).readText()
+                out.lines().forEach { line ->
+                    line.trim().toIntOrNull()?.let { pgrepPids.add(it) }
+                }
+                pgProc.waitFor()
+            } catch (_: Exception) {
+            } finally {
+                try { pgProc?.destroyForcibly() } catch (_: Exception) {}
+            }
+        }
+
+        val killedArr = JSONArray()
+        var scannedCount = 0
+        File("/proc").listFiles()?.forEach { entry ->
+            val pid = entry.name.toIntOrNull() ?: return@forEach
+            if (pid <= 1 || pid == myPid) return@forEach
+            try {
+                val cmdRaw = try {
+                    File(entry, "cmdline").readBytes().toString(Charsets.UTF_8).replace('\\u0000', ' ').trim()
+                } catch (_: Exception) {
+                    ""
+                }
+                val statText = File(entry, "stat").readText(Charsets.UTF_8)
+                val lp = statText.indexOf('(')
+                val rp = statText.lastIndexOf(')')
+                if (lp < 0 || rp <= lp) return@forEach
+                val comm = statText.substring(lp + 1, rp)
+                val rest = statText.substring(rp + 2).split(' ')
+                val state = rest.getOrNull(0) ?: "?"
+                val ppid = rest.getOrNull(1)?.toIntOrNull() ?: 0
+                val startTicks = rest.getOrNull(19)?.toLongOrNull() ?: 0L
+                val elapsedSec = if (uptimeSec > 0 && startTicks > 0L) {
+                    (uptimeSec - (startTicks / 100.0)).toLong().coerceAtLeast(0L)
+                } else 0L
+                val lower = (cmdRaw + " " + comm).lowercase()
+                val isPython = pid in pgrepPids || lower.contains("python") || lower.contains("pip")
+                if (!isPython) return@forEach
+                scannedCount++
+                if (lower.contains("droidpy_bridge")) return@forEach
+                if (pid == activePid && state != "Z" && (activeStarted == 0L || (System.currentTimeMillis() - activeStarted) < thresholdSec * 1000L)) {
+                    return@forEach
+                }
+                val isZombie = state == "Z"
+                val isStalled = elapsedSec >= thresholdSec
+                if (!isZombie && !isStalled) return@forEach
+
+                val reason = if (isZombie) "zombie (Z)" else "stalled >= \${thresholdSec}s"
+                var sigUsed = if (isZombie) "SIGKILL" else "SIGTERM"
+                try {
+                    if (isZombie) {
+                        if (ppid > 1 && ppid != myPid) {
+                            try { android.system.Os.kill(ppid, android.system.OsConstants.SIGCHLD) } catch (_: Exception) {}
+                        }
+                        try { android.os.Process.killProcess(pid) } catch (_: Exception) {}
+                    } else {
+                        android.system.Os.kill(pid, android.system.OsConstants.SIGTERM)
+                        Thread.sleep(250)
+                        if (File("/proc/$pid").exists()) {
+                            android.os.Process.killProcess(pid)
+                            sigUsed = "SIGKILL"
+                        }
+                    }
+                    killedArr.put(
+                        JSONObject()
+                            .put("pid", pid)
+                            .put("name", (cmdRaw.ifBlank { comm }).take(120))
+                            .put("state", state)
+                            .put("elapsedSec", elapsedSec)
+                            .put("reason", reason)
+                            .put("signal", sigUsed)
+                    )
+                } catch (_: Exception) {
+                }
+            } catch (_: Exception) {
+            }
+        }
+        return JSONObject()
+            .put("ok", true)
+            .put("checkedAt", System.currentTimeMillis())
+            .put("manual", manual)
+            .put("scannedCount", scannedCount)
+            .put("killedCount", killedArr.length())
+            .put("killed", killedArr)
     }
 
     private fun buildEnv(): Map<String, String> {
@@ -2526,6 +2712,7 @@ def clipboard_set(text):
                 "/backup/restore",
                 "/storage/app-usage",
                 "/storage/cleanup",
+                "/maintenance/cleanup-processes",
                 "/sdcard/status",
                 "/sdcard/list",
                 "/sdcard/read",
@@ -2964,6 +3151,13 @@ def clipboard_set(text):
                     )
                 }
 
+                method == "POST" && path == "/maintenance/cleanup-processes" -> {
+                    val manual = bodyJson.optBoolean("manual", true)
+                    val res = cleanupStuckPythonProcesses(manual = manual)
+                    appendNativeLog("Watchdog", "Cleanup checked=\${res.optInt("scannedCount")} killed=\${res.optInt("killedCount")} manual=$manual")
+                    writeJson(out, 200, res)
+                }
+
                 method == "POST" && path == "/shell" -> {
                     val cmd = bodyJson.optString("command", "").trim()
                     if (cmd.isEmpty()) {
@@ -2995,7 +3189,14 @@ def clipboard_set(text):
                         "/install-stream" -> {
                             val mode = bodyJson.optString("mode", "pip")
                             val target = bodyJson.optString("target", "").trim()
-                            if (mode == "pkg") "pkg install -y $target" else "pip install --no-cache-dir $target"
+                            val trustedHost = bodyJson.optBoolean("trustedHost", false)
+                            if (mode == "pkg") {
+                                "pkg install -y $target"
+                            } else if (trustedHost) {
+                                "pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org $target"
+                            } else {
+                                "pip install --no-cache-dir $target"
+                            }
                         }
                         else -> bodyJson.optString("command", "")
                     }
@@ -3199,6 +3400,7 @@ def clipboard_set(text):
 
                 proc = pb.start()
                 activeProcess = proc
+                activeProcessStartedAt.set(System.currentTimeMillis())
                 val charBuf = CharArray(1024)
                 val inpReader = InputStreamReader(proc.inputStream, Charsets.UTF_8)
                 while (true) {
@@ -3228,6 +3430,7 @@ def clipboard_set(text):
                 try { proc?.errorStream?.close() } catch (_: Exception) {}
                 try { proc?.outputStream?.close() } catch (_: Exception) {}
                 activeProcess = null
+                activeProcessStartedAt.set(0L)
                 if (isPkgOrPip) {
                     pruneStaleCacheAndTemp(clearAptLists = false)
                 }

@@ -131,7 +131,7 @@ const GUIDE_TEXT: Record<LocaleId, GuideContent> = {
     crawlerSteps: [
       {
         title: '1. 開啟「爬蟲瀏覽器」登入或探測目標站',
-        body: '手機點擊底部「瀏覽器」分頁、桌面在右側切換「爬蟲瀏覽器」。若在獨立 APK 內，點綠色「APK 原生瀏覽器登入抓 Cookie」即可繞過 iframe 封鎖並讀取 HttpOnly 認證 Cookie。',
+        body: '點擊底部「瀏覽器」分頁（平板可於分割畫面右側切換）。若在獨立 APK 內，點綠色「APK 原生瀏覽器登入抓 Cookie」即可繞過 iframe 封鎖並讀取 HttpOnly 認證 Cookie。',
       },
       {
         title: '2. 其他快速取 Cookie 方式（網頁 / Chrome）',
@@ -193,7 +193,7 @@ const GUIDE_TEXT: Record<LocaleId, GuideContent> = {
     crawlerSteps: [
       {
         title: '1. 打开“爬虫浏览器”登录或探测网页',
-        body: '手机点击底部“浏览器”，桌面端切换右侧“爬虫浏览器”。在独立 APK 中点击“APK 原生浏览器登录抓 Cookie”，可绕过 iframe 拦截并直接读取 HttpOnly Cookie。',
+        body: '手机点击底部“浏览器”标签，平板端可在分屏右侧切换“爬虫浏览器”。在独立 APK 中点击“APK 原生浏览器登录抓 Cookie”，可绕过 iframe 拦截并直接读取 HttpOnly Cookie。',
       },
       {
         title: '2. 其他获取 Cookie 方式（cURL / 书签工具）',
@@ -228,7 +228,7 @@ const GUIDE_TEXT: Record<LocaleId, GuideContent> = {
         a: '浏览器 WebAssembly 受 CORS 限制。请切换到“Termux 原生引擎”或导出安装独立 APK 执行爬虫脚本。',
       },
       {
-        q: '如何让脚本在电脑和手机 APK 都能通用？',
+        q: '如何让脚本在不同手机或平板环境都能通用？',
         a: '使用相对路径读写文件，并用 try: import droid / except ImportError 做兼容判断，可点击下方按钮查看跨环境标准示例。',
       },
     ],
@@ -251,7 +251,7 @@ const GUIDE_TEXT: Record<LocaleId, GuideContent> = {
     crawlerSteps: [
       {
         title: '1. Open the Crawler Browser',
-        body: 'Tap "Browser" on mobile or switch the right workspace pane on desktop. Inside the standalone APK, tap the Native Browser button to log in on any site and capture HttpOnly cookies via Android CookieManager.',
+        body: 'Tap "Browser" in the bottom bar on phone or switch the split pane on tablet. Inside the standalone APK, tap the Native Browser button to log in on any site and capture HttpOnly cookies via Android CookieManager.',
       },
       {
         title: '2. Alternative Cookie Capture (Termux Probe / cURL / Bookmarklet)',
@@ -286,7 +286,7 @@ const GUIDE_TEXT: Record<LocaleId, GuideContent> = {
         a: 'Browser WebAssembly is subject to CORS security policies. Switch the engine to Termux Native or run inside the exported Android APK.',
       },
       {
-        q: 'Can the same Python script run on both PC and Android?',
+        q: 'Can the same Python script run reliably across mobile devices and sandboxes?',
         a: 'Yes! Use relative paths (e.g. Path("cookies.json")) and guard import droid with try/except ImportError. Load the cross-platform demo below to see the pattern.',
       },
     ],
@@ -309,7 +309,7 @@ const GUIDE_TEXT: Record<LocaleId, GuideContent> = {
     crawlerSteps: [
       {
         title: '1. クローラーブラウザでログイン・検証',
-        body: 'モバイル下部「ブラウザ」またはデスクトップ右ペインから利用します。独立 APK 内ではネイティブ WebView でログインし、HttpOnly を含む Cookie を自動取得できます。',
+        body: 'スマホ下部の「ブラウザ」タブまたはタブレットの分割ペインから利用します。独立 APK 内ではネイティブ WebView でログインし、HttpOnly を含む Cookie を自動取得できます。',
       },
       {
         title: '2. Termux 検証・cURL 取込・ブックマークレット',
@@ -344,8 +344,8 @@ const GUIDE_TEXT: Record<LocaleId, GuideContent> = {
         a: 'ブラウザの CORS 制約のためです。エンジンを Termux ネイティブへ切り替えるか、独立 APK 上で実行してください。',
       },
       {
-        q: 'PC とスマホで同じスクリプトを共有できますか？',
-        a: '相対パスを使い、import droid を try/except ImportError で囲むことで両環境でそのまま動作します。下のサンプルで確認できます。',
+        q: 'スマホやタブレットなど異なる環境で同じスクリプトを共有できますか？',
+        a: '相対パスを使い、import droid を try/except ImportError で囲むことで各環境でそのまま動作します。下のサンプルで確認できます。',
       },
     ],
   },
@@ -384,10 +384,10 @@ export const HelpTutorialModal: React.FC<HelpTutorialModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="w-full sm:max-w-2xl max-h-[88vh] flex flex-col rounded-t-3xl sm:rounded-2xl bg-[var(--ide-surface)] border border-[var(--ide-border)] shadow-xl text-[var(--ide-text)] overflow-hidden"
+        className="w-full sm:max-w-2xl max-h-[88vh] flex flex-col md-sheet rounded-b-none sm:rounded-b-[1.75rem] text-[var(--ide-text)] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-10 h-1.5 bg-[var(--ide-border)] rounded-full mx-auto mt-3 sm:hidden shrink-0" />
+        <div className="w-10 h-1 bg-[var(--ide-border)] rounded-full mx-auto mt-2.5 sm:hidden shrink-0" />
 
         {/* Header */}
         <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-[var(--ide-border)] shrink-0">
@@ -443,7 +443,7 @@ export const HelpTutorialModal: React.FC<HelpTutorialModalProps> = ({
             content.quickSteps.map((step, i) => (
               <div
                 key={i}
-                className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-4 space-y-1.5"
+                className="md-card p-4 space-y-1.5"
               >
                 <h3 className="text-sm font-semibold text-[var(--ide-text)]">{step.title}</h3>
                 <p className="text-xs text-[var(--ide-text-muted)] leading-relaxed">{step.body}</p>
@@ -454,7 +454,7 @@ export const HelpTutorialModal: React.FC<HelpTutorialModalProps> = ({
             content.crawlerSteps.map((step, i) => (
               <div
                 key={i}
-                className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-4 space-y-1.5"
+                className="md-card p-4 space-y-1.5"
               >
                 <h3 className="text-sm font-semibold text-[var(--ide-text)]">{step.title}</h3>
                 <p className="text-xs text-[var(--ide-text-muted)] leading-relaxed">{step.body}</p>
@@ -465,7 +465,7 @@ export const HelpTutorialModal: React.FC<HelpTutorialModalProps> = ({
             content.apkSteps.map((step, i) => (
               <div
                 key={i}
-                className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-4 space-y-1.5"
+                className="md-card p-4 space-y-1.5"
               >
                 <h3 className="text-sm font-semibold text-[var(--ide-text)]">{step.title}</h3>
                 <p className="text-xs text-[var(--ide-text-muted)] leading-relaxed">{step.body}</p>
@@ -476,7 +476,7 @@ export const HelpTutorialModal: React.FC<HelpTutorialModalProps> = ({
             content.faqs.map((item, i) => (
               <div
                 key={i}
-                className="rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-4 space-y-1.5"
+                className="md-card p-4 space-y-1.5"
               >
                 <h3 className="text-sm font-semibold text-[var(--ide-accent-text)]">{item.q}</h3>
                 <p className="text-xs text-[var(--ide-text-muted)] leading-relaxed">{item.a}</p>
