@@ -137,3 +137,5 @@
 - Native Android Bridge now uses a dedicated accept thread plus a bounded 8-worker/16-queue executor, rejects excess clients, caps headers at 16 KiB and bodies at 8 MiB, rejects ambiguous request framing, incomplete bodies and invalid JSON, and preserves the rule that Bridge shutdown must not terminate active user Python work.
 - Extended `check:bridge` to verify the generated Python and native Kotlin source resource limits and lifecycle guards. CI and Android 10+ device acceptance pending.
 - The older PR #17 patch was not merged directly: its stale base and shutdown behavior would conflict with the newer process-preservation fix. Only the required resource protections were ported and adapted.
+
+- Added `scripts/check-script-backup.mjs` and CI command `check:script-backup`: verifies quota failure leaves the old value unchanged, corrupt storage is never overwritten, imports/deletes preserve independent snapshots, and the restore handler saves its rollback snapshot before calling `setFiles`.
