@@ -4,15 +4,15 @@ All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
 
-### Fixed — Termux package inventory, user-site, backups and data preservation (pending Android validation)
-- Always reconcile filesystem `.dist-info` / `.egg-info` discovery with Python's `importlib.metadata.distributions()`, including when the filesystem scan already finds one or more packages; this catches packages installed under `PYTHONUSERBASE`.
-- Redirect inventory output to an app-private temporary file instead of a pipe, enforce an 8-second timeout on Android 8+ (legacy behavior retained for API 24–25), cap output at 1 MiB, parse a marked JSON payload, and always clean up the process and temporary file.
-- Keep backup-manifest package lists additive during ordinary scans. An explicit uninstall may shrink the manifest only when both Python metadata and dpkg inventories are complete; incomplete scans preserve the previous snapshot.
-- Preserve partial or unreadable `usr/` data. If bootstrap markers/core binaries are missing but the directory contains data or cannot be safely listed, skip destructive bootstrap extraction, attempt runtime repair, and show a warning rather than deleting the directory.
-- Explicitly activate the configured `PYTHONUSERBASE` site-packages path in both generated Python environments so pip-installed packages remain importable.
-- Normalize CA bundles into validated ASCII PEM blocks (including BOM/non-ASCII comment handling) while keeping TLS certificate verification enabled.
-- Remove APT unauthenticated/insecure overrides and `[trusted=yes]` source injection; strip legacy `[trusted=yes]` entries. Missing CA trust now fails closed instead of disabling HTTPS peer/host verification.
-- Added CI regression checks for dual-source inventory, bounded subprocess output, completeness-gated manifest shrink, partial-`usr/` preservation, user-site activation, CA normalization, and APT repository/TLS verification.
+### Fixed — Termux 套件清單、使用者套件路徑、備份與資料保護（待 Android 實機驗證）
+- **完整盤點 Python 套件**：不再因檔案掃描已找到一個套件（例如 lxml）就跳過 `importlib.metadata.distributions()`；同時核對 `usr/` 與 `PYTHONUSERBASE`，避免漏掉使用者安裝的套件。
+- **限制盤點子程序資源**：輸出改寫入 App 私有暫存檔，不再使用可能塞滿的 pipe；Android 8 以上最多等待 8 秒、輸出限制 1 MiB，並在結束或失敗時清理程序與暫存檔。
+- **保護套件備份清單**：一般掃描只合併清單，不會因不完整結果縮短備份；只有明確解除安裝，而且 Python 與 dpkg 兩份盤點都確認完整時，才允許縮減清單。
+- **保護既有 `usr/`**：若啟動時核心標記或二進位檔遺失，但 `usr/` 仍有資料或無法安全讀取，就跳過破壞性的重新解壓，先嘗試修復並提示使用者，不會自動刪除原套件資料。
+- **修正套件安裝後無法匯入**：兩套 Python `sitecustomize.py` 都會明確啟用 `PYTHONUSERBASE` 的 site-packages 路徑。
+- **正規化 CA 憑證**：處理 UTF-8 BOM／非 ASCII 註解，重新組合並驗證 PEM 憑證區塊；保留 TLS 憑證驗證，不會因找不到 CA 而關閉驗證。
+- **強化 APT 套件來源驗證**：移除允許未驗證套件與不安全來源的選項，停止新增 `[trusted=yes]`，並清理舊版留下的設定；缺少可信 CA 時安全失敗，不會降級成不驗證 HTTPS。
+- **加入 CI 回歸檢查**：涵蓋套件雙來源盤點、子程序限制、備份清單完整性、部分 `usr/` 保護、使用者套件路徑、CA 正規化與 APT／TLS 驗證。
 
 ### Fixed — Python Process Safety and Bridge Lifecycle
 - **停止以執行時間自動終止 Python 工作**：移除 Python／pip 子行程 30 分鐘看門狗與定時清理；程序檢查改為唯讀診斷，不會因執行時間或殭屍狀態自行發送終止訊號。
