@@ -175,7 +175,7 @@ jobs:
         run: gradle assembleDebug --no-daemon
 
       - name: Build Release APK (Arm64)
-        if: env.DROIDPY_RELEASE_BUILD == 'true'
+        if: steps.configure.outputs.is_release == 'true'
         working-directory: android
         run: gradle assembleRelease --no-daemon
 
