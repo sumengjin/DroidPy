@@ -2757,8 +2757,12 @@ def clipboard_set(text):
         return name.trim().lowercase().replace(Regex("[-_.]+"), "-")
     }
 
-    private fun collectInstalledPipNames(): List<String> {
+    private data class PipInventory(val names: List<String>, val complete: Boolean)
+    private data class PkgInventory(val names: List<String>, val complete: Boolean)
+
+    private fun collectInstalledPipInventory(): PipInventory {
         val pipNames = mutableSetOf<String>()
+        var metadataComplete = false
         val homeDir = workspaceDir.parentFile!!
         val libRoots = listOf(
             File(usrDir, "lib"),
@@ -2872,6 +2876,7 @@ def clipboard_set(text):
                             val raw = arr.optString(i, "").trim()
                             if (raw.isNotEmpty()) pipNames.add(normalizePipPkgName(raw))
                         }
+                        metadataComplete = true
                     }
                 }
             } catch (_: Exception) {
@@ -2888,8 +2893,10 @@ def clipboard_set(text):
                 try { inventoryFile?.delete() } catch (_: Exception) {}
             }
         }
-        return pipNames.sorted()
+        return PipInventory(pipNames.sorted(), metadataComplete)
     }
+
+    private fun collectInstalledPipNames(): List<String> = collectInstalledPipInventory().names
 
     private fun calcDirSize(target: File): Long {
         if (!target.exists()) return 0L
@@ -2962,22 +2969,24 @@ def clipboard_set(text):
         return (before - after).coerceAtLeast(0L)
     }
 
-    private fun collectInstalledPkgNames(): List<String> {
+    private fun collectInstalledPkgInventory(): PkgInventory {
         val pkgSet = mutableSetOf<String>()
-        try {
-            val statusFile = File(usrDir, "var/lib/dpkg/status")
-            if (statusFile.isFile) {
-                statusFile.forEachLine { line ->
-                    if (line.startsWith("Package:")) {
-                        val p = line.substringAfter("Package:").trim()
-                        if (p.isNotBlank()) pkgSet.add(p)
-                    }
+        val statusFile = File(usrDir, "var/lib/dpkg/status")
+        if (!statusFile.isFile || !statusFile.canRead()) return PkgInventory(emptyList(), false)
+        return try {
+            statusFile.forEachLine { line ->
+                if (line.startsWith("Package:")) {
+                    val p = line.substringAfter("Package:").trim()
+                    if (p.isNotBlank()) pkgSet.add(p)
                 }
             }
+            PkgInventory(pkgSet.sorted(), pkgSet.isNotEmpty())
         } catch (_: Exception) {
+            PkgInventory(pkgSet.sorted(), false)
         }
-        return pkgSet.sorted()
     }
+
+    private fun collectInstalledPkgNames(): List<String> = collectInstalledPkgInventory().names
 
     private val corePipSet = setOf("pip", "setuptools", "wheel", "ensurepip", "distlib", "packaging")
     private val aptDefaultPipSet = setOf("pip", "setuptools", "wheel", "ensurepip", "distlib", "packaging", "lxml")
