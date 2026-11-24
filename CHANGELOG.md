@@ -4,6 +4,12 @@ All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
 
+### Security — APT Repository Integrity (pending validation)
+- **移除 APT 未驗證套件與不安全來源選項**：不再啟用 `AllowInsecureRepositories`、`AllowDowngradeToInsecureRepositories` 或 `AllowUnauthenticated`，也不再為 Termux 套件來源加入 `[trusted=yes]`。
+- **保留 HTTPS 憑證驗證**：找不到可信 CA 檔時不再關閉 Peer／Host 驗證；缺少信任材料時明確失敗，不降級成不安全下載。
+- **清理舊版設定**：修復既有 sources.list 時移除舊版寫入的 `[trusted=yes]`，並加入 CI 安全回歸檢查。
+- Android 11／13 上的既有 keyring、CA bundle、`pkg update` 與 `pkg install` 相容性仍待實機驗證。
+
 ### Fixed — Python Process Safety and Bridge Lifecycle
 - **停止以執行時間自動終止 Python 工作**：移除 Python／pip 子行程 30 分鐘看門狗與定時清理；程序檢查改為唯讀診斷，不會因執行時間或殭屍狀態自行發送終止訊號。
 - **修復 Bridge 停止時誤殺使用者工作**：停止內嵌 Bridge 不再強制終止目前 Python 程序，並保留程序控制代碼，讓 Bridge 重新啟動後仍可由使用者明確停止該工作。
