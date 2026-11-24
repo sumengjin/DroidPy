@@ -4,6 +4,11 @@ All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
 
+### Fixed — Python package inventory reliability (pending validation)
+- Always reconcile filesystem `.dist-info` / `.egg-info` discovery with `importlib.metadata`, including when filesystem scanning already finds one or more packages; this catches packages installed under `PYTHONUSERBASE`.
+- Redirect inventory output to a private temporary file instead of a pipe, enforce an 8-second process timeout and 1 MiB output cap, parse a marked JSON payload, and always clean up the temporary file/process.
+- Keep backup-manifest package lists monotonic during ordinary scans; only an explicit uninstall path may shrink the manifest. Existing `usr/`, packages, workspaces and backups are not moved or deleted.
+
 ### Fixed — Python Process Safety and Bridge Lifecycle
 - **停止以執行時間自動終止 Python 工作**：移除 Python／pip 子行程 30 分鐘看門狗與定時清理；程序檢查改為唯讀診斷，不會因執行時間或殭屍狀態自行發送終止訊號。
 - **修復 Bridge 停止時誤殺使用者工作**：停止內嵌 Bridge 不再強制終止目前 Python 程序，並保留程序控制代碼，讓 Bridge 重新啟動後仍可由使用者明確停止該工作。
