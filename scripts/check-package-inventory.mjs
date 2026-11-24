@@ -30,4 +30,14 @@ assert.match(manifest, /prevPipList \+ currentUserPip/);
 assert.match(manifest, /prevPkgList \+ currentUserPkg/);
 assert.match(source, /savePackageBackupSnapshot\(forceShrink = isUninstall\)/);
 
+const bootstrapStart = source.indexOf('val hasExistingInstall =');
+const bootstrapEnd = source.indexOf('localBridge = EmbeddedTermuxBridge', bootstrapStart);
+assert.ok(bootstrapStart >= 0 && bootstrapEnd > bootstrapStart, 'bootstrap startup guard must exist');
+const bootstrap = source.slice(bootstrapStart, bootstrapEnd);
+assert.match(bootstrap, /val hasExistingUsrData = usrDir\.exists\(\)/);
+assert.match(bootstrap, /usrDir\.listFiles\(\)\?\.isNotEmpty\(\) != false/);
+assert.match(bootstrap, /if \(!hasExistingInstall && !hasExistingUsrData\)/);
+assert.match(bootstrap, /if \(hasExistingInstall && !bootstrapMarker\.exists\(\)\)/);
+assert.match(bootstrap, /Detected partial usr\/ data/);
+
 console.log('Package inventory safety checks passed: dual-source discovery, bounded private output, cleanup and non-shrinking manifest.');
