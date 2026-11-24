@@ -1,11 +1,15 @@
 export type ThemeId =
   | 'rose'
+  | 'peony'
+  | 'champagne'
   | 'lavender'
   | 'matcha'
   | 'milktea'
   | 'sky'
   | 'berry'
   | 'rosegold'
+  | 'moonrose'
+  | 'aurorapink'
   | 'starry'
   | 'dark'
   | 'light';
@@ -33,6 +37,28 @@ export const IDE_THEMES: ThemeMeta[] = [
     swatchSurface: '#FFE4EC',
     swatchAccent: '#DB2777',
     themeColorMeta: '#FFF7F9',
+  },
+  {
+    id: 'peony',
+    name: '胭脂牡丹',
+    subtitle: '珊瑚粉綢高雅日間',
+    isDark: false,
+    category: 'feminine',
+    swatchBg: '#FFF5F6',
+    swatchSurface: '#FFE1E6',
+    swatchAccent: '#E11D48',
+    themeColorMeta: '#FFF5F6',
+  },
+  {
+    id: 'champagne',
+    name: '香檳珍珠',
+    subtitle: '絲滑奶油杏仁輕奢',
+    isDark: false,
+    category: 'feminine',
+    swatchBg: '#FCF9F4',
+    swatchSurface: '#F5ECE0',
+    swatchAccent: '#B45309',
+    themeColorMeta: '#FCF9F4',
   },
   {
     id: 'lavender',
@@ -99,6 +125,28 @@ export const IDE_THEMES: ThemeMeta[] = [
     swatchSurface: '#241B20',
     swatchAccent: '#E28C97',
     themeColorMeta: '#151013',
+  },
+  {
+    id: 'moonrose',
+    name: '月影薔薇',
+    subtitle: '深夜酒紅絲絨花影',
+    isDark: true,
+    category: 'feminine',
+    swatchBg: '#140C14',
+    swatchSurface: '#241422',
+    swatchAccent: '#F472B6',
+    themeColorMeta: '#140C14',
+  },
+  {
+    id: 'aurorapink',
+    name: '極光粉霧',
+    subtitle: '暮夜星雲玫瑰極光',
+    isDark: true,
+    category: 'feminine',
+    swatchBg: '#0F1123',
+    swatchSurface: '#181A33',
+    swatchAccent: '#F43F5E',
+    themeColorMeta: '#0F1123',
   },
   {
     id: 'starry',

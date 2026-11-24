@@ -32,6 +32,8 @@ export interface InstalledPackage {
   version: string;
 }
 
+export type Atmosphere3dMode = 'auto' | 'petals' | 'snow' | 'rain' | 'starlight';
+
 export interface EditorSettings {
   fontSize: number;
   tabSize: number;
@@ -45,6 +47,8 @@ export interface EditorSettings {
   enableSandboxAddon?: boolean;
   cleanTextMode?: boolean;
   pipTrustedHostEmergency?: boolean;
+  enable3dBg?: boolean;
+  atmosphere3dMode?: Atmosphere3dMode;
 }
 
 export type MobileTab = 'editor' | 'console' | 'browser' | 'files';

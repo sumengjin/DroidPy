@@ -117,6 +117,21 @@ function mapGitHubReleases(rawList: RawGitHubRelease[]): AppReleaseInfo[] {
 
 export const BUILTIN_LOCAL_RELEASES: AppReleaseInfo[] = [
   {
+    tagName: 'v1.2.15',
+    version: '1.2.15',
+    name: 'DroidPy v1.2.15',
+    publishedAt: '2026-11-24',
+    htmlUrl: '',
+    prerelease: false,
+    apkAssets: [],
+    body: [
+      '• 修復 GitHub Actions 重試或重複建置時 APK 資產同名衝突失敗（asset under the same name already exists）問題，統一改用 --clobber 安全覆寫並保留唯一標準檔名',
+      '• 修復新版本不發布問題：CI 自動偵測 CHANGELOG 與遠端標籤對應 commit，新提交自動遞增修訂版號（如 v1.2.15 → v1.2.16）並同步寫入 Android versionCode / versionName 後發布 Release；更新檢查改以語意版本由高至低排序並停用過期快取',
+      '• 新增浪漫女性化「動態 3D 氛圍背景」（Three.js WebGL）：隨時間推移自動切換晨曦落櫻花瓣飄、晴空／紫羅蘭微雨連漪、月夜初雪晶體與星塵流螢，支援設定頁自由選擇效果與一鍵開關',
+      '• 新增 4 款柔美女性化主題（胭脂牡丹、香檳珍珠、月影薔薇、極光粉霧），並調整編輯器／面板半透明層次以兼具程式碼高對比與動態背景美感',
+    ].join('\n'),
+  },
+  {
     tagName: 'v1.2.14',
     version: '1.2.14',
     name: 'DroidPy v1.2.14',
@@ -189,11 +204,12 @@ export async function checkForAppUpdates(
     };
   }
 
-  const apiUrl = `https://api.github.com/repos/${repoSlug}/releases?per_page=15`;
+  const apiUrl = `https://api.github.com/repos/${repoSlug}/releases?per_page=20`;
   let rawJsonText = '';
 
   try {
     const res = await fetch(apiUrl, {
+      cache: 'no-store',
       headers: {
         Accept: 'application/vnd.github+json',
       },
@@ -243,8 +259,11 @@ export async function checkForAppUpdates(
     if (!Array.isArray(parsed)) {
       throw new Error('無效的 GitHub Releases 回應格式');
     }
-    const releases = mapGitHubReleases(parsed);
-    const latest = releases[0] ?? null;
+    const releases = mapGitHubReleases(parsed).sort((a, b) =>
+      compareSemver(b.version, a.version)
+    );
+    const stableReleases = releases.filter((r) => !r.prerelease);
+    const latest = stableReleases[0] ?? releases[0] ?? null;
     const hasUpdate = Boolean(latest && compareSemver(latest.version, currentVersion) > 0);
     return {
       currentVersion,

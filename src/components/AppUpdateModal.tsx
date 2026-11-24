@@ -69,7 +69,10 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
   const latest: AppReleaseInfo | null = updateResult?.latest ?? null;
   const hasUpdate = Boolean(updateResult?.hasUpdate && latest);
   const releases = updateResult?.releases ?? [];
-  const primaryApk = latest?.apkAssets[0] ?? null;
+  const primaryApk =
+    latest?.apkAssets.find((a) => a.name === `DroidPy-arm64-${latest.tagName}.apk`) ??
+    latest?.apkAssets[0] ??
+    null;
   const currentNorm = normalizeVersionStr(currentVersion);
   const currentRelease: AppReleaseInfo | null =
     releases.find((r) => normalizeVersionStr(r.version) === currentNorm) ??
@@ -97,7 +100,7 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4"
       onClick={onClose}
       role="dialog"
       aria-modal="true"

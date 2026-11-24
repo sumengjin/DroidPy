@@ -119,25 +119,61 @@ jobs:
         with:
           gradle-version: "8.7"
 
-      - name: 設定一致性 APK 簽名與遞增版號
+      - name: 解析發佈版本與設定一致性 APK 簽名
         env:
+          GH_TOKEN: ${{ github.token }}
           CUSTOM_KS_B64: ${{ secrets.DROIDPY_KEYSTORE_BASE64 }}
           CUSTOM_STORE_PASS: ${{ secrets.DROIDPY_STORE_PASSWORD }}
           CUSTOM_KEY_ALIAS: ${{ secrets.DROIDPY_KEY_ALIAS }}
           CUSTOM_KEY_PASS: ${{ secrets.DROIDPY_KEY_PASSWORD }}
         run: |
+          INPUT_TAG="${{ inputs.release_tag }}"
           VER=$(grep -m1 -oE '\[[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md 2>/dev/null | tr -d '[' || true)
-          if [ -n "$VER" ]; then
-            IFS='.' read -r MAJ MIN PAT <<< "$VER"
-            VCODE=$(( ${MAJ:-1} * 10000 + ${MIN:-0} * 100 + ${PAT:-0} ))
-            VNAME="$VER"
-          else
-            VCODE=$(( 10200 + ${GITHUB_RUN_NUMBER:-1} ))
-            VNAME="1.2.${GITHUB_RUN_NUMBER:-1}"
+          if [ -z "$VER" ]; then
+            VER="1.2.${GITHUB_RUN_NUMBER:-1}"
           fi
+
+          if [ -n "$INPUT_TAG" ]; then
+            REL_TAG="v${INPUT_TAG#v}"
+            VNAME="${REL_TAG#v}"
+          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            REL_TAG="${GITHUB_REF_NAME}"
+            VNAME="${REL_TAG#v}"
+          else
+            IFS='.' read -r MAJ MIN PAT <<< "$VER"
+            MAJ=${MAJ:-1}
+            MIN=${MIN:-2}
+            PAT=${PAT:-0}
+            for _ in $(seq 1 50); do
+              CAND_TAG="v${MAJ}.${MIN}.${PAT}"
+              REL_EXISTS=0
+              if gh release view "$CAND_TAG" >/dev/null 2>&1; then
+                REL_EXISTS=1
+              fi
+              TAG_SHA=$(git ls-remote --tags origin "refs/tags/${CAND_TAG}^{}" 2>/dev/null | awk '{print $1}' | head -n1 || true)
+              if [ -z "$TAG_SHA" ]; then
+                TAG_SHA=$(git ls-remote --tags origin "refs/tags/${CAND_TAG}" 2>/dev/null | awk '{print $1}' | head -n1 || true)
+              fi
+              if [ "$REL_EXISTS" -eq 0 ] && [ -z "$TAG_SHA" ]; then
+                break
+              fi
+              if [ -n "$TAG_SHA" ] && [ "$TAG_SHA" = "${GITHUB_SHA}" ]; then
+                break
+              fi
+              PAT=$((PAT + 1))
+            done
+            VNAME="${MAJ}.${MIN}.${PAT}"
+            REL_TAG="v${VNAME}"
+          fi
+
+          SEMVER_PART=$(echo "$VNAME" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' || echo "1.2.15")
+          IFS='.' read -r CMAJ CMIN CPAT <<< "$SEMVER_PART"
+          VCODE=$(( ${CMAJ:-1} * 10000 + ${CMIN:-0} * 100 + ${CPAT:-0} ))
+
           echo "DROIDPY_VERSION_CODE=${VCODE}" >> "$GITHUB_ENV"
           echo "DROIDPY_VERSION_NAME=${VNAME}" >> "$GITHUB_ENV"
-          echo "Android versionCode=${VCODE}, versionName=${VNAME}"
+          echo "DROIDPY_RESOLVED_TAG=${REL_TAG}" >> "$GITHUB_ENV"
+          echo "Resolved Release=${REL_TAG}, versionCode=${VCODE}, versionName=${VNAME}"
 
           if [ -n "$CUSTOM_KS_B64" ]; then
             printf '%s' "$CUSTOM_KS_B64" | base64 -d > android/app/droidpy-custom.keystore
@@ -170,25 +206,13 @@ jobs:
             keytool -printcert -jarfile "$APK_PATH" || true
           fi
 
-      - name: 解析發佈版本並整理 APK 檔名
+      - name: 整理發佈版本與 APK 檔名
         id: resolve_tag
         run: |
           mkdir -p release-apk
-          INPUT_TAG="${{ inputs.release_tag }}"
-          if [ -n "$INPUT_TAG" ]; then
-            REL_TAG="$INPUT_TAG"
-          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            REL_TAG="${GITHUB_REF_NAME}"
-          else
-            VER=$(grep -m1 -oE '\[[0-9]+\.[0-9]+\.[0-9]+[^]]*\]' CHANGELOG.md 2>/dev/null | tr -d '[]' || true)
-            if [ -n "$VER" ]; then
-              REL_TAG="v${VER#v}"
-            else
-              REL_TAG="v0.0.${GITHUB_RUN_NUMBER}"
-            fi
-          fi
+          REL_TAG="${DROIDPY_RESOLVED_TAG}"
           SAFE_TAG="${REL_TAG//\//-}"
-          ART_NAME="DroidPy-arm64-apk-${SAFE_TAG}-r${GITHUB_RUN_NUMBER}"
+          ART_NAME="DroidPy-arm64-apk-${SAFE_TAG}-r${GITHUB_RUN_NUMBER}-a${GITHUB_RUN_ATTEMPT:-1}"
           cp android/app/build/outputs/apk/debug/*.apk "release-apk/DroidPy-arm64-${SAFE_TAG}.apk"
           echo "release_tag=${REL_TAG}" >> "$GITHUB_OUTPUT"
           echo "safe_tag=${SAFE_TAG}" >> "$GITHUB_OUTPUT"
@@ -200,6 +224,7 @@ jobs:
           name: ${{ steps.resolve_tag.outputs.artifact_name }}
           path: release-apk/*.apk
           retention-days: 90
+          overwrite: true
 
   release:
     name: 建立 GitHub Release（保留歷史版本 APK）
@@ -247,18 +272,14 @@ jobs:
           } > RELEASE_NOTES.md
 
           if gh release view "$REL_TAG" >/dev/null 2>&1; then
-            EXISTING_ASSETS=$(gh release view "$REL_TAG" --json assets --jq '.assets[].name' 2>/dev/null || true)
-            if echo "$EXISTING_ASSETS" | grep -Fxq "$APK_BASE"; then
-              UPLOAD_PATH="release-apk/DroidPy-arm64-${SAFE_TAG}-b${GITHUB_RUN_NUMBER}.apk"
-              cp "$APK_FILE" "$UPLOAD_PATH"
-              gh release upload "$REL_TAG" "$UPLOAD_PATH"
-            else
-              gh release upload "$REL_TAG" "$APK_FILE"
-            fi
+            gh release upload "$REL_TAG" "$APK_FILE" --clobber
             gh release edit "$REL_TAG" --notes-file RELEASE_NOTES.md
           else
             gh release create "$REL_TAG" "$APK_FILE" \
               --title "DroidPy ${REL_TAG}" \
               --notes-file RELEASE_NOTES.md \
-              --target "${GITHUB_SHA}"
+              --target "${GITHUB_SHA}" || {
+                gh release upload "$REL_TAG" "$APK_FILE" --clobber
+                gh release edit "$REL_TAG" --notes-file RELEASE_NOTES.md
+              }
           fi

@@ -157,7 +157,7 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex bg-black/50 backdrop-blur-xs"
+      className="fixed inset-0 z-50 flex bg-black/55"
       onClick={onClose}
       role="dialog"
       aria-modal="true"

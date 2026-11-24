@@ -2,6 +2,19 @@
 
 All notable changes to **DroidPy** are documented in this file.
 
+## [1.2.15] - 2026-11-24
+
+### Added & Fixed (CI Release Publishing, Feminine Time-Reactive 3D Background & New Feminine Themes)
+- **修復 GitHub Actions 重試與發布資產同名衝突 (`asset under the same name already exists`)**：
+  - 統一 `gh release upload ... --clobber` 覆寫語意與 `actions/upload-artifact` `overwrite: true` + `run_attempt` 區隔，徹底解決重跑 Workflow 時 `DroidPy-arm64-v1.2.14-b16.apk` 失敗的問題。
+- **修復新版本不發布與更新檢測排序問題**：
+  - `.github/workflows/droidpy.yml` 與匯出之 `build-apk.yml` 在打包 APK 前自動比對 `CHANGELOG.md` 與遠端 Release／Git Tag commit；若推送新程式碼未手動遞增版號，CI 會自動遞增修訂版號（如 `v1.2.15` → `v1.2.16`）並同步寫入 `DROIDPY_VERSION_CODE` / `DROIDPY_VERSION_NAME` 與發布全新 GitHub Release。
+  - `appUpdater.ts` 新增 `cache: 'no-store'` 與語意版本 (`compareSemver`) 降序排列，確保程式內更新視窗永遠顯示最新穩定版與正確 APK 下載檔。
+- **新增浪漫女性化「動態 3D 氛圍背景」（Three.js WebGL）**：
+  - 支援隨時間自動變化：晨曦落櫻花瓣飄、晴空／紫羅蘭細雨漣漪、暮色玫瑰花雨、月夜冰晶飄雪與星塵流螢光點，並與當前配色主題自然融合；設定內可自由開關或手動指定飄落效果。
+- **新增 4 款女性化主題**：
+  - 擴充 **胭脂牡丹 (`peony`)**、**香檳珍珠 (`champagne`)**、**月影薔薇 (`moonrose`)**、**極光粉霧 (`aurorapink`)** 4 套高對比 MD3 與 CodeMirror 語法高亮配色，共提供 14 款主題。
+
 ## [1.2.14] - 2026-11-23
 
 ### Fixed (Installed Packages Detection, Cache/Temp Cleanup, Control-Char/Garbled Output, `/shell` 404, Mobile Overflow & Long-Session Performance)

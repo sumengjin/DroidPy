@@ -56,6 +56,7 @@ interface CodeEditorProps {
   wordWrap: boolean;
   theme: ThemeId;
   pyodideReady?: boolean;
+  transparentBg?: boolean;
 }
 
 const HIGHLIGHT_PRESETS: Record<ThemeId, HighlightStyle> = {
@@ -178,6 +179,54 @@ const HIGHLIGHT_PRESETS: Record<ThemeId, HighlightStyle> = {
     { tag: [tags.meta, tags.comment], color: '#707CA8', fontStyle: 'italic' },
     { tag: tags.string, color: '#FDE68A' },
     { tag: [tags.bool, tags.atom], color: '#F9A8D4', fontWeight: '600' },
+  ]),
+  peony: HighlightStyle.define([
+    { tag: tags.keyword, color: '#E11D48', fontWeight: '600' },
+    { tag: [tags.name, tags.deleted, tags.character, tags.macroName], color: '#3F1220' },
+    { tag: [tags.function(tags.variableName), tags.labelName], color: '#9333EA' },
+    { tag: [tags.color, tags.constant(tags.name), tags.standard(tags.name)], color: '#C2410C' },
+    { tag: [tags.definition(tags.name), tags.separator], color: '#3F1220' },
+    { tag: [tags.typeName, tags.className, tags.number, tags.changed, tags.annotation, tags.modifier, tags.self, tags.namespace], color: '#0F766E' },
+    { tag: [tags.operator, tags.operatorKeyword, tags.url, tags.escape, tags.regexp, tags.link, tags.special(tags.string)], color: '#935368' },
+    { tag: [tags.meta, tags.comment], color: '#BD7D91', fontStyle: 'italic' },
+    { tag: tags.string, color: '#B45309' },
+    { tag: [tags.bool, tags.atom], color: '#BE123C', fontWeight: '600' },
+  ]),
+  champagne: HighlightStyle.define([
+    { tag: tags.keyword, color: '#B45309', fontWeight: '600' },
+    { tag: [tags.name, tags.deleted, tags.character, tags.macroName], color: '#38271A' },
+    { tag: [tags.function(tags.variableName), tags.labelName], color: '#BE185D' },
+    { tag: [tags.color, tags.constant(tags.name), tags.standard(tags.name)], color: '#0F766E' },
+    { tag: [tags.definition(tags.name), tags.separator], color: '#38271A' },
+    { tag: [tags.typeName, tags.className, tags.number, tags.changed, tags.annotation, tags.modifier, tags.self, tags.namespace], color: '#7C3AED' },
+    { tag: [tags.operator, tags.operatorKeyword, tags.url, tags.escape, tags.regexp, tags.link, tags.special(tags.string)], color: '#7F6956' },
+    { tag: [tags.meta, tags.comment], color: '#A58F7B', fontStyle: 'italic' },
+    { tag: tags.string, color: '#15803D' },
+    { tag: [tags.bool, tags.atom], color: '#C2410C', fontWeight: '600' },
+  ]),
+  moonrose: HighlightStyle.define([
+    { tag: tags.keyword, color: '#F9A8D4', fontWeight: '600' },
+    { tag: [tags.name, tags.deleted, tags.character, tags.macroName], color: '#FDF2F8' },
+    { tag: [tags.function(tags.variableName), tags.labelName], color: '#C4B5FD' },
+    { tag: [tags.color, tags.constant(tags.name), tags.standard(tags.name)], color: '#FDE68A' },
+    { tag: [tags.definition(tags.name), tags.separator], color: '#FFFFFF' },
+    { tag: [tags.typeName, tags.className, tags.number, tags.changed, tags.annotation, tags.modifier, tags.self, tags.namespace], color: '#67E8F9' },
+    { tag: [tags.operator, tags.operatorKeyword, tags.url, tags.escape, tags.regexp, tags.link, tags.special(tags.string)], color: '#CDA5C3' },
+    { tag: [tags.meta, tags.comment], color: '#94678A', fontStyle: 'italic' },
+    { tag: tags.string, color: '#FDBA74' },
+    { tag: [tags.bool, tags.atom], color: '#FB7185', fontWeight: '600' },
+  ]),
+  aurorapink: HighlightStyle.define([
+    { tag: tags.keyword, color: '#FB7185', fontWeight: '600' },
+    { tag: [tags.name, tags.deleted, tags.character, tags.macroName], color: '#F5F3FF' },
+    { tag: [tags.function(tags.variableName), tags.labelName], color: '#5EEAD4' },
+    { tag: [tags.color, tags.constant(tags.name), tags.standard(tags.name)], color: '#FDE68A' },
+    { tag: [tags.definition(tags.name), tags.separator], color: '#FFFFFF' },
+    { tag: [tags.typeName, tags.className, tags.number, tags.changed, tags.annotation, tags.modifier, tags.self, tags.namespace], color: '#C4B5FD' },
+    { tag: [tags.operator, tags.operatorKeyword, tags.url, tags.escape, tags.regexp, tags.link, tags.special(tags.string)], color: '#B6ADD8' },
+    { tag: [tags.meta, tags.comment], color: '#7D74A6', fontStyle: 'italic' },
+    { tag: tags.string, color: '#FDE047' },
+    { tag: [tags.bool, tags.atom], color: '#F472B6', fontWeight: '600' },
   ]),
 };
 
@@ -316,17 +365,77 @@ const EDITOR_SURFACE_TOKENS: Record<
     selectionBg: 'rgba(167, 139, 250, 0.24)',
     panelBg: '#181933',
   },
+  peony: {
+    bg: '#FFFFFF',
+    fg: '#3F1220',
+    gutterBg: '#FFF5F6',
+    gutterFg: '#C17D92',
+    gutterBorder: '#FECDD6',
+    activeGutterBg: '#FFE8EC',
+    activeLineBg: 'rgba(255, 228, 233, 0.5)',
+    accent: '#E11D48',
+    selectionBg: 'rgba(225, 29, 72, 0.16)',
+    panelBg: '#FFECEF',
+  },
+  champagne: {
+    bg: '#FFFFFF',
+    fg: '#38271A',
+    gutterBg: '#FCF9F4',
+    gutterFg: '#AD947D',
+    gutterBorder: '#E8D9C5',
+    activeGutterBg: '#F6EFE6',
+    activeLineBg: 'rgba(243, 233, 220, 0.55)',
+    accent: '#B45309',
+    selectionBg: 'rgba(180, 83, 9, 0.16)',
+    panelBg: '#F6EFE6',
+  },
+  moonrose: {
+    bg: '#140C14',
+    fg: '#FDF2F8',
+    gutterBg: '#140C14',
+    gutterFg: '#8E5F83',
+    gutterBorder: '#42243F',
+    activeGutterBg: '#211321',
+    activeLineBg: 'rgba(66, 36, 63, 0.45)',
+    accent: '#F472B6',
+    selectionBg: 'rgba(244, 114, 182, 0.24)',
+    panelBg: '#211321',
+  },
+  aurorapink: {
+    bg: '#0F1123',
+    fg: '#F5F3FF',
+    gutterBg: '#0F1123',
+    gutterFg: '#7771A6',
+    gutterBorder: '#32315E',
+    activeGutterBg: '#181A33',
+    activeLineBg: 'rgba(50, 49, 94, 0.45)',
+    accent: '#F43F5E',
+    selectionBg: 'rgba(244, 63, 94, 0.24)',
+    panelBg: '#181A33',
+  },
 };
 
-function createEditorTheme(themeId: ThemeId, fontSize: number) {
+function hexToRgba(hex: string, alpha: number): string {
+  const clean = hex.replace('#', '').trim();
+  if (clean.length !== 6) return hex;
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function createEditorTheme(themeId: ThemeId, fontSize: number, transparentBg = false) {
   const meta = getThemeMeta(themeId);
   const t = EDITOR_SURFACE_TOKENS[themeId] ?? EDITOR_SURFACE_TOKENS.rose;
+  const editorBg = transparentBg ? hexToRgba(t.bg, meta.isDark ? 0.72 : 0.76) : t.bg;
+  const gutterBg = transparentBg ? hexToRgba(t.gutterBg, meta.isDark ? 0.78 : 0.82) : t.gutterBg;
+  const panelBg = transparentBg ? hexToRgba(t.panelBg, 0.9) : t.panelBg;
   return EditorView.theme(
     {
       '&': {
         height: '100%',
         fontSize: `${fontSize}px`,
-        backgroundColor: t.bg,
+        backgroundColor: editorBg,
         color: t.fg,
       },
       '.cm-scroller': {
@@ -341,7 +450,7 @@ function createEditorTheme(themeId: ThemeId, fontSize: number) {
         paddingRight: '16px',
       },
       '.cm-gutters': {
-        backgroundColor: t.gutterBg,
+        backgroundColor: gutterBg,
         color: t.gutterFg,
         borderRight: `1px solid ${t.gutterBorder}`,
         fontVariantNumeric: 'tabular-nums',
@@ -370,7 +479,7 @@ function createEditorTheme(themeId: ThemeId, fontSize: number) {
         outline: `1px solid ${t.accent}`,
       },
       '.cm-panels': {
-        backgroundColor: t.panelBg,
+        backgroundColor: panelBg,
         color: t.fg,
         borderBottom: `1px solid ${t.gutterBorder}`,
       },
@@ -455,7 +564,7 @@ function buildSyntaxLinter(filenameRef: React.MutableRefObject<string | undefine
 }
 
 export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
-  ({ value, filename, onChange, onRunShortcut, onCursorChange, fontSize, tabSize, wordWrap, theme, pyodideReady }, ref) => {
+  ({ value, filename, onChange, onRunShortcut, onCursorChange, fontSize, tabSize, wordWrap, theme, pyodideReady, transparentBg = false }, ref) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const viewRef = useRef<EditorView | null>(null);
     const onChangeRef = useRef(onChange);
@@ -504,7 +613,7 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
           buildSyntaxLinter(filenameRef),
           tabCompartment.of(indentUnit.of(' '.repeat(tabSize))),
           wrapCompartment.of(wordWrap ? EditorView.lineWrapping : []),
-          themeCompartment.of(createEditorTheme(theme, fontSize)),
+          themeCompartment.of(createEditorTheme(theme, fontSize, transparentBg)),
           highlightCompartment.of(syntaxHighlighting(HIGHLIGHT_PRESETS[theme] ?? HIGHLIGHT_PRESETS.rose)),
           keymap.of([
             {
@@ -566,11 +675,11 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
       if (!view) return;
       view.dispatch({
         effects: [
-          themeCompartment.reconfigure(createEditorTheme(theme, fontSize)),
+          themeCompartment.reconfigure(createEditorTheme(theme, fontSize, transparentBg)),
           highlightCompartment.reconfigure(syntaxHighlighting(HIGHLIGHT_PRESETS[theme] ?? HIGHLIGHT_PRESETS.rose)),
         ],
       });
-    }, [theme, fontSize, themeCompartment, highlightCompartment]);
+    }, [theme, fontSize, transparentBg, themeCompartment, highlightCompartment]);
 
     useEffect(() => {
       const view = viewRef.current;

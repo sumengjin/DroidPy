@@ -527,7 +527,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       {/* Plot Lightbox Modal */}
       {expandedPlot && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
           onClick={() => setExpandedPlot(null)}
         >
           <div

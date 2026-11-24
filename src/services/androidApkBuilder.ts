@@ -85,24 +85,56 @@ jobs:
           curl -fL "https://github.com/termux/termux-packages/releases/latest/download/bootstrap-aarch64.zip" \\
             -o android/app/src/main/assets/bootstrap-aarch64.zip
 
-      - name: Configure Consistent APK Signing & Version
+      - name: Configure Consistent APK Signing & Release Version
         env:
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
           CUSTOM_KS_B64: \${{ secrets.DROIDPY_KEYSTORE_BASE64 }}
           CUSTOM_STORE_PASS: \${{ secrets.DROIDPY_STORE_PASSWORD }}
           CUSTOM_KEY_ALIAS: \${{ secrets.DROIDPY_KEY_ALIAS }}
           CUSTOM_KEY_PASS: \${{ secrets.DROIDPY_KEY_PASSWORD }}
         run: |
           VER=\$(grep -m1 -oE '\\[[0-9]+\\.[0-9]+\\.[0-9]+' CHANGELOG.md 2>/dev/null | tr -d '[' || true)
-          if [ -n "\$VER" ]; then
-            IFS='.' read -r MAJ MIN PAT <<< "\$VER"
-            VCODE=\$(( \${MAJ:-1} * 10000 + \${MIN:-0} * 100 + \${PAT:-0} ))
-            VNAME="\$VER"
-          else
-            VCODE=\$(( 10200 + \${GITHUB_RUN_NUMBER:-1} ))
-            VNAME="1.2.\${GITHUB_RUN_NUMBER:-1}"
+          if [ -z "\$VER" ]; then
+            VER="1.2.\${GITHUB_RUN_NUMBER:-1}"
           fi
+
+          if [[ "\${GITHUB_REF}" == refs/tags/* ]]; then
+            REL_TAG="\${GITHUB_REF_NAME}"
+            VNAME="\${REL_TAG#v}"
+          else
+            IFS='.' read -r MAJ MIN PAT <<< "\$VER"
+            MAJ=\${MAJ:-1}
+            MIN=\${MIN:-2}
+            PAT=\${PAT:-0}
+            for _ in \$(seq 1 50); do
+              CAND_TAG="v\${MAJ}.\${MIN}.\${PAT}"
+              REL_EXISTS=0
+              if gh release view "\$CAND_TAG" >/dev/null 2>&1; then
+                REL_EXISTS=1
+              fi
+              TAG_SHA=\$(git ls-remote --tags origin "refs/tags/\${CAND_TAG}^{}" 2>/dev/null | awk '{print \$1}' | head -n1 || true)
+              if [ -z "\$TAG_SHA" ]; then
+                TAG_SHA=\$(git ls-remote --tags origin "refs/tags/\${CAND_TAG}" 2>/dev/null | awk '{print \$1}' | head -n1 || true)
+              fi
+              if [ "\$REL_EXISTS" -eq 0 ] && [ -z "\$TAG_SHA" ]; then
+                break
+              fi
+              if [ -n "\$TAG_SHA" ] && [ "\$TAG_SHA" = "\${GITHUB_SHA}" ]; then
+                break
+              fi
+              PAT=\$((PAT + 1))
+            done
+            VNAME="\${MAJ}.\${MIN}.\${PAT}"
+            REL_TAG="v\${VNAME}"
+          fi
+
+          SEMVER_PART=\$(echo "\$VNAME" | grep -oE '^[0-9]+\\.[0-9]+\\.[0-9]+' || echo "1.2.15")
+          IFS='.' read -r CMAJ CMIN CPAT <<< "\$SEMVER_PART"
+          VCODE=\$(( \${CMAJ:-1} * 10000 + \${CMIN:-0} * 100 + \${CPAT:-0} ))
+
           echo "DROIDPY_VERSION_CODE=\${VCODE}" >> "\$GITHUB_ENV"
           echo "DROIDPY_VERSION_NAME=\${VNAME}" >> "\$GITHUB_ENV"
+          echo "DROIDPY_RESOLVED_TAG=\${REL_TAG}" >> "\$GITHUB_ENV"
 
           if [ -n "\$CUSTOM_KS_B64" ]; then
             printf '%s' "\$CUSTOM_KS_B64" | base64 -d > android/app/droidpy-custom.keystore
@@ -133,38 +165,31 @@ jobs:
       - name: Prepare Release APK Filename
         run: |
           mkdir -p release-apk
-          TAG_NAME="\${GITHUB_REF_NAME:-dev}"
-          cp android/app/build/outputs/apk/debug/*.apk "release-apk/${appSlug}-arm64-\${TAG_NAME}.apk"
+          SAFE_TAG="\${DROIDPY_RESOLVED_TAG//\\//-}"
+          cp android/app/build/outputs/apk/debug/*.apk "release-apk/${appSlug}-arm64-\${SAFE_TAG}.apk"
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${appSlug}-arm64-apk-\${{ github.run_number }}
+          name: ${appSlug}-arm64-apk-\${{ github.run_number }}-a\${{ github.run_attempt }}
           retention-days: 90
+          overwrite: true
           path: release-apk/*.apk
 
-      - name: Publish GitHub Release on Tag
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Publish GitHub Release
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
         run: |
           APK_FILE=\$(ls release-apk/*.apk | head -n1)
-          BASE_NAME=\$(basename "\$APK_FILE")
-          REL_TAG="\${GITHUB_REF_NAME}"
+          REL_TAG="\${DROIDPY_RESOLVED_TAG}"
           if gh release view "\$REL_TAG" >/dev/null 2>&1; then
-            EXISTING=\$(gh release view "\$REL_TAG" --json assets --jq '.assets[].name' || true)
-            if echo "\$EXISTING" | grep -qx "\$BASE_NAME"; then
-              ALT_FILE="release-apk/\${BASE_NAME%.apk}-b\${GITHUB_RUN_NUMBER}.apk"
-              cp "\$APK_FILE" "\$ALT_FILE"
-              gh release upload "\$REL_TAG" "\$ALT_FILE"
-            else
-              gh release upload "\$REL_TAG" "\$APK_FILE"
-            fi
+            gh release upload "\$REL_TAG" "\$APK_FILE" --clobber
           else
-            gh release create "\$REL_TAG" "\$APK_FILE" \
-              --title "${appSlug} \${REL_TAG}" \
-              --notes-file CHANGELOG.md \
-              --target "\${GITHUB_SHA}"
+            gh release create "\$REL_TAG" "\$APK_FILE" \\
+              --title "${appSlug} \${REL_TAG}" \\
+              --notes-file CHANGELOG.md \\
+              --target "\${GITHUB_SHA}" || gh release upload "\$REL_TAG" "\$APK_FILE" --clobber
           fi
 `
   );
@@ -224,8 +249,8 @@ android {
         minSdk = 24
         // targetSdk = 28 讓內嵌 Termux bootstrap 能在 App 私有目錄自由執行 pkg / python / clang（GitHub 發佈專用）
         targetSdk = 28
-        versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 10214
-        versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.14"
+        versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 10215
+        versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.15"
 
         ndk {
             abiFilters += listOf("arm64-v8a")

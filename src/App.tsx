@@ -51,6 +51,7 @@ import { CrawlerBrowserPanel } from './components/CrawlerBrowserPanel';
 import { HelpTutorialModal } from './components/HelpTutorialModal';
 import { AppExecutionLogModal } from './components/AppExecutionLogModal';
 import { AppUpdateModal } from './components/AppUpdateModal';
+import { DynamicAtmosphere3D } from './components/DynamicAtmosphere3D';
 import { appLog } from './services/appLogger';
 import {
   getAutoUpdatePackagesPref,
@@ -150,6 +151,8 @@ const DEFAULT_SETTINGS: EditorSettings = {
   githubRepo: getSavedGithubRepo(),
   enableSandboxAddon: false,
   pipTrustedHostEmergency: false,
+  enable3dBg: true,
+  atmosphere3dMode: 'auto',
 };
 
 interface PersistedIdeSnapshot {
@@ -535,6 +538,7 @@ export default function App() {
     } else {
       root.classList.remove('dark');
     }
+    root.classList.toggle('has-3d-bg', settings.enable3dBg !== false);
     const themeMeta = document.querySelector('meta[name="theme-color"]');
     if (themeMeta) {
       themeMeta.setAttribute('content', meta.themeColorMeta);
@@ -2707,6 +2711,9 @@ export default function App() {
     </form>
   );
 
+  const activeThemeMeta = getThemeMeta(settings.theme);
+  const is3dBgActive = settings.enable3dBg !== false;
+
   return (
     <I18nProvider
       locale={settings.locale}
@@ -2732,11 +2739,22 @@ export default function App() {
             setNegativeOpen(true);
           }
         }}
-        className="h-dvh flex flex-col bg-[var(--ide-bg)] text-[var(--ide-text)] overflow-hidden relative"
+        className={`h-dvh flex flex-col ${
+          is3dBgActive ? 'bg-transparent' : 'bg-[var(--ide-bg)]'
+        } text-[var(--ide-text)] overflow-hidden relative`}
       >
+      <DynamicAtmosphere3D
+        enabled={is3dBgActive}
+        mode={settings.atmosphere3dMode ?? 'auto'}
+        themeId={settings.theme}
+        isDarkTheme={activeThemeMeta.isDark}
+        accentHex={activeThemeMeta.swatchAccent}
+        bgHex={activeThemeMeta.swatchBg}
+      />
+
       {/* Tablet Top Bar: Negative Screen Trigger + File Tabs + Split Toggle + Primary CTA */}
       {deviceClass === 'tablet' && (
-      <header className="flex items-center justify-between gap-3 h-13 px-3 pt-safe border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] shrink-0">
+      <header className="relative z-10 flex items-center justify-between gap-3 h-13 px-3 pt-safe border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] shrink-0">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <button
             type="button"
@@ -2837,7 +2855,7 @@ export default function App() {
 
       {/* Phone Compact MD3 Top App Bar (Negative Screen drawer trigger + Title/File + Conditional CTA outside editor/console) */}
       {deviceClass === 'phone' && (
-      <header className="flex items-center justify-between gap-2 h-13 px-2.5 pt-safe border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] shrink-0">
+      <header className="relative z-10 flex items-center justify-between gap-2 h-13 px-2.5 pt-safe border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] shrink-0">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <button
             type="button"
@@ -2903,7 +2921,7 @@ export default function App() {
       )}
 
       {/* Main Content Area (Mobile & Tablet Only) */}
-      <main className="flex-1 min-h-0 flex overflow-hidden">
+      <main className="relative z-10 flex-1 min-h-0 flex overflow-hidden">
         {deviceClass === 'tablet' ? (
           <div className={`flex-1 min-h-0 flex ${isLandscape ? 'flex-row' : 'flex-col'} overflow-hidden`}>
             {/* Tablet Primary Editor Pane */}
@@ -2972,6 +2990,7 @@ export default function App() {
                   wordWrap={settings.wordWrap}
                   theme={settings.theme}
                   pyodideReady={pyodideStatus === 'ready'}
+                  transparentBg={is3dBgActive}
                 />
               </div>
 
@@ -3166,6 +3185,7 @@ export default function App() {
                     wordWrap={settings.wordWrap}
                     theme={settings.theme}
                     pyodideReady={pyodideStatus === 'ready'}
+                    transparentBg={is3dBgActive}
                   />
                 </div>
 
@@ -3299,7 +3319,7 @@ export default function App() {
       {deviceClass === 'phone' && (
       <nav
         aria-label={t('nav_workspace')}
-        className="shrink-0 h-[64px] pb-safe bg-[var(--md-surface-container-low)]/95 backdrop-blur-md border-t border-[var(--ide-border)] grid grid-cols-4"
+        className="relative z-10 shrink-0 h-[64px] pb-safe bg-[var(--md-surface-container-low)] border-t border-[var(--ide-border)] grid grid-cols-4"
       >
         {(
           [
@@ -3443,7 +3463,7 @@ export default function App() {
 
       {/* Compact Dismissible New Version Banner */}
       {appUpdateResult?.hasUpdate && appUpdateResult.latest && !updateBannerDismissed && !showUpdateModal && (
-        <div className="fixed bottom-20 sm:bottom-5 right-3 sm:right-4 z-40 flex items-center gap-2 rounded-2xl border border-[var(--ide-accent)] bg-[var(--ide-surface)]/95 backdrop-blur-md px-3 py-2 text-xs shadow-xl max-w-[calc(100vw-24px)]">
+        <div className="fixed bottom-20 sm:bottom-5 right-3 sm:right-4 z-40 flex items-center gap-2 rounded-2xl border border-[var(--ide-accent)] bg-[var(--ide-sheet-bg)] px-3 py-2 text-xs shadow-xl max-w-[calc(100vw-24px)]">
           <Sparkles className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
           <span className="font-semibold text-[var(--ide-text)] truncate">
             {t('upd_banner_text', { ver: appUpdateResult.latest.version })}

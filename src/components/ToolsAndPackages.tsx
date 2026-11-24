@@ -23,9 +23,14 @@ import {
   Sparkles,
   PackageCheck,
   Trash2,
+  Clock,
+  Flower2,
+  Snowflake,
+  CloudRain,
 } from 'lucide-react';
 import JSZip from 'jszip';
 import {
+  Atmosphere3dMode,
   EditorSettings,
   ExecutionEngine,
   InstalledPackage,
@@ -41,6 +46,7 @@ import {
 import { PWAInstallButton } from './PWAInstallButton';
 import { TermuxIntegrationPanel } from './TermuxIntegrationPanel';
 import { InternalStoragePanel } from './InternalStoragePanel';
+import { getActiveAtmosphereState } from './DynamicAtmosphere3D';
 import { IDE_THEMES } from '../services/themes';
 import { LOCALE_OPTIONS, TranslationKey, getLocalizedThemeText, useI18n } from '../services/i18n';
 import { generateGitHubApkProjectZip } from '../services/androidApkBuilder';
@@ -700,6 +706,86 @@ python ${entryFile}
                   </button>
                 );
               })}
+            </div>
+          </section>
+        )}
+
+        {/* Time-Reactive 3D Feminine Atmospheric Background */}
+        {showSettings && (
+          <section className="space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-[var(--ide-accent)] shrink-0" />
+                  <span>{t('bg3d_title')}</span>
+                </h2>
+                <p className="text-xs text-[var(--ide-text-muted)] mt-0.5 leading-relaxed">
+                  {t('bg3d_desc')}
+                </p>
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium text-[var(--ide-accent-text)] shrink-0">
+                <Clock className="w-3.5 h-3.5 text-[var(--ide-accent)] shrink-0" />
+                <span>{t(getActiveAtmosphereState(settings.atmosphere3dMode ?? 'auto').phaseKey)}</span>
+              </div>
+            </div>
+
+            <div className="md-card divide-y divide-[var(--ide-border)] overflow-hidden">
+              {/* Enable 3D Dynamic Background Switch */}
+              <div className="flex items-center justify-between gap-4 p-4">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium">{t('bg3d_enable_label')}</div>
+                  <div className="text-xs text-[var(--ide-text-muted)] mt-0.5 leading-relaxed">
+                    {t('bg3d_enable_desc')}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={settings.enable3dBg !== false}
+                  onClick={() => onUpdateSettings({ enable3dBg: !(settings.enable3dBg !== false) })}
+                  className={`min-h-[36px] w-14 rounded-full p-1 transition-colors flex items-center shrink-0 ${
+                    settings.enable3dBg !== false
+                      ? 'bg-[var(--ide-accent)] justify-end'
+                      : 'bg-slate-300 dark:bg-slate-700 justify-start'
+                  }`}
+                >
+                  <span className="w-6 h-6 rounded-full bg-white shadow-sm" />
+                </button>
+              </div>
+
+              {/* Atmosphere Effect Mode Selector */}
+              <div className="p-4 space-y-2.5">
+                <div className="text-sm font-medium">{t('bg3d_mode_label')}</div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {(
+                    [
+                      { id: 'auto', labelKey: 'bg3d_mode_auto', Icon: Clock },
+                      { id: 'petals', labelKey: 'bg3d_mode_petals', Icon: Flower2 },
+                      { id: 'snow', labelKey: 'bg3d_mode_snow', Icon: Snowflake },
+                      { id: 'rain', labelKey: 'bg3d_mode_rain', Icon: CloudRain },
+                      { id: 'starlight', labelKey: 'bg3d_mode_starlight', Icon: Sparkles },
+                    ] as { id: Atmosphere3dMode; labelKey: TranslationKey; Icon: React.ComponentType<{ className?: string }> }[]
+                  ).map(({ id, labelKey, Icon }) => {
+                    const active = (settings.atmosphere3dMode ?? 'auto') === id;
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        disabled={settings.enable3dBg === false}
+                        onClick={() => onUpdateSettings({ atmosphere3dMode: id })}
+                        className={`min-h-[44px] px-3 py-2 rounded-xl border text-xs font-medium flex items-center gap-2 transition-all disabled:opacity-45 ${
+                          active
+                            ? 'border-[var(--ide-accent)] bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] font-semibold'
+                            : 'border-[var(--ide-border)] bg-[var(--ide-bg)] text-[var(--ide-text)] hover:border-[var(--ide-accent)]'
+                        }`}
+                      >
+                        <Icon className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
+                        <span className="truncate">{t(labelKey)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </section>
         )}
