@@ -4,6 +4,13 @@ All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
 
+### Security — Bridge request resource limits
+- **限制 Python Bridge 併發連線**：最多 8 個處理中的請求、佇列最多 16 個；超出容量回覆 503 並關閉連線，避免無限制建立執行緒。
+- **限制原生 Android Bridge 資源**：使用最多 8 個工作執行緒與 16 個排隊請求；拒絕超額連線，HTTP 標頭限制 16 KiB、JSON 請求本文限制 8 MiB，讀取逾時維持 15 秒。
+- **嚴格檢查請求框架**：拒絕 Transfer-Encoding、重複 Content-Length、無效長度、不完整本文及無效 JSON；Bridge 停止時只關閉請求處理器，不會終止使用者正在執行的 Python 工作。
+- 加入 Python 產生碼與 Android 原生 Bridge 的資源上限及生命週期回歸檢查；Android 實機驗證仍待完成。
+
+
 ### Security — URL Probe SSRF Protection (pending Android validation)
 - **雙端阻斷私有網路探測**：Python Bridge 與 Android 原生 Bridge 都會解析 DNS、拒絕非公網／保留 IP，並直接連線至已驗證的 IP，避免 DNS rebinding 在檢查後改指向內網。
 - **逐跳驗證重新導向**：停用自動跳轉，每個 redirect 目標都重新解析及驗證；跨來源跳轉不轉送 Cookie、Authorization 或 Referer。
