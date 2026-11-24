@@ -211,10 +211,10 @@ jobs:
         run: gradle assembleRelease --no-daemon
 
       - name: 驗證 APK 簽名指紋
+        env:
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -z "${{ inputs.release_tag }}" ]; then
-            APK_PATH=$(ls android/app/build/outputs/apk/debug/*.apk | head -n1)
-          elif [[ "$GITHUB_REF" == refs/pull/* ]]; then
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -z "$INPUT_RELEASE_TAG" ]; then
             APK_PATH=$(ls android/app/build/outputs/apk/debug/*.apk | head -n1)
           else
             APK_PATH=$(ls android/app/build/outputs/apk/release/*.apk | head -n1)
@@ -228,12 +228,14 @@ jobs:
 
       - name: 整理發佈版本與 APK 檔名
         id: resolve_tag
+        env:
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           mkdir -p release-apk
           REL_TAG="${DROIDPY_RESOLVED_TAG}"
           SAFE_TAG="${REL_TAG//\//-}"
           ART_NAME="DroidPy-arm64-apk-${SAFE_TAG}-r${GITHUB_RUN_NUMBER}-a${GITHUB_RUN_ATTEMPT:-1}"
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -z "${{ inputs.release_tag }}" ]; then
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -z "$INPUT_RELEASE_TAG" ]; then
             cp android/app/build/outputs/apk/debug/*.apk "release-apk/DroidPy-arm64-${SAFE_TAG}.apk"
           else
             cp android/app/build/outputs/apk/release/*.apk "release-apk/DroidPy-arm64-${SAFE_TAG}.apk"
