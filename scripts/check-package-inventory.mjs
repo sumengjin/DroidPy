@@ -13,7 +13,7 @@ assert.match(inventory, /File\.createTempFile\("pip-inventory-"/);
 assert.match(inventory, /redirectOutput\(outputFile\)/);
 assert.match(inventory, /waitFor\(8, java\.util\.concurrent\.TimeUnit\.SECONDS\)/);
 assert.match(inventory, /Build\.VERSION\.SDK_INT >= Build\.VERSION_CODES\.O/);
-assert.match(inventory, /outputFile.length() in 1L\.\.\(1024L \* 1024L\)/);
+assert.match(inventory, /outputFile\.length\(\) in 1L\.\.\(1024L \* 1024L\)/);
 assert.match(inventory, /DROIDPY_PIP_INVENTORY:/);
 assert.match(inventory, /metadataComplete = true/);
 assert.match(source, /PkgInventory\(pkgSet\.sorted\(\), pkgSet\.isNotEmpty\(\)\)/);
