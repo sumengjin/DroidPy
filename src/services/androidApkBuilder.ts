@@ -3745,6 +3745,12 @@ def clipboard_set(text):
         val maxBytes = 24000
         val output = ByteArrayOutputStream()
         val transferEncoding = headers["transfer-encoding"]?.joinToString(",")?.lowercase().orEmpty()
+        if (transferEncoding.isNotBlank() && headers.containsKey("content-length")) {
+            throw IllegalArgumentException("Ambiguous HTTP response framing")
+        }
+        if (transferEncoding.isNotBlank() && transferEncoding.split(",").none { it.trim() == "chunked" }) {
+            throw IllegalArgumentException("Unsupported HTTP transfer encoding")
+        }
         if (transferEncoding.contains("chunked")) {
             while (output.size() < maxBytes) {
                 val sizeLine = readProbeLine(input).substringBefore(';').trim()
@@ -3764,9 +3770,6 @@ def clipboard_set(text):
                 }
             }
             return output.toByteArray()
-        }
-        if (transferEncoding.isNotBlank() && headers.containsKey("content-length")) {
-            throw IllegalArgumentException("Ambiguous HTTP response framing")
         }
         val contentLengths = headers["content-length"]
         if (contentLengths != null && contentLengths.size != 1) {
