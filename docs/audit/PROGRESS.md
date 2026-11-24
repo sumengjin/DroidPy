@@ -114,3 +114,11 @@
 - Additional R-018 hardening ported from the APT security review: removed `AllowInsecureRepositories`, `AllowDowngradeToInsecureRepositories`, `AllowUnauthenticated`, all `Verify-Peer/Verify-Host=false` fallbacks and `[trusted=yes]` source injection. Legacy trusted source options are stripped. Added `check:apt-security`; Android package operations now fail closed if verified trust material is unavailable.
 
 - SDK migration decision: keep `targetSdkVersion 28` for now. Raising to 29+ can change legacy external-storage and app-home executable behavior used by the embedded Termux `usr/` runtime. Since the app is sideloaded and the priority is preserving Android 10+ private-path execution and package operations, do not raise target SDK until a dedicated Android 10/11/13 test matrix proves the embedded shell, Python, native packages and file access remain functional. Compile SDK/build tooling can be raised independently.
+
+
+### 2026-11-25 — URL probe SSRF protection (current PR branch)
+- Created `security/probe-url-ssrf-guard-v1` from the latest main after PR #21 merged.
+- Replaced automatic urllib/HttpURLConnection redirect handling in both Bridge implementations with manual redirects. Every hop resolves and validates all DNS answers, then pins the socket to a validated public IP; HTTPS preserves SNI and certificate hostname verification.
+- Rejects loopback/private/link-local/reserved addresses, local hostnames, URL userinfo, unsafe custom headers and control characters. Cross-origin redirects drop Cookie, Authorization and Referer; response previews and timeouts are bounded.
+- Added `scripts/check-probe-url-security.mjs` with static checks plus generated-Python tests for private ranges, pinned sockets, loopback redirects and credential stripping; wired it into CI.
+- CI and Android ARM64 Debug build are pending. Android 10+ device validation must confirm normal public HTTP/HTTPS crawler probing and safe redirect behavior before merge. No workspace, `usr/`, package, backup or signing data is changed.
