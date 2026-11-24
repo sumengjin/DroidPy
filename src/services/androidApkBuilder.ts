@@ -2908,6 +2908,104 @@ def clipboard_set(text):
         return total
     }
 
+    private fun collectPythonPackageDiagnostics(): JSONObject {
+        val homeDir = workspaceDir.parentFile!!
+        val binDir = File(usrDir, "bin")
+        val pyBin = listOf(File(binDir, "python"), File(binDir, "python3")).firstOrNull { it.isFile }
+            ?: binDir.listFiles()?.firstOrNull {
+                it.name.startsWith("python3.") && !it.name.endsWith("-config") && it.isFile
+            }
+            ?: return JSONObject().put("ok", false).put("error", "找不到內嵌 Python 執行檔")
+        val outputFile = File(homeDir, "tmp/droidpy-python-diagnostics.json")
+        val errorFile = File(homeDir, "tmp/droidpy-python-diagnostics.err")
+        outputFile.parentFile?.mkdirs()
+        val pythonCode = """
+import collections, importlib.metadata, json, os, site, sys, sysconfig
+items = []
+for dist in importlib.metadata.distributions():
+    try:
+        name = (dist.metadata.get("Name") or "").strip()
+        if name:
+            items.append({"name": name, "version": str(dist.version or ""), "path": str(getattr(dist, "_path", "") or "")})
+    except Exception:
+        pass
+items.sort(key=lambda item: (item["name"].lower(), item["path"]))
+groups = collections.defaultdict(list)
+for item in items:
+    groups[item["name"].lower().replace("_", "-").replace(".", "-")].append(item["path"])
+duplicates = {name: paths for name, paths in groups.items() if len(paths) > 1}
+try:
+    user_site = site.getusersitepackages()
+except Exception as exc:
+    user_site = "ERROR: " + str(exc)
+try:
+    user_base = site.getuserbase()
+except Exception as exc:
+    user_base = "ERROR: " + str(exc)
+print(json.dumps({
+    "pythonVersion": sys.version,
+    "executable": sys.executable,
+    "prefix": sys.prefix,
+    "basePrefix": getattr(sys, "base_prefix", ""),
+    "enableUserSite": site.ENABLE_USER_SITE,
+    "userSite": user_site,
+    "userBase": user_base,
+    "pythonPath": sys.path,
+    "sysconfigPaths": sysconfig.get_paths(),
+    "environment": {key: os.environ.get(key, "") for key in ("HOME", "PREFIX", "PYTHONHOME", "PYTHONUSERBASE", "PYTHONPATH", "PYTHONNOUSERSITE")},
+    "distributionCount": len(items),
+    "distributions": items[:500],
+    "duplicateDistributions": duplicates
+}, ensure_ascii=False))
+""".trimIndent()
+        try {
+            val pb = ProcessBuilder(pyBin.absolutePath, "-c", pythonCode)
+            pb.directory(workspaceDir)
+            pb.redirectOutput(outputFile)
+            pb.redirectError(errorFile)
+            pb.environment().putAll(buildEnv())
+            val proc = pb.start()
+            val finished = proc.waitFor(12, java.util.concurrent.TimeUnit.SECONDS)
+            if (!finished) {
+                proc.destroyForcibly()
+                return JSONObject().put("ok", false).put("error", "Python 套件診斷逾時").put("pythonExecutable", pyBin.absolutePath)
+            }
+            if (proc.exitValue() != 0 || !outputFile.isFile || outputFile.length() == 0L) {
+                val err = if (errorFile.isFile) errorFile.readText(Charsets.UTF_8).take(2000) else ""
+                return JSONObject().put("ok", false).put("error", "Python 診斷程序失敗").put("exitCode", proc.exitValue()).put("stderr", err)
+            }
+            val report = JSONObject(outputFile.readText(Charsets.UTF_8))
+            val roots = JSONArray()
+            val libRoots = listOf(File(usrDir, "lib"), File(usrDir, "local/lib"), File(homeDir, "py_user/lib"), File(homeDir, ".local/lib"))
+            for (root in libRoots) {
+                val rootInfo = JSONObject().put("path", root.absolutePath).put("exists", root.isDirectory).put("bytes", calcDirSize(root))
+                val versions = JSONArray()
+                root.listFiles()?.filter { it.isDirectory && it.name.startsWith("python3.") }?.forEach { pyDir ->
+                    val sites = JSONArray()
+                    for (siteName in listOf("site-packages", "dist-packages")) {
+                        val siteDir = File(pyDir, siteName)
+                        if (siteDir.isDirectory) {
+                            val entries = siteDir.listFiles()?.count { it.isDirectory && (it.name.endsWith(".dist-info") || it.name.endsWith(".egg-info")) } ?: 0
+                            sites.put(JSONObject().put("path", siteDir.absolutePath).put("bytes", calcDirSize(siteDir)).put("metadataDirectoryCount", entries))
+                        }
+                    }
+                    versions.put(JSONObject().put("pythonDirectory", pyDir.absolutePath).put("siteDirectories", sites))
+                }
+                rootInfo.put("pythonDirectories", versions)
+                roots.put(rootInfo)
+            }
+            report.put("ok", true).put("pythonExecutable", pyBin.absolutePath).put("packageRoots", roots)
+                .put("usrBytes", calcDirSize(usrDir)).put("pyUserBytes", calcDirSize(File(homeDir, "py_user")))
+                .put("localUserBytes", calcDirSize(File(homeDir, ".local")))
+            return report
+        } catch (e: Exception) {
+            return JSONObject().put("ok", false).put("error", e.message ?: e.javaClass.simpleName)
+        } finally {
+            try { outputFile.delete() } catch (_: Exception) {}
+            try { errorFile.delete() } catch (_: Exception) {}
+        }
+    }
+
     private fun collectAppStorageUsage(): JSONObject {
         val homeDir = workspaceDir.parentFile!!
         val usrBytes = calcDirSize(usrDir)
@@ -3125,6 +3223,7 @@ def clipboard_set(text):
                 "/backup/restore",
                 "/storage/app-usage",
                 "/storage/cleanup",
+                "/diagnostics/python-packages",
                 "/maintenance/cleanup-processes",
                 "/sdcard/status",
                 "/sdcard/list",
@@ -3549,6 +3648,10 @@ def clipboard_set(text):
 
                 method == "GET" && path == "/storage/app-usage" -> {
                     writeJson(out, 200, collectAppStorageUsage())
+                }
+
+                method == "GET" && path == "/diagnostics/python-packages" -> {
+                    writeJson(out, 200, collectPythonPackageDiagnostics())
                 }
 
                 method == "POST" && path == "/storage/cleanup" -> {
