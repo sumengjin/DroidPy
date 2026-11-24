@@ -1565,7 +1565,7 @@ class EmbeddedTermuxBridge(
         }
         return out.toString()
             .replace(Regex("\\\\[(?:[0-9]{0,3}(?:[;:][0-9]{0,3})*)?m{1,2}"), "")
-            .replace(Regex("(?:^|(?<=[\\\\s\\\\]|:;]))(?:[34]?8[;:][25])?(?:[;:][0-9]{0,3})+m{1,2}"), "")
+            .replace(Regex("(?:^|(?<=[\\s\\\\]|:;]))(?:[34]?8[;:][25])?(?:[;:][0-9]{0,3})+m{1,2}"), "")
             .replace(Regex("^[0-9;:]{1,16}m{1,2}", RegexOption.MULTILINE), "")
     }
 
@@ -1874,10 +1874,10 @@ class EmbeddedTermuxBridge(
             "record_dpkg_status() {",
             "  deb_file=\\"\${d}1\\"",
             "  CTRL=\\"\${d}(\\"\${d}PREFIX/bin/dpkg-deb\\" -f \\"\${d}deb_file\\" 2>/dev/null)\\"",
-            "  PKG_NAME=\\"\${d}(printf '%s\\\\n' \\"\${d}CTRL\\" | sed -n 's/^Package: *//p' | head -n1)\\"",
+            "  PKG_NAME=\\"\${d}(printf '%s\\n' \\"\${d}CTRL\\" | sed -n 's/^Package: *//p' | head -n1)\\"",
             "  [ -z \\"\${d}PKG_NAME\\" ] && return 0",
             "  if ! grep -Fxq \\"Package: \${d}PKG_NAME\\" \\"\${d}PREFIX/var/lib/dpkg/status\\" 2>/dev/null; then",
-            "    printf '%s\\\\nStatus: install ok installed\\\\n\\\\n' \\"\${d}CTRL\\" >> \\"\${d}PREFIX/var/lib/dpkg/status\\"",
+            "    printf '%s\\nStatus: install ok installed\\n\\n' \\"\${d}CTRL\\" >> \\"\${d}PREFIX/var/lib/dpkg/status\\"",
             "  fi",
             "}",
             "relocate_debs() {",
@@ -1944,7 +1944,7 @@ class EmbeddedTermuxBridge(
             "          if [ -z \\"\${d}line\\" ]; then",
             "            if [ \\"\${d}SKIP_BLK\\" -eq 0 ] && [ -s \\"\${d}BLK_ST\\" ]; then",
             "              cat \\"\${d}BLK_ST\\" >> \\"\${d}TMP_ST\\"",
-            "              printf '\\\\n' >> \\"\${d}TMP_ST\\"",
+            "              printf '\\n' >> \\"\${d}TMP_ST\\"",
             "            fi",
             "            SKIP_BLK=0",
             "            : > \\"\${d}BLK_ST\\"",
@@ -1953,11 +1953,11 @@ class EmbeddedTermuxBridge(
             "          case \\"\${d}line\\" in",
             "            \\"Package: \${d}rpkg\\") SKIP_BLK=1 ;;",
             "          esac",
-            "          printf '%s\\\\n' \\"\${d}line\\" >> \\"\${d}BLK_ST\\"",
+            "          printf '%s\\n' \\"\${d}line\\" >> \\"\${d}BLK_ST\\"",
             "        done < \\"\${d}ST\\"",
             "        if [ \\"\${d}SKIP_BLK\\" -eq 0 ] && [ -s \\"\${d}BLK_ST\\" ]; then",
             "          cat \\"\${d}BLK_ST\\" >> \\"\${d}TMP_ST\\"",
-            "          printf '\\\\n' >> \\"\${d}TMP_ST\\"",
+            "          printf '\\n' >> \\"\${d}TMP_ST\\"",
             "        fi",
             "        rm -f \\"\${d}BLK_ST\\"",
             "        mv -f \\"\${d}TMP_ST\\" \\"\${d}ST\\"",
@@ -2600,7 +2600,7 @@ def clipboard_set(text):
         val thresholdSec = 1800L
         val myPid = android.os.Process.myPid()
         val uptimeSec = try {
-            File("/proc/uptime").readText(Charsets.UTF_8).trim().split(Regex("\\\\s+")).firstOrNull()?.toDoubleOrNull() ?: 0.0
+            File("/proc/uptime").readText(Charsets.UTF_8).trim().split(Regex("\\s+")).firstOrNull()?.toDoubleOrNull() ?: 0.0
         } catch (_: Exception) {
             0.0
         }
@@ -3710,7 +3710,7 @@ def clipboard_set(text):
                                 }
                             }
                             val titleMatch = Regex("<title[^>]*>(.*?)</title>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)).find(bodyText)
-                            val title = titleMatch?.groupValues?.getOrNull(1)?.replace(Regex("\\\\s+"), " ")?.trim() ?: ""
+                            val title = titleMatch?.groupValues?.getOrNull(1)?.replace(Regex("\\s+"), " ")?.trim() ?: ""
                             val res = JSONObject()
                                 .put("ok", code in 200..399)
                                 .put("url", targetUrl)
