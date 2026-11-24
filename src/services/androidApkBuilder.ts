@@ -661,6 +661,7 @@ class MainActivity : AppCompatActivity() {
                         if (code !in 200..299) {
                             connection.disconnect()
                             activeConnection = null
+                            tempFile.delete()
                             emitProgress("error", 0, message = "下載更新失敗 (HTTP $code)")
                             return@thread
                         }
@@ -671,6 +672,7 @@ class MainActivity : AppCompatActivity() {
                     if (connection == null || connection.responseCode !in 200..299) {
                         connection?.disconnect()
                         activeConnection = null
+                        tempFile.delete()
                         emitProgress("error", 0, message = "下載更新失敗：重新導向次數過多或網址無效")
                         return@thread
                     }
@@ -679,6 +681,7 @@ class MainActivity : AppCompatActivity() {
                     if (totalBytes > maxApkBytes) {
                         connection.disconnect()
                         activeConnection = null
+                        tempFile.delete()
                         emitProgress("error", 0, message = "更新 APK 超過 300 MiB 安全上限")
                         return@thread
                     }
@@ -1705,6 +1708,7 @@ import java.net.Socket
 import java.net.URI
 import java.net.URL
 import java.net.URLDecoder
+import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SNIHostName
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
