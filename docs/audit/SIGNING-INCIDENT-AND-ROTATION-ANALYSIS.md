@@ -42,6 +42,11 @@ Official references:
 
 The v1.2.18 build log reported a V2 signer. The next candidate must deliberately include the appropriate v3/v3.1 lineage metadata and be verified with `apksigner verify --verbose --print-certs` against every supported SDK range.
 
+The default `apksigner` rotation behavior uses the rotated signer in the v3.1 block on Android 13+ and retains the original signer in the v3 block for Android 9 through Android 12L. Therefore, default rotation would **not** move the Android 11 device off the compromised signer. The tool exposes `--rotation-min-sdk-version 28` to make the rotated signer apply from Android 9/API 28, but AOSP explicitly says key rotation is not recommended on Android 12 and earlier. This option is only a candidate for device testing, not an approved production setting.
+
+For the candidate lineage, preserve the `installed-data` capability so existing private app data can migrate, but do not grant `rollback` capability to the compromised old key. Android's own documentation notes that rollback capability allows the previous key to authorize a rollback and undermines rotation. The lineage must be inspected with the apksigner lineage tooling and tested against an actual installed v1.2.18 APK before use.
+
+
 ## 4. Hard safety rules
 
 1. Do not replace the current signer on the production branch until a candidate APK has been installed as an update over an actual v1.2.18 install on Android 11 and Android 13.
