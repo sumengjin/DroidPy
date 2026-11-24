@@ -1170,6 +1170,11 @@ class MainActivity : AppCompatActivity() {
                 File(usrDir, "bin/python3").exists() ||
                 File(usrDir, "bin/dash").exists() ||
                 File(usrDir, "bin/bash").exists()
+            // A damaged install can lose every sentinel while still containing user packages.
+            // Treat unreadable/non-directory usr paths conservatively as existing data too.
+            val hasExistingUsrData = usrDir.exists() && (
+                !usrDir.isDirectory || usrDir.listFiles()?.isNotEmpty() != false
+            )
 
             fun appendStartupLog(tag: String, msg: String) {
                 try {
@@ -1182,7 +1187,7 @@ class MainActivity : AppCompatActivity() {
 
             appendStartupLog("MainActivity", "onCreate startup: hasExistingInstall=$hasExistingInstall")
 
-            if (!hasExistingInstall) {
+            if (!hasExistingInstall && !hasExistingUsrData) {
                 try {
                     appendStartupLog("Bootstrap", "Extracting bootstrap-aarch64.zip into \${usrDir.absolutePath}")
                     extractTermuxBootstrap(usrDir)
@@ -1196,10 +1201,17 @@ class MainActivity : AppCompatActivity() {
             } else {
                 try {
                     repairTermuxRuntime(usrDir)
-                    if (!bootstrapMarker.exists()) {
+                    if (hasExistingInstall && !bootstrapMarker.exists()) {
                         bootstrapMarker.writeText("1")
                     }
-                    appendStartupLog("Bootstrap", "Preserved existing usr/ environment and repaired runtime symlinks")
+                    if (hasExistingInstall) {
+                        appendStartupLog("Bootstrap", "Preserved existing usr/ environment and repaired runtime symlinks")
+                    } else {
+                        appendStartupLog("Bootstrap", "Detected partial usr/ data without core markers; preserved it and skipped destructive bootstrap re-extraction")
+                        runOnUiThread {
+                            Toast.makeText(this@MainActivity, "偵測到既有 Termux 資料但核心檔案不完整，已先保留套件資料，未自動重置。", Toast.LENGTH_LONG).show()
+                        }
+                    }
                 } catch (e: Exception) {
                     appendStartupLog("Bootstrap", "repairTermuxRuntime warning: \${e.message}")
                 }
