@@ -1751,16 +1751,9 @@ class EmbeddedTermuxBridge(
             "Dir::Bin::apt-key \\"$prefix/bin/apt-key\\";",
             "Dir::Bin::gpg \\"$prefix/bin/gpgv\\";",
             "APT::Sandbox::User \\"root\\";",
-            "Acquire::AllowInsecureRepositories \\"true\\";",
-            "Acquire::AllowDowngradeToInsecureRepositories \\"true\\";",
-            "APT::Get::AllowUnauthenticated \\"true\\";"
         )
         if (certFile != null) {
             aptConfLines.add("Acquire::https::CaInfo \\"\${certFile.absolutePath}\\";")
-        } else {
-            aptConfLines.add("Acquire::https::Verify-Peer \\"false\\";")
-            aptConfLines.add("Acquire::https::Verify-Host \\"false\\";")
-        }
         val aptConfFile = File(usrDir, "etc/apt/apt.conf").apply {
             parentFile?.mkdirs()
             writeText(aptConfLines.joinToString("\\n") + "\\n")
@@ -1782,7 +1775,8 @@ class EmbeddedTermuxBridge(
             }
         }
 
-        // Ensure sources.list* use relocated prefix and [trusted=yes] so apt-get update never exits 100
+        // Preserve signed Termux repository metadata; never add trusted=yes while relocating legacy paths.
+        // Strip the legacy trusted=yes option from configurations written by older DroidPy versions.
         val listFiles = mutableListOf<File>()
         val mainSources = File(usrDir, "etc/apt/sources.list")
         if (mainSources.isFile) listFiles.add(mainSources)
@@ -1792,12 +1786,7 @@ class EmbeddedTermuxBridge(
                 val orig = cfg.readText()
                 val updated = orig.lines().joinToString("\\n") { line ->
                     var cur = line.replace(legacyPrefix, prefix)
-                    val trimmed = cur.trimStart()
-                    if (trimmed.startsWith("deb ") && !trimmed.startsWith("deb [")) {
-                        cur = cur.replaceFirst("deb ", "deb [trusted=yes] ")
-                    } else if (trimmed.startsWith("deb-src ") && !trimmed.startsWith("deb-src [")) {
-                        cur = cur.replaceFirst("deb-src ", "deb-src [trusted=yes] ")
-                    }
+                    cur = cur.replace("[trusted=yes] ", "").replace(" [trusted=yes]", "")
                     cur
                 }
                 if (updated != orig) cfg.writeText(updated)
@@ -1814,7 +1803,7 @@ class EmbeddedTermuxBridge(
         if (activeDebLines == 0) {
             try {
                 mainSources.parentFile?.mkdirs()
-                mainSources.writeText("deb [trusted=yes] https://packages-cf.termux.dev/apt/termux-main/ stable main\\n")
+                mainSources.writeText("deb https://packages-cf.termux.dev/apt/termux-main/ stable main\\n")
             } catch (_: Exception) {
             }
         }
@@ -1844,7 +1833,7 @@ class EmbeddedTermuxBridge(
         val caOpt = if (certFile != null) {
             "-o Acquire::https::CaInfo=\${certFile.absolutePath}"
         } else {
-            "-o Acquire::https::Verify-Peer=false -o Acquire::https::Verify-Host=false"
+            ""
         }
 
         val pkgLines = listOf(
@@ -1852,7 +1841,7 @@ class EmbeddedTermuxBridge(
             "PREFIX=\\"$prefix\\"",
             "APT_CONFIG=\\"\${aptConfFile.absolutePath}\\"",
             "export PREFIX APT_CONFIG",
-            "APT_OPTS=\\"-c \${d}APT_CONFIG -o Dir=\${d}PREFIX/ -o Dir::State=\${d}PREFIX/var/lib/apt -o Dir::State::status=\${d}PREFIX/var/lib/dpkg/status -o Dir::Cache=\${d}PREFIX/var/cache/apt -o Dir::Etc=\${d}PREFIX/etc/apt -o Dir::Etc::parts=\${d}PREFIX/etc/apt/apt.conf.d -o Dir::Etc::main=\${d}PREFIX/etc/apt/apt.conf -o Dir::Etc::preferences=\${d}PREFIX/etc/apt/preferences -o Dir::Etc::preferencesparts=\${d}PREFIX/etc/apt/preferences.d -o Dir::Etc::sourcelist=\${d}PREFIX/etc/apt/sources.list -o Dir::Etc::sourceparts=\${d}PREFIX/etc/apt/sources.list.d -o Dir::Etc::Trusted=\${d}PREFIX/etc/apt/trusted.gpg -o Dir::Etc::TrustedParts=\${d}PREFIX/etc/apt/trusted.gpg.d -o Dir::Log=\${d}PREFIX/var/log/apt -o Dir::Bin::methods=\${d}PREFIX/lib/apt/methods -o Dir::Bin::dpkg=\${d}PREFIX/bin/dpkg -o Dir::Bin::apt-key=\${d}PREFIX/bin/apt-key -o Dir::Bin::gpg=\${d}PREFIX/bin/gpgv -o DPkg::Options::=--admindir=\${d}PREFIX/var/lib/dpkg -o Acquire::AllowInsecureRepositories=true -o Acquire::AllowDowngradeToInsecureRepositories=true -o APT::Get::AllowUnauthenticated=true -o APT::Sandbox::User=root $caOpt\\"",
+            "APT_OPTS=\\"-c \${d}APT_CONFIG -o Dir=\${d}PREFIX/ -o Dir::State=\${d}PREFIX/var/lib/apt -o Dir::State::status=\${d}PREFIX/var/lib/dpkg/status -o Dir::Cache=\${d}PREFIX/var/cache/apt -o Dir::Etc=\${d}PREFIX/etc/apt -o Dir::Etc::parts=\${d}PREFIX/etc/apt/apt.conf.d -o Dir::Etc::main=\${d}PREFIX/etc/apt/apt.conf -o Dir::Etc::preferences=\${d}PREFIX/etc/apt/preferences -o Dir::Etc::preferencesparts=\${d}PREFIX/etc/apt/preferences.d -o Dir::Etc::sourcelist=\${d}PREFIX/etc/apt/sources.list -o Dir::Etc::sourceparts=\${d}PREFIX/etc/apt/sources.list.d -o Dir::Etc::Trusted=\${d}PREFIX/etc/apt/trusted.gpg -o Dir::Etc::TrustedParts=\${d}PREFIX/etc/apt/trusted.gpg.d -o Dir::Log=\${d}PREFIX/var/log/apt -o Dir::Bin::methods=\${d}PREFIX/lib/apt/methods -o Dir::Bin::dpkg=\${d}PREFIX/bin/dpkg -o Dir::Bin::apt-key=\${d}PREFIX/bin/apt-key -o Dir::Bin::gpg=\${d}PREFIX/bin/gpgv -o DPkg::Options::=--admindir=\${d}PREFIX/var/lib/dpkg -o APT::Sandbox::User=root $caOpt\\"",
             "mkdir -p \\"\${d}PREFIX/var/lib/apt/lists/partial\\" \\"\${d}PREFIX/var/cache/apt/archives/partial\\" \\"\${d}PREFIX/var/lib/dpkg/updates\\" \\"\${d}PREFIX/var/lib/dpkg/info\\" \\"\${d}PREFIX/etc/apt/apt.conf.d\\" \\"\${d}PREFIX/etc/apt/preferences.d\\" \\"\${d}PREFIX/var/log/apt\\"",
             "touch \\"\${d}PREFIX/var/lib/dpkg/status\\" \\"\${d}PREFIX/etc/apt/apt.conf\\" \\"\${d}PREFIX/etc/apt/preferences\\"",
             "SUB=\\"\${d}1\\"",
