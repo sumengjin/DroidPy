@@ -15,6 +15,11 @@ assert.ok(pythonCleanupStart >= 0 && pythonCleanupEnd > pythonCleanupStart, 'Pyt
 const pythonCleanup = pythonBridge.slice(pythonCleanupStart, pythonCleanupEnd);
 assert.doesNotMatch(pythonCleanup, /os\.kill\s*\(|signal\.|SIGKILL|SIGTERM|WATCHDOG_INTERVAL_SEC/);
 assert.doesNotMatch(pythonBridge, /_watchdog_loop|_watchdog_thread\.start\s*\(|WATCHDOG_INTERVAL_SEC/);
+assert.match(pythonBridge, /^import signal$/m, 'Manual Stop and PTY cancellation still require the signal module');
+const pythonStopStart = pythonBridge.indexOf('if self.path == "/stop":');
+const pythonStopEnd = pythonBridge.indexOf('if self.path in ("/run"', pythonStopStart);
+assert.ok(pythonStopStart >= 0 && pythonStopEnd > pythonStopStart, 'Python Bridge explicit Stop route must exist');
+assert.match(pythonBridge.slice(pythonStopStart, pythonStopEnd), /os\.killpg\(pgid,\s*signal\.SIGKILL\)/, 'Explicit user Stop must still terminate the selected process group');
 
 const nativeCleanupStart = androidBuilder.indexOf('private fun cleanupStuckPythonProcesses(');
 const nativeCleanupEnd = androidBuilder.indexOf('private fun buildEnv()', nativeCleanupStart);
