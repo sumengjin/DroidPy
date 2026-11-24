@@ -2827,50 +2827,55 @@ def clipboard_set(text):
         } catch (_: Exception) {
         }
 
-        val hasNonCoreFromFs = pipNames.any { it !in corePipSet }
-        if (!hasNonCoreFromFs) {
-            val binDir = File(usrDir, "bin")
-            val pyExe = listOf(File(binDir, "python3"), File(binDir, "python")).firstOrNull { it.exists() }
-                ?: binDir.listFiles()?.firstOrNull {
-                    it.name.startsWith("python3.") && !it.name.endsWith("-config") && it.isFile
-                }
-            if (pyExe != null) {
-                var proc: Process? = null
-                try {
-                    pyExe.setExecutable(true, false)
-                    val pb = ProcessBuilder(
-                        pyExe.absolutePath,
-                        "-c",
-                        "import importlib.metadata, json; print(json.dumps([d.metadata.get('Name','') for d in importlib.metadata.distributions()]))"
-                    )
-                    pb.directory(workspaceDir)
-                    pb.redirectErrorStream(true)
-                    pb.environment().putAll(buildEnv())
-                    proc = pb.start()
-                    val finished = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        proc.waitFor(4, java.util.concurrent.TimeUnit.SECONDS)
-                    } else {
-                        proc.waitFor() == 0
-                    }
-                    if (!finished) {
-                        proc.destroyForcibly()
-                    } else {
-                        val txt = proc.inputStream.bufferedReader(Charsets.UTF_8).readText().trim()
-                        val idx = txt.indexOf('[')
-                        if (idx >= 0) {
-                            val arr = JSONArray(txt.substring(idx))
-                            for (i in 0 until arr.length()) {
-                                val raw = arr.optString(i, "").trim()
-                                if (raw.isNotEmpty()) pipNames.add(normalizePipPkgName(raw))
-                            }
+        // Always cross-check filesystem metadata with Python's own distribution
+        // database. One visible package must never suppress PYTHONUSERBASE discovery.
+        val binDir = File(usrDir, "bin")
+        val pyExe = listOf(File(binDir, "python3"), File(binDir, "python")).firstOrNull { it.exists() }
+            ?: binDir.listFiles()?.firstOrNull {
+                it.name.startsWith("python3.") && !it.name.endsWith("-config") && it.isFile
+            }
+        if (pyExe != null) {
+            var proc: Process? = null
+            var inventoryFile: File? = null
+            try {
+                pyExe.setExecutable(true, false)
+                val homeTmp = File(homeDir, "tmp").apply { mkdirs() }
+                inventoryFile = File.createTempFile("pip-inventory-", ".json", homeTmp)
+                val pb = ProcessBuilder(
+                    pyExe.absolutePath,
+                    "-c",
+                    "import importlib.metadata, json; print('DROIDPY_PIP_INVENTORY:' + json.dumps(sorted({d.metadata.get('Name','') for d in importlib.metadata.distributions() if d.metadata.get('Name')})))"
+                )
+                pb.directory(workspaceDir)
+                pb.redirectErrorStream(true)
+                pb.redirectOutput(inventoryFile)
+                pb.environment().putAll(buildEnv())
+                proc = pb.start()
+                val finished = proc.waitFor(8, java.util.concurrent.TimeUnit.SECONDS)
+                if (!finished) {
+                    proc.destroyForcibly()
+                } else if (proc.exitValue() == 0 && inventoryFile.isFile &&
+                    inventoryFile.length() in 1L..(1024L * 1024L)) {
+                    val txt = inventoryFile.readText(Charsets.UTF_8)
+                    val marker = "DROIDPY_PIP_INVENTORY:"
+                    val idx = txt.indexOf(marker)
+                    if (idx >= 0) {
+                        val jsonStart = idx + marker.length
+                        val jsonEnd = txt.indexOf('\n', jsonStart).let { if (it < 0) txt.length else it }
+                        val arr = JSONArray(txt.substring(jsonStart, jsonEnd).trim())
+                        for (i in 0 until arr.length()) {
+                            val raw = arr.optString(i, "").trim()
+                            if (raw.isNotEmpty()) pipNames.add(normalizePipPkgName(raw))
                         }
                     }
-                } catch (_: Exception) {
-                } finally {
-                    try { proc?.inputStream?.close() } catch (_: Exception) {}
-                    try { proc?.errorStream?.close() } catch (_: Exception) {}
-                    try { proc?.outputStream?.close() } catch (_: Exception) {}
                 }
+            } catch (_: Exception) {
+            } finally {
+                try { proc?.destroyForcibly() } catch (_: Exception) {}
+                try { proc?.inputStream?.close() } catch (_: Exception) {}
+                try { proc?.errorStream?.close() } catch (_: Exception) {}
+                try { proc?.outputStream?.close() } catch (_: Exception) {}
+                try { inventoryFile?.delete() } catch (_: Exception) {}
             }
         }
         return pipNames.sorted()
