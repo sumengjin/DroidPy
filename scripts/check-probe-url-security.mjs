@@ -74,8 +74,8 @@ try:
         pass
 
     responses = [
-        type("Response", (), {"status": 302, "getheaders": lambda self: [("Location", "http://other.example/final")], "read": lambda self, n: b""})(),
-        type("Response", (), {"status": 200, "getheaders": lambda self: [("Content-Type", "text/plain")], "read": lambda self, n: b"ok"})(),
+        type("Response", (), {"status": 302, "getheaders": lambda self: [("Location", "http://other.example/final")], "getheader": lambda self, name, default=None: next((v for k, v in self.getheaders() if k.lower() == name.lower()), default), "read": lambda self, n: b""})(),
+        type("Response", (), {"status": 200, "getheaders": lambda self: [("Content-Type", "text/plain")], "getheader": lambda self, name, default=None: next((v for k, v in self.getheaders() if k.lower() == name.lower()), default), "read": lambda self, n: b"ok"})(),
     ]
     requests = []
     probe_globals = ns["_probe_url_safely"].__globals__
@@ -99,7 +99,7 @@ try:
     assert "Cookie" not in requests[1] and "Authorization" not in requests[1], "credentials leaked across redirect origin"
 
     responses[:] = [
-        type("Response", (), {"status": 302, "getheaders": lambda self: [("Location", "http://127.0.0.1/admin")], "read": lambda self, n: b""})(),
+        type("Response", (), {"status": 302, "getheaders": lambda self: [("Location", "http://127.0.0.1/admin")], "getheader": lambda self, name, default=None: next((v for k, v in self.getheaders() if k.lower() == name.lower()), default), "read": lambda self, n: b""})(),
     ]
     requests.clear()
     try:
