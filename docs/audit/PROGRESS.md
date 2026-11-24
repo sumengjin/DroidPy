@@ -122,3 +122,10 @@
 - Rejects loopback/private/link-local/reserved addresses, local hostnames, URL userinfo, unsafe custom headers and control characters. Cross-origin redirects drop Cookie, Authorization and Referer; response previews and timeouts are bounded.
 - Added `scripts/check-probe-url-security.mjs` with static checks plus generated-Python tests for private ranges, pinned sockets, loopback redirects and credential stripping; wired it into CI.
 - CI and Android ARM64 Debug build are pending. Android 10+ device validation must confirm normal public HTTP/HTTPS crawler probing and safe redirect behavior before merge. No workspace, `usr/`, package, backup or signing data is changed.
+
+
+### 2026-11-25 — Integrated Termux security PR #26
+- Integrated PR #25's DNS-pinned URL probe implementation into the package/data safety branch so one Debug APK covers SSRF protection, package inventory, backup-manifest safety, partial `usr/` preservation, `PYTHONUSERBASE`, CA normalization and APT fail-closed behavior.
+- Standalone PR #25 was closed as superseded by PR #26; no duplicate PR remains for URL probe SSRF.
+- Integrated CI run `45488075770` passed Python syntax/unit tests, all TypeScript/PWA/security checks, and Android ARM64 Debug APK compile/upload. Artifact: `DroidPy-arm64-debug-179-a1`. Production Release/signature verification and GitHub Release were skipped as expected for a PR.
+- Follow-up commits expand regression coverage for special-purpose IPv4/IPv6 ranges, oversized/ambiguous HTTP response headers and strict chunked framing; latest CI is re-running those assertions. Device acceptance on Android 10+ remains pending before merge.
