@@ -56,7 +56,7 @@ os.makedirs(WORKSPACE, exist_ok=True)
 PROC_LOCK = threading.Lock()
 ACTIVE_PROC = {"pid": None, "pgid": None, "master_fd": None, "started_at": 0.0}
 WATCHDOG_INTERVAL_SEC = 1800
-MAX_REQUEST_BODY_BYTES = 1024 * 1024
+MAX_REQUEST_BODY_BYTES = 4 * 1024 * 1024
 _LEGACY_CERTS_SUPPORTED = None
 
 def _set_active(pid, pgid, master_fd):
