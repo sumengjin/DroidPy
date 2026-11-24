@@ -81,6 +81,8 @@ import { formatDurationHMS } from './utils/formatDuration';
 import { createAnsiStreamBuffer, stripAnsi } from './utils/ansiParser';
 import {
   DEFAULT_TERMUX_CONFIG,
+  createSecureBridgeToken,
+  isSecureBridgeToken,
   CORE_TERMUX_PIP_PACKAGES,
   TermuxOutdatedPipItem,
   abortActiveTermuxStream,
@@ -387,18 +389,29 @@ export default function App() {
   });
   const [termuxConfig, setTermuxConfig] = useState<TermuxConfig>(() => {
     const nativeSnap = getInitialNativeSnapshot();
-    if (nativeSnap?.termuxConfig) {
-      return { ...DEFAULT_TERMUX_CONFIG, ...nativeSnap.termuxConfig };
-    }
-    try {
-      const saved = localStorage.getItem(STORAGE_TERMUX_CFG_KEY);
-      if (saved) {
-        return { ...DEFAULT_TERMUX_CONFIG, ...(JSON.parse(saved) as Partial<TermuxConfig>) };
+    let savedConfig: Partial<TermuxConfig> = nativeSnap?.termuxConfig ?? {};
+    if (!nativeSnap?.termuxConfig) {
+      try {
+        const saved = localStorage.getItem(STORAGE_TERMUX_CFG_KEY);
+        if (saved) savedConfig = JSON.parse(saved) as Partial<TermuxConfig>;
+      } catch {
+        // Ignore malformed local preferences; generate a fresh token below.
       }
-    } catch {
-      // ignore
     }
-    return DEFAULT_TERMUX_CONFIG;
+
+    let nativeToken = '';
+    try {
+      nativeToken = window.DroidPyNative?.getBridgeToken?.() ?? '';
+    } catch {
+      // Older native builds may not expose a per-install bridge token yet.
+    }
+    const token = isSecureBridgeToken(nativeToken)
+      ? nativeToken
+      : isSecureBridgeToken(savedConfig.token)
+      ? savedConfig.token
+      : createSecureBridgeToken();
+
+    return { ...DEFAULT_TERMUX_CONFIG, ...savedConfig, token };
   });
   const [termuxConnectionState, setTermuxConnectionState] =
     useState<TermuxConnectionState>('disconnected');
