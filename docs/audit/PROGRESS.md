@@ -3,7 +3,7 @@
 > 本文件搭配 [COMPREHENSIVE-REPAIR-PLAN.md](./COMPREHENSIVE-REPAIR-PLAN.md) 使用。
 > 最後更新：2026-11-25
 > 計畫分支：`project/comprehensive-hardening-plan`
-> 最新主分支：`6266f67016dd173dd422b545d7565e5c9954ba24`（PR #9 已合併）；續作時仍須重新查詢。
+> 最新主分支：`450232e8a4d4ff1e4dc6ab14296433a0e498ace2`（PR #12、#13 已合併）；續作時仍須重新查詢。
 
 ## 目前狀態
 
@@ -19,7 +19,7 @@
 
 ### 尚未完成
 - [ ] 逐檔審核整個 repository，建立檔案/模組清單。
-- [ ] 驗證簽名私鑰是否與現行 Release signer 完全相同，並形成安全處置/升級相容性報告。
+- [x] 已由 v1.2.18 Release CI 確認公開私鑰就是 production signer；已形成 Android v3/v3.1 輪替分析。仍需安全簽名配置與 Android 10/11/13 升級驗收。
 - [ ] Bridge 威脅模型與跨來源攻擊測試。
 - [ ] watchdog 修復與長任務測試。
 - [ ] pip/site path、套件清單、manifest、bootstrap 復原完整測試。
@@ -82,3 +82,24 @@
 - Created PR #12 `security/ci: remove public signing key and build Android debug APKs on PRs` (branch `security/contain-signing-key-and-pr-debug-build`). It removes the PKCS#12/Base64 private key from the current source tree and generated project ZIP, removes the public-key fallback from release signing (protected Actions secrets are now mandatory), gives `contents: write` only to the Release job, and enables Android Debug APK compilation on PRs using Gradle's ephemeral debug signer. Because no signing secrets are configured (v1.2.18 log used the public fallback), production Release builds will fail closed until a secure new signer/lineage is provisioned. CI pending.
 
 - PR #12 CI run `45473569491` completed SUCCESS: PWA/TypeScript build passed and the generated Android ARM64 Debug APK compiled successfully with Gradle's ephemeral debug signer. Release build, production signer verification and Release job were correctly skipped for this pull request. This validates generated Android Kotlin/Gradle compilation for the PR #12 source state, not runtime behavior on devices.
+
+
+### 2026-11-25 — security hardening continuation
+
+- PR #8 (repair plan, inventory, risk register and signing incident analysis) is merged. PR #9 (durable script backups) is merged at `6266f67016dd173dd422b545d7565e5c9954ba24`; final web CI `45471301643` passed. No Android runtime acceptance was performed for this browser-local backup fix.
+- PR #12 is merged at `34ae4058b8afd92035145dcc731762ffa3fcbb4e`. It removes the publicly committed PKCS#12/Base64 key from the current tree and requires protected signing secrets for production Release. The old private key remains compromised in Git history and existing artifacts. No secret was configured through the available connector, no key rotation was performed, and no production APK was published by this change.
+- PR #13 is merged at `450232e8a4d4ff1e4dc6ab14296433a0e498ace2`. Workflow-level permissions are now `contents: read`; only the Release job gets `contents: write`. CI run `45474423204` passed the web build; Android and Release jobs were skipped by the PR event policy.
+- PR #11 (per-install Bridge tokens and exact-origin checks) remains open on stale base `18762e9a1a641b975a107484af9edb2297a40f22`; it must be rebased and reviewed together with WebView-origin protections before merge.
+- PR #14 (bounded Bridge request resources) is open on stale base `34ae4058b8afd92035145dcc731762ffa3fcbb4e`. CI run `45474774819` passed web and Android ARM64 APK builds; Release was skipped. No device runtime test yet.
+- PR #15 (exact WebView origin and child-frame restrictions) is open on current base `450232e8a4d4ff1e4dc6ab14296433a0e498ace2`. Web CI passed in run `45475215970`; Android APK build was still in progress at last check.
+- PR #16 (APT signed-repository and TLS verification hardening) is open on current base `450232e8a4d4ff1e4dc6ab14296433a0e498ace2`, branch `security/apt-authentication-fail-closed`, head `cdc51b2c86a1af9e1fbdf8b699ccb1d0017f067e`. It removes unauthenticated APT flags and `trusted=yes`, strips the legacy source option, and leaves TLS verification enabled if a CA bundle is unavailable. It adds `npm run check:apt-security`; CI check-runs had not appeared at last poll. Android package-manager runtime tests are mandatory before merge.
+- PR #13 CI run `45474423204`: web build SUCCESS; APK and Release SKIPPED as expected.
+- No changes in this continuation modified the user's Termux `usr/`, installed Python packages, workspace, backups, original signer material or published Release artifacts. The APT change only alters generated APT configuration/source-list behavior and remains unmerged.
+
+## Next actions
+1. Refresh PR #15 Android build and PR #16 CI status.
+2. Rebase PR #11 and PR #14 onto current main; review combined Bridge token, origin, resource and SSRF protections.
+3. Review PR #15 JavaScript bridge exposure and Android navigation behavior.
+4. Validate PR #16 against the actual Termux bootstrap keyring and CA bundle; do not merge without package install/update compatibility evidence.
+5. Replace the age-only process watchdog with managed-process ownership/heartbeat.
+6. Continue audit of storage cleanup, updater, package inventory/backup manifest, bootstrap recovery, crawler cookies, Pyodide, editor and app lifecycle.
