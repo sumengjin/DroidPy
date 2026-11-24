@@ -80,3 +80,6 @@
 - Added `docs/audit/SIGNING-INCIDENT-AND-ROTATION-ANALYSIS.md`: confirms v1.2.18 used the public fallback signer; records Android v3/v3.1 behavior, Android 10/11/13 validation requirements, residual compromise risks, and a fail-closed containment/rotation plan. No signing key changed.
 
 - Created PR #10 `security(webview): restrict privileged navigation to the exact app origin` (branch `security/restrict-main-webview-origin`, head `4bd29cd3c2952c1b7b0ccc2982c623ff01fd126c`). It replaces broad prefix/host-only navigation checks with exact origin and exact file entry matching, blocks child frames, disables file-origin cross-file/universal access, and adds CSP frame/object restrictions. PR is draft; CI and Android device acceptance pending. Bridge random-token/CORS/SSRF/body-limit work remains separate and open.
+
+- PR #12 CI run `45474043434` passed: generated Android Gradle project and ARM64 Debug APK compiled with the ephemeral debug signer; production Release job was skipped. Main push validation run `45474451656` is in progress at this update.
+- PR #10 workflow was updated to use the new PR Debug APK job; latest head `c7db438c0a2fbc9dbafc076214606597a5f2de04` validation pending.
