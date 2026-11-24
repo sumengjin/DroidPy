@@ -94,7 +94,7 @@
 
 
 ### 2026-11-25 — Process watchdog removal (PR #21)
-- PR #21 head `c63bddd2060459b2641c7e7e7df345ee3b6ba0ff` includes the Kotlin `EmbeddedTermuxBridge.start()` brace correction and removes the 30-minute age-based watchdog from both Bridge implementations.
-- Process inspection is now read-only; stopping the Bridge leaves active user Python work alive. UI labels updated in Traditional Chinese, Simplified Chinese, English and Japanese. Added `scripts/check-watchdog-safety.mjs` and wired it into CI.
-- CI run `45479438842` completed SUCCESS: Python syntax/unit tests, PWA/TypeScript build, Android ARM64 Debug APK compilation and artifact upload all passed. Artifact `DroidPy-arm64-debug-115-a1` was generated. Release APK, production signer verification and GitHub Release were skipped by the PR workflow; no production APK was published.
+- PR #21 latest head `3aaf47373eb4998861f8cee98b3a956ef765e599` includes the Kotlin `EmbeddedTermuxBridge.start()` brace correction and removes the 30-minute age-based watchdog from both Bridge implementations.
+- Process inspection is read-only. Bridge shutdown leaves active user Python work alive and retains the native `Process` handle so explicit Stop remains available after Bridge restart. UI labels updated in Traditional Chinese, Simplified Chinese, English and Japanese. Added CI regression checks for age-based termination and explicit Stop preservation.
+- CI run `45479438842` passed Python tests, PWA/TypeScript build, Android ARM64 Debug APK compilation and artifact upload. Follow-up run `45480204247` also passed the full Debug build. Latest code-validation run `45480787105` passed Python tests and PWA/TypeScript build; Android ARM64 Debug compilation is still running. Production Release APK, production signer verification and GitHub Release are skipped for PR builds; no production APK was published.
 - Device verification remains required for Android 10+ process survival and explicit Stop behavior. No `usr/`, installed packages, workspace, backups or signing material was changed.
