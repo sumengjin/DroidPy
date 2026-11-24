@@ -78,3 +78,13 @@
 - PR #9 merged successfully via squash: merge commit `6266f67016dd173dd422b545d7565e5c9954ba24`; main now points to this commit. Web CI for the final PR head passed; Android APK job was skipped by workflow policy and device acceptance remains pending.
 
 - Added `docs/audit/SIGNING-INCIDENT-AND-ROTATION-ANALYSIS.md`: confirms v1.2.18 used the public fallback signer; records Android v3/v3.1 behavior, Android 10/11/13 validation requirements, residual compromise risks, and a fail-closed containment/rotation plan. No signing key changed.
+
+
+### 2026-11-25 — Bridge resource-exhaustion hardening (PR #14)
+- Current main base: `34ae4058b8afd92035145dcc731762ffa3fcbb4e`.
+- Opened [PR #14](https://github.com/sumengjin/DroidPy/pull/14), branch `security/bridge-resource-limits`, head `b4ce968baf15e563d387c4ebe312fc315061bb06` at the time of this entry.
+- Python Bridge: 4 MiB JSON body cap; rejects invalid/negative/incomplete lengths, Transfer-Encoding, invalid UTF-8/JSON and non-object JSON; 10-second socket read timeout; 8 concurrent handler slots and backlog 16.
+- EmbeddedTermuxBridge: 16 KiB header cap; 4 MiB body cap; rejects Transfer-Encoding, invalid/incomplete lengths and malformed JSON; 10-second socket read timeout; bounded ThreadPoolExecutor (8 workers, 16 queued tasks), rejects excess accepted sockets.
+- Python syntax/compileall job passed; full workflow run `45474774819` is still building the Android APK. No device runtime test yet.
+- R-017 remains PARTIAL: this PR addresses resource exhaustion only. Fixed token, permissive CORS/Origin and SSRF remain separate open findings.
+- No user data, signing key, existing `usr/`, installed packages, workspace, backups, or Release artifacts were changed.
