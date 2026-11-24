@@ -134,7 +134,7 @@
 ### 2026-11-25 — Bridge request resource limits (dependent on PR #26)
 - Created `security/bridge-resource-limits-v3` from the integrated Termux security branch so the resource fix does not reintroduce stale CORS, SSRF, or watchdog code from the older PR #17 branch.
 - Python Bridge now rejects duplicate Content-Length and Transfer-Encoding, validates bounded decimal lengths and JSON object bodies, retains the 8 MiB body limit and 15-second socket timeout, and caps active request handlers at 8 with a 16-connection backlog and explicit 503 overload rejection.
-- Native Android Bridge now uses a dedicated accept thread plus a bounded 8-worker/16-queue executor, rejects excess clients, caps headers at 16 KiB and bodies at 8 MiB, rejects ambiguous request framing, incomplete bodies and invalid JSON, and preserves the rule that Bridge shutdown must not terminate active user Python work.
+- Native Android Bridge now uses a dedicated accept thread plus a bounded 8-worker/16-queue executor, rejects excess clients, caps headers at 16 KiB and bodies at 8 MiB, rejects ambiguous request framing, incomplete bodies and invalid JSON, and preserves the rule that Bridge shutdown must not terminate active user Python work. It also tracks and closes accepted client sockets during shutdown so rapid stop/start cycles do not leave idle handler threads behind.
 - Extended `check:bridge` to verify the generated Python and native Kotlin source resource limits and lifecycle guards. CI and Android 10+ device acceptance pending.
 - The older PR #17 patch was not merged directly: its stale base and shutdown behavior would conflict with the newer process-preservation fix. Only the required resource protections were ported and adapted.
 
