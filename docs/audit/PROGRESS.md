@@ -76,3 +76,5 @@
 - PR #9 latest head `923bab90d26d22d2640a64d1695578937be90959` CI run `45471301643`: TypeScript/lint and web build SUCCESS. Android APK build and Release jobs were SKIPPED by the current workflow's pull-request condition; no device test yet.
 
 - PR #9 merged successfully via squash: merge commit `6266f67016dd173dd422b545d7565e5c9954ba24`; main now points to this commit. Web CI for the final PR head passed; Android APK job was skipped by workflow policy and device acceptance remains pending.
+
+- Added `docs/audit/SIGNING-INCIDENT-AND-ROTATION-ANALYSIS.md`: confirms v1.2.18 used the public fallback signer; records Android v3/v3.1 behavior, Android 10/11/13 validation requirements, residual compromise risks, and a fail-closed containment/rotation plan. No signing key changed.
