@@ -3748,7 +3748,7 @@ def clipboard_set(text):
         if (transferEncoding.isNotBlank() && headers.containsKey("content-length")) {
             throw IllegalArgumentException("Ambiguous HTTP response framing")
         }
-        if (transferEncoding.isNotBlank() && transferEncoding.split(",").none { it.trim() == "chunked" }) {
+        if (transferEncoding.isNotBlank() && transferEncoding.trim() != "chunked") {
             throw IllegalArgumentException("Unsupported HTTP transfer encoding")
         }
         if (transferEncoding.contains("chunked")) {
