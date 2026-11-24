@@ -1576,7 +1576,11 @@ import java.net.URLDecoder
 import javax.net.ssl.SNIHostName
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
+import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 class EmbeddedTermuxBridge(
@@ -1589,7 +1593,7 @@ class EmbeddedTermuxBridge(
     private val assetManager: AssetManager? = null
 ) {
     private var serverSocket: ServerSocket? = null
-    private val executor = Executors.newCachedThreadPool()
+    private var executor: ThreadPoolExecutor? = null
     @Volatile private var running = false
     @Volatile private var activeProcess: Process? = null
     private val activeProcessStartedAt = AtomicLong(0L)
@@ -1685,33 +1689,55 @@ class EmbeddedTermuxBridge(
 
     fun start() {
         if (running) return
-        running = true
-        serverSocket = ServerSocket().apply {
+        val localServer = ServerSocket().apply {
             reuseAddress = true
-            bind(InetSocketAddress(InetAddress.getByName("127.0.0.1"), port), 32)
+            bind(InetSocketAddress(InetAddress.getByName("127.0.0.1"), port), 16)
         }
+        val localExecutor = ThreadPoolExecutor(
+            1, 8, 60L, TimeUnit.SECONDS, ArrayBlockingQueue<Runnable>(16)
+        )
+        serverSocket = localServer
+        executor = localExecutor
+        running = true
         appendNativeLog("Bridge", "EmbeddedTermuxBridge started on 127.0.0.1:$port (usr=\${usrDir.absolutePath})")
-        executor.execute {
-            while (running) {
+        Thread({
+            while (running && serverSocket === localServer) {
                 try {
-                    val client = serverSocket?.accept() ?: break
-                    executor.execute { handleClient(client) }
+                    val client = localServer.accept()
+                    try {
+                        localExecutor.execute { handleClient(client) }
+                    } catch (_: RejectedExecutionException) {
+                        try {
+                            client.getOutputStream().write(
+                                "HTTP/1.1 503 Service Unavailable\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n".toByteArray(Charsets.US_ASCII)
+                            )
+                        } catch (_: Exception) {
+                        }
+                        try { client.close() } catch (_: Exception) {}
+                        appendNativeLog("Bridge", "Rejected client: bounded request capacity reached")
+                    }
                 } catch (e: Exception) {
-                    if (!running) break
+                    if (!running || serverSocket !== localServer) break
                     appendNativeLog("Bridge", "Accept loop error: \${e.message}")
                 }
             }
+        }, "DroidPyBridge-Accept").apply {
+            isDaemon = true
+            start()
         }
     }
 
     fun stop() {
         running = false
         appendNativeLog("Bridge", "EmbeddedTermuxBridge stopping")
-        // The Bridge may stop while a user task is still running. Leave that
-        // process alive; only an explicit user Stop action may terminate it.
-        // Keep the Process handle so an explicit user Stop can still terminate
-        // the task after the Bridge is restarted. Bridge shutdown is not task cancellation.
-        try { serverSocket?.close() } catch (_: Exception) {}
+        // Bridge shutdown must never terminate an active user Python process.
+        // Only the explicit /stop action may terminate that process.
+        val oldServer = serverSocket
+        serverSocket = null
+        try { oldServer?.close() } catch (_: Exception) {}
+        val oldExecutor = executor
+        executor = null
+        try { oldExecutor?.shutdownNow() } catch (_: Exception) {}
     }
 
     private fun ensurePrefixWrappers(): File {
@@ -3140,7 +3166,15 @@ def clipboard_set(text):
                 p3 = p2
                 p2 = p1
                 p1 = b
-                if (headerBuf.size() > 65536) return
+                if (headerBuf.size() > 16 * 1024) {
+                    try {
+                        sock.getOutputStream().write(
+                            "HTTP/1.1 431 Request Header Fields Too Large\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n".toByteArray(Charsets.US_ASCII)
+                        )
+                    } catch (_: Exception) {
+                    }
+                    return
+                }
             }
             val headerLines = headerBuf.toString("ISO-8859-1").split("\\r\\n")
             val requestLine = headerLines.firstOrNull()?.trim() ?: return
@@ -3152,15 +3186,24 @@ def clipboard_set(text):
             val queryStr = rawTarget.substringAfter("?", "")
 
             val headers = mutableMapOf<String, String>()
+            var duplicateContentLength = false
             for (hLine in headerLines.drop(1)) {
                 if (hLine.isEmpty()) continue
                 val idx = hLine.indexOf(':')
                 if (idx > 0) {
-                    headers[hLine.substring(0, idx).trim().lowercase()] = hLine.substring(idx + 1).trim()
+                    val key = hLine.substring(0, idx).trim().lowercase()
+                    if (key == "content-length" && headers.containsKey(key)) {
+                        duplicateContentLength = true
+                    }
+                    headers[key] = hLine.substring(idx + 1).trim()
                 }
             }
 
             val out = sock.getOutputStream()
+            if (duplicateContentLength || headers.containsKey("transfer-encoding")) {
+                writeJson(out, 400, JSONObject().put("error", "Ambiguous or unsupported request framing"))
+                return
+            }
             val requestHost = headers["host"]?.lowercase()
             if (requestHost != "127.0.0.1:$port" && requestHost != "localhost:$port") {
                 writeJson(out, 403, JSONObject().put("error", "Untrusted Host"))
@@ -3211,9 +3254,14 @@ def clipboard_set(text):
                 return
             }
 
-            val len = (headers["content-length"] ?: "0").toIntOrNull()
-            if (len == null || len < 0 || len > 8 * 1024 * 1024) {
-                writeJson(out, 413, JSONObject().put("error", "Invalid or oversized request body"))
+            val rawLength = headers["content-length"] ?: "0"
+            if (!rawLength.matches(Regex("[0-9]{1,10}"))) {
+                writeJson(out, 400, JSONObject().put("error", "Invalid Content-Length"))
+                return
+            }
+            val len = rawLength.toIntOrNull()
+            if (len == null || len > 8 * 1024 * 1024) {
+                writeJson(out, 413, JSONObject().put("error", "Request body exceeds the 8 MiB limit"))
                 return
             }
             val bodyBytes = ByteArray(len)
@@ -3223,8 +3271,17 @@ def clipboard_set(text):
                 if (r < 0) break
                 readTotal += r
             }
+            if (readTotal != len) {
+                writeJson(out, 400, JSONObject().put("error", "Incomplete request body"))
+                return
+            }
             val bodyStr = if (readTotal > 0) String(bodyBytes, 0, readTotal, Charsets.UTF_8).trim() else ""
-            val bodyJson = if (bodyStr.startsWith("{")) JSONObject(bodyStr) else JSONObject()
+            val bodyJson = try {
+                if (bodyStr.isBlank()) JSONObject() else JSONObject(bodyStr)
+            } catch (_: Exception) {
+                writeJson(out, 400, JSONObject().put("error", "Invalid JSON body"))
+                return
+            }
 
             when {
                 method == "GET" && path == "/health" -> {
