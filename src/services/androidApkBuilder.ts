@@ -33,13 +33,24 @@ on:
     branches: [ main, master ]
     tags: [ 'v*' ]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Optional release tag, for example v1.2.3. Leave empty for a debug build.'
+        required: false
+        type: string
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-apk:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      is_release: \${{ steps.configure.outputs.is_release }}
+      release_tag: \${{ steps.configure.outputs.release_tag }}
+      artifact_name: \${{ steps.configure.outputs.artifact_name }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -64,8 +75,9 @@ jobs:
         env:
           VITE_GITHUB_REPO: \${{ github.repository }}
         run: |
-          if [ -f "package.json" ]; then
-            if [ -f "package-lock.json" ]; then
+          set -euo pipefail
+          if [ -f package.json ]; then
+            if [ -f package-lock.json ]; then
               npm ci || npm install --legacy-peer-deps --no-audit --no-fund
             else
               npm install --legacy-peer-deps --no-audit --no-fund
@@ -78,138 +90,164 @@ jobs:
 
       - name: Download Termux ARM64 Bootstrap
         run: |
+          set -euo pipefail
           mkdir -p android/app/src/main/assets
-          curl -fL "https://github.com/termux/termux-packages/releases/latest/download/bootstrap-aarch64.zip" \\
-            -o android/app/src/main/assets/bootstrap-aarch64.zip
+          curl -fL https://github.com/termux/termux-packages/releases/latest/download/bootstrap-aarch64.zip -o android/app/src/main/assets/bootstrap-aarch64.zip
 
-      - name: Configure Consistent APK Signing & Release Version
+      - name: Configure version and protected signing
+        id: configure
         env:
           GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
           CUSTOM_KS_B64: \${{ secrets.DROIDPY_KEYSTORE_BASE64 }}
           CUSTOM_STORE_PASS: \${{ secrets.DROIDPY_STORE_PASSWORD }}
           CUSTOM_KEY_ALIAS: \${{ secrets.DROIDPY_KEY_ALIAS }}
           CUSTOM_KEY_PASS: \${{ secrets.DROIDPY_KEY_PASSWORD }}
+          INPUT_RELEASE_TAG: \${{ inputs.release_tag }}
         run: |
-          VER=\$(grep -m1 -oE '\\[[0-9]+\\.[0-9]+\\.[0-9]+' CHANGELOG.md 2>/dev/null | tr -d '[' || true)
-          if [ -z "\$VER" ]; then
-            VER="1.2.\${GITHUB_RUN_NUMBER:-1}"
+          set -euo pipefail
+          INPUT_TAG="\${INPUT_RELEASE_TAG:-}"
+          if [ -n "$INPUT_TAG" ] && ! [[ "$INPUT_TAG" =~ ^v?[0-9]+[.][0-9]+[.][0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo '::error::release_tag must be a valid version such as v1.2.3'
+            exit 1
           fi
-
-          if [[ "\${GITHUB_REF}" == refs/tags/* ]]; then
-            REL_TAG="\${GITHUB_REF_NAME}"
+          IS_RELEASE_REF=false
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            case "$GITHUB_REF" in
+              refs/heads/main|refs/heads/master|refs/tags/v*) IS_RELEASE_REF=true ;;
+            esac
+          elif [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ -n "$INPUT_TAG" ]; then
+            IS_RELEASE_REF=true
+          fi
+          VER=$(grep -m1 -oE '[0-9]+[.][0-9]+[.][0-9]+' CHANGELOG.md 2>/dev/null | head -n1 || true)
+          if [ -z "$VER" ]; then VER="1.2.16"; fi
+          if [ -n "$INPUT_TAG" ]; then
+            REL_TAG="v\${INPUT_TAG#v}"
             VNAME="\${REL_TAG#v}"
-          else
-            IFS='.' read -r MAJ MIN PAT <<< "\$VER"
-            MAJ=\${MAJ:-1}
-            MIN=\${MIN:-2}
-            PAT=\${PAT:-0}
-            for _ in \$(seq 1 50); do
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            REL_TAG="$GITHUB_REF_NAME"
+            VNAME="\${REL_TAG#v}"
+          elif [ "$IS_RELEASE_REF" = true ]; then
+            IFS='.' read -r MAJ MIN PAT <<< "$VER"
+            MAJ=\${MAJ:-1}; MIN=\${MIN:-2}; PAT=\${PAT:-0}
+            for _ in $(seq 1 50); do
               CAND_TAG="v\${MAJ}.\${MIN}.\${PAT}"
               REL_EXISTS=0
-              if gh release view "\$CAND_TAG" >/dev/null 2>&1; then
-                REL_EXISTS=1
-              fi
-              TAG_SHA=\$(git ls-remote --tags origin "refs/tags/\${CAND_TAG}^{}" 2>/dev/null | awk '{print \$1}' | head -n1 || true)
-              if [ -z "\$TAG_SHA" ]; then
-                TAG_SHA=\$(git ls-remote --tags origin "refs/tags/\${CAND_TAG}" 2>/dev/null | awk '{print \$1}' | head -n1 || true)
-              fi
-              if [ "\$REL_EXISTS" -eq 0 ] && [ -z "\$TAG_SHA" ]; then
-                break
-              fi
-              if [ -n "\$TAG_SHA" ] && [ "\$TAG_SHA" = "\${GITHUB_SHA}" ]; then
-                break
-              fi
-              PAT=\$((PAT + 1))
+              if gh release view "$CAND_TAG" >/dev/null 2>&1; then REL_EXISTS=1; fi
+              TAG_SHA=$(git ls-remote --tags origin "refs/tags/\${CAND_TAG}^{}" 2>/dev/null | awk '{print $1}' | head -n1 || true)
+              if [ -z "$TAG_SHA" ]; then TAG_SHA=$(git ls-remote --tags origin "refs/tags/\${CAND_TAG}" 2>/dev/null | awk '{print $1}' | head -n1 || true); fi
+              if [ "$REL_EXISTS" -eq 0 ] && [ -z "$TAG_SHA" ]; then break; fi
+              if [ -n "$TAG_SHA" ] && [ "$TAG_SHA" = "$GITHUB_SHA" ]; then break; fi
+              PAT=$((PAT + 1))
             done
             VNAME="\${MAJ}.\${MIN}.\${PAT}"
-            REL_TAG="v\${VNAME}"
+            REL_TAG="v$VNAME"
+          else
+            REL_TAG="debug-$GITHUB_RUN_NUMBER"
+            VNAME="$VER"
           fi
-
-          SEMVER_PART=\$(echo "\$VNAME" | grep -oE '^[0-9]+\\.[0-9]+\\.[0-9]+' || echo "1.2.16")
-          IFS='.' read -r CMAJ CMIN CPAT <<< "\$SEMVER_PART"
-          VCODE=\$(( \${CMAJ:-1} * 10000 + \${CMIN:-0} * 100 + \${CPAT:-0} ))
-
-          echo "DROIDPY_VERSION_CODE=\${VCODE}" >> "\$GITHUB_ENV"
-          echo "DROIDPY_VERSION_NAME=\${VNAME}" >> "\$GITHUB_ENV"
-          echo "DROIDPY_RESOLVED_TAG=\${REL_TAG}" >> "\$GITHUB_ENV"
-
-          if [ -n "\$CUSTOM_KS_B64" ]; then
-            if [ -z "\$CUSTOM_STORE_PASS" ] || [ -z "\$CUSTOM_KEY_ALIAS" ] || [ -z "\$CUSTOM_KEY_PASS" ]; then
-              echo "::error::Custom keystore is set but one or more required signing secrets are missing."
+          SEMVER_PART=$(printf '%s' "$VNAME" | grep -oE '^[0-9]+[.][0-9]+[.][0-9]+' || echo '1.2.16')
+          IFS='.' read -r CMAJ CMIN CPAT <<< "$SEMVER_PART"
+          VCODE=$(( \${CMAJ:-1} * 10000 + \${CMIN:-0} * 100 + \${CPAT:-0} ))
+          echo "DROIDPY_VERSION_CODE=$VCODE" >> "$GITHUB_ENV"
+          echo "DROIDPY_VERSION_NAME=$VNAME" >> "$GITHUB_ENV"
+          echo "DROIDPY_RESOLVED_TAG=$REL_TAG" >> "$GITHUB_ENV"
+          echo "DROIDPY_RELEASE_BUILD=$IS_RELEASE_REF" >> "$GITHUB_ENV"
+          if [ "$IS_RELEASE_REF" = true ]; then
+            if [ -z "$CUSTOM_KS_B64" ] || [ -z "$CUSTOM_STORE_PASS" ] || [ -z "$CUSTOM_KEY_ALIAS" ] || [ -z "$CUSTOM_KEY_PASS" ]; then
+              echo '::error::A production Release requires all protected DROIDPY signing secrets. No public-key fallback is permitted.'
               exit 1
             fi
-            printf '%s' "\$CUSTOM_KS_B64" | base64 -d > android/app/droidpy-custom.keystore
-            echo "DROIDPY_KEYSTORE_FILE=droidpy-custom.keystore" >> "\$GITHUB_ENV"
-            printf 'DROIDPY_STORE_PASSWORD=%s\\n' "\$CUSTOM_STORE_PASS" >> "\$GITHUB_ENV"
-            printf 'DROIDPY_KEY_ALIAS=%s\\n' "\$CUSTOM_KEY_ALIAS" >> "\$GITHUB_ENV"
-            printf 'DROIDPY_KEY_PASSWORD=%s\\n' "\$CUSTOM_KEY_PASS" >> "\$GITHUB_ENV"
+            printf '%s' "$CUSTOM_KS_B64" | base64 --decode > android/app/droidpy-custom.keystore
+            echo 'DROIDPY_KEYSTORE_FILE=droidpy-custom.keystore' >> "$GITHUB_ENV"
+            printf 'DROIDPY_STORE_PASSWORD=%s\n' "$CUSTOM_STORE_PASS" >> "$GITHUB_ENV"
+            printf 'DROIDPY_KEY_ALIAS=%s\n' "$CUSTOM_KEY_ALIAS" >> "$GITHUB_ENV"
+            printf 'DROIDPY_KEY_PASSWORD=%s\n' "$CUSTOM_KEY_PASS" >> "$GITHUB_ENV"
           else
-            mkdir -p ~/.android
-            cp android/app/droidpy-debug.p12 ~/.android/debug.keystore
-            echo "DROIDPY_KEYSTORE_FILE=droidpy-debug.p12" >> "\$GITHUB_ENV"
+            rm -f android/app/droidpy-custom.keystore android/app/droidpy-debug.p12
+            echo 'Debug build uses Gradle ephemeral debug signing; no production key is loaded.'
           fi
+          echo "is_release=$IS_RELEASE_REF" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$REL_TAG" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=${appSlug}-arm64-apk-$GITHUB_RUN_NUMBER-a\${GITHUB_RUN_ATTEMPT:-1}" >> "$GITHUB_OUTPUT"
 
       - name: Build Debug APK (Arm64)
         working-directory: android
         run: gradle assembleDebug --no-daemon
 
-      - name: Verify APK Signature Fingerprint
+      - name: Build Release APK (Arm64)
+        if: env.DROIDPY_RELEASE_BUILD == 'true'
+        working-directory: android
+        run: gradle assembleRelease --no-daemon
+
+      - name: Verify APK signature
         run: |
           set -euo pipefail
-          APK_PATH=\$(find android/app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -print | sort | head -n1)
-          if [ -z "\$APK_PATH" ]; then
-            echo "::error::No Debug APK found; refusing to publish an unverified artifact."
-            exit 1
+          APK_DIR=android/app/build/outputs/apk/debug
+          if [ "$DROIDPY_RELEASE_BUILD" = true ]; then APK_DIR=android/app/build/outputs/apk/release; fi
+          APK_PATH=$(find "$APK_DIR" -maxdepth 1 -type f -name '*.apk' -print | sort | head -n1)
+          if [ -z "$APK_PATH" ]; then echo '::error::No APK found.'; exit 1; fi
+          APKSIGNER=$(find "\${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/build-tools" -type f -name apksigner -perm -u+x 2>/dev/null | sort -V | tail -n1)
+          if [ -z "$APKSIGNER" ]; then echo '::error::Android apksigner not found.'; exit 1; fi
+          SIGNER_OUTPUT=$("$APKSIGNER" verify --verbose --print-certs "$APK_PATH" 2>&1)
+          printf '%s\n' "$SIGNER_OUTPUT"
+          ACTUAL_SHA256=$(printf '%s\n' "$SIGNER_OUTPUT" | sed -nE 's/.*certificate SHA-256 digest: *([0-9A-Fa-f:]+).*/\1/ip' | head -n1 | tr -d ':' | tr '[:lower:]' '[:upper:]')
+          if ! [[ "$ACTUAL_SHA256" =~ ^[0-9A-F]{64}$ ]]; then echo '::error::Invalid APK signer fingerprint.'; exit 1; fi
+          if [ "$DROIDPY_RELEASE_BUILD" = true ]; then
+            KEYSTORE_PATH="android/\${DROIDPY_KEYSTORE_FILE}"
+            EXPECTED_SHA256=$(keytool -exportcert -keystore "$KEYSTORE_PATH" -storepass "$DROIDPY_STORE_PASSWORD" -alias "$DROIDPY_KEY_ALIAS" | sha256sum | awk '{print toupper($1)}')
+            if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then echo '::error::APK signer does not match the protected keystore.'; exit 1; fi
+            echo "Verified Release signer from protected keystore: $ACTUAL_SHA256"
+          else
+            echo "Verified Debug APK signature (ephemeral signer): $ACTUAL_SHA256"
           fi
-          APKSIGNER=\$(find "\${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/build-tools" -type f -name apksigner -perm -u+x 2>/dev/null | sort -V | tail -n1)
-          if [ -z "\$APKSIGNER" ]; then
-            echo "::error::Android apksigner not found; refusing to skip signature verification."
-            exit 1
-          fi
-          SIGNER_OUTPUT=\$("\$APKSIGNER" verify --verbose --print-certs "\$APK_PATH" 2>&1) || {
-            echo "::error::APK signature verification failed."
-            printf '%s\\n' "\$SIGNER_OUTPUT"
-            exit 1
-          }
-          printf '%s\\n' "\$SIGNER_OUTPUT"
-          ACTUAL_SHA256=\$(printf '%s\\n' "\$SIGNER_OUTPUT" | sed -nE 's/.*certificate SHA-256 digest: *([0-9A-Fa-f:]+).*/\\1/ip' | head -n1 | tr -d ':' | tr '[:lower:]' '[:upper:]')
-          EXPECTED_SHA256="29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA"
-          if [ "\$ACTUAL_SHA256" != "\$EXPECTED_SHA256" ]; then
-            echo "::error::APK signing certificate does not match the original DroidPy certificate."
-            exit 1
-          fi
-          echo "Original DroidPy APK signing certificate verified."
 
-      - name: Prepare Release APK Filename
+      - name: Prepare APK Artifact
         run: |
+          set -euo pipefail
           mkdir -p release-apk
-          SAFE_TAG="\${DROIDPY_RESOLVED_TAG//\\//-}"
-          cp android/app/build/outputs/apk/debug/*.apk "release-apk/${appSlug}-arm64-\${SAFE_TAG}.apk"
+          if [ "$DROIDPY_RELEASE_BUILD" = true ]; then
+            cp android/app/build/outputs/apk/release/*.apk "release-apk/${appSlug}-arm64-\${DROIDPY_RESOLVED_TAG}.apk"
+          else
+            cp android/app/build/outputs/apk/debug/*.apk "release-apk/${appSlug}-arm64-debug-$GITHUB_RUN_NUMBER.apk"
+          fi
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${appSlug}-arm64-apk-\${{ github.run_number }}-a\${{ github.run_attempt }}
+          name: \${{ steps.configure.outputs.artifact_name }}
           retention-days: 90
           overwrite: true
           path: release-apk/*.apk
 
+  publish-release:
+    if: needs.build-apk.outputs.is_release == 'true'
+    needs: build-apk
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download verified APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: \${{ needs.build-apk.outputs.artifact_name }}
+          path: release-apk
+
       - name: Publish GitHub Release
-        if: github.event_name == 'push' || startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: \${{ needs.build-apk.outputs.release_tag }}
         run: |
-          APK_FILE=\$(ls release-apk/*.apk | head -n1)
-          REL_TAG="\${DROIDPY_RESOLVED_TAG}"
-          if gh release view "\$REL_TAG" >/dev/null 2>&1; then
-            gh release upload "\$REL_TAG" "\$APK_FILE" --clobber
+          set -euo pipefail
+          APK_FILE=$(find release-apk -maxdepth 1 -type f -name '*.apk' -print | head -n1)
+          if [ -z "$APK_FILE" ]; then echo '::error::Verified Release APK artifact is missing.'; exit 1; fi
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$APK_FILE" --clobber
           else
-            gh release create "\$REL_TAG" "\$APK_FILE" \\
-              --title "${appSlug} \${REL_TAG}" \\
-              --notes-file CHANGELOG.md \\
-              --target "\${GITHUB_SHA}" || gh release upload "\$REL_TAG" "\$APK_FILE" --clobber
-          fi
-`
+            gh release create "$RELEASE_TAG" "$APK_FILE" --title "${appSlug} $RELEASE_TAG" --notes-file CHANGELOG.md --target "$GITHUB_SHA"
+          fi`
   );
 
   // 2. Gradle root files
