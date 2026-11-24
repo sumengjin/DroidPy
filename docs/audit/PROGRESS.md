@@ -78,3 +78,5 @@
 - PR #9 merged successfully via squash: merge commit `6266f67016dd173dd422b545d7565e5c9954ba24`; main now points to this commit. Web CI for the final PR head passed; Android APK job was skipped by workflow policy and device acceptance remains pending.
 
 - Added `docs/audit/SIGNING-INCIDENT-AND-ROTATION-ANALYSIS.md`: confirms v1.2.18 used the public fallback signer; records Android v3/v3.1 behavior, Android 10/11/13 validation requirements, residual compromise risks, and a fail-closed containment/rotation plan. No signing key changed.
+
+- Created PR #11 `security(bridge): randomize per-install tokens and restrict bridge origins` (branch `security/randomize-bridge-token-and-origin`, latest known head `7b1377fc0d32f7a8642e06ef9fcd42c9029f62c1`). It removes the fixed token, generates per-install/per-browser random tokens, binds both Bridge implementations to exact origins/loopback hosts, removes wildcard CORS, limits request bodies to 8 MiB and socket reads to 15 seconds, and redacts the native token from the shared-storage state backup. CI and Android device acceptance pending. SSRF and bounded concurrency remain open.
