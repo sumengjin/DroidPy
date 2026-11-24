@@ -36,6 +36,8 @@ assert.ok(generated.includes('Duplicate Content-Length'));
 assert.ok(generated.includes('class BoundedThreadingHTTPServer(ThreadingHTTPServer):'));
 assert.ok(generated.includes('request_queue_size = 16'));
 assert.ok(generated.includes('threading.BoundedSemaphore(8)'));
+assert.ok(generated.includes('self.send_header("Connection", "close")'));
+assert.ok(generated.includes('self.close_connection = True'));
 assert.ok(generated.includes('BoundedThreadingHTTPServer(("127.0.0.1", 8765), DroidPyBridgeHandler)'));
 
 // Native Bridge limits are checked against the actual generated Android source.
