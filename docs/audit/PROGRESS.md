@@ -67,3 +67,4 @@
 - PR #9 CI check `測試與網頁建置`: SUCCESS; no Android APK job was run for this PR.
 - Next: complete PR #9 CI review; inspect the exposed signing material against the current v1.2.18 APK signer without rotating any key; then continue Bridge security audit and implementation.
 \n- Follow-up hardening: localized backup failure messages in all four supported languages; storage exceptions are converted to stable internal error codes; latest PR #9 head is `1d252d655d94ba8b4b332abc2631f03883269213`.
+- Expanded security review identified two additional high-priority risks: unbounded Bridge request bodies/slow-client resource exhaustion (R-017), and generated APT configuration disabling TLS peer/host verification when a CA file is missing (R-018). Both are recorded in `RISK-REGISTER.md`; neither is yet fixed.
