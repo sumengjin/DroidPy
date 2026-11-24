@@ -19,6 +19,8 @@ assert.match(pythonBridge, /sock\.connect\(self\._pinned_sockaddr\)/);
 assert.match(pythonBridge, /self\._context\.wrap_socket\(raw, server_hostname=self\.host\)/);
 assert.match(pythonBridge, /urllib\.parse\.urljoin/);
 assert.match(pythonBridge, /response_headers = response\.getheaders\(\)/);
+assert.match(pythonBridge, /len\(response_headers\) > 100/);
+assert.match(pythonBridge, /Ambiguous HTTP response framing/);
 assert.doesNotMatch(pythonBridge, /urllib\.request\.urlopen/);
 assert.match(pythonBridge, /key\.lower\(\) not in \("cookie", "authorization", "proxy-authorization", "referer"\)/);
 
@@ -120,6 +122,25 @@ try {
     "    except ValueError:",
     "        pass",
     "    assert len(requests) == 1, \"request was sent to a private redirect target\"",
+    "    responses[:] = [",
+    "        type(\"Response\", (), {\"status\": 200, \"getheaders\": lambda self: [(\"X-Test\", \"v\")] * 101, \"read\": lambda self, n: b\"ok\"})(),",
+    "    ]",
+    "    requests.clear()",
+    "    try:",
+    "        ns[\"_probe_url_safely\"](\"http://public.example/headers\", {})",
+    "        raise AssertionError(\"oversized response headers were accepted\")",
+    "    except ValueError:",
+    "        pass",
+    "",
+    "    responses[:] = [",
+    "        type(\"Response\", (), {\"status\": 200, \"getheaders\": lambda self: [(\"Content-Length\", \"1\"), (\"Content-Length\", \"2\")], \"read\": lambda self, n: b\"x\"})(),",
+    "    ]",
+    "    try:",
+    "        ns[\"_probe_url_safely\"](\"http://public.example/ambiguous\", {})",
+    "        raise AssertionError(\"duplicate Content-Length was accepted\")",
+    "    except ValueError:",
+    "        pass",
+    "",
     "",
     "    try:",
     "        ns[\"_build_probe_headers\"]({\"extraHeaders\": {\"Host\": \"127.0.0.1\"}})",
