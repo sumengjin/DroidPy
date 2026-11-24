@@ -67,6 +67,7 @@ import re
 import select
 import shlex
 import shutil
+import signal
 import ssl
 import subprocess
 import sys
