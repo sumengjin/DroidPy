@@ -21,6 +21,7 @@ import {
   Columns2,
   Menu,
   Sparkles,
+  Download,
 } from 'lucide-react';
 import { registerSW } from 'virtual:pwa-register';
 import { DEFAULT_FILES } from './data/defaultFiles';
@@ -406,6 +407,8 @@ export default function App() {
   const [termuxRunning, setTermuxRunning] = useState(false);
   const [backupStatus, setBackupStatus] = useState<PackageBackupStatus | null>(null);
   const [restoringBackup, setRestoringBackup] = useState(false);
+  const [dismissedBackupBanner, setDismissedBackupBanner] = useState(false);
+  const backupAlertedRef = useRef(false);
   const [cleaningProcesses, setCleaningProcesses] = useState(false);
   const [lastCleanupResult, setLastCleanupResult] = useState<ProcessCleanupResult | null>(null);
   const ansiStreamBuffersRef = useRef<Map<string, ReturnType<typeof createAnsiStreamBuffer>>>(
@@ -1040,6 +1043,18 @@ export default function App() {
       const st = await getBackupStatus(cfg ?? termuxConfigRef.current);
       if (st) {
         setBackupStatus(st);
+        const missingCount =
+          (st.missingPipPackages?.length ?? 0) + (st.missingPkgPackages?.length ?? 0);
+        if (st.hasBackup && missingCount > 0) {
+          if (!backupAlertedRef.current) {
+            backupAlertedRef.current = true;
+            setDismissedBackupBanner(false);
+            const list = [...(st.missingPkgPackages ?? []), ...(st.missingPipPackages ?? [])];
+            appLog('package', `Detected ${missingCount} missing backed-up package(s): ${list.join(', ')}`);
+          }
+        } else {
+          backupAlertedRef.current = false;
+        }
       }
     } catch {
       // ignore backup status probe error
@@ -2923,6 +2938,44 @@ export default function App() {
         )}
       </header>
       )}
+
+      {/* Missing Backed-up Packages Quick Restore Bar */}
+      {!dismissedBackupBanner &&
+        backupStatus?.hasBackup &&
+        ((backupStatus.missingPipPackages?.length ?? 0) > 0 ||
+          (backupStatus.missingPkgPackages?.length ?? 0) > 0) && (
+          <div className="relative z-10 flex items-center justify-between gap-2 px-3 py-2 border-b border-amber-300/70 dark:border-amber-800/70 bg-amber-50/95 dark:bg-amber-950/60 text-amber-950 dark:text-amber-100 shrink-0">
+            <div className="min-w-0 flex-1 text-xs leading-snug">
+              <span className="font-semibold">{t('backup_banner_title')}</span>
+              <span className="ml-1.5 font-mono text-[11px] opacity-85 truncate inline-block max-w-full align-bottom">
+                {[...backupStatus.missingPkgPackages, ...backupStatus.missingPipPackages].join(', ')}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                disabled={restoringBackup || termuxRunning}
+                onClick={() => void handleRestoreBackedUpPackages()}
+                className="min-h-[34px] px-3 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
+              >
+                {restoringBackup ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Download className="w-3.5 h-3.5" />
+                )}
+                <span>{restoringBackup ? t('backup_restoring_btn') : t('backup_restore_btn')}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDismissedBackupBanner(true)}
+                aria-label={t('files_cancel')}
+                className="min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg text-amber-800 dark:text-amber-200 hover:bg-amber-200/50 dark:hover:bg-amber-900/40"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
 
       {/* Main Content Area (Mobile & Tablet Only) */}
       <main className="relative z-10 flex-1 min-h-0 flex overflow-hidden">

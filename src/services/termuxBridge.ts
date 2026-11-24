@@ -287,18 +287,49 @@ def _droidpy_patch_module(name, mod):
             pass
 
 class _DroidPyHookLoader(importlib.abc.Loader):
-    def __init__(self, orig_spec):
-        self._orig_spec = orig_spec
+    def __init__(self, orig_loader):
+        self._orig_loader = orig_loader
+        self._in_create = False
+        self._in_exec = False
+
     def create_module(self, spec):
-        loader = self._orig_spec.loader
-        if loader is not None and hasattr(loader, "create_module"):
-            return loader.create_module(spec)
-        return None
+        loader = self._orig_loader
+        if (
+            loader is None
+            or loader is self
+            or isinstance(loader, _DroidPyHookLoader)
+            or self._in_create
+        ):
+            return None
+        fn = getattr(loader, "create_module", None)
+        if fn is None:
+            return None
+        self._in_create = True
+        try:
+            return fn(spec)
+        finally:
+            self._in_create = False
+
     def exec_module(self, module):
-        loader = self._orig_spec.loader
-        if loader is not None:
-            loader.exec_module(module)
+        loader = self._orig_loader
+        if (
+            loader is not None
+            and loader is not self
+            and not isinstance(loader, _DroidPyHookLoader)
+            and not self._in_exec
+        ):
+            self._in_exec = True
+            try:
+                if hasattr(loader, "exec_module"):
+                    loader.exec_module(module)
+                elif hasattr(loader, "load_module"):
+                    loader.load_module(module.__name__)
+            finally:
+                self._in_exec = False
         _droidpy_patch_module(module.__name__, module)
+
+    def __getattr__(self, name):
+        return getattr(self._orig_loader, name)
 
 class _DroidPySslImportHook(importlib.abc.MetaPathFinder):
     _TARGETS = frozenset({"certifi", "pip._vendor.certifi", "pip._vendor.truststore._api", "pip._internal.cli.index_command"})
@@ -309,15 +340,21 @@ class _DroidPySslImportHook(importlib.abc.MetaPathFinder):
             return None
         self._in_progress.add(fullname)
         try:
-            for finder in sys.meta_path:
-                if finder is self:
+            for finder in list(sys.meta_path):
+                if isinstance(finder, _DroidPySslImportHook):
                     continue
                 try:
                     spec = finder.find_spec(fullname, path, target)
                 except Exception:
                     spec = None
                 if spec is not None and spec.loader is not None:
-                    spec.loader = _DroidPyHookLoader(spec)
+                    orig_loader = spec.loader
+                    if not isinstance(orig_loader, _DroidPyHookLoader) and not getattr(spec, "_droidpy_wrapped", False):
+                        spec.loader = _DroidPyHookLoader(orig_loader)
+                        try:
+                            spec._droidpy_wrapped = True
+                        except Exception:
+                            pass
                     return spec
         finally:
             self._in_progress.discard(fullname)

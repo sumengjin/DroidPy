@@ -1974,6 +1974,13 @@ class EmbeddedTermuxBridge(
         val pipConfDir = File(homeDir, ".config/pip").apply { mkdirs() }
         val sysPipConf = File(usrDir, "etc/pip.conf")
         val userPipConf = File(pipConfDir, "pip.conf")
+        val pyUserDir = File(homeDir, "py_user").apply {
+            mkdirs()
+            File(this, "bin").mkdirs()
+            File(this, "lib").mkdirs()
+            setReadable(true, false)
+            setExecutable(true, false)
+        }
         val pipConfBody = buildString {
             append("[global]\\n")
             append("no-cache-dir = true\\n")
@@ -1982,6 +1989,8 @@ class EmbeddedTermuxBridge(
             if (certFile != null && certFile.exists() && certFile.length() > 0L) {
                 append("cert = \${certFile.absolutePath}\\n")
             }
+            append("\\n[install]\\n")
+            append("user = true\\n")
         }
         listOf(sysPipConf, userPipConf).forEach { cfg ->
             try {
@@ -2145,18 +2154,49 @@ def _droidpy_patch_module(name, mod):
             pass
 
 class _DroidPyHookLoader(importlib.abc.Loader):
-    def __init__(self, orig_spec):
-        self._orig_spec = orig_spec
+    def __init__(self, orig_loader):
+        self._orig_loader = orig_loader
+        self._in_create = False
+        self._in_exec = False
+
     def create_module(self, spec):
-        loader = self._orig_spec.loader
-        if loader is not None and hasattr(loader, "create_module"):
-            return loader.create_module(spec)
-        return None
+        loader = self._orig_loader
+        if (
+            loader is None
+            or loader is self
+            or isinstance(loader, _DroidPyHookLoader)
+            or self._in_create
+        ):
+            return None
+        fn = getattr(loader, "create_module", None)
+        if fn is None:
+            return None
+        self._in_create = True
+        try:
+            return fn(spec)
+        finally:
+            self._in_create = False
+
     def exec_module(self, module):
-        loader = self._orig_spec.loader
-        if loader is not None:
-            loader.exec_module(module)
+        loader = self._orig_loader
+        if (
+            loader is not None
+            and loader is not self
+            and not isinstance(loader, _DroidPyHookLoader)
+            and not self._in_exec
+        ):
+            self._in_exec = True
+            try:
+                if hasattr(loader, "exec_module"):
+                    loader.exec_module(module)
+                elif hasattr(loader, "load_module"):
+                    loader.load_module(module.__name__)
+            finally:
+                self._in_exec = False
         _droidpy_patch_module(module.__name__, module)
+
+    def __getattr__(self, name):
+        return getattr(self._orig_loader, name)
 
 class _DroidPySslImportHook(importlib.abc.MetaPathFinder):
     _TARGETS = frozenset({
@@ -2172,15 +2212,21 @@ class _DroidPySslImportHook(importlib.abc.MetaPathFinder):
             return None
         self._in_progress.add(fullname)
         try:
-            for finder in sys.meta_path:
-                if finder is self:
+            for finder in list(sys.meta_path):
+                if isinstance(finder, _DroidPySslImportHook):
                     continue
                 try:
                     spec = finder.find_spec(fullname, path, target)
                 except Exception:
                     spec = None
                 if spec is not None and spec.loader is not None:
-                    spec.loader = _DroidPyHookLoader(spec)
+                    orig_loader = spec.loader
+                    if not isinstance(orig_loader, _DroidPyHookLoader) and not getattr(spec, "_droidpy_wrapped", False):
+                        spec.loader = _DroidPyHookLoader(orig_loader)
+                        try:
+                            spec._droidpy_wrapped = True
+                        except Exception:
+                            pass
                     return spec
         finally:
             self._in_progress.discard(fullname)
@@ -2263,7 +2309,8 @@ if not any(isinstance(f, _DroidPySslImportHook) for f in sys.meta_path):
             "  unset PIP_CERT SSL_CERT_FILE REQUESTS_CA_BUNDLE CURL_CA_BUNDLE",
             "fi",
             "if [ -d \\"$prefix/etc/tls/certs\\" ]; then export SSL_CERT_DIR=\\"$prefix/etc/tls/certs\\"; else export SSL_CERT_DIR=\\"\${d}HOME/tmp\\"; fi",
-            "export PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_USER=0 PIP_BREAK_SYSTEM_PACKAGES=1 PIP_NO_CACHE_DIR=1",
+            "export PYTHONUSERBASE=\\"\${pyUserDir.absolutePath}\\"",
+            "export PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_BREAK_SYSTEM_PACKAGES=1 PIP_NO_CACHE_DIR=1",
             "exec \\"\${d}PY_BIN\\" -m pip \\"\${d}@\\""
         ).joinToString("\\n") + "\\n"
         File(wrapperDir, "pip").apply {
@@ -2624,17 +2671,23 @@ def clipboard_set(text):
         val certDir = File(usrDir, "etc/tls/certs")
         val shAbs = listOf(File(usrDir, "bin/sh"), File(usrDir, "bin/dash"), File(usrDir, "bin/bash"))
             .firstOrNull { it.exists() && it.canExecute() }?.absolutePath ?: "/system/bin/sh"
+        val pyUserDir = File(homeDir, "py_user").apply {
+            mkdirs()
+            File(this, "bin").mkdirs()
+            File(this, "lib").mkdirs()
+        }
         val env = mutableMapOf(
             "PREFIX" to usrDir.absolutePath,
             "SHELL" to shAbs,
             "CONFIG_SHELL" to shAbs,
             "CMAKE_SH" to shAbs,
             "PYTHONHOME" to usrDir.absolutePath,
+            "PYTHONUSERBASE" to pyUserDir.absolutePath,
             "PYTHONPATH" to "$droidLib:\${workspaceDir.absolutePath}",
             "HOME" to homeDir.absolutePath,
             "EXTERNAL_STORAGE" to sdcard,
             "SDCARD" to sdcard,
-            "PATH" to "$wrapperBin:$bin:/system/bin",
+            "PATH" to "$wrapperBin:$bin:\${pyUserDir.absolutePath}/bin:/system/bin",
             "LD_LIBRARY_PATH" to lib,
             "TERMINFO" to File(usrDir, "share/terminfo").absolutePath,
             "TMPDIR" to tmpDir,
@@ -2643,7 +2696,6 @@ def clipboard_set(text):
             "XDG_CACHE_HOME" to xdgCacheDir,
             "PIP_CACHE_DIR" to pipCacheDir,
             "PIP_NO_CACHE_DIR" to "1",
-            "PIP_USER" to "0",
             "PIP_BREAK_SYSTEM_PACKAGES" to "1",
             "PIP_DISABLE_PIP_VERSION_CHECK" to "1",
             "PIP_CONFIG_FILE" to File(usrDir, "etc/pip.conf").absolutePath,
@@ -2705,6 +2757,7 @@ def clipboard_set(text):
         val libRoots = listOf(
             File(usrDir, "lib"),
             File(usrDir, "local/lib"),
+            File(homeDir, "py_user/lib"),
             File(homeDir, ".local/lib")
         )
         try {
@@ -2906,24 +2959,53 @@ def clipboard_set(text):
     }
 
     private val corePipSet = setOf("pip", "setuptools", "wheel", "ensurepip", "distlib", "packaging")
+    private val aptDefaultPipSet = setOf("pip", "setuptools", "wheel", "ensurepip", "distlib", "packaging", "lxml")
     private val defaultUserPkgCandidates = setOf("python", "python-pip", "python-lxml", "libxml2", "libxslt", "clang", "ffmpeg", "git", "nodejs", "openssh")
 
-    private fun savePackageBackupSnapshot(pipNames: List<String> = collectInstalledPipNames(), pkgNames: List<String> = collectInstalledPkgNames()) {
+    private fun savePackageBackupSnapshot(
+        pipNames: List<String> = collectInstalledPipNames(),
+        pkgNames: List<String> = collectInstalledPkgNames(),
+        forceShrink: Boolean = false
+    ) {
         try {
-            val userPip = pipNames.filter { it !in corePipSet }
-            val userPkg = pkgNames.filter { it in defaultUserPkgCandidates }
+            val currentUserPip = pipNames.filter { it !in corePipSet }
+            val currentUserPkg = pkgNames.filter { it in defaultUserPkgCandidates }
             val existing = readBackupManifest()
-            // Do not overwrite non-empty backup with empty state when Python was wiped after an unclean reinstall
-            if (userPip.isEmpty() && existing != null && (existing.optJSONArray("pipPackages")?.length() ?: 0) > 0) {
+            val prevPipList = mutableListOf<String>()
+            val prevArrP = existing?.optJSONArray("pipPackages")
+            if (prevArrP != null) {
+                for (i in 0 until prevArrP.length()) {
+                    val v = prevArrP.optString(i, "").trim()
+                    if (v.isNotEmpty()) prevPipList.add(v)
+                }
+            }
+            val prevPkgList = mutableListOf<String>()
+            val prevArrK = existing?.optJSONArray("pkgPackages")
+            if (prevArrK != null) {
+                for (i in 0 until prevArrK.length()) {
+                    val v = prevArrK.optString(i, "").trim()
+                    if (v.isNotEmpty()) prevPkgList.add(v)
+                }
+            }
+            // Prevent baseline APT-only packages (pip + lxml) from overwriting a richer backup snapshot
+            val hasCustomNow = currentUserPip.any { it !in aptDefaultPipSet }
+            val hadCustomBefore = prevPipList.any { it !in aptDefaultPipSet }
+            if (!forceShrink && !hasCustomNow && hadCustomBefore) {
                 return
             }
-            val mergedPkg = if (userPkg.isEmpty() && existing != null && (existing.optJSONArray("pkgPackages")?.length() ?: 0) > 0) {
-                val prevArr = existing.optJSONArray("pkgPackages")!!
-                (0 until prevArr.length()).mapNotNull { prevArr.optString(it, "").takeIf { s -> s.isNotBlank() } }
-            } else userPkg
+            val mergedPip = if (forceShrink) {
+                currentUserPip
+            } else {
+                (prevPipList + currentUserPip).distinct().sorted()
+            }
+            val mergedPkg = if (forceShrink) {
+                currentUserPkg
+            } else {
+                (prevPkgList + currentUserPkg).distinct().sorted()
+            }
             val manifest = JSONObject()
                 .put("updatedAt", System.currentTimeMillis())
-                .put("pipPackages", JSONArray(userPip))
+                .put("pipPackages", JSONArray(mergedPip))
                 .put("pkgPackages", JSONArray(mergedPkg))
             val text = manifest.toString()
             manifestFile.writeText(text, Charsets.UTF_8)
@@ -3635,7 +3717,8 @@ def clipboard_set(text):
             }
         }
         if (code == 0 && isPkgOrPip) {
-            savePackageBackupSnapshot()
+            val isUninstall = command.contains("uninstall") || command.contains("remove") || command.contains("purge")
+            savePackageBackupSnapshot(forceShrink = isUninstall)
         }
         return JSONObject()
             .put("exitCode", code)
@@ -3744,7 +3827,8 @@ def clipboard_set(text):
         val elapsed = System.currentTimeMillis() - t0
         appendNativeLog("Exec", "Stream shell finished: exitCode=$code, durationMs=$elapsed")
         if (code == 0 && isPkgOrPip) {
-            savePackageBackupSnapshot()
+            val isUninstall = command.contains("uninstall") || command.contains("remove") || command.contains("purge")
+            savePackageBackupSnapshot(forceShrink = isUninstall)
         }
         if (code != 0 && outputTail.isNotBlank()) {
             val tailCompact = stripAnsiForLog(outputTail.toString()).trim().takeLast(1200)
