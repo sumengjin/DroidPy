@@ -3688,6 +3688,7 @@ def clipboard_set(text):
                 if (b[2] == 0x00 && b[3] == 0x00) return false
                 if (b[2] == 0x00 && b[3] == 0x02) return false
                 if (b[2] == 0x00 && b[3] == 0x10) return false
+                if (b[2] == 0x00 && b[3] == 0x20) return false
             }
             if (b[0] == 0x20 && b[1] == 0x02) return false
             if (b[0] == 0x3f && b[1] == 0xff) return false
@@ -3749,6 +3750,7 @@ def clipboard_set(text):
                 val sizeLine = readProbeLine(input).substringBefore(';').trim()
                 val chunkSize = sizeLine.toLongOrNull(16)
                     ?: throw IllegalArgumentException("Invalid chunked response")
+                if (chunkSize < 0L) throw IllegalArgumentException("Invalid chunk size")
                 if (chunkSize == 0L) {
                     while (readProbeLine(input).isNotEmpty()) { }
                     break
@@ -3763,7 +3765,14 @@ def clipboard_set(text):
             }
             return output.toByteArray()
         }
-        val lengthHeader = headers["content-length"]?.firstOrNull()
+        if (transferEncoding.isNotBlank() && headers.containsKey("content-length")) {
+            throw IllegalArgumentException("Ambiguous HTTP response framing")
+        }
+        val contentLengths = headers["content-length"]
+        if (contentLengths != null && contentLengths.size != 1) {
+            throw IllegalArgumentException("Ambiguous Content-Length")
+        }
+        val lengthHeader = contentLengths?.firstOrNull()
         if (lengthHeader != null) {
             val length = lengthHeader.toLongOrNull()
                 ?: throw IllegalArgumentException("Invalid Content-Length")
@@ -3789,8 +3798,13 @@ def clipboard_set(text):
         }
         val pinnedAddress = addresses.first()
         val rawSocket = Socket()
-        rawSocket.connect(InetSocketAddress(pinnedAddress, port), 15000)
-        rawSocket.soTimeout = 18000
+        try {
+            rawSocket.connect(InetSocketAddress(pinnedAddress, port), 15000)
+            rawSocket.soTimeout = 18000
+        } catch (error: Exception) {
+            try { rawSocket.close() } catch (_: Exception) {}
+            throw error
+        }
         val activeSocket: Socket = if (url.protocol.equals("https", true)) {
             try {
                 val factory = SSLSocketFactory.getDefault() as SSLSocketFactory
@@ -3815,7 +3829,7 @@ def clipboard_set(text):
             val hostHeader = if (host.contains(":")) "[$host]" else host
             val authority = if ((url.protocol.equals("https", true) && port == 443) ||
                 (url.protocol.equals("http", true) && port == 80)) hostHeader else "$hostHeader:$port"
-            val requestTarget = url.file.ifBlank { "/" }
+            val requestTarget = (url.path.ifBlank { "/" }) + (url.query?.let { "?" + it } ?: "")
             if (requestTarget.contains("\r") || requestTarget.contains("\n")) {
                 throw IllegalArgumentException("Invalid request path")
             }
@@ -3868,7 +3882,7 @@ def clipboard_set(text):
         val userAgent = bodyJson.optString("userAgent", "").ifBlank {
             "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36"
         }
-        if (userAgent.length > 512 || userAgent.contains("\r") || userAgent.contains("\n")) {
+        if (userAgent.length > 512 || userAgent.any { it.code < 32 && it.code != 9 } || userAgent.contains(127.toChar())) {
             throw IllegalArgumentException("Invalid User-Agent header")
         }
         val headers = linkedMapOf(
@@ -3877,7 +3891,7 @@ def clipboard_set(text):
         )
         val cookie = bodyJson.optString("cookieHeader", "").trim()
         if (cookie.isNotEmpty()) {
-            if (cookie.length > 8192 || cookie.contains("\r") || cookie.contains("\n")) {
+            if (cookie.length > 8192 || cookie.any { it.code < 32 && it.code != 9 } || cookie.contains(127.toChar())) {
                 throw IllegalArgumentException("Invalid Cookie header")
             }
             headers["Cookie"] = cookie
@@ -3896,7 +3910,7 @@ def clipboard_set(text):
                 val value = extra.optString(name, "")
                 if (name.isBlank() || name.length > 128 || value.length > 4096 ||
                     !Regex("^[A-Za-z0-9!#$%&'*+.^_|~-]+$").matches(name) ||
-                    value.contains("\r") || value.contains("\n") ||
+                    value.any { it.code < 32 && it.code != 9 } || value.contains(127.toChar()) ||
                     name.lowercase() in forbidden) {
                     throw IllegalArgumentException("Invalid or restricted custom header")
                 }
