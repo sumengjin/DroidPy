@@ -12,7 +12,6 @@ export interface GitHubApkBundleOptions {
   packageId: string;
   includeStoragePermission: boolean;
   files: PythonFile[];
-  bridgeToken: string;
 }
 
 export async function generateGitHubApkProjectZip(opts: GitHubApkBundleOptions): Promise<Blob> {
@@ -21,7 +20,6 @@ export async function generateGitHubApkProjectZip(opts: GitHubApkBundleOptions):
   const safeKotlinTitle = safeTitle.replace(/["\\]/g, '');
   const safePkg = opts.packageId.trim() || 'org.droidpy.app';
   const pkgPath = safePkg.replace(/\./g, '/');
-  const safeToken = opts.bridgeToken.replace(/["'\\]/g, '') || 'droidpy-local';
 
   const appSlug = safeTitle.replace(/\s+/g, '-') || 'DroidPy';
 
@@ -457,6 +455,35 @@ class MainActivity : AppCompatActivity() {
     private var lastBackPressedAt: Long = 0L
     private var exitToast: Toast? = null
     private val stateIoExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private val bridgeToken: String by lazy { loadOrCreateBridgeToken() }
+
+    private fun loadOrCreateBridgeToken(): String {
+        val tokenFile = File(filesDir, "droidpy_bridge_token")
+        val existing = try {
+            tokenFile.readText(Charsets.US_ASCII).trim()
+        } catch (_: Exception) {
+            ""
+        }
+        if (Regex("^[a-fA-F0-9]{64}$").matches(existing)) {
+            return existing.lowercase()
+        }
+
+        val randomBytes = ByteArray(32)
+        java.security.SecureRandom().nextBytes(randomBytes)
+        val token = randomBytes.joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+        val tempFile = File(filesDir, "droidpy_bridge_token.tmp")
+        try {
+            tempFile.writeText(token, Charsets.US_ASCII)
+            if (!tempFile.renameTo(tokenFile)) {
+                tokenFile.writeText(token, Charsets.US_ASCII)
+                tempFile.delete()
+            }
+        } catch (error: Exception) {
+            tempFile.delete()
+            throw IllegalStateException("Unable to persist the per-install DroidPy bridge token", error)
+        }
+        return token
+    }
 
     private val mobileUaString =
         "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
@@ -491,6 +518,9 @@ class MainActivity : AppCompatActivity() {
     inner class NativeDownloadBridge {
         @JavascriptInterface
         fun isNativeApp(): Boolean = true
+
+        @JavascriptInterface
+        fun getBridgeToken(): String = bridgeToken
 
         @JavascriptInterface
         fun getAppVersionName(): String {
@@ -663,12 +693,20 @@ class MainActivity : AppCompatActivity() {
                 }
                 if (hasStoragePermission()) {
                     try {
+                        // The shared-storage recovery copy must not contain the per-install bridge credential.
+                        val backupJson = try {
+                            JSONObject(json).apply {
+                                optJSONObject("termuxConfig")?.put("token", "")
+                            }.toString()
+                        } catch (_: Exception) {
+                            json
+                        }
                         val backupDir = File(Environment.getExternalStorageDirectory(), "DroidPy/.droidpy_backup").apply { mkdirs() }
                         val backup = File(backupDir, "droidpy_ide_state.json")
                         val backupTmp = File(backupDir, "droidpy_ide_state.json.tmp")
-                        backupTmp.writeText(json, Charsets.UTF_8)
+                        backupTmp.writeText(backupJson, Charsets.UTF_8)
                         if (!backupTmp.renameTo(backup)) {
-                            backup.writeText(json, Charsets.UTF_8)
+                            backup.writeText(backupJson, Charsets.UTF_8)
                             backupTmp.delete()
                         }
                     } catch (_: Exception) {
@@ -1072,6 +1110,12 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {
             false
         }
+        val remoteUrl = "${typeof window !== 'undefined' ? window.location.origin : 'https://localhost'}"
+        val bridgeAllowedOrigin = when {
+            hasBundledWww -> normalizedOrigin(Uri.parse("http://127.0.0.1:8765/")) ?: "http://127.0.0.1:8765"
+            localWeb.exists() -> "null"
+            else -> normalizedOrigin(Uri.parse(remoteUrl)) ?: "null"
+        }
 
         thread {
             val usrDir = File(filesDir, "usr")
@@ -1165,7 +1209,8 @@ class MainActivity : AppCompatActivity() {
                 appContext = applicationContext,
                 usrDir = usrDir,
                 workspaceDir = workspaceDir,
-                token = "${safeToken}",
+                token = bridgeToken,
+                allowedOrigin = bridgeAllowedOrigin,
                 assetManager = assets
             ).also { it.start() }
 
@@ -1179,7 +1224,6 @@ class MainActivity : AppCompatActivity() {
                     trustedLocalWebPath = localWeb.canonicalPath
                     webView.loadUrl("file://" + localWeb.absolutePath)
                 } else {
-                    val remoteUrl = "${typeof window !== 'undefined' ? window.location.origin : 'https://localhost'}"
                     trustedAppOrigin = normalizedOrigin(Uri.parse(remoteUrl))
                     trustedLocalWebPath = null
                     webView.loadUrl(remoteUrl)
@@ -1523,6 +1567,7 @@ class EmbeddedTermuxBridge(
     private val usrDir: File,
     private val workspaceDir: File,
     private val token: String,
+    private val allowedOrigin: String,
     private val port: Int = 8765,
     private val assetManager: AssetManager? = null
 ) {
@@ -3103,6 +3148,7 @@ def clipboard_set(text):
 
     private fun handleClient(socket: Socket) {
         socket.use { sock ->
+            sock.soTimeout = 15000
             val bis = BufferedInputStream(sock.getInputStream())
             val headerBuf = ByteArrayOutputStream()
             var p3 = 0
@@ -3137,8 +3183,19 @@ def clipboard_set(text):
             }
 
             val out = sock.getOutputStream()
+            val requestHost = headers["host"]?.lowercase()
+            if (requestHost != "127.0.0.1:$port" && requestHost != "localhost:$port") {
+                writeJson(out, 403, JSONObject().put("error", "Untrusted Host"))
+                return
+            }
+            val requestOrigin = headers["origin"]
+            if (requestOrigin != null && requestOrigin != allowedOrigin) {
+                writeJson(out, 403, JSONObject().put("error", "Untrusted Origin"))
+                return
+            }
             if (method == "OPTIONS") {
-                writeHeaders(out, 204, "text/plain", 0)
+                val allowPrivateNetwork = headers["access-control-request-private-network"].equals("true", ignoreCase = true)
+                writeHeaders(out, 204, "text/plain", 0, allowPrivateNetwork)
                 return
             }
 
@@ -3176,7 +3233,11 @@ def clipboard_set(text):
                 return
             }
 
-            val len = headers["content-length"]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+            val len = (headers["content-length"] ?: "0").toIntOrNull()
+            if (len == null || len < 0 || len > 8 * 1024 * 1024) {
+                writeJson(out, 413, JSONObject().put("error", "Invalid or oversized request body"))
+                return
+            }
             val bodyBytes = ByteArray(len)
             var readTotal = 0
             while (readTotal < len) {
@@ -3908,11 +3969,14 @@ def clipboard_set(text):
         }
     }
 
-    private fun corsHeaders(): String =
-        "Access-Control-Allow-Origin: *\\r\\n" +
-        "Access-Control-Allow-Private-Network: true\\r\\n" +
-        "Access-Control-Allow-Methods: GET, POST, OPTIONS\\r\\n" +
-        "Access-Control-Allow-Headers: Content-Type, X-DroidPy-Token\\r\\n"
+    private fun corsHeaders(allowPrivateNetwork: Boolean = false): String {
+        val pnaHeader = if (allowPrivateNetwork) "Access-Control-Allow-Private-Network: true\\r\\n" else ""
+        return "Access-Control-Allow-Origin: $allowedOrigin\\r\\n" +
+            "Vary: Origin\\r\\n" +
+            pnaHeader +
+            "Access-Control-Allow-Methods: GET, POST, OPTIONS\\r\\n" +
+            "Access-Control-Allow-Headers: Content-Type, X-DroidPy-Token\\r\\n"
+    }
 
     private fun serveBundledWebAsset(out: OutputStream, requestPath: String): Boolean {
         val mgr = assetManager ?: return false
@@ -3969,10 +4033,16 @@ def clipboard_set(text):
         else -> "OK"
     }
 
-    private fun writeHeaders(out: OutputStream, status: Int, contentType: String, length: Int) {
+    private fun writeHeaders(
+        out: OutputStream,
+        status: Int,
+        contentType: String,
+        length: Int,
+        allowPrivateNetwork: Boolean = false
+    ) {
         out.write((
             "HTTP/1.1 $status \${statusReason(status)}\\r\\n" +
-            corsHeaders() +
+            corsHeaders(allowPrivateNetwork) +
             "Content-Type: $contentType\\r\\n" +
             "Content-Length: $length\\r\\n" +
             "Connection: close\\r\\n\\r\\n"
