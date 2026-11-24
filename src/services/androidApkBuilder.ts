@@ -3676,6 +3676,9 @@ def clipboard_set(text):
             if (a0 == 172 && a1 in 16..31) return false
             if (a0 == 192 && (a1 == 0 || a1 == 2 || a1 == 168)) return false
             if (a0 == 192 && a1 == 88 && a2 == 99) return false
+            if (a0 == 192 && a1 == 31 && a2 == 196) return false
+            if (a0 == 192 && a1 == 52 && a2 == 193) return false
+            if (a0 == 192 && a1 == 175 && a2 == 48) return false
             if (a0 == 198 && a1 in 18..19) return false
             if (a0 == 198 && a1 == 51 && a2 == 100) return false
             if (a0 == 203 && a1 == 0 && a2 == 113) return false
@@ -3685,7 +3688,7 @@ def clipboard_set(text):
             if ((b[0] and 0xe0) != 0x20) return false
             if (b[0] == 0x20 && b[1] == 0x01) {
                 if (b[2] == 0x0d && b[3] == 0xb8) return false
-                if (b[2] == 0x00 && b[3] == 0x00) return false
+                if (b[2] == 0x00 && b[3] <= 0x01) return false
                 if (b[2] == 0x00 && b[3] == 0x02) return false
                 if (b[2] == 0x00 && b[3] == 0x10) return false
                 if (b[2] == 0x00 && b[3] == 0x20) return false
