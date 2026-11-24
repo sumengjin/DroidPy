@@ -6,7 +6,6 @@ import {
   ANDROID_ICON_FOREGROUND_XML,
   ANDROID_MIPMAP_PNG_BASE64,
 } from './androidIconAssets';
-import { ANDROID_SHARED_KEYSTORE_BASE64 } from './androidSigningAsset';
 
 export interface GitHubApkBundleOptions {
   appTitle: string;
@@ -3957,7 +3956,7 @@ def clipboard_set(text):
   );
 
   // 6. Launcher icon resources & deterministic APK signing keystore
-  zip.file('android/app/droidpy-debug.p12', ANDROID_SHARED_KEYSTORE_BASE64, { base64: true });
+  // Never include a private signing key in exported Android projects.
   zip.file('android/app/src/main/res/drawable/ic_launcher_background.xml', ANDROID_ICON_BACKGROUND_XML);
   zip.file('android/app/src/main/res/drawable/ic_launcher_foreground.xml', ANDROID_ICON_FOREGROUND_XML);
   zip.file('android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml', ANDROID_ADAPTIVE_ICON_XML);
