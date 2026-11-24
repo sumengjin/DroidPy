@@ -15,7 +15,7 @@ on:
         default: ""
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test:
@@ -68,7 +68,9 @@ jobs:
   build-apk:
     name: 打包 Android APK (ARM64)
     needs: test
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'pull_request' || github.event_name == 'push' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     outputs:
       release_tag: ${{ steps.resolve_tag.outputs.release_tag }}
@@ -180,7 +182,10 @@ jobs:
           echo "DROIDPY_RESOLVED_TAG=${REL_TAG}" >> "$GITHUB_ENV"
           echo "Resolved Release=${REL_TAG}, versionCode=${VCODE}, versionName=${VNAME}"
 
-          if [ -n "$CUSTOM_KS_B64" ]; then
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ] || { [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -z "$INPUT_TAG" ]; }; then
+            rm -f android/app/droidpy-custom.keystore android/app/droidpy-debug.p12
+            echo "PR/manual debug build uses Gradle ephemeral debug signer; no production key is loaded."
+          elif [ -n "$CUSTOM_KS_B64" ]; then
             if [ -z "$CUSTOM_STORE_PASS" ] || [ -z "$CUSTOM_KEY_ALIAS" ] || [ -z "$CUSTOM_KEY_PASS" ]; then
               echo "::error::自訂簽名金鑰已設定，但 DROIDPY_STORE_PASSWORD、DROIDPY_KEY_ALIAS 或 DROIDPY_KEY_PASSWORD 缺少必要值。"
               exit 1
@@ -190,15 +195,10 @@ jobs:
             printf 'DROIDPY_STORE_PASSWORD=%s\n' "$CUSTOM_STORE_PASS" >> "$GITHUB_ENV"
             printf 'DROIDPY_KEY_ALIAS=%s\n' "$CUSTOM_KEY_ALIAS" >> "$GITHUB_ENV"
             printf 'DROIDPY_KEY_PASSWORD=%s\n' "$CUSTOM_KEY_PASS" >> "$GITHUB_ENV"
-            echo "使用 GitHub Secrets 自訂簽名金鑰 (droidpy-custom.keystore)"
+            echo "使用受保護的 GitHub Actions signing secrets"
           else
-            if [ ! -f "android/app/droidpy-debug.p12" ] && [ -f "signing/droidpy-debug.p12" ]; then
-              cp signing/droidpy-debug.p12 android/app/droidpy-debug.p12
-            fi
-            mkdir -p ~/.android
-            cp android/app/droidpy-debug.p12 ~/.android/debug.keystore
-            echo "DROIDPY_KEYSTORE_FILE=droidpy-debug.p12" >> "$GITHUB_ENV"
-            echo "使用固定 DroidPy 一致性簽名金鑰 (SHA-256: 29:C5:49:F0:2A:B1:78:1D:...)"
+            echo "::error::正式 Release 必須設定受保護的 DROIDPY_KEYSTORE_BASE64、DROIDPY_STORE_PASSWORD、DROIDPY_KEY_ALIAS 與 DROIDPY_KEY_PASSWORD。拒絕使用公開原始碼中的私鑰 fallback。"
+            exit 1
           fi
 
       - name: 編譯 Debug APK (arm64-v8a)
@@ -211,6 +211,7 @@ jobs:
         run: gradle assembleRelease --no-daemon
 
       - name: 強制驗證 APK 簽名與原憑證指紋
+        if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.release_tag != '')
         env:
           INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
@@ -256,13 +257,20 @@ jobs:
           INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           mkdir -p release-apk
-          REL_TAG="${DROIDPY_RESOLVED_TAG}"
-          SAFE_TAG="${REL_TAG//\//-}"
-          ART_NAME="DroidPy-arm64-apk-${SAFE_TAG}-r${GITHUB_RUN_NUMBER}-a${GITHUB_RUN_ATTEMPT:-1}"
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -z "$INPUT_RELEASE_TAG" ]; then
-            cp android/app/build/outputs/apk/debug/*.apk "release-apk/DroidPy-arm64-${SAFE_TAG}.apk"
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            REL_TAG="pr-${GITHUB_RUN_NUMBER}"
+            SAFE_TAG="$REL_TAG"
+            ART_NAME="DroidPy-arm64-debug-pr-${GITHUB_RUN_NUMBER}-a${GITHUB_RUN_ATTEMPT:-1}"
+            cp android/app/build/outputs/apk/debug/*.apk "release-apk/DroidPy-arm64-debug-pr-${GITHUB_RUN_NUMBER}.apk"
           else
-            cp android/app/build/outputs/apk/release/*.apk "release-apk/DroidPy-arm64-${SAFE_TAG}.apk"
+            REL_TAG="${DROIDPY_RESOLVED_TAG}"
+            SAFE_TAG="${REL_TAG//\//-}"
+            ART_NAME="DroidPy-arm64-apk-${SAFE_TAG}-r${GITHUB_RUN_NUMBER}-a${GITHUB_RUN_ATTEMPT:-1}"
+            if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -z "$INPUT_RELEASE_TAG" ]; then
+              cp android/app/build/outputs/apk/debug/*.apk "release-apk/DroidPy-arm64-${SAFE_TAG}.apk"
+            else
+              cp android/app/build/outputs/apk/release/*.apk "release-apk/DroidPy-arm64-${SAFE_TAG}.apk"
+            fi
           fi
           echo "release_tag=${REL_TAG}" >> "$GITHUB_OUTPUT"
           echo "safe_tag=${SAFE_TAG}" >> "$GITHUB_OUTPUT"
@@ -279,6 +287,8 @@ jobs:
   release:
     name: 建立 GitHub Release（保留歷史版本 APK）
     needs: build-apk
+    permissions:
+      contents: write
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
