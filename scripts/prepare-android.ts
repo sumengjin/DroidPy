@@ -19,7 +19,6 @@ async function main() {
     packageId: 'org.droidpy.app',
     includeStoragePermission: true,
     files: DEFAULT_FILES,
-    bridgeToken: 'droidpy-local',
   });
 
   const buffer = Buffer.from(await blob.arrayBuffer());
