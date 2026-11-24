@@ -3835,18 +3835,18 @@ def clipboard_set(text):
                     val authority = if ((url.protocol.equals("https", true) && port == 443) ||
                         (url.protocol.equals("http", true) && port == 80)) hostHeader else "$hostHeader:$port"
                     val requestTarget = (url.path.ifBlank { "/" }) + (url.query?.let { "?" + it } ?: "")
-                    if (requestTarget.contains("\r") || requestTarget.contains("\n")) {
+                    if (requestTarget.contains("\\r") || requestTarget.contains("\\n")) {
                         throw IllegalArgumentException("Invalid request path")
                     }
                     val request = StringBuilder()
-                        .append("GET ").append(requestTarget).append(" HTTP/1.1\r\n")
-                        .append("Host: ").append(authority).append("\r\n")
-                        .append("Connection: close\r\n")
-                        .append("Accept-Encoding: identity\r\n")
+                        .append("GET ").append(requestTarget).append(" HTTP/1.1\\r\\n")
+                        .append("Host: ").append(authority).append("\\r\\n")
+                        .append("Connection: close\\r\\n")
+                        .append("Accept-Encoding: identity\\r\\n")
                     for ((name, value) in requestHeaders) {
-                        request.append(name).append(": ").append(value).append("\r\n")
+                        request.append(name).append(": ").append(value).append("\\r\\n")
                     }
-                    request.append("\r\n")
+                    request.append("\\r\\n")
                     socket.getOutputStream().write(request.toString().toByteArray(Charsets.ISO_8859_1))
                     socket.getOutputStream().flush()
 
@@ -3960,7 +3960,7 @@ def clipboard_set(text):
                 }
             }
             val titleMatch = Regex("<title[^>]*>(.*?)</title>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)).find(bodyText)
-            val title = titleMatch?.groupValues?.getOrNull(1)?.replace(Regex("\\s+"), " ")?.trim() ?: ""
+            val title = titleMatch?.groupValues?.getOrNull(1)?.replace(Regex("\\\\s+"), " ")?.trim() ?: ""
             return JSONObject()
                 .put("ok", response.statusCode in 200..399)
                 .put("url", targetUrl)
