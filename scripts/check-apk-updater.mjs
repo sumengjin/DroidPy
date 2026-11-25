@@ -7,6 +7,16 @@ const end = source.indexOf('@JavascriptInterface\n        fun readPersistedState
 assert.ok(start >= 0 && end > start, 'native APK updater source must exist');
 const updater = source.slice(start, end);
 
+// First-update permission flow must persist the verified APK while Settings is open,
+// then resume installation from onResume after the user grants the per-app permission.
+assert.ok(source.includes('private fun installVerifiedApkOrRequestPermission(apkFile: File)'));
+assert.ok(source.includes('Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES'));
+assert.ok(source.includes('Uri.parse("package:\\$packageName")'));
+assert.ok(source.includes('updatePrefs.edit().putString(pendingInstallKey, apkFile.absolutePath).apply()'));
+assert.ok(source.includes('override fun onResume()'));
+assert.ok(source.includes('packageManager.canRequestPackageInstalls()'));
+assert.ok(source.includes('installVerifiedApkOrRequestPermission(File(pendingPath))'));
+
 // Redirects must remain HTTPS and on the official GitHub asset delivery hosts.
 assert.ok(updater.includes('fun validateGithubAssetUrl(raw: String): URL'));
 assert.ok(source.includes('import java.net.URL\nimport javax.net.ssl.HttpsURLConnection'));
