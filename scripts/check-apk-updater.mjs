@@ -26,7 +26,7 @@ assert.ok(source.includes('applicationInfo.targetSdkVersion >= Build.VERSION_COD
 assert.ok(source.includes('val requiresAllFilesAccess = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&'));
 assert.ok(source.includes('appContext.applicationInfo.targetSdkVersion >= Build.VERSION_CODES.R'), 'Bridge storage checks must honor the app target SDK');
 const nativeStorageCheckStart = source.indexOf('fun hasStoragePermission(): Boolean {');
-const nativeStorageCheckEnd = source.indexOf('@JavascriptInterface\\n        fun requestStoragePermission()', nativeStorageCheckStart);
+const nativeStorageCheckEnd = source.indexOf('fun requestStoragePermission()', nativeStorageCheckStart);
 assert.ok(nativeStorageCheckStart >= 0 && nativeStorageCheckEnd > nativeStorageCheckStart);
 assert.ok(source.slice(nativeStorageCheckStart, nativeStorageCheckEnd).includes('val requiresAllFilesAccess'), 'NativeDownloadBridge must honor target SDK when checking storage access');
 assert.ok(source.includes('val manageAll = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && appContext.applicationInfo.targetSdkVersion >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()'));
