@@ -2511,7 +2511,7 @@ class EmbeddedTermuxBridge(
                 File(fallbackMetadata, "INSTALLER").writeText("DroidPy\\n", Charsets.UTF_8)
             }
         } catch (error: Exception) {
-            appendStartupLog("Packages", "Pure-Python Frostwork fallback seed warning: \${error.message}")
+            android.util.Log.w("DroidPy", "Pure-Python Frostwork fallback seed warning: " + error.message, error)
         }
         val pipConfDir = File(homeDir, ".config/pip").apply { mkdirs() }
         val sysPipConf = File(usrDir, "etc/pip.conf")
