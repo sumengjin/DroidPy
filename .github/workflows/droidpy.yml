@@ -166,7 +166,9 @@ jobs:
                 exit 1
               fi
             done
-            if ! printf '%s' "$CUSTOM_KS_B64" | base64 --decode > android/app/droidpy-release.keystore 2>/dev/null; then
+            # Normalize pasted line breaks/spaces before decoding the one-line Base64 file.
+            CUSTOM_KS_B64_CLEAN=$(printf '%s' "$CUSTOM_KS_B64" | tr -d '[:space:]')
+            if ! printf '%s' "$CUSTOM_KS_B64_CLEAN" | base64 --decode > android/app/droidpy-release.keystore 2>base64-error.txt; then
               echo "::error::DROIDPY_KEYSTORE_BASE64 無法解碼；請將 DROIDPY_KEYSTORE_BASE64.txt 全文原樣填入，不要加引號或其他文字。"
               exit 1
             fi
@@ -174,13 +176,16 @@ jobs:
               echo "::error::解碼後的金鑰庫是空檔案，請重新確認 DROIDPY_KEYSTORE_BASE64。"
               exit 1
             fi
+            KEYSTORE_BYTES=$(wc -c < android/app/droidpy-release.keystore | tr -d ' ')
+            echo "已解碼正式簽名金鑰庫：${KEYSTORE_BYTES} bytes（不輸出任何 Secret）"
             if ! keytool -list -keystore android/app/droidpy-release.keystore -storepass "$CUSTOM_STORE_PASS" -alias "$CUSTOM_KEY_ALIAS" >/dev/null 2>keytool-list-error.txt; then
-              if grep -Eqi 'password was incorrect|keystore was tampered|failed to decrypt' keytool-list-error.txt; then
+              if grep -Eqi 'password was incorrect|keystore was tampered|failed to decrypt|keystore password.*incorrect' keytool-list-error.txt; then
                 echo "::error::金鑰庫密碼驗證失敗：請確認 DROIDPY_STORE_PASSWORD。"
               elif grep -Eqi 'alias .* does not exist|does not contain alias|alias .* not found' keytool-list-error.txt; then
                 echo "::error::找不到指定金鑰別名：請確認 DROIDPY_KEY_ALIAS 是否為 droidpy-release。"
               else
-                echo "::error::無法讀取 PKCS12 金鑰庫；請確認 DROIDPY_KEYSTORE_BASE64 是完整的 .p12 Base64 內容，且 DROIDPY_STORE_PASSWORD 正確。"
+                echo "::error::PKCS12 金鑰庫載入失敗，以下為 keytool 診斷（不含密碼）："
+                sed -n '1,8p' keytool-list-error.txt
               fi
               exit 1
             fi
@@ -190,11 +195,18 @@ jobs:
             printf 'DROIDPY_KEY_PASSWORD=%s\n' "$CUSTOM_KEY_PASS" >> "$GITHUB_ENV"
             set -o pipefail
             if ! KEYSTORE_SHA256=$(keytool -exportcert -keystore android/app/droidpy-release.keystore -storepass "$CUSTOM_STORE_PASS" -alias "$CUSTOM_KEY_ALIAS" 2>keytool-export-error.txt | sha256sum | awk '{print toupper($1)}') || [ -z "$KEYSTORE_SHA256" ]; then
-              echo "::error::無法從金鑰庫匯出憑證指紋；請確認金鑰庫密碼與別名。"
+              echo "::error::無法從金鑰庫匯出憑證指紋；keytool 診斷如下："
+              sed -n '1,8p' keytool-export-error.txt
+              exit 1
+            fi
+            EXPECTED_RELEASE_CERT_SHA256="353F581792A659420EAF1E8EC278E7F5F78C8B13F767EA0A9E3DDEA682AEB818"
+            if [ "$KEYSTORE_SHA256" != "$EXPECTED_RELEASE_CERT_SHA256" ]; then
+              echo "::error::載入的 keystore 憑證指紋與預期的新 DroidPy 金鑰不符；請確認 Base64 Secret 來自正確的 DROIDPY_KEYSTORE_BASE64.txt。"
+              echo "::error::實際指紋：$KEYSTORE_SHA256"
               exit 1
             fi
             echo "DROIDPY_EXPECTED_CERT_SHA256=$KEYSTORE_SHA256" >> "$GITHUB_ENV"
-            echo "已載入新的 DroidPy Release 憑證：$KEYSTORE_SHA256"
+            echo "已驗證新的 DroidPy Release 憑證：$KEYSTORE_SHA256"
           else
             echo "PR／非正式建置使用 GitHub Actions 臨時 Debug 簽名；不需要正式發布金鑰。"
           fi
