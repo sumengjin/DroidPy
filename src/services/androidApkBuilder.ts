@@ -1566,43 +1566,41 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun requestExternalStoragePermissionIfNeeded(force: Boolean = false) {
-        val permsToAsk = mutableListOf<String>()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            listOf(
-                Manifest.permission.READ_MEDIA_IMAGES,
-                Manifest.permission.READ_MEDIA_VIDEO,
-                Manifest.permission.READ_MEDIA_AUDIO
-            ).forEach { perm ->
-                if (ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) {
-                    permsToAsk.add(perm)
-                }
+        // Android 11+ uses the dedicated all-files-access settings flow.
+        // Do not launch a legacy runtime permission dialog at the same time:
+        // concurrent permission UI can race Activity transitions on Android 11.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (Environment.isExternalStorageManager()) {
+                appendActivityLog("StoragePermission", "All-files access already granted")
+                return
             }
-        } else {
-            listOf(
-                Manifest.permission.READ_EXTERNAL_STORAGE,
-                Manifest.permission.WRITE_EXTERNAL_STORAGE
-            ).forEach { perm ->
-                if (ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) {
-                    permsToAsk.add(perm)
-                }
-            }
-        }
-        if (permsToAsk.isNotEmpty()) {
-            ActivityCompat.requestPermissions(this, permsToAsk.toTypedArray(), 1001)
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
             try {
                 val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
                     data = Uri.parse("package:\$packageName")
                 }
+                appendActivityLog("StoragePermission", "Opening app-specific all-files access settings")
                 startActivity(intent)
-            } catch (_: Exception) {
+            } catch (error: Exception) {
+                appendActivityLog("StoragePermission", "App-specific settings unavailable: " + error.message)
                 try {
                     startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
-                } catch (_: Exception) {
+                } catch (fallbackError: Exception) {
+                    appendActivityLog("StoragePermission", "Fallback settings unavailable: " + fallbackError.message)
+                    Toast.makeText(this, "無法開啟所有檔案存取權設定：" + fallbackError.message, Toast.LENGTH_LONG).show()
                 }
             }
+            return
+        }
+
+        // Android 10 and earlier retain the legacy runtime storage permissions.
+        val permsToAsk = listOf(
+            Manifest.permission.READ_EXTERNAL_STORAGE,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
+        ).filter { perm ->
+            ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED
+        }
+        if (permsToAsk.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, permsToAsk.toTypedArray(), 1001)
         }
     }
 
