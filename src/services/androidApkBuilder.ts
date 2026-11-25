@@ -4249,15 +4249,16 @@ import subprocess
 import sys
 import tarfile
 import tempfile
-import urllib.request
+import urllib.parse
 
 with tempfile.TemporaryDirectory(prefix="droidpy-sklearn-") as tmp:
     root = pathlib.Path(tmp)
-    with urllib.request.urlopen("https://pypi.org/pypi/scikit-learn/json", timeout=30) as response:
-        metadata = json.load(response)
+    metadata = json.loads(subprocess.check_output(["curl", "-fsSL", "https://pypi.org/pypi/scikit-learn/json"], text=True))
     sdist = next(item for item in metadata["urls"] if item["packagetype"] == "sdist")
     archive = root / "scikit-learn-sdist.tar.gz"
-    urllib.request.urlretrieve(sdist["url"], archive)
+    if urllib.parse.urlparse(sdist["url"]).hostname != "files.pythonhosted.org":
+        raise RuntimeError("Unexpected scikit-learn sdist host")
+    subprocess.check_call(["curl", "-fL", sdist["url"], "-o", str(archive)])
     source_root = root / "source"
     source_root.mkdir()
     with tarfile.open(archive, "r:*") as package:
@@ -4272,7 +4273,7 @@ with tempfile.TemporaryDirectory(prefix="droidpy-sklearn-") as tmp:
         "--no-build-isolation", "--no-deps", str(source)
     ])
 """.trimIndent())
-                                "pkg install -y python-numpy python-scipy ninja && $pythonCmd -m pip install --no-cache-dir $trustArgs --prefer-binary 'meson-python>=0.17.1,<0.20' 'cython>=3.1.2,<3.2.6' 'joblib>=1.4.0' 'narwhals>=2.0.1' 'threadpoolctl>=3.5.0' && $pythonCmd \"$installerScript\""
+                                "pkg install -y python-numpy python-scipy ninja curl && $pythonCmd -m pip install --no-cache-dir $trustArgs --prefer-binary 'meson-python>=0.17.1,<0.20' 'cython>=3.1.2,<3.2.6' 'joblib>=1.4.0' 'narwhals>=2.0.1' 'threadpoolctl>=3.5.0' && $pythonCmd \"$installerScript\""
                             } else if (trustedHost) {
                                 "$pythonCmd -m pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org $target"
                             } else {
