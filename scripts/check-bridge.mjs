@@ -104,6 +104,8 @@ assert.ok(androidBuilder.includes('"/pause"'));
 assert.ok(androidBuilder.includes('"/resume"'));
 assert.ok(androidBuilder.includes('android.os.Process.sendSignal(pid, signal)'));
 assert.ok(androidBuilder.includes('private fun normalizeShellCommand(command: String): String'));
+assert.ok(androidBuilder.includes('val normalizedCommand = normalizeShellCommand(command)'));
+assert.ok(androidBuilder.includes('ProcessBuilder(shFile.absolutePath, "-c", normalizedCommand)'));
 assert.ok(androidBuilder.includes('"pandas" to "python-pandas"'));
 assert.ok(androidBuilder.includes('"numpy" to "python-numpy"'));
 assert.ok(androidBuilder.includes('"scipy" to "python-scipy"'));
@@ -165,6 +167,7 @@ assert.ok(termuxBridgeSource.includes('pkg install -y python-lxml && '));
 assert.ok(termuxBridgeSource.includes('shlex.join(_build_pip_cmd(["w3lib<2.6", "parsel"]'));
 assert.ok(termuxBridgeSource.includes('pkg install -y python-scipy'));
 assert.ok(termuxBridgeSource.includes('normalized_cmd = _normalize_shell_command(cmd_str)'));
+assert.ok(termuxBridgeSource.includes('python|python3)\\\\s+-m\\\\s+)?pip3?\\\\s+install\\\\s+scipy'));
 
 assert.ok(!termuxBridgeSource.includes("  abortActiveTermuxStream();\n  const controller = new AbortController();"));
 const abortHelperStart = termuxBridgeSource.indexOf('export function abortActiveTermuxStream(): void {');
