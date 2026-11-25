@@ -68,6 +68,18 @@ assert.ok(generated.includes('"pandas": "python-pandas"'));
 assert.ok(generated.includes('"numpy": "python-numpy"'));
 assert.ok(generated.includes('"matplotlib": "matplotlib"'));
 assert.ok(generated.includes('"cryptography": "python-cryptography"'));
+assert.ok(generated.includes('apsw: "python-apsw"'));
+assert.ok(generated.includes('bcrypt: "python-bcrypt"'));
+assert.ok(generated.includes('brotli: "python-brotli"'));
+assert.ok(generated.includes('grpcio: "python-grpcio"'));
+assert.ok(generated.includes('msgpack: "python-msgpack"'));
+assert.ok(generated.includes('psutil: "python-psutil"'));
+assert.ok(generated.includes('pycryptodomex: "python-pycryptodomex"'));
+assert.ok(generated.includes('tflite-runtime: "python-tflite-runtime"'));
+assert.ok(generated.includes('torch: "python-torch"'));
+assert.ok(generated.includes('torchaudio: "python-torchaudio"'));
+assert.ok(generated.includes('torchvision: "python-torchvision"'));
+assert.ok(generated.includes('yt-dlp: "python-yt-dlp"'));
 assert.ok(generated.includes('shlex.quote("DroidPy: no verified Termux ARM64 / Python 3.14 prebuilt scikit-learn package is available; on-device source builds are disabled.")'));
 assert.ok(generated.includes('_compatibility_install_command(pkgs[0], trusted_host=trusted_host)'));
 
@@ -163,6 +175,18 @@ assert.ok(androidBuilder.includes('resolvePackageCompatibilityCommand(packageMat
 
 assert.ok(androidBuilder.includes('"polars" to "python-polars"'));
 assert.ok(androidBuilder.includes('"matplotlib" to "matplotlib"'));
+assert.ok(androidBuilder.includes('"apsw" to "python-apsw"'));
+assert.ok(androidBuilder.includes('"bcrypt" to "python-bcrypt"'));
+assert.ok(androidBuilder.includes('"brotli" to "python-brotli"'));
+assert.ok(androidBuilder.includes('"grpcio" to "python-grpcio"'));
+assert.ok(androidBuilder.includes('"msgpack" to "python-msgpack"'));
+assert.ok(androidBuilder.includes('"psutil" to "python-psutil"'));
+assert.ok(androidBuilder.includes('"pycryptodomex" to "python-pycryptodomex"'));
+assert.ok(androidBuilder.includes('"tflite-runtime" to "python-tflite-runtime"'));
+assert.ok(androidBuilder.includes('"torch" to "python-torch"'));
+assert.ok(androidBuilder.includes('"torchaudio" to "python-torchaudio"'));
+assert.ok(androidBuilder.includes('"torchvision" to "python-torchvision"'));
+assert.ok(androidBuilder.includes('"yt-dlp" to "python-yt-dlp"'));
 assert.ok(androidBuilder.includes('nativeTermuxPackageForPip(name)'));
 assert.ok(androidBuilder.includes('val pipInstall = Regex('));
 assert.ok(androidBuilder.includes('val packageMatch = pipInstall.find(command)'));
@@ -380,6 +404,18 @@ const cases = [
   ['pip', 'lxml', 'pkg', 'python-lxml'],
   ['pip', 'cryptography', 'pkg', 'python-cryptography'],
   ['pip', 'matplotlib', 'pkg', 'matplotlib'],
+  ['pip', 'apsw', 'pkg', 'python-apsw'],
+  ['pip', 'bcrypt', 'pkg', 'python-bcrypt'],
+  ['pip', 'brotli', 'pkg', 'python-brotli'],
+  ['pip', 'grpcio', 'pkg', 'python-grpcio'],
+  ['pip', 'msgpack', 'pkg', 'python-msgpack'],
+  ['pip', 'psutil', 'pkg', 'python-psutil'],
+  ['pip', 'pycryptodomex', 'pkg', 'python-pycryptodomex'],
+  ['pip', 'tflite-runtime', 'pkg', 'python-tflite-runtime'],
+  ['pip', 'torch', 'pkg', 'python-torch'],
+  ['pip', 'torchaudio', 'pkg', 'python-torchaudio'],
+  ['pip', 'torchvision', 'pkg', 'python-torchvision'],
+  ['pip', 'yt-dlp', 'pkg', 'python-yt-dlp'],
   ['pkg', 'matplotlib', 'pkg', 'matplotlib'],
   ['pkg', 'numpy', 'pkg', 'python-numpy'],
   ['pkg', './dist/library.tar.gz', 'pip', './dist/library.tar.gz'],
