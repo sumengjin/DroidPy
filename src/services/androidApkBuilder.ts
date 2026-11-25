@@ -907,9 +907,19 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun openCrawlerBrowser(url: String, desktopUa: Boolean) {
             runOnUiThread {
+                val candidate = url.trim().let {
+                    if (it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true)) it
+                    else "https://$it"
+                }
+                val parsed = Uri.parse(candidate)
+                val scheme = parsed.scheme?.lowercase()
+                if ((scheme != "http" && scheme != "https") || parsed.host.isNullOrBlank() || !parsed.userInfo.isNullOrBlank()) {
+                    Toast.makeText(this@MainActivity, "網址無效；僅允許 HTTP 或 HTTPS 網址", Toast.LENGTH_SHORT).show()
+                    return@runOnUiThread
+                }
                 crawlerDesktopUa = desktopUa
                 applyCrawlerUa()
-                val safeUrl = if (url.startsWith("http://") || url.startsWith("https://")) url else "https://$url"
+                val safeUrl = parsed.toString()
                 crawlerUrlInput.setText(safeUrl)
                 crawlerOverlay.visibility = View.VISIBLE
                 crawlerWebView.loadUrl(safeUrl)
@@ -1108,14 +1118,27 @@ class MainActivity : AppCompatActivity() {
             settings.databaseEnabled = true
             settings.useWideViewPort = true
             settings.loadWithOverviewMode = true
-            settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            settings.allowFileAccess = false
+            settings.allowContentAccess = false
+            settings.allowFileAccessFromFileURLs = false
+            settings.allowUniversalAccessFromFileURLs = false
+            settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             CookieManager.getInstance().setAcceptCookie(true)
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
             webChromeClient = WebChromeClient()
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                    val target = request?.url?.toString() ?: return false
-                    return !(target.startsWith("http://") || target.startsWith("https://"))
+                    val uri = request?.url ?: return true
+                    val scheme = uri.scheme?.lowercase()
+                    return (scheme != "http" && scheme != "https") || uri.host.isNullOrBlank()
+                }
+
+                override fun onReceivedSslError(
+                    view: WebView?,
+                    handler: android.webkit.SslErrorHandler?,
+                    error: android.net.http.SslError?
+                ) {
+                    handler?.cancel()
                 }
 
                 override fun onPageFinished(view: WebView?, url: String?) {
