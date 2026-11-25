@@ -4,6 +4,12 @@ All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
 
+### Fixed — Android updater permission flow and terminal stability
+- **修復首次更新未自動引導安裝權限**：更新 APK 完成驗證後，若 Android 尚未允許 DroidPy 安裝未知來源應用程式，會保存已驗證 APK 路徑並直接開啟本 App 專屬的權限設定；使用者返回且授權後，透過 Activity resume 自動接續系統安裝器，不必重新下載。
+- **修復原生終端機命令輸出阻塞**：不再先以無上限的 `readText()` 讀取子程序輸出、之後才等待逾時；改為輸出導向 App 私有暫存檔、先執行逾時等待、最多回傳最後 2 MiB，並回報逾時與啟動錯誤，避免大量輸出或長時間命令拖垮記憶體／卡住請求。
+- **改善套件命令辨識與清理判斷**：只將真正的 pkg／apt／pip 命令視為套件操作，避免僅因參數或套件名稱含有相似字串就觸發套件備份與快取清理；補上更新權限恢復及命令輸出上限回歸測試。
+
+
 ### Fixed — Native Termux package routing and Python archive installs
 - **修正 matplotlib 在 Android 上的安裝方式**：將 `matplotlib` 自動導向 Termux 原生 `pkg install matplotlib`，避免 pip 下載大型 `.tar.gz` 後再長時間建置 `contourpy` 等原生相依套件；同步套用至匯出的 Termux 執行包及套件目錄提示，並加入安裝路由回歸測試。
 - **避免 Android 上對原生擴充套件進行漫長的 pip 原始碼編譯**：NumPy、pandas、Pillow/PIL、lxml 與 cryptography 優先使用內嵌 Termux 預編譯套件，並同步擴充至匯出的 Termux 執行包，避免 App 與匯出腳本採用不同安裝策略。
