@@ -4286,14 +4286,14 @@ def clipboard_set(text):
                             if (mode == "pkg") {
                                 "pkg install -y $target"
                             } else if (target.equals("parsel", ignoreCase = true)) {
-                                // w3lib 2.6.0 added Frostwork, whose current wheels do not target Android/Bionic.
-                                // Keep Parsel's pure-Python stack Android-compatible and use Termux's prebuilt lxml.
+                                // DroidPy seeds a pure-Python Frostwork compatibility module for w3lib 2.6 navigation.
+                                // Use Termux's prebuilt lxml and avoid Rust/Maturin compilation on-device.
                                 val pipArgs = if (trustedHost) {
                                     "--no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org"
                                 } else {
                                     "--no-cache-dir"
                                 }
-                                "pkg install -y python-lxml && $pythonCmd -m pip install $pipArgs 'w3lib<2.6' parsel"
+                                "pkg install -y python-lxml && $pythonCmd -m pip install $pipArgs 'w3lib>=2.6' parsel"
                             } else if (target.equals("polars", ignoreCase = true)) {
                                 // Use TUR's signed Android-native Polars package and Rust runtime, not pip/maturin.
                                 "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"
@@ -4733,12 +4733,11 @@ with tempfile.TemporaryDirectory(prefix="droidpy-sklearn-") as tmp:
         // Keep the terminal's direct pip route aligned with the package manager's Android Parsel workaround.
         // Restrict rewriting to the exact, simple install command; do not alter compound/custom shell commands.
         // Match both short Python commands and DroidPy's absolute app-private interpreter path.
-        // Match both short Python commands and DroidPy's absolute app-private interpreter path.
         val pipPrefix = """(?:(?:[^\s;&|]*/)?python(?:3(?:\.\d+)?)?\s+-m\s+)?"""
         val parselPip = Regex("""^\s*""" + pipPrefix + """pip3?\s+install\s+parsel\s*$""", RegexOption.IGNORE_CASE)
         if (parselPip.matches(command)) {
             val pythonCmd = File(usrDir, "bin/python3").absolutePath
-            return "pkg install -y python-lxml && $pythonCmd -m pip install --no-cache-dir 'w3lib<2.6' parsel"
+            return "pkg install -y python-lxml && $pythonCmd -m pip install --no-cache-dir 'w3lib>=2.6' parsel"
         }
         val scipyPip = Regex("""^\s*""" + pipPrefix + """pip3?\s+install\s+scipy\s*$""", RegexOption.IGNORE_CASE)
         if (scipyPip.matches(command)) return "pkg install -y python-scipy"
