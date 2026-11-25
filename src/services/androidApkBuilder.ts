@@ -3567,7 +3567,7 @@ def clipboard_set(text):
                         val currentPkgs = pkgInventory.names.toSet()
                         val needPkgs = mutableListOf("python", "python-pip")
                         val arrK = manifest.optJSONArray("pkgPackages")
-                        if (arrK != null) {
+                        if (pkgInventory.complete && arrK != null) {
                             for (i in 0 until arrK.length()) {
                                 val v = arrK.optString(i, "").trim()
                                 if (v.isNotEmpty() && v !in currentPkgs && v !in needPkgs) {
@@ -3577,7 +3577,7 @@ def clipboard_set(text):
                         }
                         val needPips = mutableListOf<String>()
                         val arrP = manifest.optJSONArray("pipPackages")
-                        if (arrP != null) {
+                        if (pipInventory.complete && arrP != null) {
                             for (i in 0 until arrP.length()) {
                                 val v = arrP.optString(i, "").trim()
                                 if (v.isNotEmpty() && normalizePipPkgName(v) !in currentPips) {
@@ -3595,6 +3595,8 @@ def clipboard_set(text):
                             // Python is not ready yet. Restore native packages first; retry pip restore after initialization.
                             steps.add("echo '[DroidPy] Python package inventory is incomplete; skipped pip restore safely. Initialize Python, then retry restore.'")
                         }
+                        val needsNumpy = needPips.any { normalizePipPkgName(it) == "numpy" }
+                        val remainingPips = needPips.filter { normalizePipPkgName(it) != "numpy" }
                         // Use the same embedded Termux interpreter for imports and pip installs.
                         val pythonCmd = File(usrDir, "bin/python3").absolutePath
                         if (pipInventory.complete) {
