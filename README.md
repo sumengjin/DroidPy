@@ -71,9 +71,21 @@ npm run build
 1. 開啟安裝好的 DroidPy APK（會自動偵測並切換至內建原生引擎）。
 2. 前往 **「Termux 橋接」**，點擊 **「一鍵初始化 Python + 爬蟲環境」**，系統會自動執行：
    ```bash
-   pkg update -y && pkg install -y python clang libxml2 libxslt && pip install requests beautifulsoup4 lxml httpx
+   pkg update -y && pkg install -y python python-pip python-lxml libxml2 libxslt clang && pip install --no-cache-dir requests beautifulsoup4 httpx
    ```
 3. 接著即可直接使用 **「爬蟲瀏覽器」** 登入網站抓 Cookie，或在終端執行任意爬蟲腳本。
+
+---
+
+## Termux 套件安裝注意事項
+
+- **大型原生套件優先使用 Termux 預編譯套件**：例如 `python-lxml`、`python-numpy`、`python-pandas` 與 `matplotlib`。不要為了安裝這些套件而讓 pip 在 Android 上長時間從原始碼編譯。
+- **Parsel** 是純 Python 套件，但它仍依賴 `lxml`。在 Termux 先執行 `pkg install -y python-lxml`，再安裝 Parsel：
+  ```bash
+python -m pip install --no-cache-dir --index-url https://pypi.org/simple parsel==1.12.1
+```
+  Parsel 官方相依套件為 `cssselect`、`jmespath`、`lxml` 與 `w3lib`；`frostwork` 並非 Parsel 的官方相依套件。若安裝時出現 Frostwork，請先停止並檢查 pip 套件索引／鏡像設定，不要把它當成 Parsel 必要依賴。
+- **`metadata` 不等於 Python 標準庫的套件中繼資料 API**：Python 3.8+ 已內建 `importlib.metadata`，可直接 `from importlib import metadata`，一般不需要執行 `pip install metadata`。若某個第三方程式真的要求同名套件，應先確認其文件與用途。
 
 ---
 
