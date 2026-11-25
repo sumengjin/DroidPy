@@ -154,6 +154,11 @@ assert.ok(!androidBuilder.includes('private val executor = Executors.newCachedTh
 // Only the explicit Stop control is allowed to abort its AbortController.
 const termuxBridgeSource = await readFile('src/services/termuxBridge.ts', 'utf8');
 assert.ok(termuxBridgeSource.includes('已有 Termux 工作正在執行'));
+assert.ok(termuxBridgeSource.includes('target.lower() == "parsel"'));
+assert.ok(termuxBridgeSource.includes('w3lib<2.6'));
+assert.ok(termuxBridgeSource.includes('pkg install -y python-lxml && '));
+assert.ok(termuxBridgeSource.includes('shlex.join(_build_pip_cmd(["w3lib<2.6", "parsel"]'));
+
 assert.ok(!termuxBridgeSource.includes("  abortActiveTermuxStream();\n  const controller = new AbortController();"));
 const abortHelperStart = termuxBridgeSource.indexOf('export function abortActiveTermuxStream(): void {');
 const abortHelperEnd = termuxBridgeSource.indexOf('\n}', abortHelperStart);
