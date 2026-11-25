@@ -398,14 +398,18 @@ def create_session() -> tuple[requests.Session, str]:
                     rest["HttpOnly"] = None
                 if item.get("sameSite"):
                     rest["SameSite"] = item["sameSite"]
-                cookie_domain = str(item.get("domain") or urlparse(url).hostname or "")
+                target_url = urlparse(url)
+                cookie_domain = str(item.get("domain") or target_url.hostname or "")
+                cookie_path = str(item.get("path") or target_url.path or "/")
+                expires_value = item.get("expiresAt")
+                cookie_expires = int(expires_value) if expires_value is not None else None
                 cookie = create_cookie(
                     name=str(item["name"]),
                     value=str(item.get("value") or ""),
                     domain=cookie_domain,
-                    path=str(item.get("path") or "/"),
+                    path=cookie_path,
                     secure=bool(item.get("secure")),
-                    expires=item.get("expiresAt"),
+                    expires=cookie_expires,
                     rest=rest,
                 )
                 if not item.get("domain"):
