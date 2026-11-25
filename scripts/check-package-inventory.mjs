@@ -1,10 +1,26 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [source, bridgeSource] = await Promise.all([
+const [source, bridgeSource, catalogSource, exportSource] = await Promise.all([
   readFile(new URL('../src/services/androidApkBuilder.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/services/termuxBridge.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/data/packageCatalog.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/components/ToolsAndPackages.tsx', import.meta.url), 'utf8'),
 ]);
+
+const catalogItems = catalogSource.split(/\n  \{\n    id: '/).slice(1);
+assert.ok(catalogItems.length >= 60, 'package catalog should retain its complete inventory');
+for (const item of catalogItems) {
+  const packageId = item.match(/^([^']+)/)?.[1] || 'unknown';
+  assert.match(
+    item,
+    /termux:\s*\{\s*mode:\s*'(?:pip|pkg)',\s*targetName:\s*'[^']+'\s*\}/,
+    `Termux install route must be explicit for catalog package ${packageId}`
+  );
+}
+assert.match(bridgeSource, /matplotlib:\s*'matplotlib'/);
+assert.match(exportSource, /matplotlib:\s*'matplotlib'/);
+
 const start = source.indexOf('private fun collectInstalledPipInventory()');
 const end = source.indexOf('private fun calcDirSize', start);
 assert.ok(start >= 0 && end > start, 'package inventory function must exist');
