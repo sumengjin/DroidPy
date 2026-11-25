@@ -160,7 +160,9 @@ assert.ok(generatedCrawler.includes('from requests.cookies import create_cookie'
 assert.ok(generatedCrawler.includes('data.get("cookie_list") or []'));
 assert.ok(generatedCrawler.includes('sess.cookies.set_cookie(cookie)'));
 assert.ok(generatedCrawler.includes('cookie.domain_specified = False'));
-assert.ok(generatedCrawler.includes('urlparse(url).hostname'));
+assert.ok(generatedCrawler.includes('target_url = urlparse(url)'));
+assert.ok(generatedCrawler.includes('target_url.path or "/"'));
+assert.ok(generatedCrawler.includes('cookie_expires = int(expires_value) if expires_value is not None else None'));
 assert.equal(normalizeUrlInput('example.com'), 'https://example.com/');
 assert.throws(() => normalizeUrlInput('javascript:alert(1)'), /網址無效/);
 const crawlerTempDir = await mkdtemp(path.join(os.tmpdir(), 'droidpy-crawler-check-'));
