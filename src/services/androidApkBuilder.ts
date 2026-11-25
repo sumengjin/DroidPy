@@ -1896,6 +1896,7 @@ class EmbeddedTermuxBridge(
     @Volatile private var running = false
     @Volatile private var activeProcess: Process? = null
     @Volatile private var activeProcessPaused: Boolean = false
+    @Volatile private var activeProcessStopRequested: Boolean = false
     private val activeProcessStartedAt = AtomicLong(0L)
     private val logLock = Any()
     private val nativeLogFile: File
@@ -3850,8 +3851,11 @@ def clipboard_set(text):
                 method == "POST" && path == "/stop" -> {
                     val proc = activeProcess
                     if (proc != null) {
-                        appendNativeLog("Exec", "Force stopping active process tree")
+                        activeProcessStopRequested = true
+                        appendNativeLog("Exec", "Explicit Stop request: force stopping process tree pid=\${proc.pid()}")
                         killProcessTree(proc)
+                    } else {
+                        appendNativeLog("Exec", "Explicit Stop request received; no active process")
                     }
                     activeProcessPaused = false
                     writeJson(out, 200, JSONObject().put("ok", true))
@@ -4679,6 +4683,7 @@ def clipboard_set(text):
                 proc = pb.start()
                 activeProcess = proc
                 activeProcessPaused = false
+                activeProcessStopRequested = false
                 activeProcessStartedAt.set(System.currentTimeMillis())
                 appendNativeLog("Exec", "Process started pid=${proc.pid()} command=${normalizedCommand.take(120)}")
                 var clientDisconnected = false
@@ -4702,11 +4707,15 @@ def clipboard_set(text):
                 }
                 code = proc.waitFor()
             } catch (e: Exception) {
-                appendNativeLog("Exec", "Exec exception: \${e.message}")
-                recordTail("[DroidPy] Exec error: \${e.message}\\n")
-                try {
-                    sendStdout("[DroidPy] Exec error: \${e.message}\\n")
-                } catch (_: Exception) {
+                if (activeProcessStopRequested) {
+                    appendNativeLog("Exec", "Process output read ended after explicit Stop pid=\${proc?.pid()} (\${e.javaClass.simpleName}: \${e.message})")
+                } else {
+                    appendNativeLog("Exec", "Exec exception: \${e.javaClass.simpleName}: \${e.message}")
+                    recordTail("[DroidPy] Exec error: \${e.message}\\n")
+                    try {
+                        sendStdout("[DroidPy] Exec error: \${e.message}\\n")
+                    } catch (_: Exception) {
+                    }
                 }
             } finally {
                 try { proc?.inputStream?.close() } catch (_: Exception) {}
@@ -4714,6 +4723,7 @@ def clipboard_set(text):
                 try { proc?.outputStream?.close() } catch (_: Exception) {}
                 activeProcess = null
                 activeProcessPaused = false
+                activeProcessStopRequested = false
                 activeProcessStartedAt.set(0L)
                 try { activeProcessPidFile.delete() } catch (_: Exception) {}
                 if (isPkgOrPip) {
