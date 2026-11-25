@@ -3,6 +3,7 @@
 All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
+- **測試版與正式版可並存**：未發布 APK 的版本名稱加上 `-Beta`，Debug 變體使用獨立 `.beta` 套件 ID，FileProvider authority 隨變體套件 ID 變化；正式版套件 ID、簽名與 Release 發布流程維持不變。
 - **修復 Android scikit-learn 建置時 Meson launcher 回傳 127**：在 Ninja 開始編譯前，將 pip 產生的 Meson 入口改為透過目前可用的 Termux Python 執行 `mesonbuild.mesonmain`，先執行版本預檢；避免 Ninja 呼叫 `py_user/bin/meson --internal copy` 時因啟動器失效而整批複製任務失敗。APK 內嵌與外部 Termux Bridge 同步修正。
 - **修正 Android 終端機絕對 Python 路徑漏接套件相容流程**：現在 `/data/user/.../python3 -m pip install polars` 等完整路徑命令也會辨識並導向 Termux 原生套件，不再誤觸 pip/maturin/Rust 編譯；外部 Termux Bridge 同步修正。
 - **修正 scikit-learn 在 Termux 的 Meson 版本腳本權限**：安裝時下載官方 PyPI 原始碼包，若 `sklearn/_build_utils/version.py` 在原始碼包中缺失便依 PyPI 版本資訊建立，並補上可執行權限，再使用既有原生 NumPy／SciPy 與無隔離建置流程；APK 內嵌與外部 Termux 同步套用。
