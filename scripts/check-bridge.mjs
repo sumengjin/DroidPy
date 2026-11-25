@@ -16,7 +16,7 @@ const bundle = await build({
   write: false,
 });
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`;
-const { buildTermuxBridgeScript } = await import(moduleUrl);
+const { buildTermuxBridgeScript, resolveTermuxInstallTarget } = await import(moduleUrl);
 
 const token = 'a'.repeat(64);
 const origin = 'https://droidpy-ci.example';
@@ -82,4 +82,31 @@ try {
   await rm(tempDir, { recursive: true, force: true });
 }
 
+// Package installation routing: Python archives must use pip, native extensions should use Termux binaries.
+const cases = [
+  ['pip', 'numpy', 'pkg', 'python-numpy'],
+  ['pip', 'pandas', 'pkg', 'python-pandas'],
+  ['pip', 'Pillow', 'pkg', 'python-pillow'],
+  ['pip', 'PIL', 'pkg', 'python-pillow'],
+  ['pip', 'lxml', 'pkg', 'python-lxml'],
+  ['pip', 'cryptography', 'pkg', 'python-cryptography'],
+  ['pkg', 'numpy', 'pkg', 'python-numpy'],
+  ['pkg', './dist/library.tar.gz', 'pip', './dist/library.tar.gz'],
+  ['pkg', '/sdcard/Download/library.tgz', 'pip', '/sdcard/Download/library.tgz'],
+  ['pkg', 'https://example.invalid/library.whl', 'pip', 'https://example.invalid/library.whl'],
+  ['pkg', 'library.zip', 'pip', 'library.zip'],
+  ['pkg', 'library.tar.bz2', 'pip', 'library.tar.bz2'],
+  ['pkg', 'library.tar.xz', 'pip', 'library.tar.xz'],
+  ['pkg', '-r requirements.txt', 'pip', '-r requirements.txt'],
+  ['pkg', './local-package.deb', 'pkg', './local-package.deb'],
+  ['pip', 'numpy==2.0.0', 'pip', 'numpy==2.0.0'],
+  ['pip', 'Pillow[extra]', 'pip', 'Pillow[extra]'],
+  ['pip', 'requests pandas', 'pip', 'requests pandas'],
+];
+for (const [inputMode, input, expectedMode, expectedTarget] of cases) {
+  const resolved = resolveTermuxInstallTarget(inputMode, input);
+  assert.equal(resolved.mode, expectedMode, `${inputMode} ${input} mode`);
+  assert.equal(resolved.target, expectedTarget, `${inputMode} ${input} target`);
+}
+assert.ok(generated.includes('cmd = [sys.executable, "-m", "pip", "install", "--prefer-binary"]'));
 console.log('Generated Termux Bridge token/origin checks and Python syntax validation passed.');
