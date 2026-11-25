@@ -4248,6 +4248,7 @@ import pathlib
 import shlex
 import site
 import stat
+import sysconfig
 import subprocess
 import sys
 import tarfile
@@ -4274,7 +4275,9 @@ with tempfile.TemporaryDirectory(prefix="droidpy-sklearn-") as tmp:
     # Meson-python embeds this console-script path into build.ninja. On Android,
     # the pip-generated launcher can fail with exit 127; use the active Python
     # interpreter explicitly so Ninja can execute Meson's internal copy command.
-    meson_launcher = pathlib.Path(site.getuserbase()) / "bin" / "meson"
+    meson_launcher = pathlib.Path(sysconfig.get_path("scripts")) / "meson"
+    if not meson_launcher.is_file():
+        meson_launcher = pathlib.Path(site.getuserbase()) / "bin" / "meson"
     if not meson_launcher.is_file():
         raise RuntimeError("Meson user launcher is missing: " + str(meson_launcher))
     meson_launcher.write_text(

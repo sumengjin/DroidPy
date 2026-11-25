@@ -848,7 +848,7 @@ def _scikit_learn_source_install_command(trusted_host=False):
         "threadpoolctl>=3.5.0",
     ], trusted_host=trusted_host)
     installer_code = "\\n".join([
-        "import json, os, pathlib, shlex, site, stat, subprocess, tarfile, tempfile, urllib.parse",
+        "import json, os, pathlib, shlex, site, stat, subprocess, sysconfig, tarfile, tempfile, urllib.parse",
         "with tempfile.TemporaryDirectory(prefix='droidpy-sklearn-') as tmp:",
         "    root = pathlib.Path(tmp)",
         "    metadata = json.loads(subprocess.check_output(['curl', '-fsSL', 'https://pypi.org/pypi/scikit-learn/json'], text=True))",
@@ -866,7 +866,8 @@ def _scikit_learn_source_install_command(trusted_host=False):
         "    version_script.write_text('#!' + __import__('sys').executable + '\\\\nprint(' + repr(metadata['info']['version']) + ')\\\\n', encoding='utf-8')",
         "    version_script.chmod(version_script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)",
         "    # Meson-python records this launcher in build.ninja; invoke Meson through the active Python on Android.",
-        "    meson_launcher = pathlib.Path(site.getuserbase()) / 'bin' / 'meson'",
+        "    meson_launcher = pathlib.Path(sysconfig.get_path('scripts')) / 'meson'",
+        "    if not meson_launcher.is_file(): meson_launcher = pathlib.Path(site.getuserbase()) / 'bin' / 'meson'",
         "    if not meson_launcher.is_file(): raise RuntimeError('Meson user launcher is missing: ' + str(meson_launcher))",
         "    meson_launcher.write_text('#!/system/bin/sh' + chr(10) + 'exec ' + shlex.quote(__import__('sys').executable) + ' -m mesonbuild.mesonmain \\\"$@\\\"' + chr(10), encoding='utf-8')",
         "    meson_launcher.chmod(0o755)",
