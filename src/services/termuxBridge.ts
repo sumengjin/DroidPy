@@ -868,7 +868,7 @@ def _scikit_learn_source_install_command(trusted_host=False):
         "    # Meson-python records this launcher in build.ninja; invoke Meson through the active Python on Android.",
         "    meson_launcher = pathlib.Path(site.getuserbase()) / 'bin' / 'meson'",
         "    if not meson_launcher.is_file(): raise RuntimeError('Meson user launcher is missing: ' + str(meson_launcher))",
-        "    meson_launcher.write_text('#!/system/bin/sh' + chr(10) + 'exec ' + shlex.quote(__import__('sys').executable) + ' -m mesonbuild.mesonmain \"$@\"' + chr(10), encoding='utf-8')",
+        "    meson_launcher.write_text('#!/system/bin/sh' + chr(10) + 'exec ' + shlex.quote(__import__('sys').executable) + ' -m mesonbuild.mesonmain \\\"$@\\\"' + chr(10), encoding='utf-8')",
         "    meson_launcher.chmod(0o755)",
         "    subprocess.check_call([str(meson_launcher), '--version'])",
         "    subprocess.check_call([__import__('sys').executable, '-m', 'pip', 'install', '--no-cache-dir', '--no-build-isolation', '--no-deps', str(source)])",
