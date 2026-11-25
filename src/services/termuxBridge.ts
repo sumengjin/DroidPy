@@ -1812,6 +1812,8 @@ export const TERMUX_NATIVE_PYTHON_PACKAGES: Record<string, string> = {
 
 const PYTHON_ARCHIVE_PATTERN = /\.(?:whl|tar\.gz|tgz|tar\.bz2|tbz2|tar\.xz|txz|tar|zip|egg)(?:$|[?#])/i;
 const REQUIREMENTS_INPUT_PATTERN = /(?:^|\s)(?:-r|--requirement)(?:\s+|=)/i;
+const DEBIAN_PACKAGE_PATTERN = /\.deb(?:$|[?#])/i;
+const PIP_SPECIFIER_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*(?:\[[^\]]+\])?(?:===?|~=|!=|<=|>=).+$/;
 
 export function resolveTermuxInstallTarget(
   mode: 'pip' | 'pkg',
@@ -1820,13 +1822,15 @@ export function resolveTermuxInstallTarget(
   const clean = target.trim();
   if (!clean) return { mode, target, routedFromPip: false };
 
-  // Python wheels and source archives belong to pip, never to apt/pkg.
-  if (PYTHON_ARCHIVE_PATTERN.test(clean) || REQUIREMENTS_INPUT_PATTERN.test(clean) || /^-e(?:\s|=)|^--editable(?:\s|=)|^git\+/i.test(clean)) {
+  // Debian archives are system packages; Python archives and requirements belong to pip.
+  if (DEBIAN_PACKAGE_PATTERN.test(clean)) {
+    return { mode: 'pkg', target: clean, routedFromPip: mode === 'pip', reason: 'Debian system package' };
+  }
+  if (PYTHON_ARCHIVE_PATTERN.test(clean) || REQUIREMENTS_INPUT_PATTERN.test(clean) || /^-e(?:\s|=)|^--editable(?:\s|=)|^git\+/i.test(clean) || /^https?:\/\//i.test(clean) || (mode === 'pkg' && (PIP_SPECIFIER_PATTERN.test(clean) || /^[a-zA-Z0-9_.-]+\[[^\]]+\]$/.test(clean)))) {
     return mode === 'pkg'
       ? { mode: 'pip', target: clean, routedFromPip: true, reason: 'Python archive/requirements input' }
       : { mode, target: clean, routedFromPip: false };
   }
-
   // Do not rewrite version pins, extras, URLs, markers, or multi-package commands.
   if (!/^[a-zA-Z0-9_.-]+$/.test(clean)) {
     return { mode, target, routedFromPip: false };
