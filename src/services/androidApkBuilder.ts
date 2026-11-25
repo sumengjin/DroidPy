@@ -3585,7 +3585,7 @@ def clipboard_set(text):
                             steps.add("pkg install -y " + missingPkgsOnly.joinToString(" "))
                         }
                         // Bind installs and import checks to the same Termux Python used by /run-stream.
-                        val pythonCmd = "\\"\u0024{File(usrDir, "bin/python3").absolutePath}\\""
+                        val pythonCmd = "\\\"" + File(usrDir, "bin/python3").absolutePath + "\\\""
                         steps.add("test -x $pythonCmd || { echo '[DroidPy] Python is not ready; package restore aborted.' >&2; exit 127; }")
                         val needsNumpy = needPips.any { normalizePipPkgName(it) == "numpy" }
                         val remainingPips = needPips.filter { normalizePipPkgName(it) != "numpy" }
@@ -3940,12 +3940,13 @@ def clipboard_set(text):
                             val mode = bodyJson.optString("mode", "pip")
                             val target = bodyJson.optString("target", "").trim()
                             val trustedHost = bodyJson.optBoolean("trustedHost", false)
+                            val pythonCmd = "\\\"" + File(usrDir, "bin/python3").absolutePath + "\\\""
                             if (mode == "pkg") {
                                 "pkg install -y $target"
                             } else if (trustedHost) {
-                                "pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org $target"
+                                "$pythonCmd -m pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org $target"
                             } else {
-                                "pip install --no-cache-dir $target"
+                                "$pythonCmd -m pip install --no-cache-dir $target"
                             }
                         }
                         else -> bodyJson.optString("command", "")
