@@ -1461,7 +1461,7 @@ class MainActivity : AppCompatActivity() {
             seedDefaultWorkspaceFiles(workspaceDir)
             appendActivityLog("Startup", "Default workspace seeding completed")
 
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || applicationInfo.targetSdkVersion < Build.VERSION_CODES.R || Environment.isExternalStorageManager()) {
+            if (applicationInfo.targetSdkVersion <= Build.VERSION_CODES.Q || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager())) {
                 try {
                     File(Environment.getExternalStorageDirectory(), "Download/tmp").mkdirs()
                     File(Environment.getExternalStorageDirectory(), "DroidPy/.droidpy_backup").mkdirs()
