@@ -4236,9 +4236,43 @@ def clipboard_set(text):
                                 // Use TUR's signed Android-native Polars package and Rust runtime, not pip/maturin.
                                 "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"
                             } else if (target.equals("scikit-learn", ignoreCase = true)) {
-                                // Reuse native NumPy/SciPy; no-build-isolation prevents pip from rebuilding NumPy.
+                                // Termux source archives may lose the executable bit on sklearn's Meson version.py.
+                                // Restore it before building against the already-installed native NumPy/SciPy.
                                 val trustArgs = if (trustedHost) "--trusted-host pypi.org --trusted-host files.pythonhosted.org" else ""
-                                "pkg install -y python-numpy python-scipy ninja && $pythonCmd -m pip install --no-cache-dir $trustArgs --prefer-binary 'meson-python>=0.17.1,<0.22' 'cython>=3.1.2,<3.2.6' 'joblib>=1.4.0' 'narwhals>=2.0.1' 'threadpoolctl>=3.5.0' && $pythonCmd -m pip install --no-cache-dir $trustArgs --no-build-isolation --no-deps scikit-learn"
+                                val installerScript = File(usrDir, "tmp/droidpy-install-sklearn.py")
+                                installerScript.parentFile?.mkdirs()
+                                installerScript.writeText("""
+import json
+import pathlib
+import stat
+import subprocess
+import sys
+import tarfile
+import tempfile
+import urllib.request
+
+with tempfile.TemporaryDirectory(prefix="droidpy-sklearn-") as tmp:
+    root = pathlib.Path(tmp)
+    with urllib.request.urlopen("https://pypi.org/pypi/scikit-learn/json", timeout=30) as response:
+        metadata = json.load(response)
+    sdist = next(item for item in metadata["urls"] if item["packagetype"] == "sdist")
+    archive = root / "scikit-learn-sdist.tar.gz"
+    urllib.request.urlretrieve(sdist["url"], archive)
+    source_root = root / "source"
+    source_root.mkdir()
+    with tarfile.open(archive, "r:*") as package:
+        package.extractall(source_root, filter="data")
+    source = next(item for item in source_root.iterdir() if item.is_dir())
+    version_script = source / "sklearn" / "_build_utils" / "version.py"
+    if not version_script.is_file():
+        raise RuntimeError("scikit-learn sdist is missing sklearn/_build_utils/version.py")
+    version_script.chmod(version_script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    subprocess.check_call([
+        sys.executable, "-m", "pip", "install", "--no-cache-dir",
+        "--no-build-isolation", "--no-deps", str(source)
+    ])
+""".trimIndent())
+                                "pkg install -y python-numpy python-scipy ninja && $pythonCmd -m pip install --no-cache-dir $trustArgs --prefer-binary 'meson-python>=0.17.1,<0.22' 'cython>=3.1.2,<3.2.6' 'joblib>=1.4.0' 'narwhals>=2.0.1' 'threadpoolctl>=3.5.0' && $pythonCmd \"$installerScript\""
                             } else if (trustedHost) {
                                 "$pythonCmd -m pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org $target"
                             } else {
@@ -4612,23 +4646,58 @@ def clipboard_set(text):
     private fun normalizeShellCommand(command: String): String {
         // Keep the terminal's direct pip route aligned with the package manager's Android Parsel workaround.
         // Restrict rewriting to the exact, simple install command; do not alter compound/custom shell commands.
-        val parselPip = Regex("""^\s*(?:(?:python|python3)\s+-m\s+)?pip3?\s+install\s+parsel\s*$""", RegexOption.IGNORE_CASE)
+        // Match both short Python commands and DroidPy's absolute app-private interpreter path.
+        val pipPrefix = """(?:(?:[^\\s;&|]*/)?python(?:3(?:\\.\\d+)?)?\\s+-m\\s+)?"""
+        val parselPip = Regex("""^\\s*${'$'}pipPrefix pip3?\\s+install\\s+parsel\\s*""".replace(" ", ""), RegexOption.IGNORE_CASE)
         if (parselPip.matches(command)) {
             val pythonCmd = File(usrDir, "bin/python3").absolutePath
             return "pkg install -y python-lxml && $pythonCmd -m pip install --no-cache-dir 'w3lib<2.6' parsel"
         }
-        val scipyPip = Regex("""^\s*(?:(?:python|python3)\s+-m\s+)?pip3?\s+install\s+scipy\s*$""", RegexOption.IGNORE_CASE)
+        val scipyPip = Regex("""^\\s*${'$'}pipPrefix pip3?\\s+install\\s+scipy\\s*""".replace(" ", ""), RegexOption.IGNORE_CASE)
         if (scipyPip.matches(command)) return "pkg install -y python-scipy"
-        val polarsPip = Regex("""^\s*(?:(?:python|python3)\s+-m\s+)?pip3?\s+install\s+polars\s*$""", RegexOption.IGNORE_CASE)
+        val polarsPip = Regex("""^\\s*${'$'}pipPrefix pip3?\\s+install\\s+polars\\s*""".replace(" ", ""), RegexOption.IGNORE_CASE)
         if (polarsPip.matches(command)) {
             // Polars needs Android-native Rust runtime wheels; use the prebuilt TUR package, not maturin/rustup.
             return "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"
         }
-        val sklearnPip = Regex("""^\s*(?:(?:python|python3)\s+-m\s+)?pip3?\s+install\s+scikit-learn\s*$""", RegexOption.IGNORE_CASE)
+        val sklearnPip = Regex("""^\\s*${'$'}pipPrefix pip3?\\s+install\\s+scikit-learn\\s*""".replace(" ", ""), RegexOption.IGNORE_CASE)
         if (sklearnPip.matches(command)) {
-            // Reuse Termux's working NumPy/SciPy and install the Meson build requirements outside pip isolation.
+            // Reuse Termux's working NumPy/SciPy; patch the upstream Meson version script before building.
             val pythonCmd = File(usrDir, "bin/python3").absolutePath
-            return "pkg install -y python-numpy python-scipy ninja && $pythonCmd -m pip install --no-cache-dir --prefer-binary 'meson-python>=0.17.1,<0.22' 'cython>=3.1.2,<3.2.6' 'joblib>=1.4.0' 'narwhals>=2.0.1' 'threadpoolctl>=3.5.0' && $pythonCmd -m pip install --no-cache-dir --no-build-isolation --no-deps scikit-learn"
+            val installerScript = File(usrDir, "tmp/droidpy-install-sklearn.py")
+            installerScript.parentFile?.mkdirs()
+            installerScript.writeText("""
+import json
+import pathlib
+import stat
+import subprocess
+import sys
+import tarfile
+import tempfile
+import urllib.request
+
+with tempfile.TemporaryDirectory(prefix="droidpy-sklearn-") as tmp:
+    root = pathlib.Path(tmp)
+    with urllib.request.urlopen("https://pypi.org/pypi/scikit-learn/json", timeout=30) as response:
+        metadata = json.load(response)
+    sdist = next(item for item in metadata["urls"] if item["packagetype"] == "sdist")
+    archive = root / "scikit-learn-sdist.tar.gz"
+    urllib.request.urlretrieve(sdist["url"], archive)
+    source_root = root / "source"
+    source_root.mkdir()
+    with tarfile.open(archive, "r:*") as package:
+        package.extractall(source_root, filter="data")
+    source = next(item for item in source_root.iterdir() if item.is_dir())
+    version_script = source / "sklearn" / "_build_utils" / "version.py"
+    if not version_script.is_file():
+        raise RuntimeError("scikit-learn sdist is missing sklearn/_build_utils/version.py")
+    version_script.chmod(version_script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    subprocess.check_call([
+        sys.executable, "-m", "pip", "install", "--no-cache-dir",
+        "--no-build-isolation", "--no-deps", str(source)
+    ])
+""".trimIndent())
+            return "pkg install -y python-numpy python-scipy ninja && $pythonCmd -m pip install --no-cache-dir --prefer-binary 'meson-python>=0.17.1,<0.22' 'cython>=3.1.2,<3.2.6' 'joblib>=1.4.0' 'narwhals>=2.0.1' 'threadpoolctl>=3.5.0' && $pythonCmd \"$installerScript\""
         }
         val installPrefix = Regex("""^\s*pkg\s+install\b""", RegexOption.IGNORE_CASE)
         val match = installPrefix.find(command) ?: return command
