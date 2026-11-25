@@ -127,7 +127,7 @@ export const BUILTIN_LOCAL_RELEASES: AppReleaseInfo[] = [
     body: [
       '• 修正 App 版本常數、原生 APK 預設版本與離線更新資訊長期停留在舊版的問題',
       '• 統一主專案與匯出 Android 專案的版本回退值，避免更新視窗誤判目前版本',
-    ].join('\\n'),
+    ].join('\n'),
   },
   {
     tagName: 'v1.2.30',
@@ -140,7 +140,7 @@ export const BUILTIN_LOCAL_RELEASES: AppReleaseInfo[] = [
     body: [
       '• 修復 Android Bridge 併發阻塞、Activity 重建與 Python 程序生命週期問題',
       '• 改善斷線處理、停止流程、崩潰診斷與 SD 卡備份逾時記錄',
-    ].join('\\n'),
+    ].join('\n'),
   },
 
   {
