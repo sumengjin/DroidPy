@@ -119,7 +119,7 @@ jobs:
             IS_RELEASE_REF=true
           fi
           VER=$(grep -m1 -oE '[0-9]+[.][0-9]+[.][0-9]+' CHANGELOG.md 2>/dev/null | head -n1 || true)
-          if [ -z "$VER" ]; then VER="1.2.31"; fi
+          if [ -z "$VER" ]; then VER="1.2.33"; fi
           if [ -n "$INPUT_TAG" ]; then
             REL_TAG="v\${INPUT_TAG#v}"
             VNAME="\${REL_TAG#v}"
@@ -145,7 +145,7 @@ jobs:
             REL_TAG="debug-$GITHUB_RUN_NUMBER"
             VNAME="$VER"
           fi
-          SEMVER_PART=$(printf '%s' "$VNAME" | grep -oE '^[0-9]+[.][0-9]+[.][0-9]+' || echo '1.2.31')
+          SEMVER_PART=$(printf '%s' "$VNAME" | grep -oE '^[0-9]+[.][0-9]+[.][0-9]+' || echo '1.2.33')
           IFS='.' read -r CMAJ CMIN CPAT <<< "$SEMVER_PART"
           VCODE=$(( \${CMAJ:-1} * 1000000 + \${CMIN:-0} * 1000 + \${CPAT:-0} ))
           echo "DROIDPY_VERSION_CODE=$VCODE" >> "$GITHUB_ENV"
@@ -313,8 +313,8 @@ android {
         minSdk = 24
         // targetSdk = 28 讓內嵌 Termux bootstrap 能在 App 私有目錄自由執行 pkg / python / clang（GitHub 發佈專用）
         targetSdk = 28
-        versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 1002031
-        versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.31"
+        versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 1002033
+        versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.33"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -634,9 +634,9 @@ class MainActivity : AppCompatActivity() {
         fun getAppVersionName(): String {
             return try {
                 @Suppress("DEPRECATION")
-                packageManager.getPackageInfo(packageName, 0).versionName ?: "1.2.31"
+                packageManager.getPackageInfo(packageName, 0).versionName ?: "1.2.33"
             } catch (_: Exception) {
-                "1.2.31"
+                "1.2.33"
             }
         }
 
@@ -3451,6 +3451,32 @@ def clipboard_set(text):
     private val aptDefaultPipSet = setOf("pip", "setuptools", "wheel", "ensurepip", "distlib", "packaging", "lxml")
     private val defaultUserPkgCandidates = setOf("python", "python-pip", "python-lxml", "libxml2", "libxslt", "clang", "ffmpeg", "git", "nodejs", "openssh")
 
+    private fun writeAtomicTextFile(target: File, text: String): Boolean {
+        val parent = target.parentFile ?: return false
+        if (!parent.isDirectory && !parent.mkdirs()) return false
+        val temp = try {
+            File.createTempFile("droidpy-manifest-", ".tmp", parent)
+        } catch (_: Exception) {
+            return false
+        }
+        return try {
+            temp.outputStream().use { output ->
+                output.write(text.toByteArray(Charsets.UTF_8))
+                output.fd.sync()
+            }
+            temp.setReadable(true, false)
+            temp.setWritable(true, false)
+            // The temporary file is created beside the target, so rename stays
+            // on the same filesystem and atomically replaces the old snapshot.
+            android.system.Os.rename(temp.absolutePath, target.absolutePath)
+            true
+        } catch (_: Exception) {
+            false
+        } finally {
+            try { temp.delete() } catch (_: Exception) {}
+        }
+    }
+
     private fun savePackageBackupSnapshot(
         pipInventory: PipInventory = collectInstalledPipInventory(),
         pkgInventory: PkgInventory = collectInstalledPkgInventory(),
@@ -3500,12 +3526,21 @@ def clipboard_set(text):
                 .put("pipPackages", JSONArray(mergedPip))
                 .put("pkgPackages", JSONArray(mergedPkg))
             val text = manifest.toString()
-            manifestFile.writeText(text, Charsets.UTF_8)
-            if (hasStorageAccess()) {
-                val backupDir = File(Environment.getExternalStorageDirectory(), "DroidPy/.droidpy_backup").apply { mkdirs() }
-                File(backupDir, "packages_manifest.json").writeText(text, Charsets.UTF_8)
+            val localSaved = writeAtomicTextFile(manifestFile, text)
+            val backupFile = if (hasStorageAccess()) {
+                File(Environment.getExternalStorageDirectory(), "DroidPy/.droidpy_backup/packages_manifest.json")
+            } else null
+            val externalSaved = backupFile?.let { writeAtomicTextFile(it, text) } ?: false
+            if (!localSaved && !externalSaved) {
+                appendNativeLog("Package", "Package backup manifest save failed; previous copies were preserved")
+            } else if (!localSaved || (backupFile != null && !externalSaved)) {
+                appendNativeLog("Package", "Package backup manifest saved to only one location")
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            try {
+                appendNativeLog("Package", "Package backup manifest update failed: \${e.javaClass.simpleName}")
+            } catch (_: Exception) {
+            }
         }
     }
 
@@ -4938,13 +4973,13 @@ def clipboard_set(text):
 
   const changelogContent = `# Changelog / 更新日誌
 
-## [1.2.31] - 2026-11-24
+## [1.2.33] - 2026-11-24
 - **深度修復 \`pip\` \`truststore\` \`Errno 13\`、選項獨立視窗設計、手機文字防溢出與寫實 3D 四季天光**：
   - 於 \`sitecustomize.py\` 植入記憶體備援 certifi CA 憑證與攔截 \`truststore\` / \`load_verify_locations\`，配合 \`pip.conf\` 與目錄權限規範徹底根除 Android Python 3.14 \`PermissionError: [Errno 13]\`。
   - 工具箱抽屜改採「選項目錄 → 獨立操作視窗（頂部附返回按鈕）」，全面精簡「Python／內建 Python」文案並修復 360px 手機版文字按鈕溢出問題。
   - 升級 Three.js 寫實 3D 背景支援春櫻／夏雨／秋楓／冬雪與真實晨昏星月天光漸變。
 
-## [1.2.31] - 2026-11-23
+## [1.2.33] - 2026-11-23
 - **修復「已安裝套件為空」、安裝失敗暫存清理、亂碼淨化、\`/shell\` 404 與長時使用卡頓**：
   - \`EmbeddedTermuxBridge.kt\` 擴大掃描 \`site-packages\`／\`dist-packages\` 並補上 \`importlib.metadata\` 回退驗證、移除 \`EXTERNALLY-MANAGED\`、導出 \`PIP_USER=0\`／\`PIP_NO_CACHE_DIR=1\` 與 \`PYTHONUTF8=1\`。
   - 開機與每次 \`pip\`／\`pkg\` 結束自動清理 \`tmp/pip-*\`、\`.cache/pip\`、\`tmp_pkg_stage\` 與 \`.deb\` 暫存，新增 \`GET /storage/app-usage\`、\`POST /storage/cleanup\` 與 \`POST /shell\`。

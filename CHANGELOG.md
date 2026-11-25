@@ -4,6 +4,11 @@ All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
 
+### Fixed — Atomic Termux package backup manifests
+- **避免套件備份清單在 App 中斷時被截斷或損壞**：主儲存與外部備份現在先寫入同目錄暫存檔、同步落盤後再以原子 rename 取代舊檔；寫入失敗時保留既有清單並記錄診斷結果。
+- 新增回歸檢查，確保兩份套件清單都不再使用直接覆寫。
+
+
 ### Fixed — Termux process survival after client disconnect
 - **避免 Termux 原生 Python 工作因網頁串流斷線被誤殺**：用戶端中斷後，Bridge 改為停止傳送輸出但持續讀取／排空 PTY，讓使用者腳本可以自然執行完畢；只有明確呼叫授權的 /stop 才會終止程序。
 - 新增回歸檢查，確保斷線路徑不再對程序群組發送 SIGKILL，且明確停止路由仍保留。
@@ -120,6 +125,17 @@ All notable changes to **DroidPy** are documented in this file.
 - **修復 Bridge 停止時誤殺使用者工作**：停止內嵌 Bridge 不再強制終止目前 Python 程序，並保留程序控制代碼，讓 Bridge 重新啟動後仍可由使用者明確停止該工作。
 - **同步更新繁中、簡中、英文與日文介面文案**，明確標示程序檢查不會自動終止工作。
 - **加入 watchdog 安全回歸檢查**，防止未來重新引入依執行時間清理程序的邏輯。
+
+## [1.2.33] - 2026-11-25
+
+### Fixed — Atomic package backup and version metadata
+- 套件備份清單改為同目錄暫存檔寫入、fsync 後原子替換；寫入失敗時保留既有有效清單，並記錄不含敏感資料的診斷訊息。
+- 同步前端版本、原生 APK 備援版本、匯出專案預設版本、離線更新清單與 package.json 版本；主 APK 與匯出 APK 的 versionCode 統一為 1.2.33 → 1002033。
+
+## [1.2.32] - 2026-11-25
+
+### Fixed — Termux stream disconnect handling
+- 外部 Termux Bridge 在網頁串流用戶端斷線時不再對 Python 程序群組送出 SIGKILL；改為持續排空 PTY 輸出，讓工作自然結束，明確 /stop 仍保留終止權限。
 
 ## [1.2.31] - 2026-11-25
 

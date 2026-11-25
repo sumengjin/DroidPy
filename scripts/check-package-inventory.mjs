@@ -45,6 +45,16 @@ assert.match(bridgeSource, /base64\.b64decode\(payload, validate=True\)/);
 assert.match(inventory, /inventoryFile\?\.delete\(\)/);
 assert.match(inventory, /proc\?\.destroyForcibly\(\)/);
 
+const atomicStart = source.indexOf('private fun writeAtomicTextFile(');
+const atomicEnd = source.indexOf('private fun savePackageBackupSnapshot', atomicStart);
+assert.ok(atomicStart >= 0 && atomicEnd > atomicStart, 'atomic manifest writer must exist');
+const atomicWriter = source.slice(atomicStart, atomicEnd);
+assert.match(atomicWriter, /File\.createTempFile\("droidpy-manifest-"/);
+assert.match(atomicWriter, /temp\.outputStream\(\)\.use/);
+assert.match(atomicWriter, /output\.fd\.sync\(\)/);
+assert.match(atomicWriter, /android\.system\.Os\.rename/);
+assert.match(atomicWriter, /finally/);
+
 const manifestStart = source.indexOf('private fun savePackageBackupSnapshot(');
 const manifestEnd = source.indexOf('private fun readBackupManifest', manifestStart);
 assert.ok(manifestStart >= 0 && manifestEnd > manifestStart, 'manifest writer must exist');
@@ -53,6 +63,12 @@ assert.match(manifest, /forceShrink && pipInventory\.complete && pkgInventory\.c
 assert.match(manifest, /if \(canShrink\)/);
 assert.match(manifest, /prevPipList \+ currentUserPip/);
 assert.match(manifest, /prevPkgList \+ currentUserPkg/);
+assert.match(manifest, /writeAtomicTextFile\(manifestFile, text\)/);
+assert.match(manifest, /writeAtomicTextFile\(it, text\)/);
+assert.doesNotMatch(manifest, /manifestFile\.writeText/);
+assert.doesNotMatch(manifest, /packages_manifest\.json.*writeText/);
+assert.match(manifest, /previous copies were preserved/);
+
 assert.match(source, /savePackageBackupSnapshot\(forceShrink = isUninstall\)/);
 
 const bootstrapStart = source.indexOf('val hasExistingInstall =');
