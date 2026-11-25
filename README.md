@@ -1,8 +1,8 @@
-# DroidPy — Android-First Python 3.12 IDE, Termux Bridge & Standalone Crawler APK
+# DroidPy — Android-First Python IDE, Pyodide 3.12, Termux Bridge & Standalone Crawler APK
 
 **DroidPy** 是一套以 Android 手機為優先的 Python 開發環境，結合離線 Pyodide、原生 Termux 執行引擎、互動式終端機、檔案管理、爬蟲瀏覽器與 Cookie 工作台，並透過 GitHub Actions 自動建置及發布 ARM64 Android APK。
 
-無須依賴電腦即可在手機上編寫、執行及管理 Python 專案。Pyodide 與 Termux 是兩個不同的執行環境：前者適合離線純 Python 與支援的科學運算套件；後者提供 Android/Linux 原生套件、網路工具及系統命令。可攜式程式碼可盡量共用，但兩邊安裝的套件不會自動互通。
+無須依賴電腦即可在手機上編寫、執行及管理 Python 專案。Pyodide 與 Termux 是兩個不同的執行環境：前者固定使用 Python 3.12 WebAssembly，適合離線純 Python 與支援的科學運算套件；後者的 Python 版本由內嵌 Termux Bootstrap 提供，並可使用 Android/Linux 原生套件、網路工具及系統命令。可攜式程式碼可盡量共用，但兩邊安裝的套件不會自動互通。
 
 > **English Summary**: DroidPy is an Android-first Python IDE featuring an offline Pyodide sandbox, native Termux runtime, interactive terminal, project file management, a native crawler browser with Android CookieManager capture, and automated ARM64 APK builds and GitHub Releases.
 
