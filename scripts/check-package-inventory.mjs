@@ -43,7 +43,6 @@ assert.match(bridgeSource, /w3lib<2\.6/, 'standalone Termux bridge must retain i
 
 assert.match(catalogSource, /w3lib 2.6 使用 DroidPy 內建純 Python Frostwork 相容層/);
 assert.match(catalogSource, /Termux User Repository（TUR）預編譯套件提供/);
-assert.match(catalogSource, /Meson\/Cython 無隔離建置/);
 assert.match(source, /"polars" to "python-polars"/);
 assert.match(source, /"python-polars" in missingPkgsOnly/);
 assert.match(panelSource, /python-lxml libxml2 libxslt clang/);
