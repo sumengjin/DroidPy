@@ -19,6 +19,10 @@ assert.match(frostworkSource, /def _css_nodes\(/, 'CSS selector fallback must be
 assert.match(frostworkSource, /def _xpath_nodes\(/, 'XPath selector fallback must be bundled');
 assert.ok(frostworkMetadata.includes('Name: frostwork') && frostworkMetadata.includes('Version: 0.2.2'));
 assert.match(source, /Pure-Python Frostwork fallback seed warning/);
+assert.match(source, /hasNativeFrostwork/, 'a real upstream Frostwork install must take precedence');
+assert.match(source, /isOurFallbackMetadata/, 'fallback cleanup must not delete unrelated user metadata');
+assert.match(source, /if \(!fallbackInit\.exists\(\) \|\| isOurFallback\)/, 'custom user modules must never be overwritten');
+
 assert.ok(source.includes('python/frostwork/__init__.py'));
 
 for (const item of catalogItems) {
