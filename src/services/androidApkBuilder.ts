@@ -3584,8 +3584,14 @@ def clipboard_set(text):
                             steps.add("(pkg update -y || true)")
                             steps.add("pkg install -y " + missingPkgsOnly.joinToString(" "))
                         }
-                        if (needPips.isNotEmpty()) {
-                            steps.add("pip install --no-cache-dir " + needPips.joinToString(" "))
+                        val needsNumpy = needPips.any { normalizePipPkgName(it) == "numpy" }
+                        val remainingPips = needPips.filter { normalizePipPkgName(it) != "numpy" }
+                        if (needsNumpy) {
+                            // Use Termux's prebuilt NumPy package; never trigger a long source build on-device.
+                            steps.add("if pkg install -y python-numpy; then python3 -c 'import numpy' >/dev/null 2>&1 && echo '[DroidPy] NumPy ready (Termux binary package).' || echo '[DroidPy] NumPy package installed but import verification failed.'; else echo '[DroidPy] Termux python-numpy is unavailable; NumPy was skipped to avoid a source build.'; fi")
+                        }
+                        if (remainingPips.isNotEmpty()) {
+                            steps.add("pip install --no-cache-dir " + remainingPips.joinToString(" "))
                         }
                         val restoreCmd = if (steps.isEmpty()) {
                             "echo '[DroidPy] 所有已備份套件均已存在，無需還原。'"
