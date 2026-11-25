@@ -42,13 +42,16 @@ assert.ok(updater.includes('compatibleHistory.containsAll(installedCurrent)'));
 assert.ok(!updater.includes('29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA'));
 assert.ok(!updater.includes('expectedFingerprint'));
 
-// Every APK variant must use the protected keystore and the recovered original
-// DroidPy certificate fingerprint; a changed signing key must fail closed.
+// PR builds may use a temporary Debug signer; merged main/master Release builds
+// require the new protected keystore and compare the APK signer to that keystore.
 const workflow = await readFile('.github/workflows/droidpy.yml', 'utf8');
-assert.ok(workflow.includes('keytool -exportcert -keystore "$KEYSTORE_PATH"'));
-assert.ok(workflow.includes('KEYSTORE_PATH="android/app/${DROIDPY_KEYSTORE_FILE:-droidpy-custom.keystore}"'));
-assert.ok(workflow.includes('受保護 keystore 不符合 DroidPy 原始憑證指紋'));
-assert.ok(workflow.includes('APK 簽名不是 DroidPy 原始憑證'));
-assert.ok(workflow.includes('29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA'));
+assert.ok(workflow.includes('CUSTOM_KS_B64: ${{ secrets.DROIDPY_KEYSTORE_BASE64 }}'));
+assert.ok(workflow.includes('if [ "$IS_RELEASE_REF" = "true" ]; then'));
+assert.ok(workflow.includes('正式發布缺少新的 DROIDPY_KEYSTORE_BASE64 Secret'));
+assert.ok(workflow.includes('DROIDPY_EXPECTED_CERT_SHA256=$KEYSTORE_SHA256'));
+assert.ok(workflow.includes('Release APK 與本次受保護的新 keystore 憑證不一致'));
+assert.ok(workflow.includes("if: (github.event_name == 'push'"));
+assert.ok(!workflow.includes('29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA'));
+assert.ok(!workflow.includes('所有 APK 都必須使用原始 keystore'));
 
 console.log('Native APK updater HTTPS redirect, size, atomic download and installed-signer checks passed.');
