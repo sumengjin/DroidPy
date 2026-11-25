@@ -73,6 +73,11 @@ export const TERMUX_PKG_NAME_HINTS: Record<string, { suggestedMode: 'pkg' | 'pip
     suggestedTarget: 'python-cryptography',
     reason: 'Termux 預編譯 cryptography（含 Rust 模組）套件名為 python-cryptography。',
   },
+  parsel: {
+    suggestedMode: 'pip',
+    suggestedTarget: 'parsel',
+    reason: 'Parsel 本身是純 Python，但需要 cssselect、jmespath、w3lib 與 lxml；Termux 請先安裝原生 python-lxml。官方 Parsel 不依賴 frostwork，若安裝輸出出現 frostwork，請先檢查 pip 套件索引／鏡像設定。',
+  },
 };
 
 export const PACKAGE_CATALOG: CatalogPackageItem[] = [
@@ -138,7 +143,7 @@ export const PACKAGE_CATALOG: CatalogPackageItem[] = [
     category: 'crawler',
     tier: 'niche',
     desc: 'Scrapy 底層的輕量 CSS / XPath / 正則擷取器',
-    runtimeHint: '純 Python（輕巧免 C 編譯）',
+    runtimeHint: '純 Python；Termux 先安裝原生 python-lxml，再安裝 Parsel 與純 Python 相依套件',
     aliases: ['scrapy', 'cssselect', 'xpath'],
     pyodide: { supported: true, packageName: 'parsel' },
     termux: { mode: 'pip', targetName: 'parsel' },
