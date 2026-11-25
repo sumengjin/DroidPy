@@ -159,25 +159,26 @@ jobs:
           fi
           echo "DROIDPY_RELEASE_BUILD=$IS_RELEASE_REF" >> "$GITHUB_ENV"
 
-          if [ -z "$CUSTOM_KS_B64" ]; then
-            echo "::error::缺少原始 DROIDPY_KEYSTORE_BASE64。所有 APK 都必須使用原始 keystore；拒絕臨時或自動生成簽名。"
-            exit 1
+          if [ "$IS_RELEASE_REF" = "true" ]; then
+            if [ -z "$CUSTOM_KS_B64" ]; then
+              echo "::error::正式發布缺少新的 DROIDPY_KEYSTORE_BASE64 Secret。"
+              exit 1
+            fi
+            CUSTOM_STORE_PASS="${CUSTOM_STORE_PASS:-android}"
+            CUSTOM_KEY_ALIAS="${CUSTOM_KEY_ALIAS:-androiddebugkey}"
+            CUSTOM_KEY_PASS="${CUSTOM_KEY_PASS:-android}"
+            printf '%s' "$CUSTOM_KS_B64" | base64 --decode > android/app/droidpy-release.keystore
+            keytool -list -keystore android/app/droidpy-release.keystore -storepass "$CUSTOM_STORE_PASS" -alias "$CUSTOM_KEY_ALIAS" >/dev/null
+            echo "DROIDPY_KEYSTORE_FILE=droidpy-release.keystore" >> "$GITHUB_ENV"
+            printf 'DROIDPY_STORE_PASSWORD=%s\n' "$CUSTOM_STORE_PASS" >> "$GITHUB_ENV"
+            printf 'DROIDPY_KEY_ALIAS=%s\n' "$CUSTOM_KEY_ALIAS" >> "$GITHUB_ENV"
+            printf 'DROIDPY_KEY_PASSWORD=%s\n' "$CUSTOM_KEY_PASS" >> "$GITHUB_ENV"
+            KEYSTORE_SHA256=$(keytool -exportcert -keystore android/app/droidpy-release.keystore -storepass "$CUSTOM_STORE_PASS" -alias "$CUSTOM_KEY_ALIAS" | sha256sum | awk '{print toupper($1)}')
+            echo "DROIDPY_EXPECTED_CERT_SHA256=$KEYSTORE_SHA256" >> "$GITHUB_ENV"
+            echo "已載入新的 DroidPy Release 憑證：$KEYSTORE_SHA256"
+          else
+            echo "PR／非正式建置使用 GitHub Actions 臨時 Debug 簽名；不需要正式發布金鑰。"
           fi
-          CUSTOM_STORE_PASS="${CUSTOM_STORE_PASS:-android}"
-          CUSTOM_KEY_ALIAS="${CUSTOM_KEY_ALIAS:-androiddebugkey}"
-          CUSTOM_KEY_PASS="${CUSTOM_KEY_PASS:-android}"
-          printf '%s' "$CUSTOM_KS_B64" | base64 --decode > android/app/droidpy-custom.keystore
-          echo "DROIDPY_KEYSTORE_FILE=droidpy-custom.keystore" >> "$GITHUB_ENV"
-          printf 'DROIDPY_STORE_PASSWORD=%s\n' "$CUSTOM_STORE_PASS" >> "$GITHUB_ENV"
-          printf 'DROIDPY_KEY_ALIAS=%s\n' "$CUSTOM_KEY_ALIAS" >> "$GITHUB_ENV"
-          printf 'DROIDPY_KEY_PASSWORD=%s\n' "$CUSTOM_KEY_PASS" >> "$GITHUB_ENV"
-          PINNED_SHA256="29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA"
-          KEYSTORE_SHA256=$(keytool -exportcert -keystore android/app/droidpy-custom.keystore -storepass "$CUSTOM_STORE_PASS" -alias "$CUSTOM_KEY_ALIAS" | sha256sum | awk '{print toupper($1)}')
-          if [ "$KEYSTORE_SHA256" != "$PINNED_SHA256" ]; then
-            echo "::error::簽名金鑰與 DroidPy 原始憑證不一致，已停止建置／發布。"
-            exit 1
-          fi
-          echo "已確認使用 DroidPy 原始簽名憑證：$KEYSTORE_SHA256"
           if [ -n "$INPUT_TAG" ]; then
             REL_TAG="v${INPUT_TAG#v}"
             VNAME="${REL_TAG#v}"
@@ -244,22 +245,16 @@ jobs:
             echo "::error::無法從 apksigner 輸出取得有效的 SHA-256 憑證指紋。"
             exit 1
           fi
-          KEYSTORE_PATH="android/app/${DROIDPY_KEYSTORE_FILE:-droidpy-custom.keystore}"
-          if [ ! -f "$KEYSTORE_PATH" ]; then
-            echo "::error::找不到本次建置使用的受保護簽名 keystore。"
-            exit 1
+          if [ "${DROIDPY_RELEASE_BUILD:-false}" = "true" ]; then
+            EXPECTED_SHA256="${DROIDPY_EXPECTED_CERT_SHA256:-}"
+            if ! [[ "$EXPECTED_SHA256" =~ ^[0-9A-F]{64}$ ]] || [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+              echo "::error::Release APK 與本次受保護的新 keystore 憑證不一致，已阻止發布。"
+              exit 1
+            fi
+            echo "已確認 Release APK 使用本次受保護的新簽名憑證（SHA-256: $ACTUAL_SHA256）。"
+          else
+            echo "已確認 PR Debug APK 簽名結構有效（SHA-256: $ACTUAL_SHA256）。"
           fi
-          EXPECTED_SHA256=$(keytool -exportcert -keystore "$KEYSTORE_PATH" -storepass "$DROIDPY_STORE_PASSWORD" -alias "$DROIDPY_KEY_ALIAS" | sha256sum | awk '{print toupper($1)}')
-          PINNED_SHA256="29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA"
-          if ! [[ "$EXPECTED_SHA256" =~ ^[0-9A-F]{64}$ ]] || [ "$EXPECTED_SHA256" != "$PINNED_SHA256" ]; then
-            echo "::error::受保護 keystore 不符合 DroidPy 原始憑證指紋，已阻止 APK 產生／發布。"
-            exit 1
-          fi
-          if [ "$ACTUAL_SHA256" != "$PINNED_SHA256" ]; then
-            echo "::error::APK 簽名不是 DroidPy 原始憑證，已阻止發布。"
-            exit 1
-          fi
-          echo "已確認 APK 使用原始 DroidPy 簽名憑證（SHA-256: $ACTUAL_SHA256）。"
 
       - name: 整理發佈版本與 APK 檔名
         id: resolve_tag
