@@ -213,7 +213,7 @@ jobs:
         working-directory: android
         run: gradle assembleRelease --no-daemon
 
-      - name: 強制驗證所有 APK 均使用原始受保護簽名憑證
+      - name: 驗證 APK 簽名（正式版比對新金鑰）
         env:
           INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
