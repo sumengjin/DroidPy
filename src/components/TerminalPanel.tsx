@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Trash2, Copy, Check, AlertCircle, CornerDownLeft, Download, Maximize2, X, FileText } from 'lucide-react';
+import { Trash2, Copy, Check, AlertCircle, CornerDownLeft, Download, Maximize2, X, FileText, Pause, Play } from 'lucide-react';
 import { ExecutionEngine, PyodideStatus, TerminalEntry } from '../types/ide';
 import { renderAnsiText, stripAnsi } from '../utils/ansiParser';
 import { useI18n } from '../services/i18n';
@@ -21,6 +21,8 @@ interface TerminalPanelProps {
   onSubmitInput: (value: string) => void;
   onRunRepl: (statement: string) => Promise<void>;
   onSendTermuxStdin?: (text: string) => Promise<void>;
+  paused?: boolean;
+  onTogglePause?: () => void;
   onOpenLogs?: () => void;
   enableSandboxAddon?: boolean;
   isDark?: boolean;
@@ -173,6 +175,8 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   onSubmitInput,
   onRunRepl,
   onSendTermuxStdin,
+  paused = false,
+  onTogglePause,
   onOpenLogs,
   enableSandboxAddon = false,
   isDark,
@@ -345,6 +349,18 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-1 shrink-0">
+          {engine === 'termux' && status === 'running' && onTogglePause && (
+            <button
+              type="button"
+              onClick={onTogglePause}
+              aria-label={paused ? '繼續腳本' : '暫停腳本'}
+              title={paused ? '繼續腳本' : '暫停腳本'}
+              className="min-h-[38px] px-2.5 flex items-center gap-1 rounded-xl bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] text-xs font-semibold transition-colors whitespace-nowrap"
+            >
+              {paused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
+              <span>{paused ? '繼續' : '暫停'}</span>
+            </button>
+          )}
           {selectedText.length > 0 && (
             <button
               type="button"
