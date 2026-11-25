@@ -20,8 +20,7 @@ const onCreateStart = source.indexOf('override fun onCreate(savedInstanceState: 
 const onCreateEnd = source.indexOf('override fun onResume()', onCreateStart);
 assert.ok(onCreateStart >= 0 && onCreateEnd > onCreateStart);
 assert.ok(!source.slice(onCreateStart, onCreateEnd).includes('requestExternalStoragePermissionIfNeeded()'), 'storage Settings must not interrupt first-run startup');
-// Android 11+ must use one all-files-access settings flow, never launch
-// legacy READ/WRITE runtime dialogs concurrently with the Settings activity.
+// Use all-files Settings only for targetSdk 30+; legacy-target apps keep runtime READ/WRITE permissions.
 assert.ok(source.includes('Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&'));
 assert.ok(source.includes('applicationInfo.targetSdkVersion >= Build.VERSION_CODES.R'), 'all-files Settings must only be used when the app targets Android 11+');
 assert.ok(source.includes('if (Environment.isExternalStorageManager()) {'));
