@@ -81,6 +81,9 @@ assert.ok(source.includes('                "1.2.31"\n            }'));
 const updaterSource = await readFile('src/services/appUpdater.ts', 'utf8');
 assert.ok(updaterSource.includes("tagName: 'v1.2.31'"));
 assert.ok(updaterSource.includes("tagName: 'v1.2.30'"));
-assert.ok(!updaterSource.includes("tagName: 'v1.2.16'"));
+assert.ok(updaterSource.indexOf("tagName: 'v1.2.31'") < updaterSource.indexOf("tagName: 'v1.2.16'"));
+assert.ok(!source.includes('?: 10216'));
+assert.ok(!source.includes('?: "1.2.16"'));
+
 
 console.log('Native APK updater HTTPS redirect, size, atomic download and installed-signer checks passed.');
