@@ -4,7 +4,7 @@ All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
 - **調整 Pandas 與 Matplotlib 的 Android 安裝來源**：套件目錄與一鍵安裝提示統一使用 Termux 預編譯 `python-pandas`／`matplotlib`，避免 pip 在手機上重複編譯 NumPy、pandas 或 contourpy 等原生依賴。
-- **集中管理 Android 套件相容路由**：APK 內建 Bridge 與獨立 Termux Bridge 都將 Parsel、SciPy、Polars 與 scikit-learn 的特殊安裝規則集中管理；各自的終端機 `pip install` 與 `/install` API 共用相同解析邏輯，APK 內建環境使用 Frostwork 純 Python 相容層，獨立 Termux 環境保留安全的 w3lib 相容限制，避免兩種執行環境混用不適用的模組。
+- **集中管理 Android 套件相容路由**：APK 內建 Bridge 與獨立 Termux Bridge 都將 Parsel、SciPy、Polars 的特殊安裝規則集中管理；scikit-learn 因缺少已驗證的 Android ARM64／Python 3.14 預編譯版本，兩種環境均改為明確提示不可安裝，APK 內建環境使用 Frostwork 純 Python 相容層，獨立 Termux 環境保留安全的 w3lib 相容限制，避免兩種執行環境混用不適用的模組。
 - **新增 Android 純 Python Frostwork 相容替代層**：APK 啟動時將本地相容模組與套件中繼資料種入 DroidPy 使用者匯入路徑，支援 w3lib 2.6 所需的 `navigation()`、常用 CSS／XPath 選擇器、多欄位文字／屬性擷取；無法支援的選擇器會明確報錯，不要求 Rust／Maturin 編譯，也不覆蓋已安裝的上游 Frostwork。此版本以相容性與功能覆蓋為優先，並非 Rust 版本的效能或完整 API 等價物。
 - **修正正式版與 Beta 並存時的本機 Bridge 連接埠衝突**：正式版維持 `127.0.0.1:8765`，Beta 改用 `127.0.0.1:8766`；Android 原生端點會同步提供給前端，避免 Beta 啟動時因正式版仍佔用 8765 而閃退或連錯服務。
 - **修正 Android 11 以上儲存授權與實際 target SDK 不一致**：只有 App 本身 targetSdk ≥ 30 時才開啟「所有檔案存取權」設定；目前 DroidPy targetSdk 28，在 Android 11+ 仍使用相容的 READ/WRITE 執行期授權。Native Bridge、Termux Bridge、儲存狀態 API 與共享資料夾初始化也統一依 target SDK 判斷，避免授權已成功卻被錯誤回報為未授權。
@@ -13,12 +13,10 @@ All notable changes to **DroidPy** are documented in this file.
 - **修復內嵌 Android Bridge 用戶端斷線造成工作執行緒崩潰**：客戶端提前關閉連線時，`writeJson`／`writeHeaders` 的 `Broken pipe` 現在會被視為正常請求結束，不再讓未捕獲的 `IOException` 以 `FATAL EXCEPTION` 終止整個 App；加入回歸檢查。
 - **修復首次啟動授予儲存權限後可能崩潰的流程競態**：不再於 `onCreate` 尚未完成 WebView／Termux Bridge 初始化時自動跳轉系統設定；改為使用者實際操作儲存功能時才請求授權。只有 targetSdk ≥ 30 的版本在 Android 11 以上使用「所有檔案存取權」設定；目前 targetSdk 28 的版本在 Android 11+ 仍使用相容的 READ/WRITE 執行期權限，並加入診斷紀錄。
 - **測試版與正式版可並存**：未發布 APK 的版本名稱加上 `-Beta`，Debug 變體使用獨立 `.beta` 套件 ID，FileProvider authority 隨變體套件 ID 變化；正式版套件 ID、簽名與 Release 發布流程維持不變。
-- **修復 Android scikit-learn 建置時 Meson launcher 回傳 127**：在 Ninja 開始編譯前，將 pip 產生的 Meson 入口改為透過目前可用的 Termux Python 執行 `mesonbuild.mesonmain`，先執行版本預檢；避免 Ninja 呼叫 `py_user/bin/meson --internal copy` 時因啟動器失效而整批複製任務失敗。APK 內嵌與外部 Termux Bridge 同步修正。
 - **修正 Android 終端機絕對 Python 路徑漏接套件相容流程**：現在 `/data/user/.../python3 -m pip install polars` 等完整路徑命令也會辨識並導向 Termux 原生套件，不再誤觸 pip/maturin/Rust 編譯；外部 Termux Bridge 同步修正。
-- **修正 scikit-learn 在 Termux 的 Meson 版本腳本權限**：安裝時下載官方 PyPI 原始碼包，若 `sklearn/_build_utils/version.py` 在原始碼包中缺失便依 PyPI 版本資訊建立，並補上可執行權限，再使用既有原生 NumPy／SciPy 與無隔離建置流程；APK 內嵌與外部 Termux 同步套用。
 - **統一終端機與套件管理介面的 Android 套件相容路徑**：直接輸入簡單的 `pip install parsel`（含 `python -m pip`）也會先安裝 Termux 原生 `python-lxml`，並透過 DroidPy 純 Python Frostwork 相容層支援 `w3lib>=2.6`，不再需要舊版 `w3lib<2.6` 限制或 Frostwork/Rust 建置；外部獨立 Termux Bridge 保留原有相容路徑。
 - **修正 SciPy 在 Android 上的安裝路由**：套件目錄與終端機直接輸入 `pip install scipy` 改走 Termux 預編譯 `python-scipy`，避免 pip 嘗試從原始碼建置 NumPy／SciPy。
-- **新增 scikit-learn Android 專用建置流程**：直接輸入 `pip install scikit-learn` 時，先使用 Termux 原生 NumPy／SciPy 與 Ninja，再安裝相容的 Meson/Cython 及執行期依賴，最後以 `--no-build-isolation --no-deps` 建置，避免 pip 在隔離環境重複編譯 NumPy；外部 Termux Bridge 同步支援。
+- **停用 scikit-learn 手機端原始碼編譯**：目前官方 Termux ARM64 套件庫未提供可確認的 Python 3.14 預編譯版本；已找到的第三方 wheel 只有 CPython 3.12，且其 Linux ARM64 標籤不能保證 Android 相容，因此不再自動下載原始碼並於手機上編譯，改為明確回報尚無相容預編譯套件，避免再次以 Ninja 失敗收場。
 - **新增 Polars Android 原生安裝流程**：直接輸入 `pip install polars` 時，自動加入已簽署的 Termux User Repository（TUR）並安裝預編譯 `python-polars`，避開 Android 不支援的 pip/maturin/rustup 編譯路徑；套件目錄一鍵安裝與備份還原同步支援。
 - 更新 scikit-learn 與 Polars 的 Android 相容性提示，清楚區分 TUR 第三方套件來源與 scikit-learn 本機原生編譯限制。
 
