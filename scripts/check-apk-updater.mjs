@@ -67,26 +67,35 @@ assert.ok(workflow.includes('找不到指定金鑰別名'));
 assert.ok(workflow.includes('DROIDPY_EXPECTED_CERT_SHA256=$KEYSTORE_SHA256'));
 assert.ok(workflow.includes('Release APK 與本次受保護的新 keystore 憑證不一致'));
 assert.ok(workflow.includes("if: (github.event_name == 'push'"));
+const releaseHeadingParser = "VER=$(sed -nE 's/^## \\[([0-9]+\\.[0-9]+\\.[0-9]+)\\].*/\\1/p' CHANGELOG.md 2>/dev/null | head -n1 || true)";
+assert.ok(workflow.includes(releaseHeadingParser));
+assert.ok(workflow.includes('actions/checkout@v5'));
+assert.ok(workflow.includes('actions/setup-node@v5'));
+assert.ok(workflow.includes('actions/setup-python@v6'));
+assert.ok(!workflow.includes('actions/checkout@v4'));
+assert.ok(!workflow.includes('actions/setup-node@v4'));
+assert.ok(!workflow.includes('actions/setup-python@v5'));
+
 assert.ok(!workflow.includes('29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA'));
 assert.ok(!workflow.includes('所有 APK 都必須使用原始 keystore'));
 
 // App, generated APK and native fallback versions must advance together.
 const versionSource = await readFile('src/version.ts', 'utf8');
-assert.ok(versionSource.includes("APP_VERSION = '1.2.33'"));
-assert.ok(versionSource.includes('APP_VERSION_CODE = 1002033'));
-assert.ok(source.includes('versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 1002033'));
-assert.ok(source.includes('versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.33"'));
-assert.ok(source.includes('packageManager.getPackageInfo(packageName, 0).versionName ?: "1.2.33"'));
-assert.ok(source.includes('                "1.2.33"\n            }'));
+assert.ok(versionSource.includes("APP_VERSION = '1.2.34'"));
+assert.ok(versionSource.includes('APP_VERSION_CODE = 1002034'));
+assert.ok(source.includes('versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 1002034'));
+assert.ok(source.includes('versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.34"'));
+assert.ok(source.includes('packageManager.getPackageInfo(packageName, 0).versionName ?: "1.2.34"'));
+assert.ok(source.includes('                "1.2.34"\n            }'));
 assert.ok(source.includes('VCODE=$(( \\${CMAJ:-1} * 1000000 + \\${CMIN:-0} * 1000 + \\${CPAT:-0} ))'));
 
 const updaterSource = await readFile('src/services/appUpdater.ts', 'utf8');
+assert.ok(updaterSource.includes("tagName: 'v1.2.34'"));
 assert.ok(updaterSource.includes("tagName: 'v1.2.33'"));
-assert.ok(updaterSource.includes("tagName: 'v1.2.32'"));
-assert.ok(updaterSource.indexOf("tagName: 'v1.2.33'") < updaterSource.indexOf("tagName: 'v1.2.16'"));
+assert.ok(updaterSource.indexOf("tagName: 'v1.2.34'") < updaterSource.indexOf("tagName: 'v1.2.16'"));
 const packageManifest = JSON.parse(await readFile('package.json', 'utf8'));
 assert.equal(packageManifest.name, 'droidpy');
-assert.equal(packageManifest.version, '1.2.33');
+assert.equal(packageManifest.version, '1.2.34');
 const bunLock = await readFile('bun.lock', 'utf8');
 assert.ok(bunLock.includes('"name": "droidpy"'));
 assert.ok((await readFile('README.md', 'utf8')).includes('Android-First Python IDE, Pyodide 3.12'));

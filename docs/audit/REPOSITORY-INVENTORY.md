@@ -1,35 +1,26 @@
 # Repository inventory — DroidPy
 
-> Audit baseline: `main` at `e8956f09d1463cd665322edd5dc7821df0fcd014`
+> Audit baseline: `main` at `e6e035776707d4bfb99ab9a1837ad2d477ca9c2d` (before this audit-refresh PR)
 > Inventory refreshed: 2026-11-25
 > Source: GitHub recursive tree API (`truncated=false`)
-> Scope: tracked repository files only; generated Android project contents and Git history require separate inspection.
+> Scope: tracked repository files only; generated Android project contents and Git history are reviewed separately.
 
 ## Repository size and layout
 
-The current tree contains **58 tracked files** (including binary assets). Main areas:
+The main branch snapshot contains **69 tracked files** across 82 tree entries (69 files and 13 directories). The recursive tree was not truncated.
 
 | Area | Files | Audit focus |
 |---|---:|---|
-| GitHub Actions | 1 | permissions, trigger conditions, fork PR trust, signing and Release gates |
-| Root config/docs | 9 | dependency lock, package metadata, README/version consistency, environment examples |
-| Android generator | 1 | generated Kotlin/Gradle/Manifest/WebView/Bridge, signing, permissions, storage |
-| Android preparation script | 1 | generated project reproducibility |
-| Signing assets | 2 | exposed PKCS#12 and embedded Base64 private-key material |
-| React application | 1 | lifecycle, state, async races, storage migration, destructive actions |
-| UI components | 13 | editor, crawler, file manager, storage, terminal, update, package UI |
-| Data/catalog | 2 | embedded templates and package catalog |
-| Hooks | 3 | timers/listeners and lifecycle cleanup |
-| Services | 11 | APK builder, Termux Bridge, updater, backup, storage, logger, Pyodide, i18n |
-| Types | 1 | bridge and diagnostic contracts |
-| Utilities | 6 | crawler session, ANSI, clipboard, download, formatting |
-| Public media | 5 | icons/PWA assets |
-| Styles/entry | 3 | CSS, HTML/React entry, Vite config |
-| Other | 1 | metadata |
+| Root config, app metadata and workflow | 11 | package manager/lock, CI permissions, versioning, environment examples |
+| Audit documentation | 5 | current inventory, risk register, signing incident and progress |
+| Public media | 5 | PWA icons and static assets |
+| Scripts | 9 | regression checks, Android project preparation |
+| React/TypeScript source | 39 | UI lifecycle, storage, Bridge, updater, crawler and generated native Android code |
+| **Total** | **69** | |
 
 ## Tracked file inventory
 
-### Root, build and workflow
+### Root, build and workflow (11)
 - `.env.example`
 - `.github/workflows/droidpy.yml`
 - `.gitignore`
@@ -39,24 +30,38 @@ The current tree contains **58 tracked files** (including binary assets). Main a
 - `index.html`
 - `metadata.json`
 - `package.json`
-- `scripts/prepare-android.ts`
 - `tsconfig.json`
 - `vite.config.ts`
 
-### Public assets
+### Audit documentation (5)
+- `docs/audit/COMPREHENSIVE-REPAIR-PLAN.md`
+- `docs/audit/PROGRESS.md`
+- `docs/audit/REPOSITORY-INVENTORY.md`
+- `docs/audit/RISK-REGISTER.md`
+- `docs/audit/SIGNING-INCIDENT-AND-ROTATION-ANALYSIS.md`
+
+### Public assets (5)
 - `public/apple-touch-icon.png`
 - `public/icon.svg`
 - `public/pwa-192x192.png`
 - `public/pwa-512x512.png`
 - `public/pwa-maskable-512x512.png`
 
-### Android/signing
-- `signing/droidpy-debug.p12`
-- `src/services/androidSigningAsset.ts`
-- `src/services/androidApkBuilder.ts` (generates the Android project, native Kotlin and workflow)
+### Scripts (9)
+- `scripts/check-apk-updater.mjs`
+- `scripts/check-apt-security.mjs`
+- `scripts/check-bridge.mjs`
+- `scripts/check-export-workflow.mjs`
+- `scripts/check-package-inventory.mjs`
+- `scripts/check-probe-url-security.mjs`
+- `scripts/check-script-backup.mjs`
+- `scripts/check-watchdog-safety.mjs`
+- `scripts/prepare-android.ts`
 
-### Application and components
+### Application and UI (15)
 - `src/App.tsx`
+- `src/main.tsx`
+- `src/index.css`
 - `src/components/AndroidSymbolBar.tsx`
 - `src/components/AppExecutionLogModal.tsx`
 - `src/components/AppUpdateModal.tsx`
@@ -69,17 +74,21 @@ The current tree contains **58 tracked files** (including binary assets). Main a
 - `src/components/NegativeScreenDrawer.tsx`
 - `src/components/PWAInstallButton.tsx`
 - `src/components/TerminalPanel.tsx`
+
+### Termux integration and data (5)
 - `src/components/TermuxIntegrationPanel.tsx`
 - `src/components/ToolsAndPackages.tsx`
-
-### Data, hooks, services, types and utilities
 - `src/data/defaultFiles.ts`
 - `src/data/packageCatalog.ts`
+- `src/version.ts`
+
+### Hooks (3)
 - `src/hooks/useDeviceLayout.ts`
 - `src/hooks/useOnlineStatus.ts`
 - `src/hooks/usePWAInstall.ts`
-- `src/index.css`
-- `src/main.tsx`
+
+### Services (10)
+- `src/services/androidApkBuilder.ts` (generates Android Kotlin, Gradle, Manifest, Bridge and export workflow)
 - `src/services/androidIconAssets.ts`
 - `src/services/appLogger.ts`
 - `src/services/appUpdater.ts`
@@ -89,24 +98,26 @@ The current tree contains **58 tracked files** (including binary assets). Main a
 - `src/services/storageManager.ts`
 - `src/services/termuxBridge.ts`
 - `src/services/themes.ts`
+
+### Types and utilities (6)
 - `src/types/ide.ts`
 - `src/utils/ansiParser.tsx`
 - `src/utils/clipboard.ts`
 - `src/utils/crawlerSession.ts`
 - `src/utils/downloadBlob.ts`
 - `src/utils/formatDuration.ts`
-- `src/version.ts`
 
-## Initial verified observations
+## Verified observations
 
-1. The tracked tree includes a binary PKCS#12 file at `signing/droidpy-debug.p12` and an application source file `src/services/androidSigningAsset.ts` containing a Base64-encoded PKCS#12 asset. The source comments expose the associated certificate fingerprint. This proves private signing material is present in public source control; it does **not yet prove** that the same key signed the currently distributed APK. Treat as a P0 key-exposure incident until cryptographic comparison is completed.
-2. `src/services/termuxBridge.ts` defines a default fixed bridge token and its Python server generator falls back to that token when the supplied token is empty. The same service generates a localhost HTTP server with broad CORS/Private Network Access behavior. The generated native Android bridge in `src/services/androidApkBuilder.ts` must be audited separately; fixing only one implementation is insufficient.
-3. `src/services/scriptBackup.ts` removes older snapshots under localStorage quota pressure. When all writes fail it returns an empty list, but `createScriptBackup` still returns the newly constructed snapshot. Callers can therefore report a backup that was not persisted. The restore flow creates a pre-restore backup but does not verify persistence before replacing in-memory files.
-4. `package.json` has no package version aligned to the app release (currently `0.0.0`) and declares broad semver ranges. `bun.lock` exists while CI uses npm installation; the lockfile/installer strategy is inconsistent.
-5. The main workflow declares `contents: write` globally, although the test job only needs read access. Build/release jobs should receive only the permissions they require.
-6. `src/services/appUpdater.ts` contains built-in local release history through v1.2.16, while GitHub Releases currently include v1.2.18. `src/version.ts` and README runtime claims also require reconciliation against generated APK metadata and actual embedded Termux Python.
-7. `README.md` describes Python 3.12 and the exported APK workflow. The previously observed runtime traceback reported Python 3.14. Treat documentation/runtime mismatch as unverified until the generated bootstrap and device environment are checked.
+1. The current main tree no longer contains `signing/droidpy-debug.p12` or `src/services/androidSigningAsset.ts`. The historical public-key exposure remains a Git-history compromise; this inventory does not claim the old key was erased from history.
+2. Formal Releases v1.2.31, v1.2.32 and v1.2.33 were built with the protected Actions signer. The APK signer SHA-256 remained `353F581792A659420EAF1E8EC278E7F5F78C8B13F767EA0A9E3DDEA682AEB818`. Device upgrade compatibility still requires installation testing.
+3. README now distinguishes Pyodide's Python 3.12 runtime from the Python version supplied by the embedded Termux Bootstrap.
+4. Package metadata now uses `droidpy` and a release-aligned version. `bun.lock` exists, but CI still installs with npm rather than a frozen lockfile; dependency reproducibility remains open.
+5. Native Kotlin and the exported GitHub workflow are generated from `src/services/androidApkBuilder.ts`; tests must validate both the source template and generated project.
+6. The crawler Cookie capture stores session cookies in workspace `cookies.json`. Native logs avoid cookie values, but workspace backups and ZIP exports may include that file; this remains a privacy-review item.
 
-## Audit coverage
+## Audit coverage and limitations
 
-This is a repository file inventory and initial static review, not a claim that all 58 files have received line-by-line security review. Native Kotlin is generated inside `androidApkBuilder.ts`; audit its generated output and all security-sensitive routes as first-class code. Git history, binary keystore contents, release APK signer identity, runtime behavior, and Android 10+ storage behavior remain separate verification tasks.
+This is a verified repository inventory plus a targeted static review of security-sensitive paths (Bridge authentication/CORS, URL probing, process lifecycle, package inventory/backup, bootstrap preservation, storage deletion boundaries, updater signing, WebView navigation and Cookie capture). It is **not** a claim that all 69 files have received a complete line-by-line audit or that Android 10+ device acceptance is complete.
+
+Remaining work includes full UI lifecycle review, Android 10+ storage and upgrade tests, cookie export privacy, dependency-lock reproducibility, bounded storage-usage scanning, and review of the still-draft package diagnostics PR #7.

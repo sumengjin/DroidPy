@@ -126,6 +126,13 @@ All notable changes to **DroidPy** are documented in this file.
 - **同步更新繁中、簡中、英文與日文介面文案**，明確標示程序檢查不會自動終止工作。
 - **加入 watchdog 安全回歸檢查**，防止未來重新引入依執行時間清理程序的邏輯。
 
+## [1.2.34] - 2026-11-25
+
+### Fixed — Release pipeline and audit coverage
+- 主版與匯出 Android 專案的 Release 版本只從 CHANGELOG 的正式版本標題解析，避免正文中其他版本字串誤導自動發版。
+- 將 GitHub Actions checkout/setup-node/setup-python 更新至 Node 24 相容版本，並加入回歸檢查。
+- 更新全專案 69 個追蹤檔案的盤點、風險登錄與實際驗證進度；明確標示仍需 Android 10+ 實機驗收的項目。
+
 ## [1.2.33] - 2026-11-25
 
 ### Fixed — Atomic package backup and version metadata

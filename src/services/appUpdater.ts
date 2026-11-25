@@ -117,11 +117,24 @@ function mapGitHubReleases(rawList: RawGitHubRelease[]): AppReleaseInfo[] {
 
 export const BUILTIN_LOCAL_RELEASES: AppReleaseInfo[] = [
   {
+    tagName: 'v1.2.34',
+    version: '1.2.34',
+    name: 'DroidPy v1.2.34',
+    publishedAt: '2026-11-25',
+    htmlUrl: '',
+    prerelease: false,
+    apkAssets: [],
+    body: [
+      '• 統一 Release 版本解析，只讀取 CHANGELOG 的正式版本標題，避免誤讀正文中的其他版本號',
+      '• 升級 GitHub Actions Node 24 相容版本，並更新稽核清單與版本資訊',
+    ].join('\n'),
+  },
+  {
     tagName: 'v1.2.33',
     version: '1.2.33',
     name: 'DroidPy v1.2.33',
     publishedAt: '2026-11-25',
-    htmlUrl: '',
+    htmlUrl: 'https://github.com/sumengjin/DroidPy/releases/tag/v1.2.33',
     prerelease: false,
     apkAssets: [],
     body: [
@@ -140,19 +153,6 @@ export const BUILTIN_LOCAL_RELEASES: AppReleaseInfo[] = [
     body: [
       '• 修正外部 Termux Bridge 在網頁串流斷線時誤送 SIGKILL 的問題',
       '• 斷線後繼續排空 PTY 輸出，只有明確 /stop 才終止 Python 程序',
-    ].join('\n'),
-  },
-  {
-    tagName: 'v1.2.31',
-    version: '1.2.31',
-    name: 'DroidPy v1.2.31',
-    publishedAt: '2026-11-25',
-    htmlUrl: 'https://github.com/sumengjin/DroidPy/releases/tag/v1.2.31',
-    prerelease: false,
-    apkAssets: [],
-    body: [
-      '• 修正 App 版本常數、原生 APK 預設版本與離線更新資訊長期停留在舊版的問題',
-      '• 統一主專案與匯出 Android 專案的 versionCode 編碼公式',
     ].join('\n'),
   },
   {
