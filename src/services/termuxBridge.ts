@@ -1357,7 +1357,9 @@ async function termuxStreamRequest(
   callbacks: TermuxStreamCallbacks
 ): Promise<{ exitCode: number; durationMs: number }> {
   const base = config.endpointUrl.replace(/\/+$/, '');
-  abortActiveTermuxStream();
+  if (activeStreamController && !activeStreamController.signal.aborted) {
+    throw new Error('已有 Termux 工作正在執行；請先停止目前工作後再試。');
+  }
   const controller = new AbortController();
   activeStreamController = controller;
 
@@ -1377,7 +1379,7 @@ async function termuxStreamRequest(
       activeStreamController = null;
     }
     if (err instanceof Error && err.name === 'AbortError') {
-      return { exitCode: 130, durationMs: 0 };
+      return { exitCode: -1, durationMs: 0 };
     }
     if (err instanceof TypeError) {
       throw new Error(`無法連線至 Termux 橋接服務 (${base})，請先在 Termux 啟動新版橋接腳本`);
@@ -1445,7 +1447,7 @@ async function termuxStreamRequest(
     }
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
-      return { exitCode: 130, durationMs };
+      return { exitCode: -1, durationMs };
     }
     throw err;
   } finally {
