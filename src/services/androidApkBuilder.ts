@@ -512,6 +512,8 @@ class MainActivity : AppCompatActivity() {
     private val updatePrefs by lazy { getSharedPreferences("droidpy_update_flow", Context.MODE_PRIVATE) }
     private val pendingInstallKey = "pending_verified_apk_path"
     private val bridgeToken: String by lazy { loadOrCreateBridgeToken() }
+    // Stable and Beta installations must not contend for the same localhost port.
+    private val bridgePort: Int get() = if (packageName.endsWith(".beta")) 8766 else 8765
 
     private fun appendActivityLog(tag: String, message: String) {
         try {
@@ -567,7 +569,8 @@ class MainActivity : AppCompatActivity() {
                 workspaceDir = workspaceDir,
                 token = bridgeToken,
                 allowedOrigin = bridgeAllowedOrigin,
-                assetManager = assets
+                assetManager = assets,
+                port = bridgePort
             )
             created.start()
             retainedBridge = created
@@ -639,6 +642,9 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun getBridgeToken(): String = bridgeToken
+
+        @JavascriptInterface
+        fun getBridgeEndpoint(): String = "http://127.0.0.1:\${bridgePort}"
 
         @JavascriptInterface
         fun getAppVersionName(): String {
@@ -1442,7 +1448,7 @@ class MainActivity : AppCompatActivity() {
         }
         val remoteUrl = "${typeof window !== 'undefined' ? window.location.origin : 'https://localhost'}"
         val bridgeAllowedOrigin = when {
-            hasBundledWww -> normalizedOrigin(Uri.parse("http://127.0.0.1:8765/")) ?: "http://127.0.0.1:8765"
+            hasBundledWww -> normalizedOrigin(Uri.parse("http://127.0.0.1:\${bridgePort}/")) ?: "http://127.0.0.1:\${bridgePort}"
             localWeb.exists() -> "null"
             else -> normalizedOrigin(Uri.parse(remoteUrl)) ?: "null"
         }
@@ -1558,9 +1564,9 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 appendStartupLog("WebView", "Dispatching initial page load")
                 if (hasBundledWww) {
-                    trustedAppOrigin = normalizedOrigin(Uri.parse("http://127.0.0.1:8765/"))
+                    trustedAppOrigin = normalizedOrigin(Uri.parse("http://127.0.0.1:\${bridgePort}/"))
                     trustedLocalWebPath = null
-                    webView.loadUrl("http://127.0.0.1:8765/")
+                    webView.loadUrl("http://127.0.0.1:\${bridgePort}/")
                 } else if (localWeb.exists()) {
                     trustedAppOrigin = null
                     trustedLocalWebPath = localWeb.canonicalPath
