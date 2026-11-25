@@ -16,6 +16,14 @@ assert.ok(source.includes('updatePrefs.edit().putString(pendingInstallKey, apkFi
 assert.ok(source.includes('override fun onResume()'));
 assert.ok(source.includes('packageManager.canRequestPackageInstalls()'));
 assert.ok(source.includes('installVerifiedApkOrRequestPermission(File(pendingPath))'));
+// Android 11+ must use one all-files-access settings flow, never launch
+// legacy READ/WRITE runtime dialogs concurrently with the Settings activity.
+assert.ok(source.includes('if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {'))
+assert.ok(source.includes('if (Environment.isExternalStorageManager()) {'))
+assert.ok(source.includes('Opening app-specific all-files access settings'))
+assert.ok(source.includes('Android 10 and earlier retain the legacy runtime storage permissions.'))
+assert.ok(source.includes('return\n        }\n\n        // Android 10 and earlier'))
+assert.ok(source.includes('ActivityCompat.requestPermissions(this, permsToAsk.toTypedArray(), 1001)'));
 
 // Redirects must remain HTTPS and on the official GitHub asset delivery hosts.
 assert.ok(updater.includes('fun validateGithubAssetUrl(raw: String): URL'));
