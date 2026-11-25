@@ -55,6 +55,10 @@ assert.ok(generated.slice(explicitStopStart, explicitStopEnd).includes('os.killp
 
 assert.ok(generated.includes('os.killpg(pgid, signal.SIGSTOP if should_pause else signal.SIGCONT)'));
 assert.ok(generated.includes('def _normalize_shell_command(command):'));
+assert.ok(generated.includes('python-polars'));
+assert.ok(generated.includes('--no-build-isolation'));
+assert.ok(generated.includes('meson-python>=0.17.1,<0.22'));
+assert.ok(generated.includes('cython>=3.1.2,<3.2.6'));
 assert.ok(generated.includes('return re.sub(r"^(\\s*pkg\\s+install\\b)", r"\\1 -y"'));
 assert.ok(generated.includes('BoundedThreadingHTTPServer(("127.0.0.1", 8765), DroidPyBridgeHandler)'));
 
@@ -113,6 +117,11 @@ assert.ok(androidBuilder.includes('val parselPip = Regex('));
 assert.ok(androidBuilder.includes("w3lib<2.6' parsel"));
 assert.ok(androidBuilder.includes('val scipyPip = Regex('));
 assert.ok(androidBuilder.includes('return "pkg install -y python-scipy"'));
+assert.ok(androidBuilder.includes('val polarsPip = Regex('));
+assert.ok(androidBuilder.includes('pkg install -y tur-repo && pkg update -y && pkg install -y python-polars'));
+assert.ok(androidBuilder.includes('val sklearnPip = Regex('));
+assert.ok(androidBuilder.includes('--no-build-isolation --no-deps scikit-learn'));
+assert.ok(androidBuilder.includes('"polars" to "python-polars"'));
 assert.ok(androidBuilder.includes('"matplotlib" to "matplotlib"'));
 assert.ok(androidBuilder.includes('nativeTermuxPackageForPip(name)'));
 assert.ok(androidBuilder.includes('target.equals("parsel", ignoreCase = true)'));
