@@ -24,10 +24,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 檢出程式碼
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 設定 Python 環境
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -44,7 +44,7 @@ jobs:
           fi
 
       - name: 設定 Node.js 20
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "20"
 
@@ -87,7 +87,7 @@ jobs:
       artifact_name: ${{ steps.resolve_tag.outputs.artifact_name }}
     steps:
       - name: 檢出程式碼
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 下載前端建置產物
         uses: actions/download-artifact@v4
@@ -96,7 +96,7 @@ jobs:
           path: dist
 
       - name: 設定 Node.js 20
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "20"
 
@@ -144,7 +144,7 @@ jobs:
             echo "::error::release_tag 必須是有效的版本標籤，例如 v1.2.3"
             exit 1
           fi
-          VER=$(grep -m1 -oE '\[[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md 2>/dev/null | tr -d '[' || true)
+          VER=$(sed -nE 's/^## \[([0-9]+\.[0-9]+\.[0-9]+)\].*/\1/p' CHANGELOG.md 2>/dev/null | head -n1 || true)
           if [ -z "$VER" ]; then
             VER="1.2.${GITHUB_RUN_NUMBER:-1}"
           fi
@@ -349,7 +349,7 @@ jobs:
       contents: write
     steps:
       - name: 檢出程式碼
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 下載 APK 建置產物
         uses: actions/download-artifact@v4
