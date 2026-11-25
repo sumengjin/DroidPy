@@ -502,6 +502,8 @@ class MainActivity : AppCompatActivity() {
     private var lastBackPressedAt: Long = 0L
     private var exitToast: Toast? = null
     private val stateIoExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private val updatePrefs by lazy { getSharedPreferences("droidpy_update_flow", Context.MODE_PRIVATE) }
+    private val pendingInstallKey = "pending_verified_apk_path"
     private val bridgeToken: String by lazy { loadOrCreateBridgeToken() }
 
     private fun loadOrCreateBridgeToken(): String {
@@ -803,28 +805,7 @@ class MainActivity : AppCompatActivity() {
                     emitProgress("installing", 100, downloaded, if (totalBytes > 0L) totalBytes else downloaded)
 
                     runOnUiThread {
-                        try {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
-                                Toast.makeText(this@MainActivity, "請允許 DroidPy 安裝未知來源應用程式以完成更新", Toast.LENGTH_LONG).show()
-                                val permIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                                    data = Uri.parse("package:\\$packageName")
-                                }
-                                startActivity(permIntent)
-                                return@runOnUiThread
-                            }
-                            val contentUri = FileProvider.getUriForFile(
-                                this@MainActivity,
-                                "\${packageName}.fileprovider",
-                                outFile
-                            )
-                            val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(contentUri, "application/vnd.android.package-archive")
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                            startActivity(installIntent)
-                        } catch (e: Exception) {
-                            emitProgress("error", 0, message = "啟動系統安裝器失敗: \${e.message}")
-                        }
+                        installVerifiedApkOrRequestPermission(outFile)
                     }
                 } catch (e: Exception) {
                     try { activeConnection?.disconnect() } catch (_: Exception) {}
@@ -1151,6 +1132,42 @@ class MainActivity : AppCompatActivity() {
         return overlay
     }
 
+    private fun installVerifiedApkOrRequestPermission(apkFile: File) {
+        if (!apkFile.isFile || apkFile.length() <= 0L) {
+            updatePrefs.edit().remove(pendingInstallKey).apply()
+            Toast.makeText(this, "找不到已驗證的更新 APK，請重新下載", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+            updatePrefs.edit().putString(pendingInstallKey, apkFile.absolutePath).apply()
+            val settingsIntent = Intent(
+                Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                Uri.parse("package:\$packageName")
+            )
+            try {
+                startActivity(settingsIntent)
+            } catch (_: Exception) {
+                try {
+                    startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:\$packageName")))
+                } catch (error: Exception) {
+                    Toast.makeText(this, "無法開啟安裝未知應用程式設定：\${error.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+            return
+        }
+        updatePrefs.edit().remove(pendingInstallKey).apply()
+        try {
+            val contentUri = FileProvider.getUriForFile(this, "\${packageName}.fileprovider", apkFile)
+            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(contentUri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(installIntent)
+        } catch (error: Exception) {
+            Toast.makeText(this, "啟動系統安裝器失敗：\${error.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -1420,6 +1437,17 @@ class MainActivity : AppCompatActivity() {
                     trustedLocalWebPath = null
                     webView.loadUrl(remoteUrl)
                 }
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val pendingPath = updatePrefs.getString(pendingInstallKey, null) ?: return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()) {
+            updatePrefs.edit().remove(pendingInstallKey).apply()
+            window.decorView.post {
+                installVerifiedApkOrRequestPermission(File(pendingPath))
             }
         }
     }
@@ -4334,44 +4362,72 @@ def clipboard_set(text):
         val shFile = File(usrDir, "bin/sh")
         var code = 1
         var stdoutText = ""
-        val isPkgOrPip = command.contains("pip") || command.contains("pkg") || command.contains("apt")
-        if (!shFile.exists()) {
-            stdoutText = "[DroidPy] Bootstrap sh not ready"
-        } else {
-            var proc: Process? = null
-            try {
+        var stderrText = ""
+        val isPkgOrPip = Regex("""(^|[;&|]\s*)(?:pkg|apt|apt-get|pip|python(?:3)?\s+-m\s+pip)\b""")
+            .containsMatchIn(command)
+        val logDir = File(usrDir, "tmp").apply { mkdirs() }
+        var logFile: File? = null
+        var proc: Process? = null
+        try {
+            if (!shFile.isFile || !shFile.canExecute()) {
+                stderrText = "[DroidPy] Bootstrap shell 尚未就緒：\${shFile.absolutePath}"
+            } else {
+                logFile = File.createTempFile("droidpy-shell-", ".log", logDir)
                 val pb = ProcessBuilder(shFile.absolutePath, "-c", command)
                 pb.directory(workspaceDir)
                 pb.redirectErrorStream(true)
+                pb.redirectOutput(logFile)
                 pb.environment().putAll(buildEnv())
                 proc = pb.start()
-                stdoutText = proc.inputStream.bufferedReader(Charsets.UTF_8).readText()
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    val done = proc.waitFor(120, java.util.concurrent.TimeUnit.SECONDS)
-                    code = if (done) proc.exitValue() else 124
-                    if (!done) proc.destroyForcibly()
+                val done = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    proc.waitFor(120, java.util.concurrent.TimeUnit.SECONDS)
                 } else {
-                    code = proc.waitFor()
+                    proc.waitFor()
+                    true
                 }
-            } catch (e: Exception) {
-                stdoutText = e.message ?: "Shell execution error"
-            } finally {
-                try { proc?.inputStream?.close() } catch (_: Exception) {}
-                try { proc?.errorStream?.close() } catch (_: Exception) {}
-                try { proc?.outputStream?.close() } catch (_: Exception) {}
-                if (isPkgOrPip) {
-                    pruneStaleCacheAndTemp(clearAptLists = false)
+                if (!done) {
+                    proc.destroy()
+                    val stopped = proc.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
+                    if (!stopped) proc.destroyForcibly()
+                    code = 124
+                    stderrText = "命令執行逾時（120 秒），已終止程序"
+                } else {
+                    code = proc.exitValue()
                 }
+                val output = logFile.takeIf { it.isFile }?.let { file ->
+                    java.io.RandomAccessFile(file, "r").use { input ->
+                        val maxBytes = 2L * 1024L * 1024L
+                        val start = (input.length() - maxBytes).coerceAtLeast(0L)
+                        input.seek(start)
+                        ByteArray((input.length() - start).toInt()).also(input::readFully)
+                            .toString(Charsets.UTF_8)
+                    }
+                }.orEmpty()
+                stdoutText = if ((logFile?.length() ?: 0L) > 2L * 1024L * 1024L) {
+                    "[DroidPy] 輸出過長，僅保留最後 2 MiB。\n" + output
+                } else output
+            }
+        } catch (e: Exception) {
+            stderrText = e.message ?: "Shell execution error"
+            code = 1
+        } finally {
+            try { proc?.inputStream?.close() } catch (_: Exception) {}
+            try { proc?.errorStream?.close() } catch (_: Exception) {}
+            try { proc?.outputStream?.close() } catch (_: Exception) {}
+            try { proc?.destroyForcibly() } catch (_: Exception) {}
+            try { logFile?.delete() } catch (_: Exception) {}
+            if (isPkgOrPip) {
+                pruneStaleCacheAndTemp(clearAptLists = false)
             }
         }
         if (code == 0 && isPkgOrPip) {
-            val isUninstall = command.contains("uninstall") || command.contains("remove") || command.contains("purge")
+            val isUninstall = Regex("""\b(uninstall|remove|purge)\b""", RegexOption.IGNORE_CASE).containsMatchIn(command)
             savePackageBackupSnapshot(forceShrink = isUninstall)
         }
         return JSONObject()
             .put("exitCode", code)
             .put("stdout", stripAnsiForLog(stdoutText))
-            .put("stderr", "")
+            .put("stderr", stripAnsiForLog(stderrText))
             .put("durationMs", System.currentTimeMillis() - t0)
     }
 
