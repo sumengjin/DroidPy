@@ -119,11 +119,13 @@ export const CrawlerBrowserPanel: React.FC<CrawlerBrowserPanelProps> = ({
     // so the address bar always produces a visible navigation on Android.
     if (isNativeApk) {
       try {
-        const openBrowser = window.DroidPyNative?.openCrawlerBrowser;
-        if (!openBrowser) {
+        if (!window.DroidPyNative?.openCrawlerBrowser) {
           throw new Error('原生瀏覽器橋接不可用，請重新啟動 DroidPy');
         }
-        openBrowser(clean, isDesktopUa);
+        // Keep the injected Java bridge object as the call receiver.
+        // Detaching a @JavascriptInterface method causes Android WebView to
+        // reject it with "Java bridge method can't be invoked on a non-injected object".
+        window.DroidPyNative.openCrawlerBrowser(clean, isDesktopUa);
       } catch (err) {
         setProbeError(err instanceof Error ? err.message : String(err));
       }
