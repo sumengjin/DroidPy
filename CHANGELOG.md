@@ -5,7 +5,9 @@ All notable changes to **DroidPy** are documented in this file.
 ## [Unreleased]
 - **統一終端機與套件管理介面的 Android 套件相容路徑**：直接輸入簡單的 `pip install parsel`（含 `python -m pip`）也會先安裝 Termux 原生 `python-lxml`，再以 `w3lib<2.6` 安裝 Parsel，避免意外觸發 Frostwork/Rust 建置；外部 Termux Bridge 同步套用。
 - **修正 SciPy 在 Android 上的安裝路由**：套件目錄與終端機直接輸入 `pip install scipy` 改走 Termux 預編譯 `python-scipy`，避免 pip 嘗試從原始碼建置 NumPy／SciPy。
-- 更新 scikit-learn 與 Polars 的 Android 相容性提示，明確說明原生依賴／Rust 目標限制，避免將不穩定的 pip 編譯誤導為一般安裝流程。
+- **新增 scikit-learn Android 專用建置流程**：直接輸入 `pip install scikit-learn` 時，先使用 Termux 原生 NumPy／SciPy 與 Ninja，再安裝相容的 Meson/Cython 及執行期依賴，最後以 `--no-build-isolation --no-deps` 建置，避免 pip 在隔離環境重複編譯 NumPy；外部 Termux Bridge 同步支援。
+- **新增 Polars Android 原生安裝流程**：直接輸入 `pip install polars` 時，自動加入已簽署的 Termux User Repository（TUR）並安裝預編譯 `python-polars`，避開 Android 不支援的 pip/maturin/rustup 編譯路徑；套件目錄一鍵安裝與備份還原同步支援。
+- 更新 scikit-learn 與 Polars 的 Android 相容性提示，清楚區分 TUR 第三方套件來源與 scikit-learn 本機原生編譯限制。
 
 - 修正 Termux 橋接頁面顯示的初始化指令：明確安裝 `python-pip` 與原生 `python-lxml`，不再展示會讓使用者誤以為應以 pip 編譯 lxml 的舊指令。
 - 補充 `metadata` 套件名稱與標準庫 `importlib.metadata` 的差異。

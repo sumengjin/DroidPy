@@ -3210,7 +3210,8 @@ def clipboard_set(text):
         "pil" to "python-pillow",
         "lxml" to "python-lxml",
         "cryptography" to "python-cryptography",
-        "matplotlib" to "matplotlib"
+        "matplotlib" to "matplotlib",
+        "polars" to "python-polars"
     )
 
     private fun nativeTermuxPackageForPip(name: String): String? {
@@ -3826,6 +3827,10 @@ def clipboard_set(text):
                             }
                         }
                         val missingPkgsOnly = (needPkgs + nativeRestoreTargets).distinct().filter { it !in currentPkgs }
+                        if ("python-polars" in missingPkgsOnly) {
+                            // Polars is supplied by the optional, signed Termux User Repository (TUR).
+                            steps.add("pkg install -y tur-repo && pkg update -y")
+                        }
                         if (nativeRestoreTargets.isNotEmpty()) {
                             steps.add("echo '[DroidPy] Restoring native Termux packages: " + nativeRestoreTargets.joinToString(" ") + "'")
                         }
@@ -4227,6 +4232,13 @@ def clipboard_set(text):
                                     "--no-cache-dir"
                                 }
                                 "pkg install -y python-lxml && $pythonCmd -m pip install $pipArgs 'w3lib<2.6' parsel"
+                            } else if (target.equals("polars", ignoreCase = true)) {
+                                // Use TUR's signed Android-native Polars package and Rust runtime, not pip/maturin.
+                                "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"
+                            } else if (target.equals("scikit-learn", ignoreCase = true)) {
+                                // Reuse native NumPy/SciPy; no-build-isolation prevents pip from rebuilding NumPy.
+                                val trustArgs = if (trustedHost) "--trusted-host pypi.org --trusted-host files.pythonhosted.org" else ""
+                                "pkg install -y python-numpy python-scipy ninja && $pythonCmd -m pip install --no-cache-dir $trustArgs --prefer-binary 'meson-python>=0.17.1,<0.22' 'cython>=3.1.2,<3.2.6' 'joblib>=1.4.0' 'narwhals>=2.0.1' 'threadpoolctl>=3.5.0' && $pythonCmd -m pip install --no-cache-dir $trustArgs --no-build-isolation --no-deps scikit-learn"
                             } else if (trustedHost) {
                                 "$pythonCmd -m pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org $target"
                             } else {
@@ -4607,6 +4619,17 @@ def clipboard_set(text):
         }
         val scipyPip = Regex("""^\s*(?:(?:python|python3)\s+-m\s+)?pip3?\s+install\s+scipy\s*$""", RegexOption.IGNORE_CASE)
         if (scipyPip.matches(command)) return "pkg install -y python-scipy"
+        val polarsPip = Regex("""^\s*(?:(?:python|python3)\s+-m\s+)?pip3?\s+install\s+polars\s*$""", RegexOption.IGNORE_CASE)
+        if (polarsPip.matches(command)) {
+            // Polars needs Android-native Rust runtime wheels; use the prebuilt TUR package, not maturin/rustup.
+            return "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"
+        }
+        val sklearnPip = Regex("""^\s*(?:(?:python|python3)\s+-m\s+)?pip3?\s+install\s+scikit-learn\s*$""", RegexOption.IGNORE_CASE)
+        if (sklearnPip.matches(command)) {
+            // Reuse Termux's working NumPy/SciPy and install the Meson build requirements outside pip isolation.
+            val pythonCmd = File(usrDir, "bin/python3").absolutePath
+            return "pkg install -y python-numpy python-scipy ninja && $pythonCmd -m pip install --no-cache-dir --prefer-binary 'meson-python>=0.17.1,<0.22' 'cython>=3.1.2,<3.2.6' 'joblib>=1.4.0' 'narwhals>=2.0.1' 'threadpoolctl>=3.5.0' && $pythonCmd -m pip install --no-cache-dir --no-build-isolation --no-deps scikit-learn"
+        }
         val installPrefix = Regex("""^\s*pkg\s+install\b""", RegexOption.IGNORE_CASE)
         val match = installPrefix.find(command) ?: return command
         val tailStart = match.range.last + 1

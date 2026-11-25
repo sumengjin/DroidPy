@@ -73,6 +73,16 @@ export const TERMUX_PKG_NAME_HINTS: Record<string, { suggestedMode: 'pkg' | 'pip
     suggestedTarget: 'python-cryptography',
     reason: 'Termux 預編譯 cryptography（含 Rust 模組）套件名為 python-cryptography。',
   },
+  polars: {
+    suggestedMode: 'pip',
+    suggestedTarget: 'polars',
+    reason: 'Polars 的 Android Rust 執行模組改由已簽署的 Termux User Repository（TUR）預編譯套件提供；一鍵安裝會先加入 TUR，再安裝 python-polars。',
+  },
+  'scikit-learn': {
+    suggestedMode: 'pip',
+    suggestedTarget: 'scikit-learn',
+    reason: '先使用 Termux 原生 NumPy／SciPy，再安裝 Meson/Cython 建置需求並停用 pip build isolation，避免重複編譯 NumPy。',
+  },
 };
 
 export const PACKAGE_CATALOG: CatalogPackageItem[] = [
@@ -261,7 +271,7 @@ export const PACKAGE_CATALOG: CatalogPackageItem[] = [
     category: 'data',
     tier: 'popular',
     desc: '機器學習分類、迴歸、聚類與特徵工程框架',
-    runtimeHint: 'Termux 的 pip 可能因 NumPy／SciPy Android 原生建置相依而失敗；請優先使用 Pyodide，或確認可用的 Termux 原生套件來源',
+    runtimeHint: 'Termux 使用原生 NumPy／SciPy + Meson/Cython 無隔離建置；DroidPy 已加入專用安裝流程，建置仍受手機資源與 Ninja 相容性影響',
     aliases: ['sklearn', 'ml', 'ai'],
     pyodide: { supported: true, packageName: 'scikit-learn' },
     termux: { mode: 'pip', targetName: 'scikit-learn' },
@@ -294,7 +304,7 @@ export const PACKAGE_CATALOG: CatalogPackageItem[] = [
     category: 'data',
     tier: 'niche',
     desc: 'Rust 編寫的超高速多執行緒 DataFrame 分析引擎',
-    runtimeHint: 'Termux Android 環境目前缺少可用的官方 Rust 目標輪子；pip 可能因 rustup 不支援 aarch64-unknown-linux-android 而失敗',
+    runtimeHint: 'Termux 使用 TUR 預編譯 python-polars 與 Android Rust runtime，不再呼叫 pip/maturin/rustup；首次安裝會加入 TUR 第三方套件來源',
     aliases: ['df', 'rust', 'parquet'],
     pyodide: { supported: true, packageName: 'polars' },
     termux: { mode: 'pip', targetName: 'polars' },
