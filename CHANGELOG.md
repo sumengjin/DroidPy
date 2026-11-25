@@ -18,6 +18,7 @@ All notable changes to **DroidPy** are documented in this file.
 - **修正 Android 終端機絕對 Python 路徑漏接套件相容流程**：現在 `/data/user/.../python3 -m pip install polars` 等完整路徑命令也會辨識並導向 Termux 原生套件，不再誤觸 pip/maturin/Rust 編譯；外部 Termux Bridge 同步修正。
 - **統一終端機與套件管理介面的 Android 套件相容路徑**：直接輸入簡單的 `pip install parsel`（含 `python -m pip`）也會先安裝 Termux 原生 `python-lxml`，並透過 DroidPy 純 Python Frostwork 相容層支援 `w3lib>=2.6`，不再需要舊版 `w3lib<2.6` 限制或 Frostwork/Rust 建置；外部獨立 Termux Bridge 保留原有相容路徑。
 - **修正 SciPy 在 Android 上的安裝路由**：套件目錄與終端機直接輸入 `pip install scipy` 改走 Termux 預編譯 `python-scipy`，避免 pip 嘗試從原始碼建置 NumPy／SciPy。
+- **第三方 APT 來源安全審查**：雖有社群倉庫宣稱提供預編譯 scikit-learn，但其安裝腳本以 `trusted=yes` 加入 APT 來源，會略過套件庫簽章驗證；DroidPy 不會為了讓套件可安裝而關閉 APT 信任驗證，也不會自動加入該來源。
 - **停用 scikit-learn 手機端原始碼編譯**：目前官方 Termux ARM64 套件庫未提供可確認的 Python 3.14 預編譯版本；已找到的第三方 wheel 只有 CPython 3.12，且其 Linux ARM64 標籤不能保證 Android 相容，因此不再自動下載原始碼並於手機上編譯，改為明確回報尚無相容預編譯套件，避免再次以 Ninja 失敗收場。
 - **新增 Polars Android 原生安裝流程**：直接輸入 `pip install polars` 時，自動加入已簽署的 Termux User Repository（TUR）並安裝預編譯 `python-polars`，避開 Android 不支援的 pip/maturin/rustup 編譯路徑；套件目錄一鍵安裝與備份還原同步支援。
 - 更新 scikit-learn 與 Polars 的 Android 相容性提示，清楚區分 TUR 第三方套件來源與 scikit-learn 本機原生編譯限制。
