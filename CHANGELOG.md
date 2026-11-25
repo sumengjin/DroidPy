@@ -4,12 +4,12 @@ All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
 
-### Fixed — Restore and pin the original APK signing certificate
-- **恢復簽名一致性防護**：確認 DroidPy 原始簽名憑證 SHA-256 指紋為 `29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA`，CI 現在會同時驗證受保護 keystore 與實際 APK 的憑證指紋；任何金鑰替換、錯誤 Secrets 或簽名不符都會停止建置／發布。
-- **統一所有 APK 的簽名來源**：PR／Debug Artifact 與正式 Release 一律使用同一組 GitHub Actions 受保護簽名 Secrets，不再使用 Gradle 臨時 Debug 金鑰，避免測試 APK 與正式 APK 無法互相覆蓋升級。
-- **簡化首次設定**：只要求設定原始 keystore 的 `DROIDPY_KEYSTORE_BASE64`；原始金鑰沿用舊版 `android`／`androiddebugkey` 預設值，其餘密碼與 alias Secrets 僅在曾自訂時才需要。
-- **保留自動發布**：合併後推送至 `main`／`master` 仍會自動建置、驗證並發布 GitHub Release；缺少或不符合原始憑證的 Secrets 時安全失敗，不會發布錯誤簽名 APK。
-
+### Security — Rotate DroidPy Release signing key
+- **正式簽名金鑰輪替**：正式 Release 不再接受或鎖定歷史公開的舊簽名憑證，改由專用 GitHub Actions Secrets 提供新 keystore；CI 從該 keystore 動態取得 SHA-256 指紋，並逐次驗證 Release APK 確實由同一把金鑰簽署。
+- **修復 PR APK 打包失敗**：PR／Debug 建置不再要求正式 Release Secrets，使用 Android Debug 臨時簽名產出測試 Artifact；合併至 main/master 後的正式建置才要求新 keystore。
+- **合併後自動發布**：保留 main/master push 自動流程；只有測試、Release APK 編譯、簽名驗證及 Artifact 上傳全部成功後，獨立 Release 工作才會建立或更新 GitHub Release。
+- **簽名輪替相容性提醒**：新憑證與歷史安裝版本不同，舊版 APK 無法直接覆蓋更新；使用者須先匯出 App 資料備份，再解除安裝舊版並安裝新 Release，之後使用 App 內功能還原資料。
+- **保護新私鑰**：新 keystore 不會寫入原始碼或提交至 Git；正式發布所需的 Base64、密碼及 alias 僅由 GitHub Actions Secrets 提供。請離線保管 keystore 與憑證資料。
 
 ### Security — Shared-storage state backup credential protection
 - 修正 Android 狀態備份的失敗回退：若狀態 JSON 無法解析或無法完成憑證清除，現在會跳過本次共用儲存空間備份，保留上一份有效快照；不再把未清理的原始 JSON 寫入共用目錄，避免意外暴露每次安裝專屬的 Bridge token。
