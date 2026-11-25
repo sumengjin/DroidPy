@@ -4232,6 +4232,13 @@ def clipboard_set(text):
                                     "--no-cache-dir"
                                 }
                                 "pkg install -y python-lxml && $pythonCmd -m pip install $pipArgs 'w3lib<2.6' parsel"
+                            } else if (target.equals("polars", ignoreCase = true)) {
+                                // Use TUR's signed Android-native Polars package and Rust runtime, not pip/maturin.
+                                "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"
+                            } else if (target.equals("scikit-learn", ignoreCase = true)) {
+                                // Reuse native NumPy/SciPy; no-build-isolation prevents pip from rebuilding NumPy.
+                                val trustArgs = if (trustedHost) "--trusted-host pypi.org --trusted-host files.pythonhosted.org" else ""
+                                "pkg install -y python-numpy python-scipy ninja && $pythonCmd -m pip install --no-cache-dir $trustArgs --prefer-binary 'meson-python>=0.17.1,<0.22' 'cython>=3.1.2,<3.2.6' 'joblib>=1.4.0' 'narwhals>=2.0.1' 'threadpoolctl>=3.5.0' && $pythonCmd -m pip install --no-cache-dir $trustArgs --no-build-isolation --no-deps scikit-learn"
                             } else if (trustedHost) {
                                 "$pythonCmd -m pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org $target"
                             } else {
