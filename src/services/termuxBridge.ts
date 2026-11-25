@@ -837,6 +837,14 @@ def _build_probe_headers(data):
 
 
 
+def _normalize_shell_command(command):
+    if not re.match(r"^\s*pkg\s+install\b", command, re.IGNORECASE):
+        return command
+    if re.search(r"(?:^|\s)(?:-y|--assume-yes)(?:\s|$)", command, re.IGNORECASE):
+        return command
+    return re.sub(r"^(\s*pkg\s+install\b)", r"\1 -y", command, count=1, flags=re.IGNORECASE)
+
+
 class DroidPyBridgeHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -1201,7 +1209,7 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
             if not cmd_str:
                 return self._send_json(400, {"error": "Empty command"})
             if self.path == "/shell-stream":
-                return self._stream_pty_command(cmd_str, shell=True)
+                return self._stream_pty_command(_normalize_shell_command(cmd_str), shell=True)
 
             t0 = time.perf_counter()
             proc = subprocess.run(cmd_str, shell=True, cwd=WORKSPACE, capture_output=True, text=True, timeout=180)
