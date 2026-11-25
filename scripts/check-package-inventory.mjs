@@ -30,7 +30,7 @@ for (const item of catalogItems) {
   );
 }
 assert.match(bridgeSource, /matplotlib:\s*'matplotlib'/);
-assert.match(catalogSource, /避開不相容的 Frostwork Rust 建置/);
+assert.match(catalogSource, /w3lib 2.6 使用 DroidPy 內建純 Python Frostwork 相容層/);
 assert.match(catalogSource, /Termux User Repository（TUR）預編譯套件提供/);
 assert.match(catalogSource, /Meson\/Cython 無隔離建置/);
 assert.match(source, /"polars" to "python-polars"/);
