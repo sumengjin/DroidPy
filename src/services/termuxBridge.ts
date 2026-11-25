@@ -848,14 +848,14 @@ def _scikit_learn_source_install_command(trusted_host=False):
         "threadpoolctl>=3.5.0",
     ], trusted_host=trusted_host)
     installer_code = "\\n".join([
-        "import json, pathlib, stat, subprocess, tarfile, tempfile, urllib.request",
+        "import json, pathlib, stat, subprocess, tarfile, tempfile, urllib.parse",
         "with tempfile.TemporaryDirectory(prefix='droidpy-sklearn-') as tmp:",
         "    root = pathlib.Path(tmp)",
-        "    with urllib.request.urlopen('https://pypi.org/pypi/scikit-learn/json', timeout=30) as response:",
-        "        metadata = json.load(response)",
+        "    metadata = json.loads(subprocess.check_output(['curl', '-fsSL', 'https://pypi.org/pypi/scikit-learn/json'], text=True))",
         "    sdist = next(item for item in metadata['urls'] if item['packagetype'] == 'sdist')",
         "    archive = root / 'scikit-learn-sdist.tar.gz'",
-        "    urllib.request.urlretrieve(sdist['url'], archive)",
+        "    if urllib.parse.urlparse(sdist['url']).hostname != 'files.pythonhosted.org': raise RuntimeError('Unexpected scikit-learn sdist host')",
+        "    subprocess.check_call(['curl', '-fL', sdist['url'], '-o', str(archive)])",
         "    source_root = root / 'source'",
         "    source_root.mkdir()",
         "    with tarfile.open(archive, 'r:*') as package:",
@@ -868,7 +868,7 @@ def _scikit_learn_source_install_command(trusted_host=False):
         "    subprocess.check_call([__import__('sys').executable, '-m', 'pip', 'install', '--no-cache-dir', '--no-build-isolation', '--no-deps', str(source)])",
     ])
     installer = shlex.join([sys.executable, "-c", installer_code])
-    return "pkg install -y python-numpy python-scipy ninja && " + shlex.join(build_deps) + " && " + installer
+    return "pkg install -y python-numpy python-scipy ninja curl && " + shlex.join(build_deps) + " && " + installer
 
 
 def _normalize_shell_command(command):
