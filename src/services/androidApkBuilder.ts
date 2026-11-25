@@ -156,9 +156,9 @@ jobs:
             echo '::error::The original DROIDPY_KEYSTORE_BASE64 secret is required for every APK build.'
             exit 1
           fi
-          CUSTOM_STORE_PASS="${CUSTOM_STORE_PASS:-android}"
-          CUSTOM_KEY_ALIAS="${CUSTOM_KEY_ALIAS:-androiddebugkey}"
-          CUSTOM_KEY_PASS="${CUSTOM_KEY_PASS:-android}"
+          CUSTOM_STORE_PASS="\${CUSTOM_STORE_PASS:-android}"
+          CUSTOM_KEY_ALIAS="\${CUSTOM_KEY_ALIAS:-androiddebugkey}"
+          CUSTOM_KEY_PASS="\${CUSTOM_KEY_PASS:-android}"
           printf '%s' "$CUSTOM_KS_B64" | base64 --decode > android/app/droidpy-custom.keystore
           echo 'DROIDPY_KEYSTORE_FILE=droidpy-custom.keystore' >> "$GITHUB_ENV"
           printf 'DROIDPY_STORE_PASSWORD=%s\\n' "$CUSTOM_STORE_PASS" >> "$GITHUB_ENV"
