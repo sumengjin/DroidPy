@@ -211,6 +211,11 @@ try {
 
 const browserPanel = await readFile('src/components/CrawlerBrowserPanel.tsx', 'utf8');
 assert.ok(browserPanel.includes('safeAddressHref'));
+assert.ok(browserPanel.includes('setProbeResult(null);'));
+assert.ok(browserPanel.includes('if (isNativeApk) {'));
+assert.ok(browserPanel.includes('window.DroidPyNative?.openCrawlerBrowser'));
+assert.ok(browserPanel.includes('openBrowser(clean, isDesktopUa);'));
+assert.ok(browserPanel.includes('const handleOpenNativeBrowser = () => {\n    navigateTo(urlInput);'));
 assert.ok(browserPanel.includes('Host-only cookie'));
 assert.ok(browserPanel.includes('sandbox="allow-scripts allow-forms allow-popups"'));
 assert.ok(!browserPanel.includes('allow-same-origin'));
