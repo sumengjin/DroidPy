@@ -104,6 +104,26 @@ assert.ok(androidBuilder.includes('activeProcessPidFile.takeIf { it.isFile }'));
 assert.ok(androidBuilder.includes('wrappedCommand'));
 assert.ok(androidBuilder.includes('private fun processPid(proc: Process): Int'));
 assert.ok(androidBuilder.includes('processPid(proc)'));
+// Native crawler browser calls must retain the injected Java bridge receiver.
+const crawlerPanel = await readFile('src/components/CrawlerBrowserPanel.tsx', 'utf8');
+assert.ok(crawlerPanel.includes('window.DroidPyNative.openCrawlerBrowser(clean, isDesktopUa);'));
+assert.ok(!crawlerPanel.includes('const openBrowser = window.DroidPyNative?.openCrawlerBrowser'));
+assert.ok(crawlerPanel.includes('Java bridge method can\'t be invoked on a non-injected object'));
+
+// Native cookie capture must provide visible feedback and avoid silently
+// closing the browser when the current page has no cookies.
+const captureStart = androidBuilder.indexOf('private fun captureCrawlerCookiesAndReturn() {');
+const captureEnd = androidBuilder.indexOf('private fun dp(value: Int)', captureStart);
+assert.ok(captureStart >= 0 && captureEnd > captureStart);
+const cookieCapture = androidBuilder.slice(captureStart, captureEnd);
+assert.ok(cookieCapture.includes('Cookie capture requested'));
+assert.ok(cookieCapture.includes('Cookie capture found no cookies'));
+assert.ok(cookieCapture.includes('Cookie capture completed'));
+assert.ok(cookieCapture.includes('Cookie capture failed'));
+assert.ok(cookieCapture.includes('evaluateJavascript(js)'));
+assert.ok(cookieCapture.includes('writeText(sessionJson.toString(2), Charsets.UTF_8)'));
+assert.ok(androidBuilder.includes('Cookie capture button clicked'));
+
 const terminalUi = await readFile('src/components/TerminalPanel.tsx', 'utf8');
 assert.ok(terminalUi.includes('paused ? \'繼續\' : \'暫停\''));
 const appSource = await readFile('src/App.tsx', 'utf8');
