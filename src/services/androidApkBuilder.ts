@@ -3061,6 +3061,21 @@ def clipboard_set(text):
         return name.trim().lowercase().replace(Regex("[-_.]+"), "-")
     }
 
+    // Keep backup restoration aligned with the native package routing used by the UI.
+    private val nativeTermuxPythonPackages = mapOf(
+        "numpy" to "python-numpy",
+        "pandas" to "python-pandas",
+        "pillow" to "python-pillow",
+        "pil" to "python-pillow",
+        "lxml" to "python-lxml",
+        "cryptography" to "python-cryptography",
+        "matplotlib" to "matplotlib"
+    )
+
+    private fun nativeTermuxPackageForPip(name: String): String? {
+        return nativeTermuxPythonPackages[normalizePipPkgName(name)]
+    }
+
     private data class PipInventory(val names: List<String>, val complete: Boolean)
     private data class PkgInventory(val names: List<String>, val complete: Boolean)
 
@@ -3618,8 +3633,26 @@ def clipboard_set(text):
                                 }
                             }
                         }
-                        val missingPkgsOnly = needPkgs.filter { it !in currentPkgs }
                         val steps = mutableListOf<String>()
+                        val nativeRestoreTargets = linkedSetOf<String>()
+                        val remainingPips = mutableListOf<String>()
+                        val safePipName = Regex("""^[A-Za-z0-9][A-Za-z0-9._+-]*$""")
+                        for (name in needPips) {
+                            if (!safePipName.matches(name)) {
+                                steps.add("echo '[DroidPy] Skipped an invalid package name in the backup manifest.' >&2")
+                                continue
+                            }
+                            val nativeTarget = nativeTermuxPackageForPip(name)
+                            if (nativeTarget != null) {
+                                if (nativeTarget !in currentPkgs) nativeRestoreTargets.add(nativeTarget)
+                            } else {
+                                remainingPips.add(name)
+                            }
+                        }
+                        val missingPkgsOnly = (needPkgs + nativeRestoreTargets).distinct().filter { it !in currentPkgs }
+                        if (nativeRestoreTargets.isNotEmpty()) {
+                            steps.add("echo '[DroidPy] Restoring native Termux packages: " + nativeRestoreTargets.joinToString(" ") + "'")
+                        }
                         if (missingPkgsOnly.isNotEmpty()) {
                             steps.add("(pkg update -y || true)")
                             steps.add("pkg install -y " + missingPkgsOnly.joinToString(" "))
@@ -3628,20 +3661,14 @@ def clipboard_set(text):
                             // Python is not ready yet. Restore native packages first; retry pip restore after initialization.
                             steps.add("echo '[DroidPy] Python package inventory is incomplete; skipped pip restore safely. Initialize Python, then retry restore.'")
                         }
-                        val needsNumpy = needPips.any { normalizePipPkgName(it) == "numpy" }
-                        val remainingPips = needPips.filter { normalizePipPkgName(it) != "numpy" }
                         // Use the same embedded Termux interpreter for imports and pip installs.
                         val pythonCmd = File(usrDir, "bin/python3").absolutePath
                         if (pipInventory.complete) {
                             val restoreFailureFile = File(workspaceDir, ".droidpy-restore-failed").absolutePath
                             steps.add("test -x $pythonCmd || { echo '[DroidPy] Python is not ready; package restore aborted.' >&2; exit 127; }")
                             steps.add("rm -f $restoreFailureFile")
-                            if (needsNumpy) {
-                                // A NumPy failure is recorded but must not block unrelated pure-Python restores.
-                                steps.add("if pkg install -y python-numpy && $pythonCmd -c 'import numpy'; then echo '[DroidPy] NumPy ready (Termux binary package).' ; else echo '[DroidPy] NumPy install/import failed; continuing with other packages.' >&2; touch $restoreFailureFile; fi")
-                            }
                             if (remainingPips.isNotEmpty()) {
-                                steps.add("if $pythonCmd -m pip install --no-cache-dir " + remainingPips.joinToString(" ") + "; then echo '[DroidPy] Remaining pip packages restored.'; else echo '[DroidPy] One or more pip packages failed to restore.' >&2; touch $restoreFailureFile; fi")
+                                steps.add("if $pythonCmd -m pip install --no-cache-dir --prefer-binary " + remainingPips.joinToString(" ") + "; then echo '[DroidPy] Remaining pip packages restored.'; else echo '[DroidPy] One or more pip packages failed to restore.' >&2; touch $restoreFailureFile; fi")
                             }
                             steps.add("test ! -f $restoreFailureFile")
                         }
@@ -4379,12 +4406,27 @@ def clipboard_set(text):
 
     private fun normalizeShellCommand(command: String): String {
         val installPrefix = Regex("""^\s*pkg\s+install\b""", RegexOption.IGNORE_CASE)
-        if (!installPrefix.containsMatchIn(command)) return command
-        if (Regex("""(?:^|\s)(?:-y|--assume-yes)(?:\s|$)""", RegexOption.IGNORE_CASE).containsMatchIn(command)) {
-            return command
-        }
         val match = installPrefix.find(command) ?: return command
-        return command.replaceRange(match.range, match.value + " -y")
+        val tailStart = match.range.last + 1
+        val tail = command.substring(tailStart)
+        val tokens = tail.trim().split(Regex("""\s+""")).filter { it.isNotBlank() }
+        val safeTokens = tokens.isNotEmpty() && tokens.all {
+            it.matches(Regex("""(?:--?[A-Za-z][A-Za-z0-9-]*|[A-Za-z0-9][A-Za-z0-9+_.-]*)"""))
+        }
+        val rewritten = if (safeTokens) {
+            tokens.map { token ->
+                if (token.startsWith("-")) token
+                else nativeTermuxPackageForPip(token) ?: token
+            }
+        } else {
+            emptyList()
+        }
+        val hasAssumeYes = Regex("""(?:^|\s)(?:-y|--assume-yes)(?:\s|$)""", RegexOption.IGNORE_CASE)
+            .containsMatchIn(tail)
+        val prefix = match.value + if (hasAssumeYes) "" else " -y"
+        return if (safeTokens) prefix + " " + rewritten.joinToString(" ") else {
+            command.replaceRange(match.range, prefix)
+        }
     }
 
     private fun signalActiveProcess(signal: Int): Boolean {

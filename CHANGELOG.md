@@ -4,6 +4,13 @@ All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
 
+### Fixed — Native package restore and terminal package aliases
+- **修正備份還原錯把原生套件交給 pip 編譯**：還原時依照 Termux 原生套件對照表，先以 APT 安裝 NumPy、pandas、Pillow、lxml、cryptography 與 matplotlib，再把其餘純 Python 套件交給同一個 Termux Python 的 pip；避免 NumPy／pandas 等大型原生套件在 Android 上從原始碼建置。
+- **修正終端機套件名稱別名**：直接輸入 `pkg install pandas`、`pkg install numpy` 等簡單套件命令時，自動改用 Termux 實際套件名稱（例如 `python-pandas`、`python-numpy`），並保留多套件與既有安裝旗標；複雜 shell 指令不做危險改寫。
+- **改善 pip 備份還原的 wheel 優先策略**：剩餘 pip 套件使用 `--prefer-binary`，在有相容 wheel 時優先選擇，並對備份清單中的不合法套件名稱採取安全跳過。
+- **補上原生套件還原與終端機命令回歸檢查**。
+
+
 ### Fixed — Android updater permission flow and terminal stability
 - **修復首次更新未自動引導安裝權限**：更新 APK 完成驗證後，若 Android 尚未允許 DroidPy 安裝未知來源應用程式，會保存已驗證 APK 路徑並直接開啟本 App 專屬的權限設定；使用者返回且授權後，透過 Activity resume 自動接續系統安裝器，不必重新下載。
 - **修復原生終端機命令輸出阻塞**：不再先以無上限的 `readText()` 讀取子程序輸出、之後才等待逾時；改為輸出導向 App 私有暫存檔、先執行逾時等待、最多回傳最後 2 MiB，並回報逾時與啟動錯誤，避免大量輸出或長時間命令拖垮記憶體／卡住請求。
