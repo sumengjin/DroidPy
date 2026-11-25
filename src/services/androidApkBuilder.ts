@@ -1813,6 +1813,8 @@ class EmbeddedTermuxBridge(
     private val logLock = Any()
     private val nativeLogFile: File
         get() = File(appContext.filesDir, "droidpy_native.log")
+    private val activeProcessPidFile: File
+        get() = File(usrDir, "tmp/droidpy-active-process.pid")
     private val manifestFile: File
         get() = File(appContext.filesDir, "packages_manifest.json")
 
@@ -4381,7 +4383,8 @@ def clipboard_set(text):
         if (Regex("""(?:^|\s)(?:-y|--assume-yes)(?:\s|$)""", RegexOption.IGNORE_CASE).containsMatchIn(command)) {
             return command
         }
-        return installPrefix.replaceFirst(command) { match -> match.value + " -y" }
+        val match = installPrefix.find(command) ?: return command
+        return command.replaceRange(match.range, match.value + " -y")
     }
 
     private fun signalActiveProcess(signal: Int): Boolean {
@@ -4389,7 +4392,8 @@ def clipboard_set(text):
         val proc = activeProcess ?: return false
         return try {
             if (!proc.isAlive) return false
-            val pid = proc.pid().toInt()
+            val pid = activeProcessPidFile.takeIf { it.isFile }
+                ?.readText(Charsets.US_ASCII)?.trim()?.toIntOrNull() ?: return false
             if (pid <= 0) return false
             android.os.Process.sendSignal(pid, signal)
             true
@@ -4446,7 +4450,7 @@ def clipboard_set(text):
                     }
                 }.orEmpty()
                 stdoutText = if ((logFile?.length() ?: 0L) > 2L * 1024L * 1024L) {
-                    "[DroidPy] 輸出過長，僅保留最後 2 MiB。\n" + output
+                    "[DroidPy] 輸出過長，僅保留最後 2 MiB。\\n" + output
                 } else output
             }
         } catch (e: Exception) {
@@ -4475,9 +4479,11 @@ def clipboard_set(text):
 
     private fun streamShellCommand(out: OutputStream, command: String) {
         val t0 = System.currentTimeMillis()
+        val normalizedCommand = normalizeShellCommand(command)
         val shFile = File(usrDir, "bin/sh")
-        val isPkgOrPip = command.contains("pip") || command.contains("pkg") || command.contains("apt")
-        appendNativeLog("Exec", "Stream shell start: \${command.take(180)}")
+        val isPkgOrPip = Regex("""(^|[;&|]\\s*)(?:pkg|apt|apt-get|pip|python(?:3)?\\s+-m\\s+pip)\\b""")
+            .containsMatchIn(normalizedCommand)
+        appendNativeLog("Exec", "Stream shell start: \${normalizedCommand.take(180)}")
 
         out.write((
             "HTTP/1.1 200 OK\\r\\n" +
@@ -4526,7 +4532,10 @@ def clipboard_set(text):
         } else {
             var proc: Process? = null
             try {
-                val pb = ProcessBuilder(shFile.absolutePath, "-c", normalizedCommand)
+                activeProcessPidFile.parentFile?.mkdirs()
+                activeProcessPidFile.delete()
+                val wrappedCommand = "echo \\$\\$ > '\${activeProcessPidFile.absolutePath}'; \$normalizedCommand"
+                val pb = ProcessBuilder(shFile.absolutePath, "-c", wrappedCommand)
                 pb.directory(workspaceDir)
                 pb.redirectErrorStream(true)
                 pb.environment().putAll(buildEnv())
@@ -4566,6 +4575,7 @@ def clipboard_set(text):
                 activeProcess = null
                 activeProcessPaused = false
                 activeProcessStartedAt.set(0L)
+                try { activeProcessPidFile.delete() } catch (_: Exception) {}
                 if (isPkgOrPip) {
                     pruneStaleCacheAndTemp(clearAptLists = false)
                 }
