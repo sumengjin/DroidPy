@@ -126,6 +126,17 @@ All notable changes to **DroidPy** are documented in this file.
 - **同步更新繁中、簡中、英文與日文介面文案**，明確標示程序檢查不會自動終止工作。
 - **加入 watchdog 安全回歸檢查**，防止未來重新引入依執行時間清理程序的邏輯。
 
+## [1.2.33] - 2026-11-25
+
+### Fixed — Atomic package backup and version metadata
+- 套件備份清單改為同目錄暫存檔寫入、fsync 後原子替換；寫入失敗時保留既有有效清單，並記錄不含敏感資料的診斷訊息。
+- 同步前端版本、原生 APK 備援版本、匯出專案預設版本、離線更新清單與 package.json 版本；主 APK 與匯出 APK 的 versionCode 統一為 1.2.33 → 1002033。
+
+## [1.2.32] - 2026-11-25
+
+### Fixed — Termux stream disconnect handling
+- 外部 Termux Bridge 在網頁串流用戶端斷線時不再對 Python 程序群組送出 SIGKILL；改為持續排空 PTY 輸出，讓工作自然結束，明確 /stop 仍保留終止權限。
+
 ## [1.2.31] - 2026-11-25
 
 ### Fixed — Version metadata consistency
