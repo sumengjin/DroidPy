@@ -2497,11 +2497,11 @@ class EmbeddedTermuxBridge(
                 fallbackMetadata.deleteRecursively()
             } else if (!fallbackInit.exists() || isOurFallback) {
                 fallbackDir.mkdirs()
-                assets.open("python/frostwork/__init__.py").use { input ->
+                appContext.assets.open("python/frostwork/__init__.py").use { input ->
                     fallbackInit.outputStream().use { output -> input.copyTo(output) }
                 }
                 fallbackMetadata.mkdirs()
-                assets.open("python/frostwork-0.2.2.dist-info/METADATA").use { input ->
+                appContext.assets.open("python/frostwork-0.2.2.dist-info/METADATA").use { input ->
                     File(fallbackMetadata, "METADATA").outputStream().use { output -> input.copyTo(output) }
                 }
                 File(fallbackMetadata, "top_level.txt").writeText("frostwork\\n", Charsets.UTF_8)
