@@ -1344,10 +1344,9 @@ async function termuxFetch<T>(
 let activeStreamController: AbortController | null = null;
 
 export function abortActiveTermuxStream(): void {
-  if (activeStreamController) {
-    activeStreamController.abort();
-    activeStreamController = null;
-  }
+  // Keep the slot occupied until the aborted request reaches its cleanup path.
+  // This prevents a rapid second tap from racing the server-side Stop request.
+  activeStreamController?.abort();
 }
 
 async function termuxStreamRequest(
@@ -1357,7 +1356,7 @@ async function termuxStreamRequest(
   callbacks: TermuxStreamCallbacks
 ): Promise<{ exitCode: number; durationMs: number }> {
   const base = config.endpointUrl.replace(/\/+$/, '');
-  if (activeStreamController && !activeStreamController.signal.aborted) {
+  if (activeStreamController) {
     throw new Error('已有 Termux 工作正在執行；請先停止目前工作後再試。');
   }
   const controller = new AbortController();
