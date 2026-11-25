@@ -5,6 +5,7 @@ All notable changes to **DroidPy** are documented in this file.
 ## [Unreleased]
 
 ### CI — Improve release signing diagnostics
+- 新增解碼後 keystore 原始位元組 SHA-256 比對，確認 GitHub Secret 是否與離線原始套件完全一致；擴充 keytool 無 stderr 時的合併輸出診斷，將簽名故障定位到具體原因。
 - 正式簽名載入前先正規化 Base64 空白，輸出不含 Secret 的解碼檔案大小；keytool 失敗時提供安全診斷，並強制核對預期 SHA-256 指紋，防止錯誤金鑰被用於正式 APK。
 - 更新 APK 更新器回歸檢查，覆蓋簽名金鑰指紋固定驗證與診斷路徑。
 
