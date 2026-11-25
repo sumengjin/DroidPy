@@ -4,6 +4,11 @@ All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
 
+### Fixed — Termux package installation guidance
+- 修正 Termux 橋接頁面顯示的初始化指令：改用 `python-pip` 與原生 `python-lxml`，不再錯誤引導 pip 編譯 lxml。
+- 更新 Parsel 套件提示，說明其 lxml 相依性並辨識異常的 Frostwork 依賴輸出；補充 `metadata` 與標準庫 `importlib.metadata` 的區別。
+
+
 ### Fixed — Atomic Termux package backup manifests
 - **避免套件備份清單在 App 中斷時被截斷或損壞**：主儲存與外部備份現在先寫入同目錄暫存檔、同步落盤後再以原子 rename 取代舊檔；寫入失敗時保留既有清單並記錄診斷結果。
 - 新增回歸檢查，確保兩份套件清單都不再使用直接覆寫。
