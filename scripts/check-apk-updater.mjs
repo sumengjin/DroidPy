@@ -70,4 +70,17 @@ assert.ok(workflow.includes("if: (github.event_name == 'push'"));
 assert.ok(!workflow.includes('29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA'));
 assert.ok(!workflow.includes('所有 APK 都必須使用原始 keystore'));
 
+// App, generated APK and native fallback versions must advance together.
+const versionSource = await readFile('src/version.ts', 'utf8');
+assert.ok(versionSource.includes("APP_VERSION = '1.2.29'"));
+assert.ok(versionSource.includes('APP_VERSION_CODE = 10229'));
+assert.ok(source.includes('versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 10229'));
+assert.ok(source.includes('versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.29"'));
+assert.ok(source.includes('packageManager.getPackageInfo(packageName, 0).versionName ?: "1.2.29"'));
+assert.ok(source.includes('                "1.2.29"\n            }'));
+const updaterSource = await readFile('src/services/appUpdater.ts', 'utf8');
+assert.ok(updaterSource.includes("tagName: 'v1.2.29'"));
+assert.ok(updaterSource.includes("tagName: 'v1.2.28'"));
+assert.ok(!updaterSource.includes("tagName: 'v1.2.16'"));
+
 console.log('Native APK updater HTTPS redirect, size, atomic download and installed-signer checks passed.');
