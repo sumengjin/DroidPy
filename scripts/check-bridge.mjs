@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { build } from 'esbuild';
@@ -27,6 +27,45 @@ assert.ok(generated.includes('ALLOWED_ORIGIN = "' + origin + '"'));
 assert.ok(generated.includes('MAX_REQUEST_BYTES = 8 * 1024 * 1024'));
 assert.ok(generated.includes('Access-Control-Allow-Origin", ALLOWED_ORIGIN'));
 assert.ok(!generated.includes('Access-Control-Allow-Origin", "*"'));
+
+// Request parsing and concurrency must remain bounded in the generated Python Bridge.
+assert.ok(generated.includes('def _read_json_body(self):'));
+assert.ok(generated.includes('self.headers.get_all("Transfer-Encoding")'));
+assert.ok(generated.includes('self.headers.get_all("Content-Length")'));
+assert.ok(generated.includes('Duplicate Content-Length'));
+assert.ok(generated.includes('class BoundedThreadingHTTPServer(ThreadingHTTPServer):'));
+assert.ok(generated.includes('request_queue_size = 16'));
+assert.ok(generated.includes('threading.BoundedSemaphore(8)'));
+assert.ok(generated.includes('self.send_header("Connection", "close")'));
+assert.ok(generated.includes('self.close_connection = True'));
+assert.ok(generated.includes('BoundedThreadingHTTPServer(("127.0.0.1", 8765), DroidPyBridgeHandler)'));
+
+// Native Bridge limits are checked against the actual generated Android source.
+const androidBuilder = await readFile('src/services/androidApkBuilder.ts', 'utf8');
+assert.ok(androidBuilder.includes('ThreadPoolExecutor('));
+assert.ok(androidBuilder.includes('ArrayBlockingQueue<Runnable>(16)'));
+assert.ok(androidBuilder.includes('RejectedExecutionException'));
+assert.ok(androidBuilder.includes('serverSocket === localServer'));
+assert.ok(androidBuilder.includes('oldExecutor?.shutdownNow()'));
+assert.ok(androidBuilder.includes('activeClientSockets.add(client)'));
+assert.ok(androidBuilder.includes('activeClientSockets.remove(client)'));
+assert.ok(androidBuilder.includes('activeClientSockets.toList().forEach'));
+assert.ok(androidBuilder.includes('headerBuf.size() > 16 * 1024'));
+assert.ok(androidBuilder.includes('len > 8 * 1024 * 1024'));
+assert.ok(androidBuilder.includes('duplicateContentLength'));
+assert.ok(androidBuilder.includes('headers.containsKey("transfer-encoding")'));
+assert.ok(androidBuilder.includes('Only the explicit /stop action may terminate that process.'));
+assert.ok(!androidBuilder.includes('private val executor = Executors.newCachedThreadPool()'));
+
+// Shared-storage state backups must fail closed if JSON sanitization fails;
+// otherwise malformed state could leak the per-install bridge credential.
+const backupWriterStart = androidBuilder.indexOf('fun writePersistedState(json: String)');
+assert.ok(backupWriterStart >= 0);
+const backupWriter = androidBuilder.slice(backupWriterStart, backupWriterStart + 2200);
+assert.ok(backupWriter.includes('val backupJson = JSONObject(json).apply {'));
+assert.ok(backupWriter.includes('optJSONObject("termuxConfig")?.put("token", "")'));
+assert.ok(!backupWriter.includes('catch (_: Exception) {\n                            json'));
+
 
 assert.throws(() => buildTermuxBridgeScript('', origin), /權杖無效/);
 assert.throws(() => buildTermuxBridgeScript(token, 'file:///tmp/app'), /網頁來源/);

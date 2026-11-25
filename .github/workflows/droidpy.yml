@@ -59,7 +59,13 @@ jobs:
           fi
           npm run lint
           npm run check:bridge
+          npm run check:script-backup
+          npm run check:apk-updater
+          npm run check:export-workflow
           npm run check:watchdog-safety
+          npm run check:probe-url-security
+          npm run check:package-inventory
+          npm run check:apt-security
           npm run build
 
       - name: 上傳離線前端建置產物
@@ -151,26 +157,28 @@ jobs:
           elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -n "$INPUT_TAG" ]; then
             IS_RELEASE_REF=true
           fi
+          echo "DROIDPY_RELEASE_BUILD=$IS_RELEASE_REF" >> "$GITHUB_ENV"
 
-          if [ "$IS_RELEASE_REF" != "true" ]; then
-            rm -f android/app/droidpy-custom.keystore android/app/droidpy-debug.p12
-            echo "Branch/PR/manual debug build uses Gradle ephemeral debug signer; no production key is loaded."
-          elif [ -n "$CUSTOM_KS_B64" ]; then
-            if [ -z "$CUSTOM_STORE_PASS" ] || [ -z "$CUSTOM_KEY_ALIAS" ] || [ -z "$CUSTOM_KEY_PASS" ]; then
-              echo "::error::受保護的 signing secrets 缺少必要值。"
+          if [ "$IS_RELEASE_REF" = "true" ]; then
+            if [ -z "$CUSTOM_KS_B64" ]; then
+              echo "::error::正式發布缺少新的 DROIDPY_KEYSTORE_BASE64 Secret。"
               exit 1
             fi
-            printf '%s' "$CUSTOM_KS_B64" | base64 --decode > android/app/droidpy-custom.keystore
-            echo "DROIDPY_KEYSTORE_FILE=droidpy-custom.keystore" >> "$GITHUB_ENV"
+            CUSTOM_STORE_PASS="${CUSTOM_STORE_PASS:-android}"
+            CUSTOM_KEY_ALIAS="${CUSTOM_KEY_ALIAS:-androiddebugkey}"
+            CUSTOM_KEY_PASS="${CUSTOM_KEY_PASS:-android}"
+            printf '%s' "$CUSTOM_KS_B64" | base64 --decode > android/app/droidpy-release.keystore
+            keytool -list -keystore android/app/droidpy-release.keystore -storepass "$CUSTOM_STORE_PASS" -alias "$CUSTOM_KEY_ALIAS" >/dev/null
+            echo "DROIDPY_KEYSTORE_FILE=droidpy-release.keystore" >> "$GITHUB_ENV"
             printf 'DROIDPY_STORE_PASSWORD=%s\n' "$CUSTOM_STORE_PASS" >> "$GITHUB_ENV"
             printf 'DROIDPY_KEY_ALIAS=%s\n' "$CUSTOM_KEY_ALIAS" >> "$GITHUB_ENV"
             printf 'DROIDPY_KEY_PASSWORD=%s\n' "$CUSTOM_KEY_PASS" >> "$GITHUB_ENV"
-            echo "使用受保護的 GitHub Actions signing secrets"
+            KEYSTORE_SHA256=$(keytool -exportcert -keystore android/app/droidpy-release.keystore -storepass "$CUSTOM_STORE_PASS" -alias "$CUSTOM_KEY_ALIAS" | sha256sum | awk '{print toupper($1)}')
+            echo "DROIDPY_EXPECTED_CERT_SHA256=$KEYSTORE_SHA256" >> "$GITHUB_ENV"
+            echo "已載入新的 DroidPy Release 憑證：$KEYSTORE_SHA256"
           else
-            echo "::error::正式 Release 必須設定受保護的 DROIDPY_KEYSTORE_BASE64、DROIDPY_STORE_PASSWORD、DROIDPY_KEY_ALIAS 與 DROIDPY_KEY_PASSWORD。拒絕使用公開原始碼中的私鑰 fallback。"
-            exit 1
+            echo "PR／非正式建置使用 GitHub Actions 臨時 Debug 簽名；不需要正式發布金鑰。"
           fi
-
           if [ -n "$INPUT_TAG" ]; then
             REL_TAG="v${INPUT_TAG#v}"
             VNAME="${REL_TAG#v}"
@@ -205,16 +213,15 @@ jobs:
         working-directory: android
         run: gradle assembleRelease --no-daemon
 
-      - name: 強制驗證 APK 簽名與原憑證指紋
-        if: (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))) || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+      - name: 驗證 APK 簽名（正式版比對新金鑰）
         env:
           INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -z "$INPUT_RELEASE_TAG" ]; then
-            APK_DIR="android/app/build/outputs/apk/debug"
-          else
+          if [ "${DROIDPY_RELEASE_BUILD:-false}" = "true" ]; then
             APK_DIR="android/app/build/outputs/apk/release"
+          else
+            APK_DIR="android/app/build/outputs/apk/debug"
           fi
           mapfile -t APK_FILES < <(find "$APK_DIR" -maxdepth 1 -type f -name '*.apk' -print | sort)
           if [ "${#APK_FILES[@]}" -ne 1 ]; then
@@ -238,13 +245,16 @@ jobs:
             echo "::error::無法從 apksigner 輸出取得有效的 SHA-256 憑證指紋。"
             exit 1
           fi
-          EXPECTED_SHA256="29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA"
-          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
-            echo "::error::APK 簽名憑證與 DroidPy 原有憑證不一致，已阻止產物繼續發布。"
-            echo "::error::無論使用內嵌金鑰或 GitHub Secrets，簽名指紋都必須保持不變。"
-            exit 1
+          if [ "${DROIDPY_RELEASE_BUILD:-false}" = "true" ]; then
+            EXPECTED_SHA256="${DROIDPY_EXPECTED_CERT_SHA256:-}"
+            if ! [[ "$EXPECTED_SHA256" =~ ^[0-9A-F]{64}$ ]] || [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+              echo "::error::Release APK 與本次受保護的新 keystore 憑證不一致，已阻止發布。"
+              exit 1
+            fi
+            echo "已確認 Release APK 使用本次受保護的新簽名憑證（SHA-256: $ACTUAL_SHA256）。"
+          else
+            echo "已確認 PR Debug APK 簽名結構有效（SHA-256: $ACTUAL_SHA256）。"
           fi
-          echo "已確認 APK 使用 DroidPy 原有簽名憑證（SHA-256: $ACTUAL_SHA256）。"
 
       - name: 整理發佈版本與 APK 檔名
         id: resolve_tag

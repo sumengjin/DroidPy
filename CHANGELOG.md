@@ -4,6 +4,48 @@ All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
 
+### Security — Rotate DroidPy Release signing key
+- **正式簽名金鑰輪替**：正式 Release 不再接受或鎖定歷史公開的舊簽名憑證，改由專用 GitHub Actions Secrets 提供新 keystore；CI 從該 keystore 動態取得 SHA-256 指紋，並逐次驗證 Release APK 確實由同一把金鑰簽署。
+- **修復 PR APK 打包失敗**：PR／Debug 建置不再要求正式 Release Secrets，使用 Android Debug 臨時簽名產出測試 Artifact；合併至 main/master 後的正式建置才要求新 keystore。
+- **合併後自動發布**：保留 main/master push 自動流程；只有測試、Release APK 編譯、簽名驗證及 Artifact 上傳全部成功後，獨立 Release 工作才會建立或更新 GitHub Release。
+- **簽名輪替相容性提醒**：新憑證與歷史安裝版本不同，舊版 APK 無法直接覆蓋更新；使用者須先匯出 App 資料備份，再解除安裝舊版並安裝新 Release，之後使用 App 內功能還原資料。
+- **保護新私鑰**：新 keystore 不會寫入原始碼或提交至 Git；正式發布所需的 Base64、密碼及 alias 僅由 GitHub Actions Secrets 提供。請離線保管 keystore 與憑證資料。
+
+### Security — Shared-storage state backup credential protection
+- 修正 Android 狀態備份的失敗回退：若狀態 JSON 無法解析或無法完成憑證清除，現在會跳過本次共用儲存空間備份，保留上一份有效快照；不再把未清理的原始 JSON 寫入共用目錄，避免意外暴露每次安裝專屬的 Bridge token。
+- 新增 Bridge 回歸檢查，確保備份清理採 fail-closed 行為，且不會在解析失敗時回退寫入原始狀態。
+
+
+### Fixed — Exported Android project signing instructions
+- Corrected the generated Android project README: production Releases require the protected GitHub Actions keystore Secrets, Debug artifacts use an ephemeral signer, and upgrade compatibility requires the original signing keystore. Removed the obsolete claim that the exported project automatically uses a bundled fixed signing key.
+
+### Security — Bridge request resource limits
+- **限制 Python Bridge 併發連線**：最多 8 個處理中的請求、佇列最多 16 個；超出容量回覆 503 並關閉連線，避免無限制建立執行緒。
+- **限制原生 Android Bridge 資源**：使用最多 8 個工作執行緒與 16 個排隊請求；拒絕超額連線，HTTP 標頭限制 16 KiB、JSON 請求本文限制 8 MiB，讀取逾時維持 15 秒。 停止 Bridge 時會關閉所有已接收的用戶端 socket，避免快速重啟留下等待中的工作執行緒。
+- **嚴格檢查請求框架**：拒絕 Transfer-Encoding、重複 Content-Length、無效長度、不完整本文及無效 JSON；Bridge 停止時只關閉請求處理器，不會終止使用者正在執行的 Python 工作。
+- 加入 Python 產生碼與 Android 原生 Bridge 的資源上限及生命週期回歸檢查；Android 實機驗證仍待完成。
+- 新增備份儲存回歸測試：驗證 localStorage quota 失敗與資料損壞時不覆蓋舊備份、匯入／刪除保留其他快照，以及還原前必須先成功保存 pre-restore 回復點。
+- **強化 APK 更新下載與簽名相容性驗證**：僅接受 GitHub 官方 HTTPS 資產網域並逐跳驗證重新導向；下載上限 300 MiB、先寫入並同步暫存檔，確認完整性後才替換舊 APK；比對套件 ID 與目前安裝版本的簽名憑證／有效單簽名輪替歷史，不再硬編碼已過時的舊憑證指紋。
+- **Release 簽名驗證改為跟隨受保護 keystore**：不再固定比對已過時的舊憑證指紋；CI 會從本次 Release 使用的 GitHub Actions secret keystore 匯出憑證指紋，再與 APK 簽名比對，允許安全輪替簽名金鑰，同時保留缺少／不匹配金鑰即阻止發布的 fail-closed 行為。
+- **修正匯出 Android 專案的自動發布流程**：Debug 使用臨時 Gradle 簽名並只上傳 Artifact；正式 Release 必須使用受保護 GitHub Secrets keystore、建置 Release APK 並驗證 APK 憑證與該 keystore 一致；Release 發布移至獨立 write 權限工作，移除不存在的內嵌簽名檔 fallback。
+
+
+### Security — URL Probe SSRF Protection (pending Android validation)
+- **雙端阻斷私有網路探測**：Python Bridge 與 Android 原生 Bridge 都會解析 DNS、拒絕非公網／保留 IP，並直接連線至已驗證的 IP，避免 DNS rebinding 在檢查後改指向內網。
+- **逐跳驗證重新導向**：停用自動跳轉，每個 redirect 目標都重新解析及驗證；跨來源跳轉不轉送 Cookie、Authorization 或 Referer。
+- **限制探測標頭與回應**：拒絕 Host、連線控制與 Cookie 覆寫標頭，限制標頭大小、回應預覽和逾時；HTTPS 保留憑證及主機名稱驗證。
+- 加入私有 IP、DNS pinning、loopback redirect、跨來源憑證剝除與標頭注入回歸測試；Android 實機驗證仍待完成。
+
+### Fixed — Termux 套件清單、使用者套件路徑、備份與資料保護（待 Android 實機驗證）
+- **完整盤點 Python 套件**：不再因檔案掃描已找到一個套件（例如 lxml）就跳過 `importlib.metadata.distributions()`；同時核對 `usr/` 與 `PYTHONUSERBASE`，避免漏掉使用者安裝的套件。
+- **限制盤點子程序資源**：輸出改寫入 App 私有暫存檔，不再使用可能塞滿的 pipe；Android 8 以上最多等待 8 秒、輸出限制 1 MiB，並在結束或失敗時清理程序與暫存檔。
+- **保護套件備份清單**：一般掃描只合併清單，不會因不完整結果縮短備份；只有明確解除安裝，而且 Python 與 dpkg 兩份盤點都確認完整時，才允許縮減清單。
+- **保護既有 `usr/`**：若啟動時核心標記或二進位檔遺失，但 `usr/` 仍有資料或無法安全讀取，就跳過破壞性的重新解壓，先嘗試修復並提示使用者，不會自動刪除原套件資料。
+- **修正套件安裝後無法匯入**：兩套 Python `sitecustomize.py` 都會明確啟用 `PYTHONUSERBASE` 的 site-packages 路徑。
+- **正規化 Python SSL CA 憑證**：處理 UTF-8 BOM／非 ASCII 註解，重新組合並驗證 PEM 憑證區塊；保留 TLS 憑證驗證，不會因找不到 CA 而關閉驗證。
+- **強化 APT 套件來源驗證**：移除允許未驗證套件與不安全來源的選項，停止新增 `[trusted=yes]`，並清理舊版留下的設定；缺少可信 CA 時安全失敗，不會降級成不驗證 HTTPS。
+- **加入 CI 回歸檢查**：涵蓋套件雙來源盤點、子程序限制、備份清單完整性、部分 `usr/` 保護、使用者套件路徑、CA 正規化與 APT／TLS 驗證。
+
 ### Fixed — Python Process Safety and Bridge Lifecycle
 - **停止以執行時間自動終止 Python 工作**：移除 Python／pip 子行程 30 分鐘看門狗與定時清理；程序檢查改為唯讀診斷，不會因執行時間或殭屍狀態自行發送終止訊號。
 - **修復 Bridge 停止時誤殺使用者工作**：停止內嵌 Bridge 不再強制終止目前 Python 程序，並保留程序控制代碼，讓 Bridge 重新啟動後仍可由使用者明確停止該工作。

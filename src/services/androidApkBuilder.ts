@@ -33,13 +33,24 @@ on:
     branches: [ main, master ]
     tags: [ 'v*' ]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Optional release tag, for example v1.2.3. Leave empty for a debug build.'
+        required: false
+        type: string
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-apk:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      is_release: \${{ steps.configure.outputs.is_release }}
+      release_tag: \${{ steps.configure.outputs.release_tag }}
+      artifact_name: \${{ steps.configure.outputs.artifact_name }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -64,8 +75,9 @@ jobs:
         env:
           VITE_GITHUB_REPO: \${{ github.repository }}
         run: |
-          if [ -f "package.json" ]; then
-            if [ -f "package-lock.json" ]; then
+          set -euo pipefail
+          if [ -f package.json ]; then
+            if [ -f package-lock.json ]; then
               npm ci || npm install --legacy-peer-deps --no-audit --no-fund
             else
               npm install --legacy-peer-deps --no-audit --no-fund
@@ -78,138 +90,172 @@ jobs:
 
       - name: Download Termux ARM64 Bootstrap
         run: |
+          set -euo pipefail
           mkdir -p android/app/src/main/assets
-          curl -fL "https://github.com/termux/termux-packages/releases/latest/download/bootstrap-aarch64.zip" \\
-            -o android/app/src/main/assets/bootstrap-aarch64.zip
+          curl -fL https://github.com/termux/termux-packages/releases/latest/download/bootstrap-aarch64.zip -o android/app/src/main/assets/bootstrap-aarch64.zip
 
-      - name: Configure Consistent APK Signing & Release Version
+      - name: Configure version and protected signing
+        id: configure
         env:
           GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
           CUSTOM_KS_B64: \${{ secrets.DROIDPY_KEYSTORE_BASE64 }}
           CUSTOM_STORE_PASS: \${{ secrets.DROIDPY_STORE_PASSWORD }}
           CUSTOM_KEY_ALIAS: \${{ secrets.DROIDPY_KEY_ALIAS }}
           CUSTOM_KEY_PASS: \${{ secrets.DROIDPY_KEY_PASSWORD }}
+          INPUT_RELEASE_TAG: \${{ inputs.release_tag }}
         run: |
-          VER=\$(grep -m1 -oE '\\[[0-9]+\\.[0-9]+\\.[0-9]+' CHANGELOG.md 2>/dev/null | tr -d '[' || true)
-          if [ -z "\$VER" ]; then
-            VER="1.2.\${GITHUB_RUN_NUMBER:-1}"
+          set -euo pipefail
+          INPUT_TAG="\${INPUT_RELEASE_TAG:-}"
+          if [ -n "$INPUT_TAG" ] && ! [[ "$INPUT_TAG" =~ ^v?[0-9]+[.][0-9]+[.][0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo '::error::release_tag must be a valid version such as v1.2.3'
+            exit 1
           fi
-
-          if [[ "\${GITHUB_REF}" == refs/tags/* ]]; then
-            REL_TAG="\${GITHUB_REF_NAME}"
+          IS_RELEASE_REF=false
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            case "$GITHUB_REF" in
+              refs/heads/main|refs/heads/master|refs/tags/v*) IS_RELEASE_REF=true ;;
+            esac
+          elif [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ -n "$INPUT_TAG" ]; then
+            IS_RELEASE_REF=true
+          fi
+          VER=$(grep -m1 -oE '[0-9]+[.][0-9]+[.][0-9]+' CHANGELOG.md 2>/dev/null | head -n1 || true)
+          if [ -z "$VER" ]; then VER="1.2.16"; fi
+          if [ -n "$INPUT_TAG" ]; then
+            REL_TAG="v\${INPUT_TAG#v}"
             VNAME="\${REL_TAG#v}"
-          else
-            IFS='.' read -r MAJ MIN PAT <<< "\$VER"
-            MAJ=\${MAJ:-1}
-            MIN=\${MIN:-2}
-            PAT=\${PAT:-0}
-            for _ in \$(seq 1 50); do
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            REL_TAG="$GITHUB_REF_NAME"
+            VNAME="\${REL_TAG#v}"
+          elif [ "$IS_RELEASE_REF" = true ]; then
+            IFS='.' read -r MAJ MIN PAT <<< "$VER"
+            MAJ=\${MAJ:-1}; MIN=\${MIN:-2}; PAT=\${PAT:-0}
+            for _ in $(seq 1 50); do
               CAND_TAG="v\${MAJ}.\${MIN}.\${PAT}"
               REL_EXISTS=0
-              if gh release view "\$CAND_TAG" >/dev/null 2>&1; then
-                REL_EXISTS=1
-              fi
-              TAG_SHA=\$(git ls-remote --tags origin "refs/tags/\${CAND_TAG}^{}" 2>/dev/null | awk '{print \$1}' | head -n1 || true)
-              if [ -z "\$TAG_SHA" ]; then
-                TAG_SHA=\$(git ls-remote --tags origin "refs/tags/\${CAND_TAG}" 2>/dev/null | awk '{print \$1}' | head -n1 || true)
-              fi
-              if [ "\$REL_EXISTS" -eq 0 ] && [ -z "\$TAG_SHA" ]; then
-                break
-              fi
-              if [ -n "\$TAG_SHA" ] && [ "\$TAG_SHA" = "\${GITHUB_SHA}" ]; then
-                break
-              fi
-              PAT=\$((PAT + 1))
+              if gh release view "$CAND_TAG" >/dev/null 2>&1; then REL_EXISTS=1; fi
+              TAG_SHA=$(git ls-remote --tags origin "refs/tags/\${CAND_TAG}^{}" 2>/dev/null | awk '{print $1}' | head -n1 || true)
+              if [ -z "$TAG_SHA" ]; then TAG_SHA=$(git ls-remote --tags origin "refs/tags/\${CAND_TAG}" 2>/dev/null | awk '{print $1}' | head -n1 || true); fi
+              if [ "$REL_EXISTS" -eq 0 ] && [ -z "$TAG_SHA" ]; then break; fi
+              if [ -n "$TAG_SHA" ] && [ "$TAG_SHA" = "$GITHUB_SHA" ]; then break; fi
+              PAT=$((PAT + 1))
             done
             VNAME="\${MAJ}.\${MIN}.\${PAT}"
-            REL_TAG="v\${VNAME}"
+            REL_TAG="v$VNAME"
+          else
+            REL_TAG="debug-$GITHUB_RUN_NUMBER"
+            VNAME="$VER"
           fi
-
-          SEMVER_PART=\$(echo "\$VNAME" | grep -oE '^[0-9]+\\.[0-9]+\\.[0-9]+' || echo "1.2.16")
-          IFS='.' read -r CMAJ CMIN CPAT <<< "\$SEMVER_PART"
-          VCODE=\$(( \${CMAJ:-1} * 10000 + \${CMIN:-0} * 100 + \${CPAT:-0} ))
-
-          echo "DROIDPY_VERSION_CODE=\${VCODE}" >> "\$GITHUB_ENV"
-          echo "DROIDPY_VERSION_NAME=\${VNAME}" >> "\$GITHUB_ENV"
-          echo "DROIDPY_RESOLVED_TAG=\${REL_TAG}" >> "\$GITHUB_ENV"
-
-          if [ -n "\$CUSTOM_KS_B64" ]; then
-            if [ -z "\$CUSTOM_STORE_PASS" ] || [ -z "\$CUSTOM_KEY_ALIAS" ] || [ -z "\$CUSTOM_KEY_PASS" ]; then
-              echo "::error::Custom keystore is set but one or more required signing secrets are missing."
+          SEMVER_PART=$(printf '%s' "$VNAME" | grep -oE '^[0-9]+[.][0-9]+[.][0-9]+' || echo '1.2.16')
+          IFS='.' read -r CMAJ CMIN CPAT <<< "$SEMVER_PART"
+          VCODE=$(( \${CMAJ:-1} * 10000 + \${CMIN:-0} * 100 + \${CPAT:-0} ))
+          echo "DROIDPY_VERSION_CODE=$VCODE" >> "$GITHUB_ENV"
+          echo "DROIDPY_VERSION_NAME=$VNAME" >> "$GITHUB_ENV"
+          echo "DROIDPY_RESOLVED_TAG=$REL_TAG" >> "$GITHUB_ENV"
+          echo "DROIDPY_RELEASE_BUILD=$IS_RELEASE_REF" >> "$GITHUB_ENV"
+          if [ "$IS_RELEASE_REF" = true ]; then
+            if [ -z "$CUSTOM_KS_B64" ]; then
+              echo '::error::The new DROIDPY_KEYSTORE_BASE64 secret is required for Release builds.'
               exit 1
             fi
-            printf '%s' "\$CUSTOM_KS_B64" | base64 -d > android/app/droidpy-custom.keystore
-            echo "DROIDPY_KEYSTORE_FILE=droidpy-custom.keystore" >> "\$GITHUB_ENV"
-            printf 'DROIDPY_STORE_PASSWORD=%s\\n' "\$CUSTOM_STORE_PASS" >> "\$GITHUB_ENV"
-            printf 'DROIDPY_KEY_ALIAS=%s\\n' "\$CUSTOM_KEY_ALIAS" >> "\$GITHUB_ENV"
-            printf 'DROIDPY_KEY_PASSWORD=%s\\n' "\$CUSTOM_KEY_PASS" >> "\$GITHUB_ENV"
+            CUSTOM_STORE_PASS="\${CUSTOM_STORE_PASS:-android}"
+            CUSTOM_KEY_ALIAS="\${CUSTOM_KEY_ALIAS:-androiddebugkey}"
+            CUSTOM_KEY_PASS="\${CUSTOM_KEY_PASS:-android}"
+            printf '%s' "$CUSTOM_KS_B64" | base64 --decode > android/app/droidpy-release.keystore
+            keytool -list -keystore android/app/droidpy-release.keystore -storepass "$CUSTOM_STORE_PASS" -alias "$CUSTOM_KEY_ALIAS" >/dev/null
+            echo 'DROIDPY_KEYSTORE_FILE=droidpy-release.keystore' >> "$GITHUB_ENV"
+            printf 'DROIDPY_STORE_PASSWORD=%s\\n' "$CUSTOM_STORE_PASS" >> "$GITHUB_ENV"
+            printf 'DROIDPY_KEY_ALIAS=%s\\n' "$CUSTOM_KEY_ALIAS" >> "$GITHUB_ENV"
+            printf 'DROIDPY_KEY_PASSWORD=%s\\n' "$CUSTOM_KEY_PASS" >> "$GITHUB_ENV"
+            ACTUAL_KEYSTORE_SHA256=$(keytool -exportcert -keystore android/app/droidpy-release.keystore -storepass "$CUSTOM_STORE_PASS" -alias "$CUSTOM_KEY_ALIAS" | sha256sum | awk '{print toupper($1)}')
+            echo "DROIDPY_EXPECTED_CERT_SHA256=$ACTUAL_KEYSTORE_SHA256" >> "$GITHUB_ENV"
+            echo "Verified protected Release signing certificate: $ACTUAL_KEYSTORE_SHA256"
           else
-            mkdir -p ~/.android
-            cp android/app/droidpy-debug.p12 ~/.android/debug.keystore
-            echo "DROIDPY_KEYSTORE_FILE=droidpy-debug.p12" >> "\$GITHUB_ENV"
+            echo 'PR/debug builds use the temporary Android debug signer and do not require Release secrets.'
           fi
+          echo "is_release=$IS_RELEASE_REF" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$REL_TAG" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=${appSlug}-arm64-apk-$GITHUB_RUN_NUMBER-a\${GITHUB_RUN_ATTEMPT:-1}" >> "$GITHUB_OUTPUT"
 
       - name: Build Debug APK (Arm64)
         working-directory: android
         run: gradle assembleDebug --no-daemon
 
-      - name: Verify APK Signature Fingerprint
+      - name: Build Release APK (Arm64)
+        if: steps.configure.outputs.is_release == 'true'
+        working-directory: android
+        run: gradle assembleRelease --no-daemon
+
+      - name: Verify APK signature
         run: |
           set -euo pipefail
-          APK_PATH=\$(find android/app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -print | sort | head -n1)
-          if [ -z "\$APK_PATH" ]; then
-            echo "::error::No Debug APK found; refusing to publish an unverified artifact."
-            exit 1
+          APK_DIR=android/app/build/outputs/apk/debug
+          if [ "$DROIDPY_RELEASE_BUILD" = true ]; then APK_DIR=android/app/build/outputs/apk/release; fi
+          APK_PATH=$(find "$APK_DIR" -maxdepth 1 -type f -name '*.apk' -print | sort | head -n1)
+          if [ -z "$APK_PATH" ]; then echo '::error::No APK found.'; exit 1; fi
+          APKSIGNER=$(find "\${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/build-tools" -type f -name apksigner -perm -u+x 2>/dev/null | sort -V | tail -n1)
+          if [ -z "$APKSIGNER" ]; then echo '::error::Android apksigner not found.'; exit 1; fi
+          SIGNER_OUTPUT=$("$APKSIGNER" verify --verbose --print-certs "$APK_PATH" 2>&1)
+          printf '%s\\n' "$SIGNER_OUTPUT"
+          ACTUAL_SHA256=$(printf '%s\\n' "$SIGNER_OUTPUT" | sed -nE 's/.*certificate SHA-256 digest: *([0-9A-Fa-f:]+).*/\\1/ip' | head -n1 | tr -d ':' | tr '[:lower:]' '[:upper:]')
+          if ! [[ "$ACTUAL_SHA256" =~ ^[0-9A-F]{64}$ ]]; then echo '::error::Invalid APK signer fingerprint.'; exit 1; fi
+          if [ "$DROIDPY_RELEASE_BUILD" = true ]; then
+            EXPECTED_SHA256="\${DROIDPY_EXPECTED_CERT_SHA256:-}"
+            if ! [[ "$EXPECTED_SHA256" =~ ^[0-9A-F]{64}$ ]] || [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+              echo '::error::Release APK signer does not match the protected keystore.'
+              exit 1
+            fi
+            echo "Verified protected Release APK signer: $ACTUAL_SHA256"
+          else
+            echo "Verified PR/debug APK signature structure: $ACTUAL_SHA256"
           fi
-          APKSIGNER=\$(find "\${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/build-tools" -type f -name apksigner -perm -u+x 2>/dev/null | sort -V | tail -n1)
-          if [ -z "\$APKSIGNER" ]; then
-            echo "::error::Android apksigner not found; refusing to skip signature verification."
-            exit 1
-          fi
-          SIGNER_OUTPUT=\$("\$APKSIGNER" verify --verbose --print-certs "\$APK_PATH" 2>&1) || {
-            echo "::error::APK signature verification failed."
-            printf '%s\\n' "\$SIGNER_OUTPUT"
-            exit 1
-          }
-          printf '%s\\n' "\$SIGNER_OUTPUT"
-          ACTUAL_SHA256=\$(printf '%s\\n' "\$SIGNER_OUTPUT" | sed -nE 's/.*certificate SHA-256 digest: *([0-9A-Fa-f:]+).*/\\1/ip' | head -n1 | tr -d ':' | tr '[:lower:]' '[:upper:]')
-          EXPECTED_SHA256="29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA"
-          if [ "\$ACTUAL_SHA256" != "\$EXPECTED_SHA256" ]; then
-            echo "::error::APK signing certificate does not match the original DroidPy certificate."
-            exit 1
-          fi
-          echo "Original DroidPy APK signing certificate verified."
 
-      - name: Prepare Release APK Filename
+      - name: Prepare APK Artifact
         run: |
+          set -euo pipefail
           mkdir -p release-apk
-          SAFE_TAG="\${DROIDPY_RESOLVED_TAG//\\//-}"
-          cp android/app/build/outputs/apk/debug/*.apk "release-apk/${appSlug}-arm64-\${SAFE_TAG}.apk"
+          if [ "$DROIDPY_RELEASE_BUILD" = true ]; then
+            cp android/app/build/outputs/apk/release/*.apk "release-apk/${appSlug}-arm64-\${DROIDPY_RESOLVED_TAG}.apk"
+          else
+            cp android/app/build/outputs/apk/debug/*.apk "release-apk/${appSlug}-arm64-debug-$GITHUB_RUN_NUMBER.apk"
+          fi
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${appSlug}-arm64-apk-\${{ github.run_number }}-a\${{ github.run_attempt }}
+          name: \${{ steps.configure.outputs.artifact_name }}
           retention-days: 90
           overwrite: true
           path: release-apk/*.apk
 
+  publish-release:
+    if: needs.build-apk.outputs.is_release == 'true'
+    needs: build-apk
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download verified APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: \${{ needs.build-apk.outputs.artifact_name }}
+          path: release-apk
+
       - name: Publish GitHub Release
-        if: github.event_name == 'push' || startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: \${{ needs.build-apk.outputs.release_tag }}
         run: |
-          APK_FILE=\$(ls release-apk/*.apk | head -n1)
-          REL_TAG="\${DROIDPY_RESOLVED_TAG}"
-          if gh release view "\$REL_TAG" >/dev/null 2>&1; then
-            gh release upload "\$REL_TAG" "\$APK_FILE" --clobber
+          set -euo pipefail
+          APK_FILE=$(find release-apk -maxdepth 1 -type f -name '*.apk' -print | head -n1)
+          if [ -z "$APK_FILE" ]; then echo '::error::Verified Release APK artifact is missing.'; exit 1; fi
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$APK_FILE" --clobber
           else
-            gh release create "\$REL_TAG" "\$APK_FILE" \\
-              --title "${appSlug} \${REL_TAG}" \\
-              --notes-file CHANGELOG.md \\
-              --target "\${GITHUB_SHA}" || gh release upload "\$REL_TAG" "\$APK_FILE" --clobber
-          fi
-`
+            gh release create "$RELEASE_TAG" "$APK_FILE" --title "${appSlug} $RELEASE_TAG" --notes-file CHANGELOG.md --target "$GITHUB_SHA"
+          fi`
   );
 
   // 2. Gradle root files
@@ -438,6 +484,7 @@ import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import javax.net.ssl.HttpsURLConnection
 import java.util.zip.ZipInputStream
 import kotlin.concurrent.thread
 
@@ -548,6 +595,10 @@ class MainActivity : AppCompatActivity() {
             val safeName = File(fileName).name.ifBlank { "DroidPy-update.apk" }.let {
                 if (it.lowercase().endsWith(".apk")) it else "$it.apk"
             }
+            val maxApkBytes = 300L * 1024L * 1024L
+            var activeConnection: HttpURLConnection? = null
+            var partialFile: File? = null
+
             fun emitProgress(status: String, progress: Int, downloaded: Long = 0L, total: Long = 0L, message: String = "") {
                 val payload = JSONObject()
                     .put("status", status)
@@ -562,64 +613,193 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
+            fun validateGithubAssetUrl(raw: String): URL {
+                val url = URL(raw)
+                val uri = url.toURI()
+                val host = (uri.host ?: "").lowercase(java.util.Locale.US)
+                val allowedHost = host == "github.com" ||
+                    host == "api.github.com" ||
+                    host == "objects.githubusercontent.com" ||
+                    host == "release-assets.githubusercontent.com"
+                if (uri.scheme != "https" || uri.rawUserInfo != null ||
+                    (uri.port != -1 && uri.port != 443) || !allowedHost
+                ) {
+                    throw SecurityException("更新下載網址不是受信任的 GitHub HTTPS 資產網址")
+                }
+                return url
+            }
+
+            fun certificateFingerprint(signature: android.content.pm.Signature): String {
+                return java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(signature.toByteArray())
+                    .joinToString("") { byte ->
+                        "%02X".format(java.util.Locale.US, byte.toInt() and 0xff)
+                    }
+            }
+
+            @Suppress("DEPRECATION")
+            fun signerMatchesInstalledApp(apkPath: String): Boolean {
+                val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    PackageManager.GET_SIGNING_CERTIFICATES
+                } else {
+                    PackageManager.GET_SIGNATURES
+                }
+                val archiveInfo = packageManager.getPackageArchiveInfo(apkPath, flags) ?: return false
+                if (archiveInfo.packageName != packageName) return false
+                val installedInfo = packageManager.getPackageInfo(packageName, flags)
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    val installedSigning = installedInfo.signingInfo ?: return false
+                    val archiveSigning = archiveInfo.signingInfo ?: return false
+                    val installedCurrent = installedSigning.apkContentsSigners
+                        ?.map(::certificateFingerprint)?.toSet().orEmpty()
+                    val archiveCurrent = archiveSigning.apkContentsSigners
+                        ?.map(::certificateFingerprint)?.toSet().orEmpty()
+                    if (installedCurrent.isEmpty() || archiveCurrent.isEmpty()) return false
+
+                    if (installedSigning.hasMultipleSigners() || archiveSigning.hasMultipleSigners()) {
+                        return installedCurrent == archiveCurrent
+                    }
+
+                    val archiveHistory = archiveSigning.signingCertificateHistory
+                        ?.map(::certificateFingerprint)?.toSet().orEmpty()
+                    val compatibleHistory = if (archiveHistory.isNotEmpty()) archiveHistory else archiveCurrent
+                    return compatibleHistory.containsAll(installedCurrent)
+                }
+
+                val installedSigners = installedInfo.signatures
+                    ?.map(::certificateFingerprint)?.toSet().orEmpty()
+                val archiveSigners = archiveInfo.signatures
+                    ?.map(::certificateFingerprint)?.toSet().orEmpty()
+                return installedSigners.isNotEmpty() && installedSigners == archiveSigners
+            }
+
             thread {
                 try {
                     emitProgress("downloading", 0, 0L, 0L)
                     val updatesDir = File(filesDir, "updates").apply { mkdirs() }
-                    updatesDir.listFiles()?.forEach { old -> if (old.isFile && old.name != safeName) old.delete() }
                     val outFile = File(updatesDir, safeName)
+                    val tempFile = File(updatesDir, "$safeName.part")
+                    partialFile = tempFile
+                    if (tempFile.exists()) tempFile.delete()
 
                     var currentUrl = apkUrl
-                    var conn: HttpURLConnection? = null
                     var redirects = 0
                     while (redirects < 6) {
-                        val urlObj = URL(currentUrl)
-                        val c = (urlObj.openConnection() as HttpURLConnection).apply {
+                        val urlObj = validateGithubAssetUrl(currentUrl)
+                        val connection = (urlObj.openConnection() as HttpsURLConnection).apply {
                             instanceFollowRedirects = false
                             connectTimeout = 20000
                             readTimeout = 30000
                             setRequestProperty("User-Agent", "DroidPy-Updater/1.0")
+                            setRequestProperty("Accept", "application/vnd.android.package-archive")
                         }
-                        val code = c.responseCode
+                        activeConnection = connection
+                        val code = connection.responseCode
                         if (code in 300..399) {
-                            val loc = c.getHeaderField("Location")
-                            c.disconnect()
-                            if (loc.isNullOrBlank()) break
-                            currentUrl = URL(urlObj, loc).toString()
+                            val location = connection.getHeaderField("Location")
+                            connection.disconnect()
+                            activeConnection = null
+                            if (location.isNullOrBlank()) break
+                            currentUrl = URL(urlObj, location).toString()
                             redirects++
                             continue
                         }
-                        conn = c
+                        if (code !in 200..299) {
+                            connection.disconnect()
+                            activeConnection = null
+                            tempFile.delete()
+                            emitProgress("error", 0, message = "下載更新失敗 (HTTP $code)")
+                            return@thread
+                        }
                         break
                     }
-                    if (conn == null || conn.responseCode !in 200..299) {
-                        val errCode = conn?.responseCode ?: -1
-                        conn?.disconnect()
-                        emitProgress("error", 0, message = "下載更新失敗 (HTTP $errCode)")
+
+                    val connection = activeConnection
+                    if (connection == null || connection.responseCode !in 200..299) {
+                        connection?.disconnect()
+                        activeConnection = null
+                        tempFile.delete()
+                        emitProgress("error", 0, message = "下載更新失敗：重新導向次數過多或網址無效")
                         return@thread
                     }
 
-                    val totalBytes = conn.contentLengthLong
+                    val totalBytes = connection.contentLengthLong
+                    if (totalBytes > maxApkBytes) {
+                        connection.disconnect()
+                        activeConnection = null
+                        tempFile.delete()
+                        emitProgress("error", 0, message = "更新 APK 超過 300 MiB 安全上限")
+                        return@thread
+                    }
+
                     var downloaded = 0L
                     var lastEmit = 0L
-                    conn.inputStream.use { inp ->
-                        outFile.outputStream().use { out ->
-                            val buf = ByteArray(16384)
+                    connection.inputStream.use { input ->
+                        java.io.FileOutputStream(tempFile).use { output ->
+                            val buffer = ByteArray(16384)
                             while (true) {
-                                val r = inp.read(buf)
-                                if (r <= 0) break
-                                out.write(buf, 0, r)
-                                downloaded += r
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                if (count == 0) continue
+                                downloaded += count.toLong()
+                                if (downloaded > maxApkBytes) {
+                                    throw SecurityException("更新 APK 超過 300 MiB 安全上限")
+                                }
+                                if (totalBytes > 0L && downloaded > totalBytes) {
+                                    throw SecurityException("更新 APK 長度與伺服器宣告不符")
+                                }
+                                output.write(buffer, 0, count)
                                 val now = SystemClock.elapsedRealtime()
                                 if (now - lastEmit >= 180L) {
                                     lastEmit = now
-                                    val pct = if (totalBytes > 0L) ((downloaded * 100L) / totalBytes).toInt().coerceIn(0, 99) else -1
-                                    emitProgress("downloading", pct, downloaded, totalBytes)
+                                    val percent = if (totalBytes > 0L) {
+                                        ((downloaded * 100L) / totalBytes).toInt().coerceIn(0, 99)
+                                    } else -1
+                                    emitProgress("downloading", percent, downloaded, totalBytes)
                                 }
                             }
+                            output.flush()
+                            output.fd.sync()
                         }
                     }
-                    conn.disconnect()
+                    connection.disconnect()
+                    activeConnection = null
+
+                    if (downloaded <= 0L || (totalBytes > 0L && downloaded != totalBytes)) {
+                        tempFile.delete()
+                        emitProgress("error", 0, downloaded, totalBytes, "更新 APK 下載不完整，已拒絕安裝")
+                        return@thread
+                    }
+
+                    if (!signerMatchesInstalledApp(tempFile.absolutePath)) {
+                        tempFile.delete()
+                        emitProgress(
+                            "error",
+                            0,
+                            downloaded,
+                            totalBytes,
+                            "更新 APK 驗證失敗：應用程式識別或簽名與目前安裝版本不相容，已拒絕安裝"
+                        )
+                        return@thread
+                    }
+
+                    // Keep the previous verified download until the new APK has passed identity/signature checks.
+                    val previousFile = File(updatesDir, "$safeName.previous")
+                    if (previousFile.exists()) previousFile.delete()
+                    val hadPrevious = outFile.exists()
+                    if (hadPrevious && !outFile.renameTo(previousFile)) {
+                        tempFile.delete()
+                        throw IllegalStateException("無法安全保留上一份更新 APK")
+                    }
+                    if (!tempFile.renameTo(outFile)) {
+                        if (hadPrevious) previousFile.renameTo(outFile)
+                        tempFile.delete()
+                        throw IllegalStateException("無法安全保存已驗證的更新 APK")
+                    }
+                    if (hadPrevious) previousFile.delete()
+                    partialFile = null
+
                     emitProgress("installing", 100, downloaded, if (totalBytes > 0L) totalBytes else downloaded)
 
                     runOnUiThread {
@@ -627,7 +807,7 @@ class MainActivity : AppCompatActivity() {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
                                 Toast.makeText(this@MainActivity, "請允許 DroidPy 安裝未知來源應用程式以完成更新", Toast.LENGTH_LONG).show()
                                 val permIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                                    data = Uri.parse("package:\$packageName")
+                                    data = Uri.parse("package:\\$packageName")
                                 }
                                 startActivity(permIntent)
                                 return@runOnUiThread
@@ -647,6 +827,8 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 } catch (e: Exception) {
+                    try { activeConnection?.disconnect() } catch (_: Exception) {}
+                    try { partialFile?.delete() } catch (_: Exception) {}
                     emitProgress("error", 0, message = "更新下載錯誤: \${e.message}")
                 }
             }
@@ -694,13 +876,11 @@ class MainActivity : AppCompatActivity() {
                 if (hasStoragePermission()) {
                     try {
                         // The shared-storage recovery copy must not contain the per-install bridge credential.
-                        val backupJson = try {
-                            JSONObject(json).apply {
-                                optJSONObject("termuxConfig")?.put("token", "")
-                            }.toString()
-                        } catch (_: Exception) {
-                            json
-                        }
+                        // Fail closed: never copy an unparseable state (which may still contain a bridge token)
+                        // into shared storage. The previous valid recovery snapshot remains untouched.
+                        val backupJson = JSONObject(json).apply {
+                            optJSONObject("termuxConfig")?.put("token", "")
+                        }.toString()
                         val backupDir = File(Environment.getExternalStorageDirectory(), "DroidPy/.droidpy_backup").apply { mkdirs() }
                         val backup = File(backupDir, "droidpy_ide_state.json")
                         val backupTmp = File(backupDir, "droidpy_ide_state.json.tmp")
@@ -1170,6 +1350,11 @@ class MainActivity : AppCompatActivity() {
                 File(usrDir, "bin/python3").exists() ||
                 File(usrDir, "bin/dash").exists() ||
                 File(usrDir, "bin/bash").exists()
+            // A damaged install can lose every sentinel while still containing user packages.
+            // Treat unreadable/non-directory usr paths conservatively as existing data too.
+            val hasExistingUsrData = usrDir.exists() && (
+                !usrDir.isDirectory || usrDir.listFiles()?.isNotEmpty() != false
+            )
 
             fun appendStartupLog(tag: String, msg: String) {
                 try {
@@ -1182,7 +1367,7 @@ class MainActivity : AppCompatActivity() {
 
             appendStartupLog("MainActivity", "onCreate startup: hasExistingInstall=$hasExistingInstall")
 
-            if (!hasExistingInstall) {
+            if (!hasExistingInstall && !hasExistingUsrData) {
                 try {
                     appendStartupLog("Bootstrap", "Extracting bootstrap-aarch64.zip into \${usrDir.absolutePath}")
                     extractTermuxBootstrap(usrDir)
@@ -1196,10 +1381,17 @@ class MainActivity : AppCompatActivity() {
             } else {
                 try {
                     repairTermuxRuntime(usrDir)
-                    if (!bootstrapMarker.exists()) {
+                    if (hasExistingInstall && !bootstrapMarker.exists()) {
                         bootstrapMarker.writeText("1")
                     }
-                    appendStartupLog("Bootstrap", "Preserved existing usr/ environment and repaired runtime symlinks")
+                    if (hasExistingInstall) {
+                        appendStartupLog("Bootstrap", "Preserved existing usr/ environment and repaired runtime symlinks")
+                    } else {
+                        appendStartupLog("Bootstrap", "Detected partial usr/ data without core markers; preserved it and skipped destructive bootstrap re-extraction")
+                        runOnUiThread {
+                            Toast.makeText(this@MainActivity, "偵測到既有 Termux 資料但核心檔案不完整，已先保留套件資料，未自動重置。", Toast.LENGTH_LONG).show()
+                        }
+                    }
                 } catch (e: Exception) {
                     appendStartupLog("Bootstrap", "repairTermuxRuntime warning: \${e.message}")
                 }
@@ -1551,13 +1743,25 @@ import java.io.File
 import java.io.InputStreamReader
 import java.io.OutputStream
 import java.net.HttpURLConnection
+import java.net.IDN
+import java.net.Inet4Address
+import java.net.Inet6Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.net.URI
 import java.net.URL
 import java.net.URLDecoder
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SNIHostName
+import javax.net.ssl.SSLSocket
+import javax.net.ssl.SSLSocketFactory
+import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 class EmbeddedTermuxBridge(
@@ -1570,7 +1774,10 @@ class EmbeddedTermuxBridge(
     private val assetManager: AssetManager? = null
 ) {
     private var serverSocket: ServerSocket? = null
-    private val executor = Executors.newCachedThreadPool()
+    private var executor: ThreadPoolExecutor? = null
+    private val activeClientSockets = java.util.Collections.newSetFromMap(
+        java.util.concurrent.ConcurrentHashMap<Socket, Boolean>()
+    )
     @Volatile private var running = false
     @Volatile private var activeProcess: Process? = null
     private val activeProcessStartedAt = AtomicLong(0L)
@@ -1666,33 +1873,67 @@ class EmbeddedTermuxBridge(
 
     fun start() {
         if (running) return
-        running = true
-        serverSocket = ServerSocket().apply {
+        val localServer = ServerSocket().apply {
             reuseAddress = true
-            bind(InetSocketAddress(InetAddress.getByName("127.0.0.1"), port), 32)
+            bind(InetSocketAddress(InetAddress.getByName("127.0.0.1"), port), 16)
         }
+        val localExecutor = ThreadPoolExecutor(
+            1, 8, 60L, TimeUnit.SECONDS, ArrayBlockingQueue<Runnable>(16)
+        )
+        serverSocket = localServer
+        executor = localExecutor
+        running = true
         appendNativeLog("Bridge", "EmbeddedTermuxBridge started on 127.0.0.1:$port (usr=\${usrDir.absolutePath})")
-        executor.execute {
-            while (running) {
+        Thread({
+            while (running && serverSocket === localServer) {
                 try {
-                    val client = serverSocket?.accept() ?: break
-                    executor.execute { handleClient(client) }
+                    val client = localServer.accept()
+                    activeClientSockets.add(client)
+                    try {
+                        localExecutor.execute {
+                            try {
+                                handleClient(client)
+                            } finally {
+                                activeClientSockets.remove(client)
+                            }
+                        }
+                    } catch (_: RejectedExecutionException) {
+                        activeClientSockets.remove(client)
+                        try {
+                            client.getOutputStream().write(
+                                "HTTP/1.1 503 Service Unavailable\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n".toByteArray(Charsets.US_ASCII)
+                            )
+                        } catch (_: Exception) {
+                        }
+                        try { client.close() } catch (_: Exception) {}
+                        appendNativeLog("Bridge", "Rejected client: bounded request capacity reached")
+                    }
                 } catch (e: Exception) {
-                    if (!running) break
+                    if (!running || serverSocket !== localServer) break
                     appendNativeLog("Bridge", "Accept loop error: \${e.message}")
                 }
             }
+        }, "DroidPyBridge-Accept").apply {
+            isDaemon = true
+            start()
         }
     }
 
     fun stop() {
         running = false
         appendNativeLog("Bridge", "EmbeddedTermuxBridge stopping")
-        // The Bridge may stop while a user task is still running. Leave that
-        // process alive; only an explicit user Stop action may terminate it.
-        // Keep the Process handle so an explicit user Stop can still terminate
-        // the task after the Bridge is restarted. Bridge shutdown is not task cancellation.
-        try { serverSocket?.close() } catch (_: Exception) {}
+        // Bridge shutdown must never terminate an active user Python process.
+        // Only the explicit /stop action may terminate that process.
+        val oldServer = serverSocket
+        serverSocket = null
+        try { oldServer?.close() } catch (_: Exception) {}
+        activeClientSockets.toList().forEach { client ->
+            try { client.close() } catch (_: Exception) {}
+        }
+        activeClientSockets.clear()
+        val oldExecutor = executor
+        executor = null
+        try { oldExecutor?.shutdownNow() } catch (_: Exception) {}
     }
 
     private fun ensurePrefixWrappers(): File {
@@ -1777,15 +2018,9 @@ class EmbeddedTermuxBridge(
             "Dir::Bin::apt-key \\"$prefix/bin/apt-key\\";",
             "Dir::Bin::gpg \\"$prefix/bin/gpgv\\";",
             "APT::Sandbox::User \\"root\\";",
-            "Acquire::AllowInsecureRepositories \\"true\\";",
-            "Acquire::AllowDowngradeToInsecureRepositories \\"true\\";",
-            "APT::Get::AllowUnauthenticated \\"true\\";"
         )
         if (certFile != null) {
             aptConfLines.add("Acquire::https::CaInfo \\"\${certFile.absolutePath}\\";")
-        } else {
-            aptConfLines.add("Acquire::https::Verify-Peer \\"false\\";")
-            aptConfLines.add("Acquire::https::Verify-Host \\"false\\";")
         }
         val aptConfFile = File(usrDir, "etc/apt/apt.conf").apply {
             parentFile?.mkdirs()
@@ -1808,7 +2043,8 @@ class EmbeddedTermuxBridge(
             }
         }
 
-        // Ensure sources.list* use relocated prefix and [trusted=yes] so apt-get update never exits 100
+        // Preserve signed Termux repository metadata; never add trusted=yes while relocating legacy paths.
+        // Strip the legacy trusted=yes option from configurations written by older DroidPy versions.
         val listFiles = mutableListOf<File>()
         val mainSources = File(usrDir, "etc/apt/sources.list")
         if (mainSources.isFile) listFiles.add(mainSources)
@@ -1818,12 +2054,7 @@ class EmbeddedTermuxBridge(
                 val orig = cfg.readText()
                 val updated = orig.lines().joinToString("\\n") { line ->
                     var cur = line.replace(legacyPrefix, prefix)
-                    val trimmed = cur.trimStart()
-                    if (trimmed.startsWith("deb ") && !trimmed.startsWith("deb [")) {
-                        cur = cur.replaceFirst("deb ", "deb [trusted=yes] ")
-                    } else if (trimmed.startsWith("deb-src ") && !trimmed.startsWith("deb-src [")) {
-                        cur = cur.replaceFirst("deb-src ", "deb-src [trusted=yes] ")
-                    }
+                    cur = cur.replace("[trusted=yes] ", "").replace(" [trusted=yes]", "")
                     cur
                 }
                 if (updated != orig) cfg.writeText(updated)
@@ -1840,7 +2071,7 @@ class EmbeddedTermuxBridge(
         if (activeDebLines == 0) {
             try {
                 mainSources.parentFile?.mkdirs()
-                mainSources.writeText("deb [trusted=yes] https://packages-cf.termux.dev/apt/termux-main/ stable main\\n")
+                mainSources.writeText("deb https://packages-cf.termux.dev/apt/termux-main/ stable main\\n")
             } catch (_: Exception) {
             }
         }
@@ -1870,7 +2101,7 @@ class EmbeddedTermuxBridge(
         val caOpt = if (certFile != null) {
             "-o Acquire::https::CaInfo=\${certFile.absolutePath}"
         } else {
-            "-o Acquire::https::Verify-Peer=false -o Acquire::https::Verify-Host=false"
+            ""
         }
 
         val pkgLines = listOf(
@@ -1878,7 +2109,7 @@ class EmbeddedTermuxBridge(
             "PREFIX=\\"$prefix\\"",
             "APT_CONFIG=\\"\${aptConfFile.absolutePath}\\"",
             "export PREFIX APT_CONFIG",
-            "APT_OPTS=\\"-c \${d}APT_CONFIG -o Dir=\${d}PREFIX/ -o Dir::State=\${d}PREFIX/var/lib/apt -o Dir::State::status=\${d}PREFIX/var/lib/dpkg/status -o Dir::Cache=\${d}PREFIX/var/cache/apt -o Dir::Etc=\${d}PREFIX/etc/apt -o Dir::Etc::parts=\${d}PREFIX/etc/apt/apt.conf.d -o Dir::Etc::main=\${d}PREFIX/etc/apt/apt.conf -o Dir::Etc::preferences=\${d}PREFIX/etc/apt/preferences -o Dir::Etc::preferencesparts=\${d}PREFIX/etc/apt/preferences.d -o Dir::Etc::sourcelist=\${d}PREFIX/etc/apt/sources.list -o Dir::Etc::sourceparts=\${d}PREFIX/etc/apt/sources.list.d -o Dir::Etc::Trusted=\${d}PREFIX/etc/apt/trusted.gpg -o Dir::Etc::TrustedParts=\${d}PREFIX/etc/apt/trusted.gpg.d -o Dir::Log=\${d}PREFIX/var/log/apt -o Dir::Bin::methods=\${d}PREFIX/lib/apt/methods -o Dir::Bin::dpkg=\${d}PREFIX/bin/dpkg -o Dir::Bin::apt-key=\${d}PREFIX/bin/apt-key -o Dir::Bin::gpg=\${d}PREFIX/bin/gpgv -o DPkg::Options::=--admindir=\${d}PREFIX/var/lib/dpkg -o Acquire::AllowInsecureRepositories=true -o Acquire::AllowDowngradeToInsecureRepositories=true -o APT::Get::AllowUnauthenticated=true -o APT::Sandbox::User=root $caOpt\\"",
+            "APT_OPTS=\\"-c \${d}APT_CONFIG -o Dir=\${d}PREFIX/ -o Dir::State=\${d}PREFIX/var/lib/apt -o Dir::State::status=\${d}PREFIX/var/lib/dpkg/status -o Dir::Cache=\${d}PREFIX/var/cache/apt -o Dir::Etc=\${d}PREFIX/etc/apt -o Dir::Etc::parts=\${d}PREFIX/etc/apt/apt.conf.d -o Dir::Etc::main=\${d}PREFIX/etc/apt/apt.conf -o Dir::Etc::preferences=\${d}PREFIX/etc/apt/preferences -o Dir::Etc::preferencesparts=\${d}PREFIX/etc/apt/preferences.d -o Dir::Etc::sourcelist=\${d}PREFIX/etc/apt/sources.list -o Dir::Etc::sourceparts=\${d}PREFIX/etc/apt/sources.list.d -o Dir::Etc::Trusted=\${d}PREFIX/etc/apt/trusted.gpg -o Dir::Etc::TrustedParts=\${d}PREFIX/etc/apt/trusted.gpg.d -o Dir::Log=\${d}PREFIX/var/log/apt -o Dir::Bin::methods=\${d}PREFIX/lib/apt/methods -o Dir::Bin::dpkg=\${d}PREFIX/bin/dpkg -o Dir::Bin::apt-key=\${d}PREFIX/bin/apt-key -o Dir::Bin::gpg=\${d}PREFIX/bin/gpgv -o DPkg::Options::=--admindir=\${d}PREFIX/var/lib/dpkg -o APT::Sandbox::User=root $caOpt\\"",
             "mkdir -p \\"\${d}PREFIX/var/lib/apt/lists/partial\\" \\"\${d}PREFIX/var/cache/apt/archives/partial\\" \\"\${d}PREFIX/var/lib/dpkg/updates\\" \\"\${d}PREFIX/var/lib/dpkg/info\\" \\"\${d}PREFIX/etc/apt/apt.conf.d\\" \\"\${d}PREFIX/etc/apt/preferences.d\\" \\"\${d}PREFIX/var/log/apt\\"",
             "touch \\"\${d}PREFIX/var/lib/dpkg/status\\" \\"\${d}PREFIX/etc/apt/apt.conf\\" \\"\${d}PREFIX/etc/apt/preferences\\"",
             "SUB=\\"\${d}1\\"",
@@ -2093,11 +2324,33 @@ class EmbeddedTermuxBridge(
         // 2) Bypass pip's truststore SSL context (preventing truststore/_api.py Errno 13)
         // 3) Fallback ssl.SSLContext.load_verify_locations to in-memory cadata on PermissionError
         val siteCustomizePy = """
+import base64
 import importlib.abc
 import os
+import re
 import shutil
 import ssl
 import sys
+
+# Explicitly activate pip's configured user base so installed distributions remain importable.
+try:
+    import site
+    _droidpy_user_base = os.environ.get("PYTHONUSERBASE")
+    if _droidpy_user_base:
+        _droidpy_user_site = site.getusersitepackages()
+        if isinstance(_droidpy_user_site, (list, tuple)):
+            _droidpy_user_sites = list(_droidpy_user_site)
+        else:
+            _droidpy_user_sites = [_droidpy_user_site]
+        _droidpy_user_sites.append(os.path.join(
+            _droidpy_user_base, "lib",
+            "python%d.%d" % sys.version_info[:2], "site-packages"
+        ))
+        for _droidpy_site in _droidpy_user_sites:
+            if _droidpy_site and os.path.isdir(_droidpy_site):
+                site.addsitedir(_droidpy_site)
+except Exception:
+    pass
 
 _DROIDPY_CA_FILE = None
 _DROIDPY_CA_TEXT = None
@@ -2108,10 +2361,30 @@ def _droidpy_read_pem(path):
     try:
         if os.path.getsize(path) <= 0:
             return None
-        with open(path, "r", encoding="utf-8", errors="ignore") as fp:
-            txt = fp.read()
-        if "BEGIN CERTIFICATE" in txt:
-            return txt
+        with open(path, "rb") as fp:
+            raw = fp.read()
+        txt = raw.decode("utf-8-sig", errors="ignore")
+        blocks = re.findall(
+            r"-----BEGIN CERTIFICATE-----([\\s\\S]*?)-----END CERTIFICATE-----",
+            txt,
+        )
+        clean_blocks = []
+        for body in blocks:
+            payload = "".join(body.split())
+            if not payload or not re.fullmatch(r"[A-Za-z0-9+/=]+", payload):
+                continue
+            try:
+                der = base64.b64decode(payload, validate=True)
+            except Exception:
+                continue
+            encoded = base64.b64encode(der).decode("ascii")
+            wrapped = "\\n".join(encoded[i:i + 64] for i in range(0, len(encoded), 64))
+            clean_blocks.append(
+                "-----BEGIN CERTIFICATE-----\\n" + wrapped +
+                "\\n-----END CERTIFICATE-----"
+            )
+        if clean_blocks:
+            return "\\n".join(clean_blocks) + "\\n"
     except Exception:
         return None
     return None
@@ -2757,8 +3030,12 @@ def clipboard_set(text):
         return name.trim().lowercase().replace(Regex("[-_.]+"), "-")
     }
 
-    private fun collectInstalledPipNames(): List<String> {
+    private data class PipInventory(val names: List<String>, val complete: Boolean)
+    private data class PkgInventory(val names: List<String>, val complete: Boolean)
+
+    private fun collectInstalledPipInventory(): PipInventory {
         val pipNames = mutableSetOf<String>()
+        var metadataComplete = false
         val homeDir = workspaceDir.parentFile!!
         val libRoots = listOf(
             File(usrDir, "lib"),
@@ -2827,54 +3104,72 @@ def clipboard_set(text):
         } catch (_: Exception) {
         }
 
-        val hasNonCoreFromFs = pipNames.any { it !in corePipSet }
-        if (!hasNonCoreFromFs) {
-            val binDir = File(usrDir, "bin")
-            val pyExe = listOf(File(binDir, "python3"), File(binDir, "python")).firstOrNull { it.exists() }
-                ?: binDir.listFiles()?.firstOrNull {
-                    it.name.startsWith("python3.") && !it.name.endsWith("-config") && it.isFile
+        // Always cross-check filesystem metadata with Python's own distribution
+        // database. One visible package must never suppress PYTHONUSERBASE discovery.
+        val binDir = File(usrDir, "bin")
+        val pyExe = listOf(File(binDir, "python3"), File(binDir, "python")).firstOrNull { it.exists() }
+            ?: binDir.listFiles()?.firstOrNull {
+                it.name.startsWith("python3.") && !it.name.endsWith("-config") && it.isFile
+            }
+        if (pyExe != null) {
+            var proc: Process? = null
+            var inventoryFile: File? = null
+            try {
+                pyExe.setExecutable(true, false)
+                val homeTmp = File(homeDir, "tmp").apply { mkdirs() }
+                val outputFile = File.createTempFile("pip-inventory-", ".json", homeTmp)
+                inventoryFile = outputFile
+                val pb = ProcessBuilder(
+                    pyExe.absolutePath,
+                    "-c",
+                    "import importlib.metadata, json; print('DROIDPY_PIP_INVENTORY:' + json.dumps(sorted({d.metadata.get('Name','') for d in importlib.metadata.distributions() if d.metadata.get('Name')})))"
+                )
+                pb.directory(workspaceDir)
+                pb.redirectErrorStream(true)
+                pb.redirectOutput(outputFile)
+                pb.environment().putAll(buildEnv())
+                proc = pb.start()
+                val finished = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    proc.waitFor(8, java.util.concurrent.TimeUnit.SECONDS)
+                } else {
+                    proc.waitFor() == 0
                 }
-            if (pyExe != null) {
-                var proc: Process? = null
-                try {
-                    pyExe.setExecutable(true, false)
-                    val pb = ProcessBuilder(
-                        pyExe.absolutePath,
-                        "-c",
-                        "import importlib.metadata, json; print(json.dumps([d.metadata.get('Name','') for d in importlib.metadata.distributions()]))"
-                    )
-                    pb.directory(workspaceDir)
-                    pb.redirectErrorStream(true)
-                    pb.environment().putAll(buildEnv())
-                    proc = pb.start()
-                    val finished = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        proc.waitFor(4, java.util.concurrent.TimeUnit.SECONDS)
-                    } else {
-                        proc.waitFor() == 0
-                    }
-                    if (!finished) {
-                        proc.destroyForcibly()
-                    } else {
-                        val txt = proc.inputStream.bufferedReader(Charsets.UTF_8).readText().trim()
-                        val idx = txt.indexOf('[')
-                        if (idx >= 0) {
-                            val arr = JSONArray(txt.substring(idx))
-                            for (i in 0 until arr.length()) {
-                                val raw = arr.optString(i, "").trim()
-                                if (raw.isNotEmpty()) pipNames.add(normalizePipPkgName(raw))
-                            }
+                if (!finished) {
+                    proc.destroyForcibly()
+                } else if (proc.exitValue() == 0 && outputFile.isFile &&
+                    outputFile.length() in 1L..(1024L * 1024L)) {
+                    val txt = outputFile.readText(Charsets.UTF_8)
+                    val marker = "DROIDPY_PIP_INVENTORY:"
+                    val idx = txt.indexOf(marker)
+                    if (idx >= 0) {
+                        val jsonStart = idx + marker.length
+                        val jsonEnd = txt.indexOf('\\n', jsonStart).let { if (it < 0) txt.length else it }
+                        val arr = JSONArray(txt.substring(jsonStart, jsonEnd).trim())
+                        for (i in 0 until arr.length()) {
+                            val raw = arr.optString(i, "").trim()
+                            if (raw.isNotEmpty()) pipNames.add(normalizePipPkgName(raw))
                         }
+                        metadataComplete = true
                     }
-                } catch (_: Exception) {
-                } finally {
-                    try { proc?.inputStream?.close() } catch (_: Exception) {}
-                    try { proc?.errorStream?.close() } catch (_: Exception) {}
-                    try { proc?.outputStream?.close() } catch (_: Exception) {}
                 }
+            } catch (_: Exception) {
+            } finally {
+                try {
+                    proc?.destroyForcibly()
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        proc?.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
+                    }
+                } catch (_: Exception) {}
+                try { proc?.inputStream?.close() } catch (_: Exception) {}
+                try { proc?.errorStream?.close() } catch (_: Exception) {}
+                try { proc?.outputStream?.close() } catch (_: Exception) {}
+                try { inventoryFile?.delete() } catch (_: Exception) {}
             }
         }
-        return pipNames.sorted()
+        return PipInventory(pipNames.sorted(), metadataComplete)
     }
+
+    private fun collectInstalledPipNames(): List<String> = collectInstalledPipInventory().names
 
     private fun calcDirSize(target: File): Long {
         if (!target.exists()) return 0L
@@ -2947,33 +3242,38 @@ def clipboard_set(text):
         return (before - after).coerceAtLeast(0L)
     }
 
-    private fun collectInstalledPkgNames(): List<String> {
+    private fun collectInstalledPkgInventory(): PkgInventory {
         val pkgSet = mutableSetOf<String>()
-        try {
-            val statusFile = File(usrDir, "var/lib/dpkg/status")
-            if (statusFile.isFile) {
-                statusFile.forEachLine { line ->
-                    if (line.startsWith("Package:")) {
-                        val p = line.substringAfter("Package:").trim()
-                        if (p.isNotBlank()) pkgSet.add(p)
-                    }
+        val statusFile = File(usrDir, "var/lib/dpkg/status")
+        if (!statusFile.isFile || !statusFile.canRead()) return PkgInventory(emptyList(), false)
+        return try {
+            statusFile.forEachLine { line ->
+                if (line.startsWith("Package:")) {
+                    val p = line.substringAfter("Package:").trim()
+                    if (p.isNotBlank()) pkgSet.add(p)
                 }
             }
+            PkgInventory(pkgSet.sorted(), pkgSet.isNotEmpty())
         } catch (_: Exception) {
+            PkgInventory(pkgSet.sorted(), false)
         }
-        return pkgSet.sorted()
     }
+
+    private fun collectInstalledPkgNames(): List<String> = collectInstalledPkgInventory().names
 
     private val corePipSet = setOf("pip", "setuptools", "wheel", "ensurepip", "distlib", "packaging")
     private val aptDefaultPipSet = setOf("pip", "setuptools", "wheel", "ensurepip", "distlib", "packaging", "lxml")
     private val defaultUserPkgCandidates = setOf("python", "python-pip", "python-lxml", "libxml2", "libxslt", "clang", "ffmpeg", "git", "nodejs", "openssh")
 
     private fun savePackageBackupSnapshot(
-        pipNames: List<String> = collectInstalledPipNames(),
-        pkgNames: List<String> = collectInstalledPkgNames(),
+        pipInventory: PipInventory = collectInstalledPipInventory(),
+        pkgInventory: PkgInventory = collectInstalledPkgInventory(),
         forceShrink: Boolean = false
     ) {
         try {
+            val pipNames = pipInventory.names
+            val pkgNames = pkgInventory.names
+            val canShrink = forceShrink && pipInventory.complete && pkgInventory.complete
             val currentUserPip = pipNames.filter { it !in corePipSet }
             val currentUserPkg = pkgNames.filter { it in defaultUserPkgCandidates }
             val existing = readBackupManifest()
@@ -2996,15 +3296,15 @@ def clipboard_set(text):
             // Prevent baseline APT-only packages (pip + lxml) from overwriting a richer backup snapshot
             val hasCustomNow = currentUserPip.any { it !in aptDefaultPipSet }
             val hadCustomBefore = prevPipList.any { it !in aptDefaultPipSet }
-            if (!forceShrink && !hasCustomNow && hadCustomBefore) {
+            if (!canShrink && !hasCustomNow && hadCustomBefore) {
                 return
             }
-            val mergedPip = if (forceShrink) {
+            val mergedPip = if (canShrink) {
                 currentUserPip
             } else {
                 (prevPipList + currentUserPip).distinct().sorted()
             }
-            val mergedPkg = if (forceShrink) {
+            val mergedPkg = if (canShrink) {
                 currentUserPkg
             } else {
                 (prevPkgList + currentUserPkg).distinct().sorted()
@@ -3062,7 +3362,15 @@ def clipboard_set(text):
                 p3 = p2
                 p2 = p1
                 p1 = b
-                if (headerBuf.size() > 65536) return
+                if (headerBuf.size() > 16 * 1024) {
+                    try {
+                        sock.getOutputStream().write(
+                            "HTTP/1.1 431 Request Header Fields Too Large\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n".toByteArray(Charsets.US_ASCII)
+                        )
+                    } catch (_: Exception) {
+                    }
+                    return
+                }
             }
             val headerLines = headerBuf.toString("ISO-8859-1").split("\\r\\n")
             val requestLine = headerLines.firstOrNull()?.trim() ?: return
@@ -3074,15 +3382,24 @@ def clipboard_set(text):
             val queryStr = rawTarget.substringAfter("?", "")
 
             val headers = mutableMapOf<String, String>()
+            var duplicateContentLength = false
             for (hLine in headerLines.drop(1)) {
                 if (hLine.isEmpty()) continue
                 val idx = hLine.indexOf(':')
                 if (idx > 0) {
-                    headers[hLine.substring(0, idx).trim().lowercase()] = hLine.substring(idx + 1).trim()
+                    val key = hLine.substring(0, idx).trim().lowercase()
+                    if (key == "content-length" && headers.containsKey(key)) {
+                        duplicateContentLength = true
+                    }
+                    headers[key] = hLine.substring(idx + 1).trim()
                 }
             }
 
             val out = sock.getOutputStream()
+            if (duplicateContentLength || headers.containsKey("transfer-encoding")) {
+                writeJson(out, 400, JSONObject().put("error", "Ambiguous or unsupported request framing"))
+                return
+            }
             val requestHost = headers["host"]?.lowercase()
             if (requestHost != "127.0.0.1:$port" && requestHost != "localhost:$port") {
                 writeJson(out, 403, JSONObject().put("error", "Untrusted Host"))
@@ -3133,9 +3450,14 @@ def clipboard_set(text):
                 return
             }
 
-            val len = (headers["content-length"] ?: "0").toIntOrNull()
-            if (len == null || len < 0 || len > 8 * 1024 * 1024) {
-                writeJson(out, 413, JSONObject().put("error", "Invalid or oversized request body"))
+            val rawLength = headers["content-length"] ?: "0"
+            if (!rawLength.matches(Regex("[0-9]{1,10}"))) {
+                writeJson(out, 400, JSONObject().put("error", "Invalid Content-Length"))
+                return
+            }
+            val len = rawLength.toIntOrNull()
+            if (len == null || len > 8 * 1024 * 1024) {
+                writeJson(out, 413, JSONObject().put("error", "Request body exceeds the 8 MiB limit"))
                 return
             }
             val bodyBytes = ByteArray(len)
@@ -3145,8 +3467,17 @@ def clipboard_set(text):
                 if (r < 0) break
                 readTotal += r
             }
+            if (readTotal != len) {
+                writeJson(out, 400, JSONObject().put("error", "Incomplete request body"))
+                return
+            }
             val bodyStr = if (readTotal > 0) String(bodyBytes, 0, readTotal, Charsets.UTF_8).trim() else ""
-            val bodyJson = if (bodyStr.startsWith("{")) JSONObject(bodyStr) else JSONObject()
+            val bodyJson = try {
+                if (bodyStr.isBlank()) JSONObject() else JSONObject(bodyStr)
+            } catch (_: Exception) {
+                writeJson(out, 400, JSONObject().put("error", "Invalid JSON body"))
+                return
+            }
 
             when {
                 method == "GET" && path == "/health" -> {
@@ -3157,12 +3488,14 @@ def clipboard_set(text):
                         }
                     val hasPython = pyBin != null
 
-                    val pipList = collectInstalledPipNames()
+                    val pipInventory = collectInstalledPipInventory()
+                    val pipList = pipInventory.names
                     val pipArr = JSONArray(pipList)
-                    val pkgList = collectInstalledPkgNames()
+                    val pkgInventory = collectInstalledPkgInventory()
+                    val pkgList = pkgInventory.names
                     val pkgArr = JSONArray(pkgList)
                     if (hasPython && pipList.isNotEmpty()) {
-                        savePackageBackupSnapshot(pipList, pkgList)
+                        savePackageBackupSnapshot(pipInventory, pkgInventory)
                     }
 
                     val res = JSONObject()
@@ -3634,73 +3967,340 @@ def clipboard_set(text):
                 }
 
                 method == "POST" && path == "/probe-url" -> {
-                    val targetUrl = bodyJson.optString("url", "").trim()
-                    if (targetUrl.isEmpty()) {
-                        writeJson(out, 400, JSONObject().put("error", "Missing URL"))
-                    } else {
-                        try {
-                            val ua = bodyJson.optString("userAgent", "").ifBlank {
-                                "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36"
-                            }
-                            val cookieHdr = bodyJson.optString("cookieHeader", "")
-                            val extraHdrs = bodyJson.optJSONObject("extraHeaders")
-                            val conn = (URL(targetUrl).openConnection() as HttpURLConnection).apply {
-                                requestMethod = "GET"
-                                instanceFollowRedirects = true
-                                connectTimeout = 15000
-                                readTimeout = 18000
-                                setRequestProperty("User-Agent", ua)
-                                if (extraHdrs != null) {
-                                    val keys = extraHdrs.keys()
-                                    while (keys.hasNext()) {
-                                        val k = keys.next()
-                                        val v = extraHdrs.optString(k, "")
-                                        if (k.isNotBlank() && v.isNotBlank()) {
-                                            setRequestProperty(k, v)
-                                        }
-                                    }
-                                }
-                                if (cookieHdr.isNotBlank()) setRequestProperty("Cookie", cookieHdr)
-                            }
-                            val code = conn.responseCode
-                            val stream = if (code >= 400) conn.errorStream else conn.inputStream
-                            val bodyText = stream?.bufferedReader(Charsets.UTF_8)?.use { r ->
-                                val buf = CharArray(16000)
-                                val n = r.read(buf)
-                                if (n > 0) String(buf, 0, n) else ""
-                            } ?: ""
-                            val setCookies = JSONArray()
-                            val respHeaders = JSONObject()
-                            conn.headerFields.forEach { (k, vals) ->
-                                if (k != null) {
-                                    if (k.equals("Set-Cookie", ignoreCase = true)) {
-                                        vals.forEach { setCookies.put(it) }
-                                    } else if (vals.isNotEmpty()) {
-                                        respHeaders.put(k, vals.joinToString(", "))
-                                    }
-                                }
-                            }
-                            val titleMatch = Regex("<title[^>]*>(.*?)</title>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)).find(bodyText)
-                            val title = titleMatch?.groupValues?.getOrNull(1)?.replace(Regex("\\\\s+"), " ")?.trim() ?: ""
-                            val res = JSONObject()
-                                .put("ok", code in 200..399)
-                                .put("url", targetUrl)
-                                .put("finalUrl", conn.url?.toString() ?: targetUrl)
-                                .put("statusCode", code)
-                                .put("title", title)
-                                .put("setCookies", setCookies)
-                                .put("headers", respHeaders)
-                                .put("bodyPreview", bodyText.take(8000))
-                            writeJson(out, 200, res)
-                        } catch (e: Exception) {
-                            writeJson(out, 502, JSONObject().put("error", e.message ?: "Probe failed"))
-                        }
+                    try {
+                        writeJson(out, 200, probeUrlSafely(bodyJson.optString("url", "").trim(), bodyJson))
+                    } catch (e: IllegalArgumentException) {
+                        writeJson(out, 400, JSONObject().put("error", e.message ?: "Invalid probe URL"))
+                    } catch (_: Exception) {
+                        writeJson(out, 502, JSONObject().put("error", "Unable to safely probe target URL"))
                     }
                 }
 
                 else -> writeJson(out, 404, JSONObject().put("error", "Not found"))
             }
         }
+    }
+
+    private data class SafeProbeResponse(
+        val statusCode: Int,
+        val headers: Map<String, List<String>>,
+        val body: ByteArray
+    )
+
+    private fun isPublicProbeAddress(address: InetAddress): Boolean {
+        if (address.isAnyLocalAddress || address.isLoopbackAddress ||
+            address.isLinkLocalAddress || address.isSiteLocalAddress ||
+            address.isMulticastAddress) return false
+        val b = address.address.map { it.toInt() and 0xff }
+        if (address is Inet4Address) {
+            val a0 = b[0]
+            val a1 = b[1]
+            val a2 = b[2]
+            if (a0 == 0 || a0 == 10 || a0 == 127 || a0 >= 224) return false
+            if (a0 == 100 && a1 in 64..127) return false
+            if (a0 == 169 && a1 == 254) return false
+            if (a0 == 172 && a1 in 16..31) return false
+            if (a0 == 192 && (a1 == 0 || a1 == 2 || a1 == 168)) return false
+            if (a0 == 192 && a1 == 88 && a2 == 99) return false
+            if (a0 == 192 && a1 == 31 && a2 == 196) return false
+            if (a0 == 192 && a1 == 52 && a2 == 193) return false
+            if (a0 == 192 && a1 == 175 && a2 == 48) return false
+            if (a0 == 198 && a1 in 18..19) return false
+            if (a0 == 198 && a1 == 51 && a2 == 100) return false
+            if (a0 == 203 && a1 == 0 && a2 == 113) return false
+            return true
+        }
+        if (address is Inet6Address) {
+            if ((b[0] and 0xe0) != 0x20) return false
+            if (b[0] == 0x20 && b[1] == 0x01) {
+                if (b[2] == 0x0d && b[3] == 0xb8) return false
+                if (b[2] == 0x00 && b[3] <= 0x01) return false
+                if (b[2] == 0x00 && b[3] == 0x02) return false
+                if (b[2] == 0x00 && b[3] == 0x10) return false
+                if (b[2] == 0x00 && b[3] == 0x20) return false
+            }
+            if (b[0] == 0x20 && b[1] == 0x02) return false
+            if (b[0] == 0x3f && b[1] == 0xff) return false
+            return true
+        }
+        return false
+    }
+
+    private fun validateProbeUrl(url: URL): String {
+        val scheme = url.protocol.lowercase()
+        if (scheme != "http" && scheme != "https") {
+            throw IllegalArgumentException("Only HTTP and HTTPS URLs are allowed")
+        }
+        if (URI(url.toString()).rawUserInfo != null) {
+            throw IllegalArgumentException("URLs containing credentials are not allowed")
+        }
+        val rawHost = url.host.removePrefix("[").removeSuffix("]").trimEnd('.').lowercase()
+        if (rawHost.isBlank() || rawHost == "localhost" ||
+            rawHost.endsWith(".localhost") || rawHost.endsWith(".local") ||
+            rawHost.endsWith(".internal") || rawHost.endsWith(".test") ||
+            rawHost.contains("%")) {
+            throw IllegalArgumentException("Local hostnames and scoped IP addresses are not allowed")
+        }
+        return if (rawHost.contains(":")) rawHost else IDN.toASCII(rawHost)
+    }
+
+    private fun readProbeLine(input: BufferedInputStream, maxBytes: Int = 8192): String {
+        val output = ByteArrayOutputStream()
+        while (true) {
+            val value = input.read()
+            if (value < 0) {
+                if (output.size() == 0) return ""
+                break
+            }
+            if (value == 10) break
+            if (value != 13) output.write(value)
+            if (output.size() > maxBytes) throw IllegalArgumentException("HTTP response header line too large")
+        }
+        return output.toString("ISO-8859-1")
+    }
+
+    private fun readProbeExact(input: BufferedInputStream, output: ByteArrayOutputStream, count: Int) {
+        var remaining = count
+        val buffer = ByteArray(4096)
+        while (remaining > 0) {
+            val n = input.read(buffer, 0, minOf(buffer.size, remaining))
+            if (n < 0) throw java.io.EOFException("Incomplete HTTP response body")
+            output.write(buffer, 0, n)
+            remaining -= n
+        }
+    }
+
+    private fun readProbeBody(input: BufferedInputStream, headers: Map<String, List<String>>): ByteArray {
+        val maxBytes = 24000
+        val output = ByteArrayOutputStream()
+        val transferEncoding = headers["transfer-encoding"]?.joinToString(",")?.lowercase().orEmpty()
+        if (transferEncoding.isNotBlank() && headers.containsKey("content-length")) {
+            throw IllegalArgumentException("Ambiguous HTTP response framing")
+        }
+        if (transferEncoding.isNotBlank() && transferEncoding.trim() != "chunked") {
+            throw IllegalArgumentException("Unsupported HTTP transfer encoding")
+        }
+        if (transferEncoding.contains("chunked")) {
+            while (output.size() < maxBytes) {
+                val sizeLine = readProbeLine(input).substringBefore(';').trim()
+                val chunkSize = sizeLine.toLongOrNull(16)
+                    ?: throw IllegalArgumentException("Invalid chunked response")
+                if (chunkSize < 0L) throw IllegalArgumentException("Invalid chunk size")
+                if (chunkSize == 0L) {
+                    while (readProbeLine(input).isNotEmpty()) { }
+                    break
+                }
+                val remaining = maxBytes - output.size()
+                val toRead = minOf(chunkSize, remaining.toLong()).toInt()
+                readProbeExact(input, output, toRead)
+                if (toRead.toLong() < chunkSize) break
+                if (input.read() != 13 || input.read() != 10) {
+                    throw IllegalArgumentException("Invalid chunk delimiter")
+                }
+            }
+            return output.toByteArray()
+        }
+        val contentLengths = headers["content-length"]
+        if (contentLengths != null && contentLengths.size != 1) {
+            throw IllegalArgumentException("Ambiguous Content-Length")
+        }
+        val lengthHeader = contentLengths?.firstOrNull()
+        if (lengthHeader != null) {
+            val length = lengthHeader.toLongOrNull()
+                ?: throw IllegalArgumentException("Invalid Content-Length")
+            if (length < 0) throw IllegalArgumentException("Invalid Content-Length")
+            readProbeExact(input, output, minOf(length, maxBytes.toLong()).toInt())
+            return output.toByteArray()
+        }
+        val buffer = ByteArray(4096)
+        while (output.size() < maxBytes) {
+            val n = input.read(buffer, 0, minOf(buffer.size, maxBytes - output.size()))
+            if (n < 0) break
+            if (n > 0) output.write(buffer, 0, n)
+        }
+        return output.toByteArray()
+    }
+
+    private fun performPinnedProbeRequest(url: URL, requestHeaders: Map<String, String>): SafeProbeResponse {
+        val host = validateProbeUrl(url)
+        val port = if (url.port > 0) url.port else if (url.protocol.equals("https", true)) 443 else 80
+        val addresses = InetAddress.getAllByName(host)
+        if (addresses.isEmpty() || addresses.any { !isPublicProbeAddress(it) }) {
+            throw IllegalArgumentException("Target resolves to a non-public IP address")
+        }
+        var lastError: Exception? = null
+        for (pinnedAddress in addresses) {
+            try {
+                val rawSocket = Socket()
+                try {
+                    rawSocket.connect(InetSocketAddress(pinnedAddress, port), 15000)
+                    rawSocket.soTimeout = 18000
+                } catch (error: Exception) {
+                    try { rawSocket.close() } catch (_: Exception) {}
+                    throw error
+                }
+                val activeSocket: Socket = if (url.protocol.equals("https", true)) {
+                    try {
+                        val factory = SSLSocketFactory.getDefault() as SSLSocketFactory
+                        val ssl = factory.createSocket(rawSocket, host, port, true) as SSLSocket
+                        val parameters = ssl.sslParameters
+                        parameters.endpointIdentificationAlgorithm = "HTTPS"
+                        if (!host.contains(":") && !host.matches(Regex("^[0-9.]+$"))) {
+                            parameters.serverNames = listOf(SNIHostName(host))
+                        }
+                        ssl.sslParameters = parameters
+                        ssl.startHandshake()
+                        ssl
+                    } catch (error: Exception) {
+                        try { rawSocket.close() } catch (_: Exception) {}
+                        throw error
+                    }
+                } else {
+                    rawSocket
+                }
+
+                activeSocket.use { socket ->
+                    val hostHeader = if (host.contains(":")) "[$host]" else host
+                    val authority = if ((url.protocol.equals("https", true) && port == 443) ||
+                        (url.protocol.equals("http", true) && port == 80)) hostHeader else "$hostHeader:$port"
+                    val requestTarget = (url.path.ifBlank { "/" }) + (url.query?.let { "?" + it } ?: "")
+                    if (requestTarget.contains("\\r") || requestTarget.contains("\\n")) {
+                        throw IllegalArgumentException("Invalid request path")
+                    }
+                    val request = StringBuilder()
+                        .append("GET ").append(requestTarget).append(" HTTP/1.1\\r\\n")
+                        .append("Host: ").append(authority).append("\\r\\n")
+                        .append("Connection: close\\r\\n")
+                        .append("Accept-Encoding: identity\\r\\n")
+                    for ((name, value) in requestHeaders) {
+                        request.append(name).append(": ").append(value).append("\\r\\n")
+                    }
+                    request.append("\\r\\n")
+                    socket.getOutputStream().write(request.toString().toByteArray(Charsets.ISO_8859_1))
+                    socket.getOutputStream().flush()
+
+                    val input = BufferedInputStream(socket.getInputStream())
+                    val statusLine = readProbeLine(input)
+                    val statusParts = statusLine.split(" ", limit = 3)
+                    val statusCode = statusParts.getOrNull(1)?.toIntOrNull()
+                        ?: throw IllegalArgumentException("Invalid HTTP status line")
+                    val responseHeaders = linkedMapOf<String, MutableList<String>>()
+                    var totalHeaderBytes = statusLine.length
+                    var headerCount = 0
+                    while (true) {
+                        val line = readProbeLine(input)
+                        if (line.isEmpty()) break
+                        totalHeaderBytes += line.length
+                        headerCount++
+                        if (totalHeaderBytes > 32768 || headerCount > 100) {
+                            throw IllegalArgumentException("HTTP response headers too large")
+                        }
+                        val separator = line.indexOf(':')
+                        if (separator <= 0) throw IllegalArgumentException("Invalid HTTP response header")
+                        val name = line.substring(0, separator).trim().lowercase()
+                        val value = line.substring(separator + 1).trim()
+                        responseHeaders.getOrPut(name) { mutableListOf() }.add(value)
+                    }
+                    val body = readProbeBody(input, responseHeaders)
+                    return SafeProbeResponse(statusCode, responseHeaders, body)
+                }
+            } catch (error: Exception) {
+                lastError = error
+            }
+        }
+        throw lastError ?: java.io.IOException("No reachable public address for target")
+    }
+
+    private fun probeOrigin(url: URL): String {
+        val host = url.host.lowercase()
+        val port = if (url.port > 0) url.port else if (url.protocol.equals("https", true)) 443 else 80
+        return url.protocol.lowercase() + "://" + host + ":" + port
+    }
+
+    private fun buildProbeHeaders(bodyJson: JSONObject): MutableMap<String, String> {
+        val userAgent = bodyJson.optString("userAgent", "").ifBlank {
+            "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36"
+        }
+        if (userAgent.length > 512 || userAgent.any { it.code < 32 && it.code != 9 } || userAgent.contains(127.toChar())) {
+            throw IllegalArgumentException("Invalid User-Agent header")
+        }
+        val headers = linkedMapOf(
+            "User-Agent" to userAgent,
+            "Accept" to "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8"
+        )
+        val cookie = bodyJson.optString("cookieHeader", "").trim()
+        if (cookie.isNotEmpty()) {
+            if (cookie.length > 8192 || cookie.any { it.code < 32 && it.code != 9 } || cookie.contains(127.toChar())) {
+                throw IllegalArgumentException("Invalid Cookie header")
+            }
+            headers["Cookie"] = cookie
+        }
+        val forbidden = setOf(
+            "host", "connection", "content-length", "transfer-encoding",
+            "proxy-authorization", "proxy-connection", "keep-alive",
+            "upgrade", "te", "trailer", "cookie", "accept-encoding"
+        )
+        val extra = bodyJson.optJSONObject("extraHeaders")
+        if (extra != null) {
+            if (extra.length() > 32) throw IllegalArgumentException("Too many custom headers")
+            val keys = extra.keys()
+            while (keys.hasNext()) {
+                val name = keys.next().trim()
+                val value = extra.optString(name, "")
+                if (name.isBlank() || name.length > 128 || value.length > 4096 ||
+                    !Regex("^[A-Za-z0-9!#$%&'*+.^_|~-]+$").matches(name) ||
+                    value.any { it.code < 32 && it.code != 9 } || value.contains(127.toChar()) ||
+                    name.lowercase() in forbidden) {
+                    throw IllegalArgumentException("Invalid or restricted custom header")
+                }
+                val existingName = headers.keys.firstOrNull { it.equals(name, ignoreCase = true) }
+                headers[existingName ?: name] = value
+            }
+        }
+        return headers
+    }
+
+    private fun probeUrlSafely(targetUrl: String, bodyJson: JSONObject): JSONObject {
+        if (targetUrl.isBlank() || targetUrl.length > 4096 || targetUrl.any { it.isWhitespace() }) {
+            throw IllegalArgumentException("Invalid or oversized URL")
+        }
+        var current = URL(targetUrl)
+        val headers = buildProbeHeaders(bodyJson)
+        for (redirectCount in 0..5) {
+            val response = performPinnedProbeRequest(current, headers)
+            val location = response.headers["location"]?.firstOrNull()
+            if (response.statusCode in setOf(301, 302, 303, 307, 308) &&
+                !location.isNullOrBlank() && redirectCount < 5) {
+                val next = URL(current, location)
+                if (probeOrigin(current) != probeOrigin(next)) {
+                    headers.keys.removeAll { it.lowercase() in setOf("cookie", "authorization", "proxy-authorization", "referer") }
+                }
+                current = next
+                continue
+            }
+            val bodyText = String(response.body, Charsets.UTF_8)
+            val setCookies = JSONArray()
+            val responseHeaders = JSONObject()
+            response.headers.forEach { (name, values) ->
+                if (name.equals("set-cookie", true)) {
+                    values.forEach { setCookies.put(it.take(4096)) }
+                } else {
+                    responseHeaders.put(name, values.joinToString(", ").take(2048))
+                }
+            }
+            val titleMatch = Regex("<title[^>]*>(.*?)</title>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)).find(bodyText)
+            val title = titleMatch?.groupValues?.getOrNull(1)?.replace(Regex("\\\\s+"), " ")?.trim() ?: ""
+            return JSONObject()
+                .put("ok", response.statusCode in 200..399)
+                .put("url", targetUrl)
+                .put("finalUrl", current.toString())
+                .put("statusCode", response.statusCode)
+                .put("title", title)
+                .put("setCookies", setCookies)
+                .put("headers", responseHeaders)
+                .put("bodyPreview", bodyText.take(8000))
+        }
+        throw IllegalArgumentException("Too many redirects")
     }
 
     private fun runBufferedShellCommand(command: String): JSONObject {
@@ -3979,7 +4579,7 @@ def clipboard_set(text):
   // 8. README.md (rendered automatically by GitHub) + README_GITHUB_APK.md
   const githubApkReadme = `# ${safeTitle} 獨立 Android APK（GitHub 自動打包專案）
 
-本專案已預先配置好 **GitHub Actions 自動編譯流程**、**內嵌 Termux Bootstrap 環境**、**一致性 APK 簽名金鑰** 與 **原生爬蟲瀏覽器（Cookie 擷取）**：
+本專案已預先配置好 **GitHub Actions 自動編譯流程**、**內嵌 Termux Bootstrap 環境**、**受保護的 APK Release 簽名流程** 與 **原生爬蟲瀏覽器（Cookie 擷取）**：
 打包成 APK 安裝至手機後，**無須另外安裝 Termux App**，也不受瀏覽器 CORS 限制，可直接執行 Python 網路爬蟲（\`requests\`、\`beautifulsoup4\`、\`lxml\`、\`yt-dlp\`）、\`ffmpeg\` 與 \`clang\` 原生套件。
 
 ## 發布與自動打包步驟
@@ -3987,8 +4587,9 @@ def clipboard_set(text):
 1. 在 GitHub 建立一個新的公開或私人倉庫（Repository）。
 2. 將本壓縮檔解壓縮後的所有檔案（包含 \`.github/\` 與 \`android/\`）上傳／Push 到該倉庫的 \`main\` 分支。
    - 若倉庫同時包含前端原始碼（\`package.json\`），Workflow 會自動執行 \`npm ci && npm run build\` 並複製進 \`android/app/src/main/assets/www/\` 打包為完全離線 APK。
-3. 點擊 GitHub 倉庫上方的 **Actions** 頁籤，等待 **Build DroidPy Android APK** 工作流程跑完（雲端會自動下載最新版 \`bootstrap-aarch64.zip\` 並使用固定的 \`android/app/droidpy-debug.p12\` 簽名金鑰編譯 ARM64 APK；若需改用個人正式簽名金鑰，可於 Repository Secrets 設定 \`DROIDPY_KEYSTORE_BASE64\`、\`DROIDPY_STORE_PASSWORD\`、\`DROIDPY_KEY_ALIAS\` 與 \`DROIDPY_KEY_PASSWORD\`）。
-4. 在 Actions 執行結果頁面最下方的 **Artifacts** 下載 \`.apk\` 檔案（或推送 \`v1.0.0\` Tag 自動發佈至 **GitHub Releases**），傳到 Android 手機即可直接覆蓋升級安裝、保留所有工作區程式碼。
+3. 在 GitHub Repository → Settings → Secrets and variables → Actions，為正式發布設定新的簽名 Secrets：\`DROIDPY_KEYSTORE_BASE64\`、\`DROIDPY_STORE_PASSWORD\`、\`DROIDPY_KEY_ALIAS\`、\`DROIDPY_KEY_PASSWORD\`。請使用自己新建立的 keystore；不要把 keystore、Base64 或密碼提交到 Git。妥善離線備份 keystore 與密碼，遺失後將無法再以同一憑證發布更新。
+4. PR／Debug 建置使用臨時 Debug 簽名，不需要 Release Secrets；合併至 main/master 後，push workflow 會自動使用新的受保護 keystore 建置 Release APK、比對 APK 與 keystore 的 SHA-256 憑證指紋，成功後才發布 GitHub Release。缺少 Secrets、解碼失敗或簽名不一致時會停止，不會發布。
+5. **簽名金鑰已更換**：舊版已安裝 App 的簽名與新金鑰不同，不能直接覆蓋更新。請先使用 App 內備份功能匯出工作區／狀態資料，再解除安裝舊版並安裝新 Release；重新安裝後再匯入備份。
 
 ## 首次開啟 App 初始化說明
 
@@ -4055,7 +4656,7 @@ def clipboard_set(text):
   - 新增應用程式全生命週期日誌記錄器與 Android 原生 \`/logs\`（含 \`droidpy_native.log\` 與 \`logcat\`）檢視匯出面板。
 
 ## [1.2.7] - 2026-11-21
-- **確保以後每次打包的 APK 簽名永久一致**：於倉庫與匯出專案加入固定的 30 年效期簽名金鑰 \`droidpy-debug.p12\`（SHA-256 指紋固定），\`build.gradle.kts\` 明確綁定統一 \`signingConfigs\` 並依版本號自動遞增 \`versionCode\`，同時支援選填 GitHub Secrets 自訂憑證（\`DROIDPY_KEYSTORE_BASE64\` 等）；後續每次 GitHub Actions 產出的新版本 APK 皆可直接覆蓋升級安裝，無須移除舊版、完整保留程式碼與環境。
+- 歷史版本曾使用固定簽名金鑰；目前正式發布改用使用者自行保管的 GitHub Actions keystore Secrets。直接更換憑證會使舊版 APK 無法原地覆蓋更新，需先備份 App 資料再重新安裝。
 
 ## [1.2.6] - 2026-11-21
 - 修復「授權資料夾」、「授權本機資料夾」與「更新容量」三個按鈕點擊無響應問題：移除裝置目錄按鈕的 \`disabled\` 鎖死，在 APK 環境直接串接 Android 內部儲存權限設定與 \`StatFs\` 真實裝置容量並即時跳出更新提示；在一般瀏覽器／iframe 環境自動退回原生資料夾檔案選擇器 (\`webkitdirectory\`)。

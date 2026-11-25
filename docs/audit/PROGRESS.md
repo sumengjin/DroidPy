@@ -98,3 +98,70 @@
 - Process inspection is read-only. Bridge shutdown leaves active user Python work alive and retains the native `Process` handle so explicit Stop remains available after Bridge restart. UI labels updated in Traditional Chinese, Simplified Chinese, English and Japanese. Added CI regression checks for age-based termination and explicit Stop preservation.
 - CI run `45479438842` passed Python tests, PWA/TypeScript build, Android ARM64 Debug APK compilation and artifact upload. Follow-up run `45480204247` also passed the full Debug build. Run `45480787105` completed SUCCESS, including Python tests, PWA/TypeScript build and Android ARM64 Debug APK compilation/artifact upload. Latest run `45481122921` passed Python tests and PWA/TypeScript build after restoring the `signal` import and adding an explicit-Stop regression assertion; its Android build is running, while the Kotlin source was already compiled successfully in run `45480787105`. Production Release APK, production signer verification and GitHub Release are skipped for PR builds; no production APK was published.
 - Device verification remains required for Android 10+ process survival and explicit Stop behavior. No `usr/`, installed packages, workspace, backups or signing material was changed.
+
+
+### 2026-11-25 — Package inventory and manifest safety (current branch)
+- Created `fix/package-inventory-manifest-safety-v2` from current main; ported PR #6's core fix instead of merging its stale-base branch.
+- Filesystem package scanning is now always cross-checked against `importlib.metadata.distributions()`, so finding one visible package no longer suppresses discovery from `PYTHONUSERBASE`.
+- Inventory subprocess output is redirected to an app-private temporary file (not a pipe), limited to 8 seconds and 1 MiB, parsed using a unique marker, and cleaned up on success, failure or timeout. Existing `pip-` temp cleanup already covers this filename.
+- Ordinary backup-manifest writes remain additive; explicit uninstall remains the only caller allowed to shrink package lists. No package directories, `usr/`, workspace or backup snapshots are deleted or overwritten by inventory.
+- Added a CI regression guard for always-on metadata discovery, bounded file output/timeout/cleanup and monotonic manifest behavior. CI and Android ARM64 Debug compile pending.
+
+- Additional R-008 data-preservation guard added to the same branch: startup now treats non-empty, unreadable or non-directory `usr/` as existing data; when core markers are missing it attempts non-destructive runtime repair, does not write a false bootstrap-success marker, and shows a warning instead of deleting/re-extracting the directory. CI regression checks cover this branch.
+
+- Additional R-009 fix ported into this branch: both generated `sitecustomize.py` implementations now explicitly activate the configured `PYTHONUSERBASE` and normalize CA bundles into validated ASCII PEM blocks (BOM/comments removed; invalid blocks skipped). Certificate verification is not disabled. Android 10+ pip install/import and TLS acceptance remain pending.
+
+- Additional R-018 hardening ported from the APT security review: removed `AllowInsecureRepositories`, `AllowDowngradeToInsecureRepositories`, `AllowUnauthenticated`, all `Verify-Peer/Verify-Host=false` fallbacks and `[trusted=yes]` source injection. Legacy trusted source options are stripped. Added `check:apt-security`; Android package operations now fail closed if verified trust material is unavailable.
+
+- SDK migration decision: keep `targetSdkVersion 28` for now. Raising to 29+ can change legacy external-storage and app-home executable behavior used by the embedded Termux `usr/` runtime. Since the app is sideloaded and the priority is preserving Android 10+ private-path execution and package operations, do not raise target SDK until a dedicated Android 10/11/13 test matrix proves the embedded shell, Python, native packages and file access remain functional. Compile SDK/build tooling can be raised independently.
+
+
+### 2026-11-25 — URL probe SSRF protection (current PR branch)
+- Created `security/probe-url-ssrf-guard-v1` from the latest main after PR #21 merged.
+- Replaced automatic urllib/HttpURLConnection redirect handling in both Bridge implementations with manual redirects. Every hop resolves and validates all DNS answers, then pins the socket to a validated public IP; HTTPS preserves SNI and certificate hostname verification.
+- Rejects loopback/private/link-local/reserved addresses, local hostnames, URL userinfo, unsafe custom headers and control characters. Cross-origin redirects drop Cookie, Authorization and Referer; response previews and timeouts are bounded.
+- Added `scripts/check-probe-url-security.mjs` with static checks plus generated-Python tests for private ranges, pinned sockets, loopback redirects and credential stripping; wired it into CI.
+- CI and Android ARM64 Debug build are pending. Android 10+ device validation must confirm normal public HTTP/HTTPS crawler probing and safe redirect behavior before merge. No workspace, `usr/`, package, backup or signing data is changed.
+
+
+### 2026-11-25 — Integrated Termux security PR #26
+- Integrated PR #25's DNS-pinned URL probe implementation into the package/data safety branch so one Debug APK covers SSRF protection, package inventory, backup-manifest safety, partial `usr/` preservation, `PYTHONUSERBASE`, CA normalization and APT fail-closed behavior.
+- Standalone PR #25 was closed as superseded by PR #26; no duplicate PR remains for URL probe SSRF.
+- Integrated CI run `45488075770` passed Python syntax/unit tests, all TypeScript/PWA/security checks, and Android ARM64 Debug APK compile/upload. Artifact: `DroidPy-arm64-debug-179-a1`. Production Release/signature verification and GitHub Release were skipped as expected for a PR.
+- Follow-up commits expand regression coverage for special-purpose IPv4/IPv6 ranges, oversized/ambiguous HTTP response headers and strict chunked framing; latest CI is re-running those assertions. Device acceptance on Android 10+ remains pending before merge.
+
+
+### 2026-11-25 — Bridge request resource limits (dependent on PR #26)
+- Created `security/bridge-resource-limits-v3` from the integrated Termux security branch so the resource fix does not reintroduce stale CORS, SSRF, or watchdog code from the older PR #17 branch.
+- Python Bridge now rejects duplicate Content-Length and Transfer-Encoding, validates bounded decimal lengths and JSON object bodies, retains the 8 MiB body limit and 15-second socket timeout, and caps active request handlers at 8 with a 16-connection backlog and explicit 503 overload rejection.
+- Native Android Bridge now uses a dedicated accept thread plus a bounded 8-worker/16-queue executor, rejects excess clients, caps headers at 16 KiB and bodies at 8 MiB, rejects ambiguous request framing, incomplete bodies and invalid JSON, and preserves the rule that Bridge shutdown must not terminate active user Python work. It also tracks and closes accepted client sockets during shutdown so rapid stop/start cycles do not leave idle handler threads behind.
+- Extended `check:bridge` to verify the generated Python and native Kotlin source resource limits and lifecycle guards. CI and Android 10+ device acceptance pending.
+- The older PR #17 patch was not merged directly: its stale base and shutdown behavior would conflict with the newer process-preservation fix. Only the required resource protections were ported and adapted.
+
+- Added `scripts/check-script-backup.mjs` and CI command `check:script-backup`: verifies quota failure leaves the old value unchanged, corrupt storage is never overwritten, imports/deletes preserve independent snapshots, and the restore handler saves its rollback snapshot before calling `setFiles`.
+
+
+### 2026-11-25 — Consolidated PR #27 validation and branch cleanup
+- Latest CI run `45496152665` completed SUCCESS: Python syntax/unit tests, TypeScript/PWA build, Bridge token/origin/resource checks, backup persistence tests, watchdog checks, SSRF checks, package inventory/manifest checks, APT security checks, Android ARM64 Debug APK compile and artifact upload.
+- Debug APK artifact: `DroidPy-arm64-debug-194-a1`. Production Release build, production signer verification and GitHub Release were correctly skipped for the pull request.
+- PR #27 is the sole consolidated integration PR. Superseded PRs #11, #17, #26, #24, #6, #5 and #4 were closed without merging; their relevant code is already in current main or consolidated PR #27.
+- PR Debug APKs use the workflow's ephemeral Debug signer. This is not evidence of the production Release signer or installed-app upgrade compatibility. Android 10+ device acceptance remains required before merge, especially package install/import, `pkg update/install`, partial `usr/` preservation, public HTTP/HTTPS probe behavior, Bridge saturation/restart and backup restore.
+
+
+### 2026-11-25 — APK updater signer compatibility and download hardening (PR #27)
+- Replaced the updater's hard-coded legacy certificate fingerprint with a comparison against the currently installed app's signing certificate. On Android 9+, single-signer updates may use a valid signing-certificate rotation history; multi-signer apps require an exact signer set. Android 7–8 uses exact legacy signer comparison.
+- Restricts every updater URL/redirect to HTTPS GitHub release asset hosts; redirects are followed manually. Caps APK downloads at 300 MiB, checks declared versus received length, writes to a .part file and fsyncs before verification, and retains the previous downloaded APK until the candidate passes package-ID and signer checks.
+- Added scripts/check-apk-updater.mjs and CI command check:apk-updater. CI and Android ARM64 Debug compile pending.
+
+- Updated the main repository Release workflow to derive the expected APK certificate SHA-256 from the same protected keystore secret used by Gradle, then compare it to apksigner output. This removes the obsolete hard-coded legacy fingerprint while still failing closed on missing or mismatched signing material; no private key is reintroduced into source control.
+
+- Reworked the generated Android export workflow: Debug runs use an ephemeral Gradle signer and produce artifacts only; main/master/tag pushes or an explicitly supplied workflow_dispatch release_tag require all protected signing secrets, build a Release APK, and compare its certificate to the configured keystore. Release publication is a separate job with contents:write; the build job is read-only. No missing embedded-key fallback remains.
+- Added scripts/check-export-workflow.mjs and CI command check:export-workflow to generate the project ZIP and assert the exported workflow keeps Debug and protected Release paths separate.
+
+
+### 2026-11-25 — Final consolidated security CI pass
+- CI run `45499820682` completed SUCCESS on the signer/updater/export-workflow changes: Python syntax/unit tests, TypeScript/PWA build, Bridge resource/token/origin checks, backup persistence tests, APK updater checks, generated Android export workflow checks, watchdog, SSRF, package inventory and APT security checks all passed.
+- Android ARM64 Debug APK compiled and uploaded as `DroidPy-arm64-debug-222-a1`; web artifact `droidpy-web-dist` also uploaded. Production Release build and signer verification were skipped as expected for a PR.
+- Closed obsolete signer PRs #2 and #3 after replacing their hard-coded legacy fingerprint checks with protected-keystore-derived Release verification and installed-app signer/lineage validation.
+- The latest Debug artifact uses an ephemeral CI signer; it is a test build, not a production Release. A different signer cannot update an existing installation unless Android accepts a valid signing lineage. Do not uninstall an app that contains needed private Termux data/workspace without first securing a backup.
+- PR #27 remains open and unmerged pending Android 10+ device acceptance. Target SDK remains 28 until Termux executable/private-path compatibility is validated on device.
