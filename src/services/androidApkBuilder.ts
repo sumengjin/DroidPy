@@ -1465,7 +1465,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            appendStartupLog("MainActivity", "onCreate startup: hasExistingInstall=$hasExistingInstall")
+            appendStartupLog("MainActivity", "onCreate startup: hasExistingInstall=$hasExistingInstall pid=\${android.os.Process.myPid()} restoredState=\${savedInstanceState != null}")
 
             if (!hasExistingInstall && !hasExistingUsrData) {
                 try {
