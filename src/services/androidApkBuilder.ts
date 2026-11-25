@@ -311,7 +311,7 @@ android {
     defaultConfig {
         applicationId = "${safePkg}"
         minSdk = 24
-        // targetSdk = 28 讓內嵌 Termux bootstrap 能在 App 私有目錄自由執行 pkg / python / clang（GitHub 發佈專用）
+        // Keep API 28 until embedded Termux pkg/python/clang compatibility is validated against newer target SDK behavior.
         targetSdk = 28
         versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 1002034
         versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.34"
