@@ -116,6 +116,13 @@ All notable changes to **DroidPy** are documented in this file.
 - **同步更新繁中、簡中、英文與日文介面文案**，明確標示程序檢查不會自動終止工作。
 - **加入 watchdog 安全回歸檢查**，防止未來重新引入依執行時間清理程序的邏輯。
 
+## [1.2.29] - 2026-11-25
+
+### Fixed — Version metadata consistency
+- 修正前端 APP_VERSION、原生 APK 預設 versionName／versionCode 及版本查詢失敗回退值仍停留在 v1.2.16／v1.2.14 的問題，統一對齊 v1.2.29。
+- 更新離線更新資訊，加入 v1.2.29 與最新已知正式版 v1.2.28，避免無法連線時仍展示過時版本。
+- 新增回歸檢查，防止前端、原生 APK 與更新資訊再次出現版本分歧。
+
 ## [1.2.16] - 2026-11-24
 
 ### Fixed & Redesigned (pip Truststore `Errno 13` Deep Fix, Mobile Overflow & Copy Cleanup, Hub -> Dedicated Windows, Realistic 4-Season Sky 3D Backdrop)
