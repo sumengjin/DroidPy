@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [source, bridgeSource, catalogSource, exportSource] = await Promise.all([
+const [source, bridgeSource, catalogSource, exportSource, panelSource] = await Promise.all([
   readFile(new URL('../src/services/androidApkBuilder.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/services/termuxBridge.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/data/packageCatalog.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/ToolsAndPackages.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../src/components/TermuxIntegrationPanel.tsx', import.meta.url), 'utf8'),
 ]);
 
 const catalogItems = catalogSource.split(/\n  \{\n    id: '/).slice(1);
@@ -22,7 +23,7 @@ assert.match(bridgeSource, /matplotlib:\s*'matplotlib'/);
 assert.match(catalogSource, /Parsel 本身是純 Python/);
 assert.match(catalogSource, /非 Parsel 的官方相依套件/);
 assert.match(catalogSource, /Termux 先安裝原生 python-lxml/);
-assert.match(exportSource, /python-lxml libxml2 libxslt clang/);
+assert.match(panelSource, /python-lxml libxml2 libxslt clang/);
 assert.match(exportSource, /matplotlib:\s*'matplotlib'/);
 
 const start = source.indexOf('private fun collectInstalledPipInventory()');
