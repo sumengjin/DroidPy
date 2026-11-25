@@ -17,6 +17,8 @@
 | **Termux 原生引擎** | 網路爬蟲、原生 C/C++ 套件、`ffmpeg` | 透過 `127.0.0.1:8765` PTY 串流橋接真實 ARM64 Linux/Python 環境，**無瀏覽器 CORS 限制**，可直接執行 `requests`、`beautifulsoup4`、`lxml`、`httpx`、`yt-dlp`、`clang`。 |
 | **獨立 APK 內建環境** | 免裝外部 Termux App、一裝即用 | 匯出的 GitHub 專案內含 `EmbeddedTermuxBridge.kt` 與 `bootstrap-aarch64.zip`，打開 App 自動啟動本地 Python/Termux 橋接並支援一鍵初始化爬蟲環境。 |
 
+**Termux 套件相容性提示：** Parsel 的一鍵安裝會使用 Termux 預編譯 `python-lxml`，並限制 `w3lib<2.6`。`w3lib 2.6.0` 引入 Frostwork Rust 擴充，目前該套件沒有 Android/Bionic 可用的安裝輪子，直接從原始碼建置會因 rustup 不支援 `aarch64-unknown-linux-android` 而失敗。此相容性限制僅套用於 DroidPy 的 Parsel 一鍵安裝。
+
 ### 2. 爬蟲瀏覽器與 Cookie 工作台（Crawler Browser）
 - **APK 原生登入瀏覽器**：獨立 APK 使用隔離的 Android `WebView` 開啟網站，登入後可透過原生 **「擷取 Cookie」** 按鈕讀取該網址可供 HTTP 請求使用的 Cookie（包含 `HttpOnly` Cookie），並同步回 IDE 工作階段及 `cookies.json`。原生 JavaScript Bridge 僅保留在受信任的 IDE WebView，不注入第三方網站，避免登入頁取得 App 私有操作權限。
 - **Cookie 擷取回饋與診斷**：擷取成功、目前網址沒有 Cookie、網址無效或寫入失敗時均提供明確提示；原生執行日誌記錄擷取流程與結果，但不記錄 Cookie 值或登入憑證。
