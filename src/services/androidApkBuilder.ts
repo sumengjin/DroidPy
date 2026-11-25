@@ -2487,17 +2487,25 @@ class EmbeddedTermuxBridge(
                 root.listFiles()?.filter { it.isDirectory && it.name.startsWith("python3.") }
                     ?.any { File(it, "site-packages/frostwork/__init__.py").isFile } == true
             }
-            if (!hasNativeFrostwork) {
-                val fallbackDir = File(droidLibDir, "frostwork").apply { mkdirs() }
+            val fallbackDir = File(droidLibDir, "frostwork")
+            val fallbackInit = File(fallbackDir, "__init__.py")
+            val isOurFallback = fallbackInit.isFile &&
+                fallbackInit.readText(Charsets.UTF_8).contains("DroidPy's pure-Python Frostwork compatibility layer")
+            val fallbackMetadata = File(droidLibDir, "frostwork-0.2.2.dist-info")
+            if (hasNativeFrostwork) {
+                if (isOurFallback) fallbackDir.deleteRecursively()
+                fallbackMetadata.deleteRecursively()
+            } else if (!fallbackInit.exists() || isOurFallback) {
+                fallbackDir.mkdirs()
                 assets.open("python/frostwork/__init__.py").use { input ->
-                    File(fallbackDir, "__init__.py").outputStream().use { output -> input.copyTo(output) }
+                    fallbackInit.outputStream().use { output -> input.copyTo(output) }
                 }
-                val metadataDir = File(droidLibDir, "frostwork-0.2.2.dist-info").apply { mkdirs() }
+                fallbackMetadata.mkdirs()
                 assets.open("python/frostwork-0.2.2.dist-info/METADATA").use { input ->
-                    File(metadataDir, "METADATA").outputStream().use { output -> input.copyTo(output) }
+                    File(fallbackMetadata, "METADATA").outputStream().use { output -> input.copyTo(output) }
                 }
-                File(metadataDir, "top_level.txt").writeText("frostwork\\n", Charsets.UTF_8)
-                File(metadataDir, "INSTALLER").writeText("DroidPy\\n", Charsets.UTF_8)
+                File(fallbackMetadata, "top_level.txt").writeText("frostwork\\n", Charsets.UTF_8)
+                File(fallbackMetadata, "INSTALLER").writeText("DroidPy\\n", Charsets.UTF_8)
             }
         } catch (error: Exception) {
             appendStartupLog("Packages", "Pure-Python Frostwork fallback seed warning: ${error.message}")
