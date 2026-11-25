@@ -57,6 +57,18 @@ assert.ok(androidBuilder.includes('headers.containsKey("transfer-encoding")'));
 assert.ok(androidBuilder.includes('Only the explicit /stop action may terminate that process.'));
 assert.ok(!androidBuilder.includes('private val executor = Executors.newCachedThreadPool()'));
 
+// Native buffered shell commands must wait with a timeout before reading output,
+// redirect output to a bounded temporary file, and return diagnostic stderr.
+const bufferedShellStart = androidBuilder.indexOf('private fun runBufferedShellCommand(command: String): JSONObject {');
+const bufferedShellEnd = androidBuilder.indexOf('private fun streamShellCommand', bufferedShellStart);
+assert.ok(bufferedShellStart >= 0 && bufferedShellEnd > bufferedShellStart);
+const bufferedShell = androidBuilder.slice(bufferedShellStart, bufferedShellEnd);
+assert.ok(bufferedShell.includes('pb.redirectOutput(logFile)'));
+assert.ok(bufferedShell.includes('proc.waitFor(120, java.util.concurrent.TimeUnit.SECONDS)'));
+assert.ok(bufferedShell.includes('2L * 1024L * 1024L'));
+assert.ok(bufferedShell.includes('.put("stderr", stripAnsiForLog(stderrText))'));
+assert.ok(!bufferedShell.includes('proc.inputStream.bufferedReader(Charsets.UTF_8).readText()'));
+
 // Shared-storage state backups must fail closed if JSON sanitization fails;
 // otherwise malformed state could leak the per-install bridge credential.
 const backupWriterStart = androidBuilder.indexOf('fun writePersistedState(json: String)');
