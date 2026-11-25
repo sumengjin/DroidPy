@@ -838,11 +838,11 @@ def _build_probe_headers(data):
 
 
 def _normalize_shell_command(command):
-    if not re.match(r"^\s*pkg\s+install\b", command, re.IGNORECASE):
+    if not re.match(r"^\\s*pkg\\s+install\\b", command, re.IGNORECASE):
         return command
-    if re.search(r"(?:^|\s)(?:-y|--assume-yes)(?:\s|$)", command, re.IGNORECASE):
+    if re.search(r"(?:^|\\s)(?:-y|--assume-yes)(?:\\s|$)", command, re.IGNORECASE):
         return command
-    return re.sub(r"^(\s*pkg\s+install\b)", r"\1 -y", command, count=1, flags=re.IGNORECASE)
+    return re.sub(r"^(\\s*pkg\\s+install\\b)", r"\\1 -y", command, count=1, flags=re.IGNORECASE)
 
 
 class DroidPyBridgeHandler(BaseHTTPRequestHandler):
