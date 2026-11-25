@@ -7,6 +7,7 @@ All notable changes to **DroidPy** are documented in this file.
 ### Fixed — Restore and pin the original APK signing certificate
 - **恢復簽名一致性防護**：確認 DroidPy 原始簽名憑證 SHA-256 指紋為 `29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA`，CI 現在會同時驗證受保護 keystore 與實際 APK 的憑證指紋；任何金鑰替換、錯誤 Secrets 或簽名不符都會停止建置／發布。
 - **統一所有 APK 的簽名來源**：PR／Debug Artifact 與正式 Release 一律使用同一組 GitHub Actions 受保護簽名 Secrets，不再使用 Gradle 臨時 Debug 金鑰，避免測試 APK 與正式 APK 無法互相覆蓋升級。
+- **簡化首次設定**：只要求設定原始 keystore 的 `DROIDPY_KEYSTORE_BASE64`；原始金鑰沿用舊版 `android`／`androiddebugkey` 預設值，其餘密碼與 alias Secrets 僅在曾自訂時才需要。
 - **保留自動發布**：合併後推送至 `main`／`master` 仍會自動建置、驗證並發布 GitHub Release；缺少或不符合原始憑證的 Secrets 時安全失敗，不會發布錯誤簽名 APK。
 
 
