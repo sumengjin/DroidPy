@@ -35,7 +35,7 @@ def test_css_and_xpath_multifield_extraction():
             .field("name", "article.product h1::text")
             .field("price", ".price::text")
             .field_all("images", "img::attr(src)")
-            .field_join("summary", "//article[@class='product']/h1/text()", " "))
+            .field_join("summary", "//article[@class='product']/h1/text()", " ", syntax="xpath"))
     item = page.extract(html)
     assert item.to_dict() == {
         "name": "Widget", "price": "$9", "images": ["/a.png", "/b.png"], "summary": "Widget"
