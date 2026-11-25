@@ -2909,7 +2909,7 @@ export default function App() {
           </span>
         </div>
 
-        {mobileTab !== 'editor' && mobileTab !== 'console' && (
+        {(
           <div className="flex items-center gap-1.5 shrink-0">
             {pendingInputPrompt !== null ? (
               <button
