@@ -5,7 +5,7 @@ All notable changes to **DroidPy** are documented in this file.
 ## [Unreleased]
 
 ### Fixed — Termux package restore & mobile run controls
-- **避免 NumPy 還原在手機上長時間原始碼編譯**：備份還原偵測到缺少 NumPy 時，優先透過 Termux 預編譯套件 `python-numpy` 安裝並執行 `import numpy` 驗證；其餘 pip 套件獨立繼續還原，不再把 NumPy 原始碼交給 pip 建置。
+- **修正手機套件安裝與腳本執行的 Python 環境一致性**：Termux 套件還原及一般 pip 安裝改用內嵌 `python3 -m pip`，確保安裝位置對應執行腳本的直譯器；NumPy 改由 Termux 預編譯套件 `python-numpy` 安裝，並以同一個 Python 執行 `import numpy` 驗證，安裝或驗證失敗會明確回報失敗，不再靜默略過或讓 pip 長時間編譯 NumPy。
 - **整合手機版執行／停止操作**：將執行與停止狀態切換集中到右上角頂欄，從終端機輸入列移除重複的停止按鈕，避免操作入口分散。
 
 
