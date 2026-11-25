@@ -2525,6 +2525,7 @@ class EmbeddedTermuxBridge(
         }
         val pipConfBody = buildString {
             append("[global]\\n")
+            append("index-url = https://pypi.org/simple\\n")
             append("no-cache-dir = true\\n")
             append("break-system-packages = true\\n")
             append("disable-pip-version-check = true\\n")
