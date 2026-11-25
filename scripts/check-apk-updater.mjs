@@ -22,13 +22,12 @@ assert.ok(onCreateStart >= 0 && onCreateEnd > onCreateStart);
 assert.ok(!source.slice(onCreateStart, onCreateEnd).includes('requestExternalStoragePermissionIfNeeded()'), 'storage Settings must not interrupt first-run startup');
 // Android 11+ must use one all-files-access settings flow, never launch
 // legacy READ/WRITE runtime dialogs concurrently with the Settings activity.
-assert.ok(source.includes('if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {'))
-assert.ok(source.includes('if (Environment.isExternalStorageManager()) {'))
-assert.ok(source.includes('Opening app-specific all-files access settings'))
-assert.ok(source.includes('Android 10 and earlier retain the legacy runtime storage permissions.'))
-assert.ok(source.includes('return\n        }\n\n        // Android 10 and earlier'))
+assert.ok(source.includes('Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&'));
+assert.ok(source.includes('applicationInfo.targetSdkVersion >= Build.VERSION_CODES.R'), 'all-files Settings must only be used when the app targets Android 11+');
+assert.ok(source.includes('if (Environment.isExternalStorageManager()) {'));
+assert.ok(source.includes('Opening app-specific all-files access settings'));
+assert.ok(source.includes('legacy-target apps on Android 11+ retain runtime READ/WRITE permissions.'));
 assert.ok(source.includes('ActivityCompat.requestPermissions(this, permsToAsk.toTypedArray(), 1001)'));
-
 // Redirects must remain HTTPS and on the official GitHub asset delivery hosts.
 assert.ok(updater.includes('fun validateGithubAssetUrl(raw: String): URL'));
 assert.ok(source.includes('import java.net.URL\nimport javax.net.ssl.HttpsURLConnection'));
