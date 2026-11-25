@@ -33,9 +33,10 @@ assert.ok(workflow.includes('gradle assembleDebug --no-daemon'));
 assert.ok(workflow.includes('gradle assembleRelease --no-daemon'));
 assert.ok(workflow.includes('DROIDPY_RELEASE_BUILD'));
 assert.ok(workflow.includes("if: steps.configure.outputs.is_release == 'true'"));
-assert.ok(workflow.includes('The original DROIDPY_KEYSTORE_BASE64 secret is required for every APK build.'));
+assert.ok(workflow.includes('The new DROIDPY_KEYSTORE_BASE64 secret is required for Release builds.'));
+assert.ok(workflow.includes('if [ "$IS_RELEASE_REF" = true ]; then'));
 assert.ok(workflow.includes('keytool -exportcert -keystore'));
-assert.ok(workflow.includes('KEYSTORE_PATH="android/app/'))
+assert.ok(workflow.includes('DROIDPY_EXPECTED_CERT_SHA256='));
 assert.ok(workflow.includes('verify --verbose --print-certs'));
 assert.ok(workflow.includes('needs.build-apk.outputs.is_release == \'true\''));
 assert.ok(workflow.includes('android/app/build/outputs/apk/release/*.apk'));
@@ -43,17 +44,17 @@ assert.ok(workflow.includes('android/app/build/outputs/apk/debug/*.apk'));
 assert.ok(workflow.includes("printf 'DROIDPY_STORE_PASSWORD=%s\\n'"));
 assert.ok(workflow.includes("printf '%s\\n' \"$SIGNER_OUTPUT\""));
 assert.ok(workflow.includes("DroidPy-arm64-apk-$GITHUB_RUN_NUMBER"));
-assert.ok(!workflow.includes('cp android/app/droidpy-debug.p12'));
-assert.ok(workflow.includes('29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA'));
-assert.ok(!workflow.includes('ephemeral signer'));
-assert.ok(!workflow.includes('uses Gradle ephemeral debug signing'));
+assert.ok(!workflow.includes('29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA'));
+assert.ok(workflow.includes('PR/debug builds use the temporary Android debug signer'));
+assert.ok(!workflow.includes('The original DROIDPY_KEYSTORE_BASE64 secret is required for every APK build.'));
 
 const readmeFile = zip.file('README_GITHUB_APK.md') || zip.file('README.md');
 assert.ok(readmeFile, 'exported Android project must include signing instructions');
 const readme = await readmeFile.async('string');
 assert.ok(readme.includes('DROIDPY_KEYSTORE_BASE64'));
-assert.ok(readme.includes('原有簽名 keystore'));
-assert.ok(readme.includes('Debug APK、PR Artifact 與正式 Release 全部使用同一把受保護簽名金鑰'));
+assert.ok(readme.includes('簽名金鑰已更換'));
+assert.ok(readme.includes('PR／Debug 建置使用臨時 Debug 簽名'));
+assert.ok(readme.includes('合併至 main/master 後'));
 assert.ok(!readme.includes('固定的 `android/app/droidpy-debug.p12` 簽名金鑰'));
 
-console.log('Exported Android workflow pins Debug, PR, and Release APKs to the original protected signer.');
+console.log('Exported Android workflow separates temporary PR Debug signing from protected rotated Release signing.');
