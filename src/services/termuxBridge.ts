@@ -849,7 +849,7 @@ def _compatibility_install_command(package_name, trusted_host=False):
     if package == "polars":
         return "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"
     if package in ("scikit-learn", "sklearn"):
-        return "echo DroidPy: no verified Termux ARM64 / Python 3.14 prebuilt scikit-learn package is available; on-device source builds are disabled. >&2; exit 1"
+        return "echo " + shlex.quote("DroidPy: no verified Termux ARM64 / Python 3.14 prebuilt scikit-learn package is available; on-device source builds are disabled.") + " >&2; exit 1"
     return None
 
 
