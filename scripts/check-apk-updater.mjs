@@ -84,6 +84,14 @@ const updaterSource = await readFile('src/services/appUpdater.ts', 'utf8');
 assert.ok(updaterSource.includes("tagName: 'v1.2.31'"));
 assert.ok(updaterSource.includes("tagName: 'v1.2.30'"));
 assert.ok(updaterSource.indexOf("tagName: 'v1.2.31'") < updaterSource.indexOf("tagName: 'v1.2.16'"));
+const packageManifest = JSON.parse(await readFile('package.json', 'utf8'));
+assert.equal(packageManifest.name, 'droidpy');
+assert.equal(packageManifest.version, '1.2.31');
+const bunLock = await readFile('bun.lock', 'utf8');
+assert.ok(bunLock.includes('"name": "droidpy"'));
+assert.ok((await readFile('README.md', 'utf8')).includes('Android-First Python IDE, Pyodide 3.12'));
+assert.ok(!(await readFile('README.md', 'utf8')).startsWith('# DroidPy — Android-First Python 3.12 IDE'));
+
 assert.ok(!source.includes('?: 10216'));
 assert.ok(!source.includes('?: "1.2.16"'));
 
