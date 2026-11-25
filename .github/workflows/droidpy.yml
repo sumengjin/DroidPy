@@ -157,8 +157,9 @@ jobs:
           elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -n "$INPUT_TAG" ]; then
             IS_RELEASE_REF=true
           fi
+          echo "DROIDPY_RELEASE_BUILD=$IS_RELEASE_REF" >> "$GITHUB_ENV"
 
-          if [ -z "$CUSTOM_KS_B64" ] || [ -z "$CUSTOM_STORE_PASS" ] || [ -z "$CUSTOM_KEY_ALIAS" ] || [ -z "$CUSTOM_KEY_PASS" ]; then
+          if [ -z "$CUSTOM_KS_B64" || [ -z "$CUSTOM_STORE_PASS" ] || [ -z "$CUSTOM_KEY_ALIAS" ] || [ -z "$CUSTOM_KEY_PASS" ]; then
             echo "::error::所有 APK（包括 Debug／PR Artifact）都必須使用同一組受保護的 DROIDPY signing secrets；拒絕臨時或自動生成簽名。"
             exit 1
           fi
@@ -213,10 +214,10 @@ jobs:
           INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -z "$INPUT_RELEASE_TAG" ]; then
-            APK_DIR="android/app/build/outputs/apk/debug"
-          else
+          if [ "${DROIDPY_RELEASE_BUILD:-false}" = "true" ]; then
             APK_DIR="android/app/build/outputs/apk/release"
+          else
+            APK_DIR="android/app/build/outputs/apk/debug"
           fi
           mapfile -t APK_FILES < <(find "$APK_DIR" -maxdepth 1 -type f -name '*.apk' -print | sort)
           if [ "${#APK_FILES[@]}" -ne 1 ]; then
