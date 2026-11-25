@@ -4682,7 +4682,7 @@ def clipboard_set(text):
             "scipy" -> "pkg install -y python-scipy"
             "polars" -> "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"
             "scikit-learn", "sklearn" -> "echo 'DroidPy: no verified Termux ARM64 / Python 3.14 prebuilt scikit-learn package is available; on-device source builds are disabled.' >&2; exit 1"
-            else -> null
+            else -> nativeTermuxPackageForPip(packageName)?.let { "pkg install -y $it" }
         }
     }
 
