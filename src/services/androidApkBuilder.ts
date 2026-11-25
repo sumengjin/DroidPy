@@ -1808,6 +1808,7 @@ class EmbeddedTermuxBridge(
     )
     @Volatile private var running = false
     @Volatile private var activeProcess: Process? = null
+    @Volatile private var activeProcessPaused: Boolean = false
     private val activeProcessStartedAt = AtomicLong(0L)
     private val logLock = Any()
     private val nativeLogFile: File
@@ -3450,6 +3451,8 @@ def clipboard_set(text):
                 "/logs/clear",
                 "/stdin",
                 "/stop",
+                "/pause",
+                "/resume",
                 "/shell",
                 "/run-stream",
                 "/install-stream",
@@ -3712,12 +3715,27 @@ def clipboard_set(text):
                     }
                 }
 
+                method == "POST" && (path == "/pause" || path == "/resume") -> {
+                    val shouldPause = path == "/pause"
+                    val changed = signalActiveProcess(if (shouldPause) 19 else 18)
+                    if (changed) activeProcessPaused = shouldPause
+                    writeJson(
+                        out,
+                        if (changed) 200 else 409,
+                        JSONObject()
+                            .put("ok", changed)
+                            .put("paused", activeProcessPaused)
+                            .put("error", if (changed) "" else "目前沒有可暫停／繼續的原生執行程序")
+                    )
+                }
+
                 method == "POST" && path == "/stop" -> {
                     val proc = activeProcess
                     if (proc != null) {
                         appendNativeLog("Exec", "Force stopping active process tree")
                         killProcessTree(proc)
                     }
+                    activeProcessPaused = false
                     writeJson(out, 200, JSONObject().put("ok", true))
                 }
 
@@ -4357,6 +4375,21 @@ def clipboard_set(text):
         throw IllegalArgumentException("Too many redirects")
     }
 
+    private fun signalActiveProcess(signal: Int): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
+        val proc = activeProcess ?: return false
+        return try {
+            if (!proc.isAlive) return false
+            val pid = proc.pid().toInt()
+            if (pid <= 0) return false
+            android.os.Process.sendSignal(pid, signal)
+            true
+        } catch (error: Exception) {
+            appendNativeLog("Exec", "Pause/resume signal failed: \${error.message}")
+            false
+        }
+    }
+
     private fun runBufferedShellCommand(command: String): JSONObject {
         val t0 = System.currentTimeMillis()
         val shFile = File(usrDir, "bin/sh")
@@ -4491,6 +4524,7 @@ def clipboard_set(text):
 
                 proc = pb.start()
                 activeProcess = proc
+                activeProcessPaused = false
                 activeProcessStartedAt.set(System.currentTimeMillis())
                 val charBuf = CharArray(1024)
                 val inpReader = InputStreamReader(proc.inputStream, Charsets.UTF_8)
@@ -4521,6 +4555,7 @@ def clipboard_set(text):
                 try { proc?.errorStream?.close() } catch (_: Exception) {}
                 try { proc?.outputStream?.close() } catch (_: Exception) {}
                 activeProcess = null
+                activeProcessPaused = false
                 activeProcessStartedAt.set(0L)
                 if (isPkgOrPip) {
                     pruneStaleCacheAndTemp(clearAptLists = false)
