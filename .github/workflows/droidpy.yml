@@ -178,6 +178,14 @@ jobs:
             fi
             KEYSTORE_BYTES=$(wc -c < android/app/droidpy-release.keystore | tr -d ' ')
             echo "已解碼正式簽名金鑰庫：${KEYSTORE_BYTES} bytes（不輸出任何 Secret）"
+            EXPECTED_KEYSTORE_FILE_SHA256="3903E150AEA971525F4912C67FFAE57F0E18E85759456C78A349C7C78B35B280"
+            ACTUAL_KEYSTORE_FILE_SHA256=$(sha256sum android/app/droidpy-release.keystore | awk '{print toupper($1)}')
+            if [ "$ACTUAL_KEYSTORE_FILE_SHA256" != "$EXPECTED_KEYSTORE_FILE_SHA256" ]; then
+              echo "::error::GitHub Secret 解碼後的金鑰庫內容與原始離線金鑰套件不一致。請只重新核對 DROIDPY_KEYSTORE_BASE64。"
+              echo "::error::實際檔案 SHA-256：$ACTUAL_KEYSTORE_FILE_SHA256"
+              exit 1
+            fi
+            echo "已確認解碼後金鑰庫與原始離線套件逐位元一致。"
             if ! keytool -list -keystore android/app/droidpy-release.keystore -storepass "$CUSTOM_STORE_PASS" -alias "$CUSTOM_KEY_ALIAS" >/dev/null 2>keytool-list-error.txt; then
               if grep -Eqi 'password was incorrect|keystore was tampered|failed to decrypt|keystore password.*incorrect' keytool-list-error.txt; then
                 echo "::error::金鑰庫密碼驗證失敗：請確認 DROIDPY_STORE_PASSWORD。"
@@ -185,7 +193,16 @@ jobs:
                 echo "::error::找不到指定金鑰別名：請確認 DROIDPY_KEY_ALIAS 是否為 droidpy-release。"
               else
                 echo "::error::PKCS12 金鑰庫載入失敗，以下為 keytool 診斷（不含密碼）："
-                sed -n '1,8p' keytool-list-error.txt
+                if [ -s keytool-list-error.txt ]; then
+                  sed -n '1,8p' keytool-list-error.txt
+                else
+                  echo "::error::keytool 未輸出 stderr；將改用合併輸出診斷。"
+                  if keytool -list -keystore android/app/droidpy-release.keystore -storepass "$CUSTOM_STORE_PASS" -alias "$CUSTOM_KEY_ALIAS" >keytool-list-output.txt 2>&1; then
+                    echo "第二次 keytool 載入成功；第一次錯誤可能為暫時性。"
+                  else
+                    sed -n '1,12p' keytool-list-output.txt
+                  fi
+                fi
               fi
               exit 1
             fi
