@@ -148,7 +148,7 @@ export const PACKAGE_CATALOG: CatalogPackageItem[] = [
     category: 'crawler',
     tier: 'niche',
     desc: 'Scrapy 底層的輕量 CSS / XPath / 正則擷取器',
-    runtimeHint: '純 Python；Termux 安裝會先使用原生 python-lxml，並避開不相容的 Frostwork Rust 建置',
+    runtimeHint: 'Termux 先安裝原生 python-lxml，w3lib 2.6 使用 DroidPy 內建純 Python Frostwork 相容層，無須 Rust/Maturin',
     aliases: ['scrapy', 'cssselect', 'xpath'],
     pyodide: { supported: true, packageName: 'parsel' },
     termux: { mode: 'pip', targetName: 'parsel' },
