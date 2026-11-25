@@ -4605,6 +4605,8 @@ def clipboard_set(text):
             val pythonCmd = File(usrDir, "bin/python3").absolutePath
             return "pkg install -y python-lxml && $pythonCmd -m pip install --no-cache-dir 'w3lib<2.6' parsel"
         }
+        val scipyPip = Regex("""^\s*(?:(?:python|python3)\s+-m\s+)?pip3?\s+install\s+scipy\s*$""", RegexOption.IGNORE_CASE)
+        if (scipyPip.matches(command)) return "pkg install -y python-scipy"
         val installPrefix = Regex("""^\s*pkg\s+install\b""", RegexOption.IGNORE_CASE)
         val match = installPrefix.find(command) ?: return command
         val tailStart = match.range.last + 1
