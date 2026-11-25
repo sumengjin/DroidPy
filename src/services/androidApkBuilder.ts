@@ -3275,6 +3275,18 @@ def clipboard_set(text):
         "lxml" to "python-lxml",
         "cryptography" to "python-cryptography",
         "matplotlib" to "matplotlib",
+        "apsw" to "python-apsw",
+        "bcrypt" to "python-bcrypt",
+        "brotli" to "python-brotli",
+        "grpcio" to "python-grpcio",
+        "msgpack" to "python-msgpack",
+        "psutil" to "python-psutil",
+        "pycryptodomex" to "python-pycryptodomex",
+        "tflite-runtime" to "python-tflite-runtime",
+        "torch" to "python-torch",
+        "torchaudio" to "python-torchaudio",
+        "torchvision" to "python-torchvision",
+        "yt-dlp" to "python-yt-dlp",
         "polars" to "python-polars"
     )
 
