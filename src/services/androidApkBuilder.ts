@@ -4217,6 +4217,15 @@ def clipboard_set(text):
                             val pythonCmd = File(usrDir, "bin/python3").absolutePath
                             if (mode == "pkg") {
                                 "pkg install -y $target"
+                            } else if (target.equals("parsel", ignoreCase = true)) {
+                                // w3lib 2.6.0 added Frostwork, whose current wheels do not target Android/Bionic.
+                                // Keep Parsel's pure-Python stack Android-compatible and use Termux's prebuilt lxml.
+                                val pipArgs = if (trustedHost) {
+                                    "--no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org"
+                                } else {
+                                    "--no-cache-dir"
+                                }
+                                "pkg install -y python-lxml && $pythonCmd -m pip install $pipArgs 'w3lib<2.6' parsel"
                             } else if (trustedHost) {
                                 "$pythonCmd -m pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org $target"
                             } else {
