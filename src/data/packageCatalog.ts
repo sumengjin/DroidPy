@@ -81,7 +81,7 @@ export const TERMUX_PKG_NAME_HINTS: Record<string, { suggestedMode: 'pkg' | 'pip
   'scikit-learn': {
     suggestedMode: 'pip',
     suggestedTarget: 'scikit-learn',
-    reason: '先使用 Termux 原生 NumPy／SciPy，再安裝 Meson/Cython 建置需求並停用 pip build isolation，避免重複編譯 NumPy。',
+    reason: '目前未找到官方 Termux ARM64／Python 3.14 預編譯套件；DroidPy 不會在手機上自動編譯，待相容預編譯版本通過測試後再開放。',
   },
 };
 
@@ -271,7 +271,7 @@ export const PACKAGE_CATALOG: CatalogPackageItem[] = [
     category: 'data',
     tier: 'popular',
     desc: '機器學習分類、迴歸、聚類與特徵工程框架',
-    runtimeHint: 'Termux 使用原生 NumPy／SciPy + Meson/Cython 無隔離建置；DroidPy 已加入專用安裝流程，建置仍受手機資源與 Ninja 相容性影響',
+    runtimeHint: '目前沒有已驗證的官方 Termux ARM64／Python 3.14 預編譯版本；DroidPy 已停用手機端原始碼編譯，避免安裝失敗與長時間耗電',
     aliases: ['sklearn', 'ml', 'ai'],
     pyodide: { supported: true, packageName: 'scikit-learn' },
     termux: { mode: 'pip', targetName: 'scikit-learn' },
