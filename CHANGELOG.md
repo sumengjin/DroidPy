@@ -3,6 +3,10 @@
 All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
+- **統一終端機與套件管理介面的 Android 套件相容路徑**：直接輸入簡單的 `pip install parsel`（含 `python -m pip`）也會先安裝 Termux 原生 `python-lxml`，再以 `w3lib<2.6` 安裝 Parsel，避免意外觸發 Frostwork/Rust 建置；外部 Termux Bridge 同步套用。
+- **修正 SciPy 在 Android 上的安裝路由**：套件目錄與終端機直接輸入 `pip install scipy` 改走 Termux 預編譯 `python-scipy`，避免 pip 嘗試從原始碼建置 NumPy／SciPy。
+- 更新 scikit-learn 與 Polars 的 Android 相容性提示，明確說明原生依賴／Rust 目標限制，避免將不穩定的 pip 編譯誤導為一般安裝流程。
+
 - 修正 Termux 橋接頁面顯示的初始化指令：明確安裝 `python-pip` 與原生 `python-lxml`，不再展示會讓使用者誤以為應以 pip 編譯 lxml 的舊指令。
 - 補充 `metadata` 套件名稱與標準庫 `importlib.metadata` 的差異。
 - **修復 Android Termux 的 Parsel 安裝相容性**：Parsel 安裝先使用 Termux 預編譯 `python-lxml`，並將 `w3lib` 限制在 `<2.6`，避免新版 `w3lib 2.6.0` 引入目前不支援 Android/Bionic 目標的 Frostwork Rust 擴充編譯依賴。
