@@ -403,10 +403,12 @@ export default function App() {
     }
 
     let nativeToken = '';
+    let nativeEndpoint = '';
     try {
       nativeToken = window.DroidPyNative?.getBridgeToken?.() ?? '';
+      nativeEndpoint = window.DroidPyNative?.getBridgeEndpoint?.() ?? '';
     } catch {
-      // Older native builds may not expose a per-install bridge token yet.
+      // Older native builds may not expose per-install Bridge settings yet.
     }
     const token = isSecureBridgeToken(nativeToken)
       ? nativeToken
@@ -414,7 +416,13 @@ export default function App() {
       ? savedConfig.token
       : createSecureBridgeToken();
 
-    return { ...DEFAULT_TERMUX_CONFIG, ...savedConfig, token };
+    return {
+      ...DEFAULT_TERMUX_CONFIG,
+      ...savedConfig,
+      // Native APKs obtain their port from Android; web/PWA builds keep the default.
+      endpointUrl: nativeEndpoint || savedConfig.endpointUrl || DEFAULT_TERMUX_CONFIG.endpointUrl,
+      token,
+    };
   });
   const [termuxConnectionState, setTermuxConnectionState] =
     useState<TermuxConnectionState>('disconnected');
