@@ -23,6 +23,11 @@ assert.ok(!source.slice(onCreateStart, onCreateEnd).includes('requestExternalSto
 // Use all-files Settings only for targetSdk 30+; legacy-target apps keep runtime READ/WRITE permissions.
 assert.ok(source.includes('Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&'));
 assert.ok(source.includes('applicationInfo.targetSdkVersion >= Build.VERSION_CODES.R'), 'all-files Settings must only be used when the app targets Android 11+');
+assert.ok(source.includes('val requiresAllFilesAccess = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&'));
+assert.ok(source.includes('appContext.applicationInfo.targetSdkVersion >= Build.VERSION_CODES.R'), 'Bridge storage checks must honor the app target SDK');
+assert.ok(source.includes('fun hasStoragePermission(): Boolean {\\n            val requiresAllFilesAccess'));
+assert.ok(source.includes('val manageAll = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && appContext.applicationInfo.targetSdkVersion >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()'));
+
 assert.ok(source.includes('applicationInfo.targetSdkVersion <= Build.VERSION_CODES.Q || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager())'), 'legacy-target apps and explicitly authorized all-files apps must retain shared-storage setup');
 assert.ok(source.includes('if (Environment.isExternalStorageManager()) {'));
 assert.ok(source.includes('Opening app-specific all-files access settings'));
