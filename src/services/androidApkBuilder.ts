@@ -950,19 +950,15 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun hasStoragePermission(): Boolean {
-            val manageOk = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val requiresAllFilesAccess = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+                applicationInfo.targetSdkVersion >= Build.VERSION_CODES.R
+            return if (requiresAllFilesAccess) {
                 Environment.isExternalStorageManager()
             } else {
-                true
-            }
-            val writeOk = ContextCompat.checkSelfPermission(
-                this@MainActivity,
-                Manifest.permission.WRITE_EXTERNAL_STORAGE
-            ) == PackageManager.PERMISSION_GRANTED
-            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                manageOk
-            } else {
-                writeOk
+                ContextCompat.checkSelfPermission(
+                    this@MainActivity,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+                ) == PackageManager.PERMISSION_GRANTED
             }
         }
 
@@ -2988,7 +2984,9 @@ def clipboard_set(text):
     }
 
     private fun hasStorageAccess(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        val requiresAllFilesAccess = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+            appContext.applicationInfo.targetSdkVersion >= Build.VERSION_CODES.R
+        return if (requiresAllFilesAccess) {
             Environment.isExternalStorageManager()
         } else {
             ContextCompat.checkSelfPermission(
@@ -4027,7 +4025,7 @@ def clipboard_set(text):
 
                 method == "GET" && path == "/sdcard/status" -> {
                     val root = Environment.getExternalStorageDirectory()
-                    val manageAll = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Environment.isExternalStorageManager() else true
+                    val manageAll = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && appContext.applicationInfo.targetSdkVersion >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()
                     val runtimeWrite = ContextCompat.checkSelfPermission(appContext, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
                     val droidpyDir = File(root, "DroidPy").absolutePath
                     var totalBytes = 0L
