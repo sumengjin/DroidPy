@@ -57,6 +57,16 @@ assert.ok(androidBuilder.includes('headers.containsKey("transfer-encoding")'));
 assert.ok(androidBuilder.includes('Only the explicit /stop action may terminate that process.'));
 assert.ok(!androidBuilder.includes('private val executor = Executors.newCachedThreadPool()'));
 
+// Shared-storage state backups must fail closed if JSON sanitization fails;
+// otherwise malformed state could leak the per-install bridge credential.
+const backupWriterStart = androidBuilder.indexOf('fun writePersistedState(json: String)');
+assert.ok(backupWriterStart >= 0);
+const backupWriter = androidBuilder.slice(backupWriterStart, backupWriterStart + 2200);
+assert.ok(backupWriter.includes('val backupJson = JSONObject(json).apply {'));
+assert.ok(backupWriter.includes('optJSONObject("termuxConfig")?.put("token", "")'));
+assert.ok(!backupWriter.includes('catch (_: Exception) {\n                            json'));
+
+
 assert.throws(() => buildTermuxBridgeScript('', origin), /權杖無效/);
 assert.throws(() => buildTermuxBridgeScript(token, 'file:///tmp/app'), /網頁來源/);
 
