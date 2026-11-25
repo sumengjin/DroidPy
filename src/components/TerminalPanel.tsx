@@ -21,7 +21,6 @@ interface TerminalPanelProps {
   onSubmitInput: (value: string) => void;
   onRunRepl: (statement: string) => Promise<void>;
   onSendTermuxStdin?: (text: string) => Promise<void>;
-  onStopTermux?: () => Promise<void>;
   onOpenLogs?: () => void;
   enableSandboxAddon?: boolean;
   isDark?: boolean;
