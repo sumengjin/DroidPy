@@ -532,7 +532,7 @@ class MainActivity : AppCompatActivity() {
                     val stamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
                     val target = File(filesDir, "droidpy_native.log")
                     target.parentFile?.mkdirs()
-                    target.appendText("\\n[$stamp] [FATAL] Uncaught exception on ${thread.name}:\\n${android.util.Log.getStackTraceString(error)}\\n", Charsets.UTF_8)
+                    target.appendText("\\n[$stamp] [FATAL] Uncaught exception on \\${thread.name}:\\n\\${android.util.Log.getStackTraceString(error)}\\n", Charsets.UTF_8)
                 } catch (_: Exception) {
                 }
                 if (previous != null) previous.uncaughtException(thread, error)
