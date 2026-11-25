@@ -66,6 +66,15 @@ assert.ok(androidBuilder.includes('Explicit Stop request: force stopping process
 assert.ok(androidBuilder.includes('Process output read ended after explicit Stop'));
 assert.ok(androidBuilder.includes('Run script requested: $entry'));
 assert.ok(androidBuilder.includes('SD-card write request received'));
+const streamShellStart = androidBuilder.indexOf('private fun streamShellCommand(out: OutputStream, command: String) {');
+const streamShellEnd = androidBuilder.indexOf('private fun corsHeaders(', streamShellStart);
+assert.ok(streamShellStart >= 0 && streamShellEnd > streamShellStart);
+const nativeStreamShell = androidBuilder.slice(streamShellStart, streamShellEnd);
+assert.ok(nativeStreamShell.includes('Stream client disconnected; continuing process'));
+assert.ok(!nativeStreamShell.includes('proc.destroyForcibly()'), 'a dropped output socket must not kill the Python child');
+assert.ok(appSource.includes('${entryFile.name} exited with code ${res.exitCode}'));
+assert.ok(appSource.includes('Finished ${entryFile.name}'));
+assert.ok(androidBuilder.includes('Explicit Stop request: force stopping process tree'));
 assert.ok(androidBuilder.includes('headerBuf.size() > 16 * 1024'));
 assert.ok(androidBuilder.includes('len > 8 * 1024 * 1024'));
 assert.ok(androidBuilder.includes('duplicateContentLength'));
