@@ -33,7 +33,7 @@ assert.ok(workflow.includes('gradle assembleDebug --no-daemon'));
 assert.ok(workflow.includes('gradle assembleRelease --no-daemon'));
 assert.ok(workflow.includes('DROIDPY_RELEASE_BUILD'));
 assert.ok(workflow.includes("if: steps.configure.outputs.is_release == 'true'"));
-assert.ok(workflow.includes('Every APK build, including Debug/PR artifacts, requires the protected original DROIDPY signing secrets.'));
+assert.ok(workflow.includes('The original DROIDPY_KEYSTORE_BASE64 secret is required for every APK build.'));
 assert.ok(workflow.includes('keytool -exportcert -keystore'));
 assert.ok(workflow.includes('KEYSTORE_PATH="android/app/'))
 assert.ok(workflow.includes('verify --verbose --print-certs'));
