@@ -442,6 +442,7 @@ for (const [inputMode, input, expectedMode, expectedTarget] of cases) {
 
 // Execute the actual generated Python route functions to verify direct terminal installs.
 const routeTestFile = path.join(os.tmpdir(), 'droidpy-package-route-test.py');
+const routeSourceFile = path.join(os.tmpdir(), 'droidpy-route-generated.py');
 const routeTest = [
   'import ast, re, shlex, sys',
   'source = open(sys.argv[1], encoding="utf-8").read()',
@@ -461,11 +462,13 @@ const routeTest = [
   'assert namespace["_normalize_shell_command"]("pip install scikit-learn").startswith("echo ")',
 ];
 await writeFile(routeTestFile, routeTest.join('\n'), 'utf8');
+await writeFile(routeSourceFile, generated, 'utf8');
 try {
-  const result = spawnSync('python3', [routeTestFile, path.join(os.tmpdir(), 'droidpy-route-generated.py')], { encoding: 'utf8' });
+  const result = spawnSync('python3', [routeTestFile, routeSourceFile], { encoding: 'utf8' });
   if (result.status !== 0) throw new Error(`Generated package route test failed:\n${result.stdout}\n${result.stderr}`);
 } finally {
   await rm(routeTestFile, { force: true });
+  await rm(routeSourceFile, { force: true });
 }
 assert.ok(generated.includes('cmd = [sys.executable, "-m", "pip", "install", "--prefer-binary"]'));
 console.log('Generated Termux Bridge token/origin checks and Python syntax validation passed.');
