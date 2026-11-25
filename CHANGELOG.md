@@ -3,6 +3,8 @@
 All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
+- **修正 Android 終端機絕對 Python 路徑漏接套件相容流程**：現在 `/data/user/.../python3 -m pip install polars` 等完整路徑命令也會辨識並導向 Termux 原生套件，不再誤觸 pip/maturin/Rust 編譯；外部 Termux Bridge 同步修正。
+- **修正 scikit-learn 在 Termux 的 Meson 版本腳本權限**：安裝時下載官方 PyPI 原始碼包，為 `sklearn/_build_utils/version.py` 補上可執行權限，再使用既有原生 NumPy／SciPy 與無隔離建置流程；APK 內嵌與外部 Termux 同步套用。
 - **統一終端機與套件管理介面的 Android 套件相容路徑**：直接輸入簡單的 `pip install parsel`（含 `python -m pip`）也會先安裝 Termux 原生 `python-lxml`，再以 `w3lib<2.6` 安裝 Parsel，避免意外觸發 Frostwork/Rust 建置；外部 Termux Bridge 同步套用。
 - **修正 SciPy 在 Android 上的安裝路由**：套件目錄與終端機直接輸入 `pip install scipy` 改走 Termux 預編譯 `python-scipy`，避免 pip 嘗試從原始碼建置 NumPy／SciPy。
 - **新增 scikit-learn Android 專用建置流程**：直接輸入 `pip install scikit-learn` 時，先使用 Termux 原生 NumPy／SciPy 與 Ninja，再安裝相容的 Meson/Cython 及執行期依賴，最後以 `--no-build-isolation --no-deps` 建置，避免 pip 在隔離環境重複編譯 NumPy；外部 Termux Bridge 同步支援。
