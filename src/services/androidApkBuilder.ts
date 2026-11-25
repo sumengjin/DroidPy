@@ -532,7 +532,7 @@ class MainActivity : AppCompatActivity() {
                     val stamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
                     val target = File(filesDir, "droidpy_native.log")
                     target.parentFile?.mkdirs()
-                    target.appendText("\\n[$stamp] [FATAL] Uncaught exception on \\${thread.name}:\\n\\${android.util.Log.getStackTraceString(error)}\\n", Charsets.UTF_8)
+                    target.appendText("\\n[$stamp] [FATAL] Uncaught exception on \${thread.name}:\\n\${android.util.Log.getStackTraceString(error)}\\n", Charsets.UTF_8)
                 } catch (_: Exception) {
                 }
                 if (previous != null) previous.uncaughtException(thread, error)
@@ -4024,7 +4024,7 @@ def clipboard_set(text):
                                             count++
                                         }
                                     }
-                                    appendNativeLog("Storage", "SD-card backup completed files=$count durationMs=${System.currentTimeMillis() - backupStartedAt} path=${destDir.absolutePath}")
+                                    appendNativeLog("Storage", "SD-card backup completed files=$count durationMs=\${System.currentTimeMillis() - backupStartedAt} path=\${destDir.absolutePath}")
                                     writeJson(out, 200, JSONObject().put("ok", true).put("count", count).put("dir", destDir.absolutePath))
                                 }
                             } else {
@@ -4039,7 +4039,7 @@ def clipboard_set(text):
                                 }
                             }
                         } catch (e: Exception) {
-                            appendNativeLog("Storage", "SD-card write failed durationMs=${System.currentTimeMillis() - backupStartedAt}: ${e.javaClass.simpleName}: ${e.message}")
+                            appendNativeLog("Storage", "SD-card write failed durationMs=\${System.currentTimeMillis() - backupStartedAt}: \${e.javaClass.simpleName}: \${e.message}")
                             writeJson(out, 403, JSONObject().put("error", e.message ?: "寫入失敗"))
                         }
                     }
