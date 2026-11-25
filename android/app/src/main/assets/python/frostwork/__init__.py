@@ -107,8 +107,16 @@ def navigation(html, url, encoding=None, *, content_type=None,
     parser.feed(source)
     base = url if base_url else None
     refresh = None
+    parser.close()
     for node in _walk(parser.root):
-        if node.tag == "noscript" and scripting:
+        ancestor = node.parent
+        inside_noscript = False
+        while ancestor is not None:
+            if ancestor.tag == "noscript":
+                inside_noscript = True
+                break
+            ancestor = ancestor.parent
+        if scripting and inside_noscript:
             continue
         if base_url and node.tag == "base" and base == url:
             href = node.attrs.get("href")
@@ -155,9 +163,11 @@ def _split_css(selector):
             buf.append(char)
         elif depth == 0 and char == ">":
             if buf:
-                parts.append((pending or " ", "".join(buf).strip()))
+                parts.append((">", "".join(buf).strip()))
                 buf = []
-            pending = ">"
+            elif parts:
+                parts[-1] = (">", parts[-1][1])
+            pending = None
         elif depth == 0 and char.isspace():
             if buf:
                 parts.append((pending or " ", "".join(buf).strip()))
@@ -337,6 +347,7 @@ class Page:
         source = _decode(html, encoding, content_type)
         parser = _TreeParser()
         parser.feed(source)
+        parser.close()
         values, raw = {}, {}
         for name, selector, syntax, mode, separator, mapper in self._fields:
             found = _query(parser.root, selector, syntax)
