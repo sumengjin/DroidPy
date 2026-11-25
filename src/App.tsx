@@ -422,6 +422,7 @@ export default function App() {
   const [termuxHealth, setTermuxHealth] = useState<TermuxHealthInfo | null>(null);
   const [termuxRunning, setTermuxRunning] = useState(false);
   const [termuxPaused, setTermuxPaused] = useState(false);
+  const [termuxScriptRunning, setTermuxScriptRunning] = useState(false);
   const [backupStatus, setBackupStatus] = useState<PackageBackupStatus | null>(null);
   const [restoringBackup, setRestoringBackup] = useState(false);
   const [dismissedBackupBanner, setDismissedBackupBanner] = useState(false);
@@ -1213,6 +1214,7 @@ export default function App() {
     if (!entryFile) return;
     focusOutputPane('terminal');
     setTermuxPaused(false);
+    setTermuxScriptRunning(true);
     setTermuxRunning(true);
     setRunStartedAt(Date.now());
     setTermuxError(null);
@@ -1292,6 +1294,8 @@ export default function App() {
         appLog('termux', `Aborted execution of ${entryFile.name}`, { level: 'warn' });
       }
     } finally {
+      setTermuxScriptRunning(false);
+      setTermuxPaused(false);
       setRunStartedAt(null);
       setTermuxRunning(false);
     }
@@ -3152,6 +3156,7 @@ export default function App() {
                       onRunRepl={handleRunRepl}
                       onSendTermuxStdin={handleSendTermuxStdin}
                       paused={termuxPaused}
+                      canPause={termuxScriptRunning}
                       onTogglePause={handleToggleTermuxPause}
                       onOpenLogs={() => setShowLogsModal(true)}
                       enableSandboxAddon={Boolean(settings.enableSandboxAddon)}
