@@ -1211,6 +1211,23 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
                 # Install Termux's prebuilt lxml first, then keep this Parsel install on w3lib < 2.6.
                 pip_cmd = shlex.join(_build_pip_cmd(["w3lib<2.6", "parsel"], trusted_host=trusted_host))
                 cmd = ["sh", "-c", "pkg install -y python-lxml && " + pip_cmd]
+            elif target.lower() == "polars":
+                # Use TUR's signed Android-native Polars package and Rust runtime, not pip/maturin.
+                cmd = ["sh", "-c", "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"]
+            elif target.lower() == "scikit-learn":
+                # Reuse native NumPy/SciPy; no-build-isolation prevents pip from rebuilding NumPy.
+                build_deps = _build_pip_cmd([
+                    "meson-python>=0.17.1,<0.22",
+                    "cython>=3.1.2,<3.2.6",
+                    "joblib>=1.4.0",
+                    "narwhals>=2.0.1",
+                    "threadpoolctl>=3.5.0",
+                ], trusted_host=trusted_host)
+                build_sklearn = [sys.executable, "-m", "pip", "install", "--no-cache-dir", "--no-build-isolation", "--no-deps"]
+                if trusted_host:
+                    build_sklearn.extend(["--trusted-host", "pypi.org", "--trusted-host", "files.pythonhosted.org"])
+                build_sklearn.append("scikit-learn")
+                cmd = ["sh", "-c", "pkg install -y python-numpy python-scipy ninja && " + shlex.join(build_deps) + " && " + shlex.join(build_sklearn)]
             else:
                 cmd = _build_pip_cmd(pkgs, trusted_host=trusted_host)
             if self.path == "/install-stream":
