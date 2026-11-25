@@ -22,6 +22,7 @@ interface TerminalPanelProps {
   onRunRepl: (statement: string) => Promise<void>;
   onSendTermuxStdin?: (text: string) => Promise<void>;
   paused?: boolean;
+  canPause?: boolean;
   onTogglePause?: () => void;
   onOpenLogs?: () => void;
   enableSandboxAddon?: boolean;
@@ -176,6 +177,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   onRunRepl,
   onSendTermuxStdin,
   paused = false,
+  canPause = false,
   onTogglePause,
   onOpenLogs,
   enableSandboxAddon = false,
@@ -349,7 +351,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-1 shrink-0">
-          {engine === 'termux' && status === 'running' && onTogglePause && (
+          {engine === 'termux' && status === 'running' && canPause && onTogglePause && (
             <button
               type="button"
               onClick={onTogglePause}
