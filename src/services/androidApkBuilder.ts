@@ -3571,7 +3571,8 @@ def clipboard_set(text):
     }
 
     private fun handleClient(socket: Socket) {
-        socket.use { sock ->
+        try {
+            socket.use { sock ->
             sock.soTimeout = 15000
             val bis = BufferedInputStream(sock.getInputStream())
             val headerBuf = ByteArrayOutputStream()
@@ -4339,6 +4340,10 @@ with tempfile.TemporaryDirectory(prefix="droidpy-sklearn-") as tmp:
 
                 else -> writeJson(out, 404, JSONObject().put("error", "Not found"))
             }
+            }
+        } catch (_: java.io.IOException) {
+            // A WebView or terminal client may disconnect while a response is being written.
+            // Treat the broken pipe as a normal request teardown, not a fatal worker-thread crash.
         }
     }
 
