@@ -49,6 +49,10 @@ assert.ok(workflow.includes('CUSTOM_KS_B64: ${{ secrets.DROIDPY_KEYSTORE_BASE64 
 assert.ok(workflow.includes('if [ "$IS_RELEASE_REF" = "true" ]; then'));
 assert.ok(workflow.includes('正式發布缺少必要的 GitHub Actions Secret'));
 assert.ok(workflow.includes('DROIDPY_KEYSTORE_BASE64 無法解碼'));
+assert.ok(workflow.includes('CUSTOM_KS_B64_CLEAN=$(printf'));
+assert.ok(workflow.includes('EXPECTED_RELEASE_CERT_SHA256="353F581792A659420EAF1E8EC278E7F5F78C8B13F767EA0A9E3DDEA682AEB818"'));
+assert.ok(workflow.includes('PKCS12 金鑰庫載入失敗'));
+assert.ok(workflow.includes('實際指紋：$KEYSTORE_SHA256'));
 assert.ok(workflow.includes('找不到指定金鑰別名'));
 assert.ok(workflow.includes('DROIDPY_EXPECTED_CERT_SHA256=$KEYSTORE_SHA256'));
 assert.ok(workflow.includes('Release APK 與本次受保護的新 keystore 憑證不一致'));
