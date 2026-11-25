@@ -3,7 +3,7 @@
 All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
-- **修復 Android 11 授予儲存權限後可能崩潰的授權流程競態**：Android 11 以上改為只開啟「所有檔案存取權」設定，不再同時彈出舊式 READ/WRITE 執行期權限視窗；Android 10 以下保留原有讀寫權限流程，並加入授權流程診斷紀錄。
+- **修復首次啟動授予儲存權限後可能崩潰的流程競態**：不再於 `onCreate` 尚未完成 WebView／Termux Bridge 初始化時自動跳轉系統設定；改為使用者實際操作儲存功能時才請求授權。Android 11 以上只開啟「所有檔案存取權」設定，不再同時彈出舊式 READ/WRITE 執行期權限視窗；Android 10 以下保留原有讀寫權限流程，並加入診斷紀錄。
 - **測試版與正式版可並存**：未發布 APK 的版本名稱加上 `-Beta`，Debug 變體使用獨立 `.beta` 套件 ID，FileProvider authority 隨變體套件 ID 變化；正式版套件 ID、簽名與 Release 發布流程維持不變。
 - **修復 Android scikit-learn 建置時 Meson launcher 回傳 127**：在 Ninja 開始編譯前，將 pip 產生的 Meson 入口改為透過目前可用的 Termux Python 執行 `mesonbuild.mesonmain`，先執行版本預檢；避免 Ninja 呼叫 `py_user/bin/meson --internal copy` 時因啟動器失效而整批複製任務失敗。APK 內嵌與外部 Termux Bridge 同步修正。
 - **修正 Android 終端機絕對 Python 路徑漏接套件相容流程**：現在 `/data/user/.../python3 -m pip install polars` 等完整路徑命令也會辨識並導向 Termux 原生套件，不再誤觸 pip/maturin/Rust 編譯；外部 Termux Bridge 同步修正。
