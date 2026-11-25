@@ -19,6 +19,10 @@ for (const item of catalogItems) {
   );
 }
 assert.match(bridgeSource, /matplotlib:\s*'matplotlib'/);
+assert.match(catalogSource, /Parsel 本身是純 Python/);
+assert.match(catalogSource, /非 Parsel 的官方相依套件/);
+assert.match(catalogSource, /Termux 先安裝原生 python-lxml/);
+assert.match(exportSource, /python-lxml libxml2 libxslt clang/);
 assert.match(exportSource, /matplotlib:\s*'matplotlib'/);
 
 const start = source.indexOf('private fun collectInstalledPipInventory()');
