@@ -143,7 +143,7 @@ jobs:
             REL_TAG="v$VNAME"
           else
             REL_TAG="debug-$GITHUB_RUN_NUMBER"
-            VNAME="$VER"
+            VNAME="${VER}-Beta"
           fi
           SEMVER_PART=$(printf '%s' "$VNAME" | grep -oE '^[0-9]+[.][0-9]+[.][0-9]+' || echo '1.2.34')
           IFS='.' read -r CMAJ CMIN CPAT <<< "$SEMVER_PART"
@@ -216,7 +216,7 @@ jobs:
           if [ "$DROIDPY_RELEASE_BUILD" = true ]; then
             cp android/app/build/outputs/apk/release/*.apk "release-apk/${appSlug}-arm64-\${DROIDPY_RESOLVED_TAG}.apk"
           else
-            cp android/app/build/outputs/apk/debug/*.apk "release-apk/${appSlug}-arm64-debug-$GITHUB_RUN_NUMBER.apk"
+            cp android/app/build/outputs/apk/debug/*.apk "release-apk/${appSlug}-arm64-${VNAME}.apk"
           fi
 
       - name: Upload APK Artifact
@@ -336,6 +336,8 @@ android {
 
     buildTypes {
         getByName("debug") {
+            // Keep prerelease APKs installable beside the stable application.
+            applicationIdSuffix = ".beta"
             val cfg = signingConfigs.findByName("droidpy")
             if (cfg?.storeFile?.exists() == true) {
                 signingConfig = cfg
@@ -405,7 +407,7 @@ ${storagePerms}
         android:theme="@style/Theme.AppCompat.DayNight.NoActionBar">
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="${safePkg}.fileprovider"
+            android:authorities="\${applicationId}.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data
