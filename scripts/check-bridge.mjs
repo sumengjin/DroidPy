@@ -88,6 +88,10 @@ assert.ok(!androidBuilder.includes('private val executor = Executors.newCachedTh
 const termuxBridgeSource = await readFile('src/services/termuxBridge.ts', 'utf8');
 assert.ok(termuxBridgeSource.includes('已有 Termux 工作正在執行'));
 assert.ok(!termuxBridgeSource.includes("  abortActiveTermuxStream();\n  const controller = new AbortController();"));
+const abortHelperStart = termuxBridgeSource.indexOf('export function abortActiveTermuxStream(): void {');
+const abortHelperEnd = termuxBridgeSource.indexOf('\n}', abortHelperStart);
+assert.ok(abortHelperStart >= 0 && abortHelperEnd > abortHelperStart);
+assert.ok(!termuxBridgeSource.slice(abortHelperStart, abortHelperEnd).includes('activeStreamController = null'));
 assert.ok(termuxBridgeSource.includes('return { exitCode: -1, durationMs: 0 };'));
 assert.ok(termuxBridgeSource.includes('return { exitCode: -1, durationMs };'));
 
