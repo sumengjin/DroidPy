@@ -57,7 +57,7 @@ assert.ok(generated.includes('os.killpg(pgid, signal.SIGSTOP if should_pause els
 assert.ok(generated.includes('def _normalize_shell_command(command):'));
 assert.ok(generated.includes('python-polars'));
 assert.ok(generated.includes('--no-build-isolation'));
-assert.ok(generated.includes('meson-python>=0.17.1,<0.22'));
+assert.ok(generated.includes('meson-python>=0.17.1,<0.20'));
 assert.ok(generated.includes('elif target.lower() == "polars":'));
 assert.ok(generated.includes('elif target.lower() == "scikit-learn":'));
 assert.ok(generated.includes('pkg install -y python-numpy python-scipy ninja'));
