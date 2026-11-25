@@ -456,7 +456,7 @@ if not any(isinstance(f, _DroidPySslImportHook) for f in sys.meta_path):
     pip_conf_path = os.path.expanduser("~/.config/pip/pip.conf")
     try:
         os.makedirs(os.path.dirname(pip_conf_path), exist_ok=True)
-        lines = ["[global]", "no-cache-dir = true", "break-system-packages = true", "disable-pip-version-check = true"]
+        lines = ["[global]", "index-url = https://pypi.org/simple", "no-cache-dir = true", "break-system-packages = true", "disable-pip-version-check = true"]
         if ca_path:
             lines.append(f"cert = {ca_path}")
         with open(pip_conf_path, "w", encoding="utf-8") as fp:
