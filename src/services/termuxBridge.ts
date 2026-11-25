@@ -1792,6 +1792,37 @@ export function normalizeTermuxPkgName(name: string): string {
   return name.trim().toLowerCase().replace(/[-_.]+/g, '-');
 }
 
+export interface ResolvedTermuxInstallTarget {
+  mode: 'pip' | 'pkg';
+  target: string;
+  routedFromPip: boolean;
+}
+
+// These packages ship native Termux builds; pip source builds are slow or unsupported on Android.
+const TERMUX_NATIVE_PYTHON_PACKAGES: Record<string, string> = {
+  numpy: 'python-numpy',
+  pandas: 'python-pandas',
+  pillow: 'python-pillow',
+  lxml: 'python-lxml',
+};
+
+export function resolveTermuxInstallTarget(
+  mode: 'pip' | 'pkg',
+  target: string
+): ResolvedTermuxInstallTarget {
+  if (mode !== 'pip') return { mode, target, routedFromPip: false };
+  const clean = target.trim();
+  // Only route a plain package name. Preserve version pins, extras, URLs and multi-package commands.
+  if (!/^[a-zA-Z0-9_.-]+$/.test(clean)) {
+    return { mode, target, routedFromPip: false };
+  }
+  const nativePackage = TERMUX_NATIVE_PYTHON_PACKAGES[clean.toLowerCase().replace(/[-_.]+/g, '-')]
+    ?? TERMUX_NATIVE_PYTHON_PACKAGES[clean.toLowerCase()];
+  return nativePackage
+    ? { mode: 'pkg', target: nativePackage, routedFromPip: true }
+    : { mode, target, routedFromPip: false };
+}
+
 export interface TermuxOutdatedPipItem {
   name: string;
   currentVersion: string;
