@@ -131,6 +131,7 @@ assert.ok(androidBuilder.includes('target.equals("parsel", ignoreCase = true)'))
 assert.ok(androidBuilder.includes('target.equals("polars", ignoreCase = true)'));
 assert.ok(androidBuilder.includes('target.equals("scikit-learn", ignoreCase = true)'));
 assert.ok(androidBuilder.includes('val pipPrefix ='));
+assert.ok(androidBuilder.includes('version_script.write_text'));
 assert.ok(androidBuilder.includes('version_script.chmod'));
 assert.ok(androidBuilder.includes('package.extractall(source_root, filter="data")'));
 assert.ok(androidBuilder.includes("pkg install -y python-lxml && $pythonCmd -m pip install $pipArgs 'w3lib<2.6' parsel"));
@@ -186,6 +187,7 @@ assert.ok(termuxBridgeSource.includes('pkg install -y python-scipy'));
 assert.ok(termuxBridgeSource.includes('normalized_cmd = _normalize_shell_command(cmd_str)'));
 assert.ok(termuxBridgeSource.includes('Also recognize the absolute Termux Python path'));
 assert.ok(termuxBridgeSource.includes('_scikit_learn_source_install_command'));
+assert.ok(termuxBridgeSource.includes('version_script.write_text'));
 assert.ok(termuxBridgeSource.includes('version_script.chmod'));
 assert.ok(termuxBridgeSource.includes('pip_prefix = r"(?:(?:[^\\\\s;&|]*/)?python'));
 
