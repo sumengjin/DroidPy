@@ -3515,8 +3515,10 @@ def clipboard_set(text):
 
                 method == "GET" && path == "/backup/status" -> {
                     val manifest = readBackupManifest()
-                    val currentPips = collectInstalledPipNames().toSet()
-                    val currentPkgs = collectInstalledPkgNames().toSet()
+                    val pipInventory = collectInstalledPipInventory()
+                    val pkgInventory = collectInstalledPkgInventory()
+                    val currentPips = pipInventory.names.toSet()
+                    val currentPkgs = pkgInventory.names.toSet()
                     val backedPipList = mutableListOf<String>()
                     val backedPkgList = mutableListOf<String>()
                     if (manifest != null) {
@@ -3535,8 +3537,9 @@ def clipboard_set(text):
                             }
                         }
                     }
-                    val missingPip = backedPipList.filter { normalizePipPkgName(it) !in currentPips }
-                    val missingPkg = backedPkgList.filter { it !in currentPkgs }
+                    // Incomplete inventories must never be interpreted as every package being missing.
+                    val missingPip = if (pipInventory.complete) backedPipList.filter { normalizePipPkgName(it) !in currentPips } else emptyList()
+                    val missingPkg = if (pkgInventory.complete) backedPkgList.filter { it !in currentPkgs } else emptyList()
                     writeJson(
                         out,
                         200,
@@ -3548,6 +3551,8 @@ def clipboard_set(text):
                             .put("pkgPackages", JSONArray(backedPkgList))
                             .put("missingPipPackages", JSONArray(missingPip))
                             .put("missingPkgPackages", JSONArray(missingPkg))
+                            .put("pipInventoryComplete", pipInventory.complete)
+                            .put("pkgInventoryComplete", pkgInventory.complete)
                     )
                 }
 
@@ -3556,11 +3561,13 @@ def clipboard_set(text):
                     if (manifest == null) {
                         writeJson(out, 404, JSONObject().put("error", "找不到套件備份清單"))
                     } else {
-                        val currentPips = collectInstalledPipNames().toSet()
-                        val currentPkgs = collectInstalledPkgNames().toSet()
+                        val pipInventory = collectInstalledPipInventory()
+                        val pkgInventory = collectInstalledPkgInventory()
+                        val currentPips = pipInventory.names.toSet()
+                        val currentPkgs = pkgInventory.names.toSet()
                         val needPkgs = mutableListOf("python", "python-pip")
                         val arrK = manifest.optJSONArray("pkgPackages")
-                        if (arrK != null) {
+                        if (pkgInventory.complete && arrK != null) {
                             for (i in 0 until arrK.length()) {
                                 val v = arrK.optString(i, "").trim()
                                 if (v.isNotEmpty() && v !in currentPkgs && v !in needPkgs) {
@@ -3570,7 +3577,7 @@ def clipboard_set(text):
                         }
                         val needPips = mutableListOf<String>()
                         val arrP = manifest.optJSONArray("pipPackages")
-                        if (arrP != null) {
+                        if (pipInventory.complete && arrP != null) {
                             for (i in 0 until arrP.length()) {
                                 val v = arrP.optString(i, "").trim()
                                 if (v.isNotEmpty() && normalizePipPkgName(v) !in currentPips) {
@@ -3584,8 +3591,26 @@ def clipboard_set(text):
                             steps.add("(pkg update -y || true)")
                             steps.add("pkg install -y " + missingPkgsOnly.joinToString(" "))
                         }
-                        if (needPips.isNotEmpty()) {
-                            steps.add("pip install --no-cache-dir " + needPips.joinToString(" "))
+                        if (!pipInventory.complete && arrP != null && arrP.length() > 0) {
+                            // Python is not ready yet. Restore native packages first; retry pip restore after initialization.
+                            steps.add("echo '[DroidPy] Python package inventory is incomplete; skipped pip restore safely. Initialize Python, then retry restore.'")
+                        }
+                        val needsNumpy = needPips.any { normalizePipPkgName(it) == "numpy" }
+                        val remainingPips = needPips.filter { normalizePipPkgName(it) != "numpy" }
+                        // Use the same embedded Termux interpreter for imports and pip installs.
+                        val pythonCmd = File(usrDir, "bin/python3").absolutePath
+                        if (pipInventory.complete) {
+                            val restoreFailureFile = File(workspaceDir, ".droidpy-restore-failed").absolutePath
+                            steps.add("test -x $pythonCmd || { echo '[DroidPy] Python is not ready; package restore aborted.' >&2; exit 127; }")
+                            steps.add("rm -f $restoreFailureFile")
+                            if (needsNumpy) {
+                                // A NumPy failure is recorded but must not block unrelated pure-Python restores.
+                                steps.add("if pkg install -y python-numpy && $pythonCmd -c 'import numpy'; then echo '[DroidPy] NumPy ready (Termux binary package).' ; else echo '[DroidPy] NumPy install/import failed; continuing with other packages.' >&2; touch $restoreFailureFile; fi")
+                            }
+                            if (remainingPips.isNotEmpty()) {
+                                steps.add("if $pythonCmd -m pip install --no-cache-dir " + remainingPips.joinToString(" ") + "; then echo '[DroidPy] Remaining pip packages restored.'; else echo '[DroidPy] One or more pip packages failed to restore.' >&2; touch $restoreFailureFile; fi")
+                            }
+                            steps.add("test ! -f $restoreFailureFile")
                         }
                         val restoreCmd = if (steps.isEmpty()) {
                             "echo '[DroidPy] 所有已備份套件均已存在，無需還原。'"
@@ -3931,12 +3956,13 @@ def clipboard_set(text):
                             val mode = bodyJson.optString("mode", "pip")
                             val target = bodyJson.optString("target", "").trim()
                             val trustedHost = bodyJson.optBoolean("trustedHost", false)
+                            val pythonCmd = File(usrDir, "bin/python3").absolutePath
                             if (mode == "pkg") {
                                 "pkg install -y $target"
                             } else if (trustedHost) {
-                                "pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org $target"
+                                "$pythonCmd -m pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org $target"
                             } else {
-                                "pip install --no-cache-dir $target"
+                                "$pythonCmd -m pip install --no-cache-dir $target"
                             }
                         }
                         else -> bodyJson.optString("command", "")

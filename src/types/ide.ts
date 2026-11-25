@@ -113,6 +113,8 @@ export interface PackageBackupStatus {
   pkgPackages: string[];
   missingPipPackages: string[];
   missingPkgPackages: string[];
+  pipInventoryComplete?: boolean;
+  pkgInventoryComplete?: boolean;
 }
 
 export interface CapturedCookieItem {

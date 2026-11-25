@@ -2909,7 +2909,7 @@ export default function App() {
           </span>
         </div>
 
-        {mobileTab !== 'editor' && mobileTab !== 'console' && (
+        {(
           <div className="flex items-center gap-1.5 shrink-0">
             {pendingInputPrompt !== null ? (
               <button
@@ -3122,7 +3122,6 @@ export default function App() {
                       onSubmitInput={handleSubmitInput}
                       onRunRepl={handleRunRepl}
                       onSendTermuxStdin={handleSendTermuxStdin}
-                      onStopTermux={handleStopTermux}
                       onOpenLogs={() => setShowLogsModal(true)}
                       enableSandboxAddon={Boolean(settings.enableSandboxAddon)}
                       isDark={getThemeMeta(settings.theme).isDark}
@@ -3285,7 +3284,6 @@ export default function App() {
                   onSubmitInput={handleSubmitInput}
                   onRunRepl={handleRunRepl}
                   onSendTermuxStdin={handleSendTermuxStdin}
-                  onStopTermux={handleStopTermux}
                   onOpenLogs={() => setShowLogsModal(true)}
                   enableSandboxAddon={Boolean(settings.enableSandboxAddon)}
                   isDark={getThemeMeta(settings.theme).isDark}
@@ -3334,55 +3332,6 @@ export default function App() {
           </div>
         )}
       </main>
-
-      {/* Phone Thumb-Zone MD3 FAB on Editor / Console tabs (single dominant primary CTA) */}
-      {deviceClass === 'phone' && (mobileTab === 'editor' || mobileTab === 'console') && (
-        <div
-          className={`fixed right-3.5 z-30 ${
-            mobileTab === 'console'
-              ? 'bottom-[132px]'
-              : settings.showSymbolBar
-              ? 'bottom-[118px]'
-              : 'bottom-[76px]'
-          }`}
-        >
-          {pendingInputPrompt !== null ? (
-            <button
-              type="button"
-              onClick={handleCancelInput}
-              className="min-h-[56px] px-4 rounded-[1rem] bg-red-600 text-white text-xs font-semibold shadow-lg inline-flex items-center gap-2 active:scale-95 transition-transform"
-            >
-              <Square className="w-4 h-4 fill-current" />
-              <span>{t('cta_abort_short')}</span>
-            </button>
-          ) : termuxRunning ? (
-            <button
-              type="button"
-              onClick={() => void handleStopTermux()}
-              className="min-h-[56px] px-4 rounded-[1rem] bg-red-600 text-white text-xs font-semibold shadow-lg inline-flex items-center gap-2 active:scale-95 transition-transform"
-            >
-              <Square className="w-4 h-4 fill-current" />
-              <span>{t('cta_stop_short')}</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleRunCode}
-              disabled={isRunning || isCoreLoading}
-              className="min-h-[56px] px-5 md-fab disabled:opacity-50 text-xs font-semibold inline-flex items-center gap-2 active:scale-95 transition-transform"
-            >
-              {isRunning || isCoreLoading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Play className="w-4 h-4 fill-current" />
-              )}
-              <span>
-                {isCoreLoading ? t('cta_loading_short') : isRunning ? t('cta_running') : t('cta_run_short')}
-              </span>
-            </button>
-          )}
-        </div>
-      )}
 
       {/* Phone MD3 Bottom Navigation Bar (Icon-only pill indicator) */}
       {deviceClass === 'phone' && (

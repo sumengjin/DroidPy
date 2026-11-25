@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Trash2, Copy, Check, AlertCircle, CornerDownLeft, Download, Maximize2, X, Square, FileText } from 'lucide-react';
+import { Trash2, Copy, Check, AlertCircle, CornerDownLeft, Download, Maximize2, X, FileText } from 'lucide-react';
 import { ExecutionEngine, PyodideStatus, TerminalEntry } from '../types/ide';
 import { renderAnsiText, stripAnsi } from '../utils/ansiParser';
 import { useI18n } from '../services/i18n';
@@ -21,7 +21,6 @@ interface TerminalPanelProps {
   onSubmitInput: (value: string) => void;
   onRunRepl: (statement: string) => Promise<void>;
   onSendTermuxStdin?: (text: string) => Promise<void>;
-  onStopTermux?: () => Promise<void>;
   onOpenLogs?: () => void;
   enableSandboxAddon?: boolean;
   isDark?: boolean;
@@ -174,7 +173,6 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   onSubmitInput,
   onRunRepl,
   onSendTermuxStdin,
-  onStopTermux,
   onOpenLogs,
   enableSandboxAddon = false,
   isDark,
@@ -477,16 +475,6 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           >
             {t('term_send')}
           </button>
-          {onStopTermux && (
-            <button
-              type="button"
-              onClick={() => void onStopTermux()}
-              className="min-h-[40px] px-3 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold inline-flex items-center gap-1 whitespace-nowrap shrink-0"
-            >
-              <Square className="w-3.5 h-3.5 fill-current" />
-              <span>{t('cta_stop_short')}</span>
-            </button>
-          )}
         </form>
       ) : (
         /* Persistent Interactive Python REPL Input */
