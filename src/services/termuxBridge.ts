@@ -489,7 +489,8 @@ def _resolve_certifi_env(base_env=None):
     return env
 
 def _build_pip_cmd(pkgs, trusted_host=False):
-    cmd = [sys.executable, "-m", "pip", "install"]
+    # Prefer a compatible wheel; build from source only when no wheel is available.
+    cmd = [sys.executable, "-m", "pip", "install", "--prefer-binary"]
     if trusted_host:
         cmd.extend(["--trusted-host", "pypi.org", "--trusted-host", "files.pythonhosted.org"])
     cmd.extend(pkgs)
@@ -1796,31 +1797,48 @@ export interface ResolvedTermuxInstallTarget {
   mode: 'pip' | 'pkg';
   target: string;
   routedFromPip: boolean;
+  reason?: string;
 }
 
-// These packages ship native Termux builds; pip source builds are slow or unsupported on Android.
-const TERMUX_NATIVE_PYTHON_PACKAGES: Record<string, string> = {
+// Curated native Termux builds avoid expensive or unsupported Android source builds.
+export const TERMUX_NATIVE_PYTHON_PACKAGES: Record<string, string> = {
   numpy: 'python-numpy',
   pandas: 'python-pandas',
   pillow: 'python-pillow',
+  pil: 'python-pillow',
   lxml: 'python-lxml',
+  cryptography: 'python-cryptography',
 };
+
+const PYTHON_ARCHIVE_PATTERN = /\.(?:whl|tar\.gz|tgz|tar\.bz2|tbz2|tar\.xz|txz|tar|zip|egg)(?:$|[?#])/i;
+const REQUIREMENTS_INPUT_PATTERN = /(?:^|\s)(?:-r|--requirement)(?:\s+|=)/i;
 
 export function resolveTermuxInstallTarget(
   mode: 'pip' | 'pkg',
   target: string
 ): ResolvedTermuxInstallTarget {
-  if (mode !== 'pip') return { mode, target, routedFromPip: false };
   const clean = target.trim();
-  // Only route a plain package name. Preserve version pins, extras, URLs and multi-package commands.
+  if (!clean) return { mode, target, routedFromPip: false };
+
+  // Python wheels and source archives belong to pip, never to apt/pkg.
+  if (PYTHON_ARCHIVE_PATTERN.test(clean) || REQUIREMENTS_INPUT_PATTERN.test(clean) || /^-e(?:\s|=)|^--editable(?:\s|=)|^git\+/i.test(clean)) {
+    return mode === 'pkg'
+      ? { mode: 'pip', target: clean, routedFromPip: true, reason: 'Python archive/requirements input' }
+      : { mode, target: clean, routedFromPip: false };
+  }
+
+  // Do not rewrite version pins, extras, URLs, markers, or multi-package commands.
   if (!/^[a-zA-Z0-9_.-]+$/.test(clean)) {
     return { mode, target, routedFromPip: false };
   }
-  const nativePackage = TERMUX_NATIVE_PYTHON_PACKAGES[clean.toLowerCase().replace(/[-_.]+/g, '-')]
+
+  const normalized = clean.toLowerCase().replace(/[-_.]+/g, '-');
+  const nativePackage = TERMUX_NATIVE_PYTHON_PACKAGES[normalized]
     ?? TERMUX_NATIVE_PYTHON_PACKAGES[clean.toLowerCase()];
-  return nativePackage
-    ? { mode: 'pkg', target: nativePackage, routedFromPip: true }
-    : { mode, target, routedFromPip: false };
+  if (nativePackage) {
+    return { mode: 'pkg', target: nativePackage, routedFromPip: mode === 'pip', reason: 'prebuilt native Termux Python package' };
+  }
+  return { mode, target, routedFromPip: false };
 }
 
 export interface TermuxOutdatedPipItem {
