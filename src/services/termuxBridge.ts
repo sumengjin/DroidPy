@@ -1260,10 +1260,11 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
             pkgs = shlex.split(target)
             if not pkgs:
                 return self._send_json(400, {"error": "Missing package target"})
+            compatibility_cmd = _compatibility_install_command(pkgs[0], trusted_host=trusted_host) if len(pkgs) == 1 else None
             if mode == "pkg":
                 cmd = ["pkg", "install", "-y"] + pkgs
-            elif len(pkgs) == 1 and _compatibility_install_command(pkgs[0], trusted_host=trusted_host):
-                cmd = ["sh", "-c", _compatibility_install_command(pkgs[0], trusted_host=trusted_host)]
+            elif compatibility_cmd:
+                cmd = ["sh", "-c", compatibility_cmd]
             else:
                 cmd = _build_pip_cmd(pkgs, trusted_host=trusted_host)
             if self.path == "/install-stream":
