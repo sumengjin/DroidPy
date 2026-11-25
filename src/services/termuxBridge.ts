@@ -841,7 +841,7 @@ def _scikit_learn_source_install_command(trusted_host=False):
     # Termux source archives can lose the executable bit on sklearn's Meson version script.
     # Download the official PyPI sdist, restore that bit, then build against native NumPy/SciPy.
     build_deps = _build_pip_cmd([
-        "meson-python>=0.17.1,<0.22",
+        "meson-python>=0.17.1,<0.20",
         "cython>=3.1.2,<3.2.6",
         "joblib>=1.4.0",
         "narwhals>=2.0.1",
