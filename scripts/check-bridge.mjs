@@ -58,8 +58,12 @@ assert.ok(generated.includes('def _normalize_shell_command(command):'));
 assert.ok(generated.includes('python-polars'));
 assert.ok(generated.includes('--no-build-isolation'));
 assert.ok(generated.includes('meson-python>=0.17.1,<0.20'));
-assert.ok(generated.includes('elif target.lower() == "polars":'));
-assert.ok(generated.includes('elif target.lower() == "scikit-learn":'));
+assert.ok(generated.includes('def _compatibility_install_command(package_name, trusted_host=False):'));
+assert.ok(generated.includes('if package == "parsel":'));
+assert.ok(generated.includes('if package == "scipy":'));
+assert.ok(generated.includes('if package == "polars":'));
+assert.ok(generated.includes('if package in ("scikit-learn", "sklearn"):'));
+assert.ok(generated.includes('_compatibility_install_command(pkgs[0], trusted_host=trusted_host)'));
 assert.ok(generated.includes('pkg install -y python-numpy python-scipy ninja'));
 assert.ok(generated.includes('meson_launcher = pathlib.Path(site.getuserbase()) / \'bin\' / \'meson\''));
 assert.ok(generated.includes('sysconfig.get_path(\'scripts\')'));
@@ -208,7 +212,8 @@ assert.ok(!androidBuilder.includes('private val executor = Executors.newCachedTh
 // Only the explicit Stop control is allowed to abort its AbortController.
 const termuxBridgeSource = await readFile('src/services/termuxBridge.ts', 'utf8');
 assert.ok(termuxBridgeSource.includes('已有 Termux 工作正在執行'));
-assert.ok(termuxBridgeSource.includes('target.lower() == "parsel"'));
+assert.ok(termuxBridgeSource.includes('def _compatibility_install_command(package_name, trusted_host=False):'));
+assert.ok(termuxBridgeSource.includes('package == "parsel"'));
 assert.ok(termuxBridgeSource.includes('w3lib<2.6'));
 assert.ok(termuxBridgeSource.includes('pkg install -y python-lxml && '));
 assert.ok(termuxBridgeSource.includes('shlex.join(_build_pip_cmd(["w3lib<2.6", "parsel"]'));
