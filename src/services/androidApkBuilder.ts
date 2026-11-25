@@ -3515,28 +3515,31 @@ def clipboard_set(text):
 
                 method == "GET" && path == "/backup/status" -> {
                     val manifest = readBackupManifest()
-                    val currentPips = collectInstalledPipNames().toSet()
-                    val currentPkgs = collectInstalledPkgNames().toSet()
+                    val pipInventory = collectInstalledPipInventory()
+                    val pkgInventory = collectInstalledPkgInventory()
+                    val currentPips = pipInventory.names.toSet()
+                    val currentPkgs = pkgInventory.names.toSet()
                     val backedPipList = mutableListOf<String>()
                     val backedPkgList = mutableListOf<String>()
                     if (manifest != null) {
                         val arrP = manifest.optJSONArray("pipPackages")
-                        if (arrP != null) {
+                        if (pipInventory.complete && arrP != null) {
                             for (i in 0 until arrP.length()) {
                                 val v = arrP.optString(i, "").trim()
                                 if (v.isNotEmpty()) backedPipList.add(v)
                             }
                         }
                         val arrK = manifest.optJSONArray("pkgPackages")
-                        if (arrK != null) {
+                        if (pkgInventory.complete && arrK != null) {
                             for (i in 0 until arrK.length()) {
                                 val v = arrK.optString(i, "").trim()
                                 if (v.isNotEmpty()) backedPkgList.add(v)
                             }
                         }
                     }
-                    val missingPip = backedPipList.filter { normalizePipPkgName(it) !in currentPips }
-                    val missingPkg = backedPkgList.filter { it !in currentPkgs }
+                    // Incomplete inventories must never be interpreted as every package being missing.
+                    val missingPip = if (pipInventory.complete) backedPipList.filter { normalizePipPkgName(it) !in currentPips } else emptyList()
+                    val missingPkg = if (pkgInventory.complete) backedPkgList.filter { it !in currentPkgs } else emptyList()
                     writeJson(
                         out,
                         200,
@@ -3548,6 +3551,8 @@ def clipboard_set(text):
                             .put("pkgPackages", JSONArray(backedPkgList))
                             .put("missingPipPackages", JSONArray(missingPip))
                             .put("missingPkgPackages", JSONArray(missingPkg))
+                            .put("pipInventoryComplete", pipInventory.complete)
+                            .put("pkgInventoryComplete", pkgInventory.complete)
                     )
                 }
 
@@ -3556,8 +3561,10 @@ def clipboard_set(text):
                     if (manifest == null) {
                         writeJson(out, 404, JSONObject().put("error", "找不到套件備份清單"))
                     } else {
-                        val currentPips = collectInstalledPipNames().toSet()
-                        val currentPkgs = collectInstalledPkgNames().toSet()
+                        val pipInventory = collectInstalledPipInventory()
+                        val pkgInventory = collectInstalledPkgInventory()
+                        val currentPips = pipInventory.names.toSet()
+                        val currentPkgs = pkgInventory.names.toSet()
                         val needPkgs = mutableListOf("python", "python-pip")
                         val arrK = manifest.optJSONArray("pkgPackages")
                         if (arrK != null) {
@@ -3584,17 +3591,21 @@ def clipboard_set(text):
                             steps.add("(pkg update -y || true)")
                             steps.add("pkg install -y " + missingPkgsOnly.joinToString(" "))
                         }
+                        if (!pipInventory.complete && arrP != null && arrP.length() > 0) {
+                            // Python is not ready yet. Restore native packages first; retry pip restore after initialization.
+                            steps.add("echo '[DroidPy] Python package inventory is incomplete; skipped pip restore safely. Initialize Python, then retry restore.'")
+                        }
                         // Use the same embedded Termux interpreter for imports and pip installs.
                         val pythonCmd = File(usrDir, "bin/python3").absolutePath
-                        steps.add("test -x $pythonCmd || { echo '[DroidPy] Python is not ready; package restore aborted.' >&2; exit 127; }")
-                        val needsNumpy = needPips.any { normalizePipPkgName(it) == "numpy" }
-                        val remainingPips = needPips.filter { normalizePipPkgName(it) != "numpy" }
-                        if (needsNumpy) {
-                            // Use Termux's prebuilt native package and verify it with the script interpreter.
-                            steps.add("pkg install -y python-numpy && $pythonCmd -c 'import numpy' && echo '[DroidPy] NumPy ready (Termux binary package).'")
-                        }
-                        if (remainingPips.isNotEmpty()) {
-                            steps.add("$pythonCmd -m pip install --no-cache-dir " + remainingPips.joinToString(" "))
+                        if (pipInventory.complete) {
+                            steps.add("test -x $pythonCmd || { echo '[DroidPy] Python is not ready; package restore aborted.' >&2; exit 127; }")
+                            if (needsNumpy) {
+                                // Use Termux's prebuilt native package and verify it with the script interpreter.
+                                steps.add("pkg install -y python-numpy && $pythonCmd -c 'import numpy' && echo '[DroidPy] NumPy ready (Termux binary package).'")
+                            }
+                            if (remainingPips.isNotEmpty()) {
+                                steps.add("$pythonCmd -m pip install --no-cache-dir " + remainingPips.joinToString(" "))
+                            }
                         }
                         val restoreCmd = if (steps.isEmpty()) {
                             "echo '[DroidPy] 所有已備份套件均已存在，無需還原。'"
