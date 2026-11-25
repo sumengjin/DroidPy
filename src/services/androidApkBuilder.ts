@@ -1544,7 +1544,7 @@ class MainActivity : AppCompatActivity() {
                 localBridge = getOrStartRetainedBridge(usrDir, workspaceDir, bridgeAllowedOrigin)
                 appendStartupLog("Bridge", "Embedded bridge started successfully")
             } catch (error: Exception) {
-                appendStartupLog("Bridge", "Embedded bridge startup FAILED: ${error.stackTraceToString()}")
+                appendStartupLog("Bridge", "Embedded bridge startup FAILED: \${error.stackTraceToString()}")
                 throw error
             }
 
