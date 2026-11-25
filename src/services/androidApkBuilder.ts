@@ -3523,14 +3523,14 @@ def clipboard_set(text):
                     val backedPkgList = mutableListOf<String>()
                     if (manifest != null) {
                         val arrP = manifest.optJSONArray("pipPackages")
-                        if (pipInventory.complete && arrP != null) {
+                        if (arrP != null) {
                             for (i in 0 until arrP.length()) {
                                 val v = arrP.optString(i, "").trim()
                                 if (v.isNotEmpty()) backedPipList.add(v)
                             }
                         }
                         val arrK = manifest.optJSONArray("pkgPackages")
-                        if (pkgInventory.complete && arrK != null) {
+                        if (arrK != null) {
                             for (i in 0 until arrK.length()) {
                                 val v = arrK.optString(i, "").trim()
                                 if (v.isNotEmpty()) backedPkgList.add(v)
