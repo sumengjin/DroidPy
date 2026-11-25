@@ -4,6 +4,13 @@ All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
 
+### Fixed — Native browser bridge and Cookie capture
+- **修復原生瀏覽器「前往」呼叫失敗**：呼叫 `@JavascriptInterface` 方法時保留注入的 `DroidPyNative` 物件作為呼叫接收者，避免 Android WebView 回報 `Java bridge method can't be invoked on a non-injected object`。
+- **補強 APK 原生 Cookie 擷取**：擷取前驗證目前網址，成功讀取後同步至 IDE 事件與工作區 `cookies.json`；沒有 Cookie 時不再默默關閉瀏覽器，而是提示使用者確認登入狀態。寫入及事件派送失敗會顯示錯誤。
+- **增加原生診斷日誌**：記錄 Cookie 按鈕點擊、擷取開始／完成／無 Cookie／失敗及事件派送結果；不記錄 Cookie 值或登入憑證。
+- **更新 README**：釐清 Pyodide 與 Termux 的執行環境差異，更新 APK 原生瀏覽器安全邊界及 Cookie 擷取說明。
+
+
 ### Fixed — Native browser address-bar navigation
 - **修復 Android APK 網頁預覽按下「前往」沒有反應**：獨立 APK 的預覽畫面使用隔離的原生 WebView，而非一般瀏覽器的 iframe；原本地址列只更新 iframe 狀態，但 APK 畫面仍停留在提示頁。現在地址列送出、快速網址預設與「開啟原生瀏覽器」統一導向原生 WebView，並清除舊的 HTTP 探測結果，確保新網址立即開啟。
 - 補上原生瀏覽器導航分流與舊探測結果清理的回歸檢查。
