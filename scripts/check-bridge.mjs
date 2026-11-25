@@ -90,6 +90,8 @@ const cases = [
   ['pip', 'PIL', 'pkg', 'python-pillow'],
   ['pip', 'lxml', 'pkg', 'python-lxml'],
   ['pip', 'cryptography', 'pkg', 'python-cryptography'],
+  ['pip', 'matplotlib', 'pkg', 'matplotlib'],
+  ['pkg', 'matplotlib', 'pkg', 'matplotlib'],
   ['pkg', 'numpy', 'pkg', 'python-numpy'],
   ['pkg', './dist/library.tar.gz', 'pip', './dist/library.tar.gz'],
   ['pkg', '/sdcard/Download/library.tgz', 'pip', '/sdcard/Download/library.tgz'],

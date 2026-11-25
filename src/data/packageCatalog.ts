@@ -38,6 +38,11 @@ export const PACKAGE_CATEGORIES: { id: PackageCategoryId; labelKey: string }[] =
 ];
 
 export const TERMUX_PKG_NAME_HINTS: Record<string, { suggestedMode: 'pkg' | 'pip'; suggestedTarget: string; reason: string }> = {
+  matplotlib: {
+    suggestedMode: 'pkg',
+    suggestedTarget: 'matplotlib',
+    reason: 'Termux 提供原生 matplotlib 套件，避免 pip 在 Android 上編譯 matplotlib／contourpy 等原生依賴。',
+  },
   pandas: {
     suggestedMode: 'pkg',
     suggestedTarget: 'python-pandas',

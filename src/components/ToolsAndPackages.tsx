@@ -448,6 +448,7 @@ warn_on_root = 1
       pillow: 'python-pillow',
       pil: 'python-pillow',
       cryptography: 'python-cryptography',
+      matplotlib: 'matplotlib',
       lxml: 'python-lxml',
     };
     const termuxPkgs = new Set<string>([

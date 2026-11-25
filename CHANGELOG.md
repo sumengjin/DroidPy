@@ -5,6 +5,7 @@ All notable changes to **DroidPy** are documented in this file.
 ## [Unreleased]
 
 ### Fixed — Native Termux package routing and Python archive installs
+- **修正 matplotlib 在 Android 上的安裝方式**：將 `matplotlib` 自動導向 Termux 原生 `pkg install matplotlib`，避免 pip 下載大型 `.tar.gz` 後再長時間建置 `contourpy` 等原生相依套件；同步套用至匯出的 Termux 執行包及套件目錄提示，並加入安裝路由回歸測試。
 - **避免 Android 上對原生擴充套件進行漫長的 pip 原始碼編譯**：NumPy、pandas、Pillow/PIL、lxml 與 cryptography 優先使用內嵌 Termux 預編譯套件，並同步擴充至匯出的 Termux 執行包，避免 App 與匯出腳本採用不同安裝策略。
 - **正確辨識 Python 套件檔案格式**：`.whl`、`.tar.gz`、`.tgz`、`.tar.bz2`、`.tar.xz`、`.zip`、`.egg`、requirements 輸入與 Git editable 安裝交由 pip；若誤選 pkg，會自動切換至 pip，避免把 Python 壓縮套件交給 apt/pkg。系統 `.deb` 套件仍保留 pkg 路徑。
 - **優先選擇預編譯 wheel**：pip 安裝加入 `--prefer-binary`，有相容 wheel 時優先使用，只有沒有可用 wheel 時才退回原始碼建置；明確指定的 `.tar.gz` 原始碼包仍依套件本身需求建置。

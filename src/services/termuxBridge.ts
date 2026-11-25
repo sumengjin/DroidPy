@@ -1808,6 +1808,7 @@ export const TERMUX_NATIVE_PYTHON_PACKAGES: Record<string, string> = {
   pil: 'python-pillow',
   lxml: 'python-lxml',
   cryptography: 'python-cryptography',
+  matplotlib: 'matplotlib',
 };
 
 const PYTHON_ARCHIVE_PATTERN = /\.(?:whl|tar\.gz|tgz|tar\.bz2|tbz2|tar\.xz|txz|tar|zip|egg)(?:$|[?#])/i;
