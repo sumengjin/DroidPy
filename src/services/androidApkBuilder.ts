@@ -4285,83 +4285,18 @@ def clipboard_set(text):
                             val mode = bodyJson.optString("mode", "pip")
                             val target = bodyJson.optString("target", "").trim()
                             val trustedHost = bodyJson.optBoolean("trustedHost", false)
-                            val pythonCmd = File(usrDir, "bin/python3").absolutePath
                             if (mode == "pkg") {
                                 "pkg install -y $target"
-                            } else if (target.equals("parsel", ignoreCase = true)) {
-                                // DroidPy seeds a pure-Python Frostwork compatibility module for w3lib 2.6 navigation.
-                                // Use Termux's prebuilt lxml and avoid Rust/Maturin compilation on-device.
-                                val pipArgs = if (trustedHost) {
-                                    "--no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org"
-                                } else {
-                                    "--no-cache-dir"
-                                }
-                                "pkg install -y python-lxml && $pythonCmd -m pip install $pipArgs 'w3lib>=2.6' parsel"
-                            } else if (target.equals("polars", ignoreCase = true)) {
-                                // Use TUR's signed Android-native Polars package and Rust runtime, not pip/maturin.
-                                "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"
-                            } else if (target.equals("scikit-learn", ignoreCase = true)) {
-                                // Termux source archives may lose the executable bit on sklearn's Meson version.py.
-                                // Restore it before building against the already-installed native NumPy/SciPy.
-                                val trustArgs = if (trustedHost) "--trusted-host pypi.org --trusted-host files.pythonhosted.org" else ""
-                                val installerScript = File(usrDir, "tmp/droidpy-install-sklearn.py")
-                                installerScript.parentFile?.mkdirs()
-                                installerScript.writeText("""
-import json
-import os
-import pathlib
-import shlex
-import site
-import stat
-import sysconfig
-import subprocess
-import sys
-import tarfile
-import tempfile
-import urllib.parse
-
-with tempfile.TemporaryDirectory(prefix="droidpy-sklearn-") as tmp:
-    root = pathlib.Path(tmp)
-    metadata = json.loads(subprocess.check_output(["curl", "-fsSL", "https://pypi.org/pypi/scikit-learn/json"], text=True))
-    sdist = next(item for item in metadata["urls"] if item["packagetype"] == "sdist")
-    archive = root / "scikit-learn-sdist.tar.gz"
-    if urllib.parse.urlparse(sdist["url"]).hostname != "files.pythonhosted.org":
-        raise RuntimeError("Unexpected scikit-learn sdist host")
-    subprocess.check_call(["curl", "-fL", sdist["url"], "-o", str(archive)])
-    source_root = root / "source"
-    source_root.mkdir()
-    with tarfile.open(archive, "r:*") as package:
-        package.extractall(source_root, filter="data")
-    source = next(item for item in source_root.iterdir() if item.is_dir())
-    version_script = source / "sklearn" / "_build_utils" / "version.py"
-    version_script.parent.mkdir(parents=True, exist_ok=True)
-    version_script.write_text("#!" + sys.executable + "\\nprint(" + repr(metadata["info"]["version"]) + ")\\n", encoding="utf-8")
-    version_script.chmod(version_script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    # Meson-python embeds this console-script path into build.ninja. On Android,
-    # the pip-generated launcher can fail with exit 127; use the active Python
-    # interpreter explicitly so Ninja can execute Meson's internal copy command.
-    meson_launcher = pathlib.Path(sysconfig.get_path("scripts")) / "meson"
-    if not meson_launcher.is_file():
-        meson_launcher = pathlib.Path(site.getuserbase()) / "bin" / "meson"
-    if not meson_launcher.is_file():
-        raise RuntimeError("Meson user launcher is missing: " + str(meson_launcher))
-    meson_launcher.write_text(
-        '#!/system/bin/sh' + chr(10) + 'exec ' + shlex.quote(sys.executable) +
-        ' -m mesonbuild.mesonmain "$@"' + chr(10),
-        encoding="utf-8",
-    )
-    meson_launcher.chmod(0o755)
-    subprocess.check_call([str(meson_launcher), "--version"])
-    subprocess.check_call([
-        sys.executable, "-m", "pip", "install", "--no-cache-dir",
-        "--no-build-isolation", "--no-deps", str(source)
-    ])
-""".trimIndent())
-                                "pkg install -y python-numpy python-scipy ninja curl && $pythonCmd -m pip install --no-cache-dir $trustArgs --prefer-binary 'meson-python>=0.17.1,<0.20' 'cython>=3.1.2,<3.2.6' 'joblib>=1.4.0' 'narwhals>=2.0.1' 'threadpoolctl>=3.5.0' && $pythonCmd \\"$installerScript\\""
-                            } else if (trustedHost) {
-                                "$pythonCmd -m pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org $target"
                             } else {
-                                "$pythonCmd -m pip install --no-cache-dir $target"
+                                resolvePackageCompatibilityCommand(target, trustedHost)
+                                    ?: run {
+                                        val pythonCmd = File(usrDir, "bin/python3").absolutePath
+                                        if (trustedHost) {
+                                            "$pythonCmd -m pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org $target"
+                                        } else {
+                                            "$pythonCmd -m pip install --no-cache-dir $target"
+                                        }
+                                    }
                             }
                         }
                         else -> bodyJson.optString("command", "")
@@ -4732,67 +4667,95 @@ with tempfile.TemporaryDirectory(prefix="droidpy-sklearn-") as tmp:
         throw IllegalArgumentException("Too many redirects")
     }
 
-    private fun normalizeShellCommand(command: String): String {
-        // Keep the terminal's direct pip route aligned with the package manager's Android Parsel workaround.
-        // Restrict rewriting to the exact, simple install command; do not alter compound/custom shell commands.
-        // Match both short Python commands and DroidPy's absolute app-private interpreter path.
-        val pipPrefix = """(?:(?:[^\s;&|]*/)?python(?:3(?:\.\d+)?)?\s+-m\s+)?"""
-        val parselPip = Regex("""^\s*""" + pipPrefix + """pip3?\s+install\s+parsel\s*$""", RegexOption.IGNORE_CASE)
-        if (parselPip.matches(command)) {
-            val pythonCmd = File(usrDir, "bin/python3").absolutePath
-            return "pkg install -y python-lxml && $pythonCmd -m pip install --no-cache-dir 'w3lib>=2.6' parsel"
-        }
-        val scipyPip = Regex("""^\s*""" + pipPrefix + """pip3?\s+install\s+scipy\s*$""", RegexOption.IGNORE_CASE)
-        if (scipyPip.matches(command)) return "pkg install -y python-scipy"
-        val polarsPip = Regex("""^\s*""" + pipPrefix + """pip3?\s+install\s+polars\s*$""", RegexOption.IGNORE_CASE)
-        if (polarsPip.matches(command)) {
-            // Polars needs Android-native Rust runtime wheels; use the prebuilt TUR package, not maturin/rustup.
-            return "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"
-        }
-        val sklearnPip = Regex("""^\s*""" + pipPrefix + """pip3?\s+install\s+scikit-learn\s*$""", RegexOption.IGNORE_CASE)
-        if (sklearnPip.matches(command)) {
-            // Reuse Termux's working NumPy/SciPy; patch the upstream Meson version script before building.
-            val pythonCmd = File(usrDir, "bin/python3").absolutePath
-            val installerScript = File(usrDir, "tmp/droidpy-install-sklearn.py")
-            installerScript.parentFile?.mkdirs()
-            installerScript.writeText("""
+    private fun resolvePackageCompatibilityCommand(target: String, trustedHost: Boolean = false): String? {
+        val packageName = target.trim().lowercase().replace('_', '-')
+        val pythonCmd = File(usrDir, "bin/python3").absolutePath
+        return when (packageName) {
+            "parsel" -> {
+                val pipArgs = if (trustedHost) {
+                    "--no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org"
+                } else {
+                    "--no-cache-dir"
+                }
+                "pkg install -y python-lxml && $pythonCmd -m pip install $pipArgs 'w3lib>=2.6' parsel"
+            }
+            "scipy" -> "pkg install -y python-scipy"
+            "polars" -> "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"
+            "scikit-learn", "sklearn" -> {
+                val trustArgs = if (trustedHost) "--trusted-host pypi.org --trusted-host files.pythonhosted.org" else ""
+                val installerScript = File(usrDir, "tmp/droidpy-install-sklearn.py")
+                installerScript.parentFile?.mkdirs()
+                installerScript.writeText("""
 import json
+import os
 import pathlib
+import shlex
+import site
 import stat
+import sysconfig
 import subprocess
 import sys
 import tarfile
 import tempfile
-import urllib.request
+import urllib.parse
 
 with tempfile.TemporaryDirectory(prefix="droidpy-sklearn-") as tmp:
     root = pathlib.Path(tmp)
-    with urllib.request.urlopen("https://pypi.org/pypi/scikit-learn/json", timeout=30) as response:
-        metadata = json.load(response)
+    metadata = json.loads(subprocess.check_output(["curl", "-fsSL", "https://pypi.org/pypi/scikit-learn/json"], text=True))
     sdist = next(item for item in metadata["urls"] if item["packagetype"] == "sdist")
     archive = root / "scikit-learn-sdist.tar.gz"
-    urllib.request.urlretrieve(sdist["url"], archive)
+    if urllib.parse.urlparse(sdist["url"]).hostname != "files.pythonhosted.org":
+        raise RuntimeError("Unexpected scikit-learn sdist host")
+    subprocess.check_call(["curl", "-fL", sdist["url"], "-o", str(archive)])
     source_root = root / "source"
     source_root.mkdir()
     with tarfile.open(archive, "r:*") as package:
         package.extractall(source_root, filter="data")
     source = next(item for item in source_root.iterdir() if item.is_dir())
     version_script = source / "sklearn" / "_build_utils" / "version.py"
-    if not version_script.is_file():
-        raise RuntimeError("scikit-learn sdist is missing sklearn/_build_utils/version.py")
+    version_script.parent.mkdir(parents=True, exist_ok=True)
+    version_script.write_text("#!" + sys.executable + "\\nprint(" + repr(metadata["info"]["version"]) + ")\\n", encoding="utf-8")
     version_script.chmod(version_script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    meson_launcher = pathlib.Path(sysconfig.get_path("scripts")) / "meson"
+    if not meson_launcher.is_file():
+        meson_launcher = pathlib.Path(site.getuserbase()) / "bin" / "meson"
+    if not meson_launcher.is_file():
+        raise RuntimeError("Meson user launcher is missing: " + str(meson_launcher))
+    meson_launcher.write_text(
+        '#!/system/bin/sh' + chr(10) + 'exec ' + shlex.quote(sys.executable) +
+        ' -m mesonbuild.mesonmain "$@"' + chr(10),
+        encoding="utf-8",
+    )
+    meson_launcher.chmod(0o755)
+    subprocess.check_call([str(meson_launcher), "--version"])
     subprocess.check_call([
         sys.executable, "-m", "pip", "install", "--no-cache-dir",
         "--no-build-isolation", "--no-deps", str(source)
     ])
 """.trimIndent())
-            return "pkg install -y python-numpy python-scipy ninja && $pythonCmd -m pip install --no-cache-dir --prefer-binary 'meson-python>=0.17.1,<0.20' 'cython>=3.1.2,<3.2.6' 'joblib>=1.4.0' 'narwhals>=2.0.1' 'threadpoolctl>=3.5.0' && $pythonCmd \\"$installerScript\\""
+                "pkg install -y python-numpy python-scipy ninja curl && $pythonCmd -m pip install --no-cache-dir $trustArgs --prefer-binary 'meson-python>=0.17.1,<0.20' 'cython>=3.1.2,<3.2.6' 'joblib>=1.4.0' 'narwhals>=2.0.1' 'threadpoolctl>=3.5.0' && $pythonCmd \\"$installerScript\\""
+            }
+            else -> null
         }
-        val installPrefix = Regex("""^\s*pkg\s+install\b""", RegexOption.IGNORE_CASE)
+    }
+
+    private fun normalizeShellCommand(command: String): String {
+        // Only rewrite a single, unambiguous pip install; preserve custom shell commands.
+        // Match both short Python commands and DroidPy's absolute app-private interpreter path.
+        val pipPrefix = """(?:(?:[^\\s;&|]*/)?python(?:3(?:\\.\\d+)?)?\\s+-m\\s+)?"""
+        val pipInstall = Regex(
+            """^\\s*""" + pipPrefix + """pip3?\\s+install\\s+([A-Za-z0-9_.-]+)\\s*$""",
+            RegexOption.IGNORE_CASE
+        )
+        val packageMatch = pipInstall.find(command)
+        if (packageMatch != null) {
+            resolvePackageCompatibilityCommand(packageMatch.groupValues[1])?.let { return it }
+        }
+        val installPrefix = Regex("""^\\s*pkg\\s+install\\b""", RegexOption.IGNORE_CASE)
         val match = installPrefix.find(command) ?: return command
         val tailStart = match.range.last + 1
         val tail = command.substring(tailStart)
-        val tokens = tail.trim().split(Regex("""\s+""")).filter { it.isNotBlank() }
+        val tokens = tail.trim().split(Regex("""\\s+""")).filter { it.isNotBlank() }
         val safeTokens = tokens.isNotEmpty() && tokens.all {
             it.matches(Regex("""(?:--?[A-Za-z][A-Za-z0-9-]*|[A-Za-z0-9][A-Za-z0-9+_.-]*)"""))
         }
@@ -4804,7 +4767,7 @@ with tempfile.TemporaryDirectory(prefix="droidpy-sklearn-") as tmp:
         } else {
             emptyList()
         }
-        val hasAssumeYes = Regex("""(?:^|\s)(?:-y|--assume-yes)(?:\s|$)""", RegexOption.IGNORE_CASE)
+        val hasAssumeYes = Regex("""(?:^|\\s)(?:-y|--assume-yes)(?:\\s|$)""", RegexOption.IGNORE_CASE)
             .containsMatchIn(tail)
         val prefix = match.value + if (hasAssumeYes) "" else " -y"
         return if (safeTokens) prefix + " " + rewritten.joinToString(" ") else {
