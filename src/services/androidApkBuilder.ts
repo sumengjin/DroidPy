@@ -4264,8 +4264,8 @@ with tempfile.TemporaryDirectory(prefix="droidpy-sklearn-") as tmp:
         package.extractall(source_root, filter="data")
     source = next(item for item in source_root.iterdir() if item.is_dir())
     version_script = source / "sklearn" / "_build_utils" / "version.py"
-    if not version_script.is_file():
-        raise RuntimeError("scikit-learn sdist is missing sklearn/_build_utils/version.py")
+    version_script.parent.mkdir(parents=True, exist_ok=True)
+    version_script.write_text("#!" + sys.executable + "\\nprint(" + repr(metadata["info"]["version"]) + ")\\n", encoding="utf-8")
     version_script.chmod(version_script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     subprocess.check_call([
         sys.executable, "-m", "pip", "install", "--no-cache-dir",
