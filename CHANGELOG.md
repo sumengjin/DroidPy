@@ -1,5 +1,8 @@
 # Changelog / 更新日誌
 
+## [Unreleased]
+- **修復 Android Termux 的 Parsel 安裝相容性**：Parsel 安裝先使用 Termux 預編譯 `python-lxml`，並將 `w3lib` 限制在 `<2.6`，避免新版 `w3lib 2.6.0` 引入目前不支援 Android/Bionic 目標的 Frostwork Rust 擴充編譯依賴。
+
 All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
