@@ -3204,6 +3204,7 @@ def clipboard_set(text):
     // Keep backup restoration aligned with the native package routing used by the UI.
     private val nativeTermuxPythonPackages = mapOf(
         "numpy" to "python-numpy",
+        "scipy" to "python-scipy",
         "pandas" to "python-pandas",
         "pillow" to "python-pillow",
         "pil" to "python-pillow",
@@ -4597,6 +4598,13 @@ def clipboard_set(text):
     }
 
     private fun normalizeShellCommand(command: String): String {
+        // Keep the terminal's direct pip route aligned with the package manager's Android Parsel workaround.
+        // Restrict rewriting to the exact, simple install command; do not alter compound/custom shell commands.
+        val parselPip = Regex("""^\s*(?:(?:python|python3)\s+-m\s+)?pip3?\s+install\s+parsel\s*$""", RegexOption.IGNORE_CASE)
+        if (parselPip.matches(command)) {
+            val pythonCmd = File(usrDir, "bin/python3").absolutePath
+            return "pkg install -y python-lxml && $pythonCmd -m pip install --no-cache-dir 'w3lib<2.6' parsel"
+        }
         val installPrefix = Regex("""^\s*pkg\s+install\b""", RegexOption.IGNORE_CASE)
         val match = installPrefix.find(command) ?: return command
         val tailStart = match.range.last + 1
