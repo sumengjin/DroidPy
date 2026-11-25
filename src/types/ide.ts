@@ -124,6 +124,9 @@ export interface CapturedCookieItem {
   domain?: string;
   path?: string;
   httpOnly?: boolean;
+  secure?: boolean;
+  expiresAt?: number;
+  sameSite?: string;
 }
 
 export interface CrawlerSessionData {

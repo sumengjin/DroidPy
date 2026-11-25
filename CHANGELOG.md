@@ -4,6 +4,14 @@ All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
 
+### Fixed — Termux execution ownership and crawler browser sessions
+- **避免重複啟動互相中斷腳本**：Termux 串流請求不再因第二個操作自動取消第一個工作；已有工作時明確拒絕新的串流請求，只有使用者明確按下停止才會中斷目前串流。明確停止造成的 HTTP Abort 不再偽裝成 Python 程序退出碼 130，讓真正的 SIGINT／程序退出碼保留診斷價值。
+- **修復爬蟲 Cookie 匯入與跨網域覆蓋**：Cookie 合併改以名稱、Domain、Path 作為識別，避免不同子網域或路徑的同名 Cookie 互相覆蓋；匯入與匯出保留 HttpOnly、Secure、SameSite、Expires／Max-Age 等可取得屬性，Netscape cookies.txt 也會保留安全旗標。
+- **修復 Python 爬蟲工作階段還原**：產生的 `crawler_session.py` 會從 `cookie_list` 建立具 Domain／Path／Secure／Expires 屬性的 Requests CookieJar，同時相容舊版只有 `cookies` 字典的 `cookies.json`。
+- **強化內建 Android 瀏覽器安全性**：限制地址列只載入有效 HTTP／HTTPS 網址，停用本機檔案與 Content URI 存取及混合內容，明確拒絕 TLS 憑證錯誤；外部頁面仍在獨立瀏覽器 WebView 中執行，不會取得主 IDE 的原生 JavaScript Bridge。
+- **新增串流所有權、Cookie 範圍、Cookie 匯入／匯出及產生 Python 腳本的回歸檢查**；Android 實機瀏覽器登入與 Cookie 擷取仍需新版 APK 驗證。
+
+
 ### Fixed — Native package restore and terminal package aliases
 - **修正備份還原錯把原生套件交給 pip 編譯**：還原時依照 Termux 原生套件對照表，先以 APT 安裝 NumPy、pandas、Pillow、lxml、cryptography 與 matplotlib，再把其餘純 Python 套件交給同一個 Termux Python 的 pip；避免 NumPy／pandas 等大型原生套件在 Android 上從原始碼建置。
 - **修正終端機套件名稱別名**：直接輸入 `pkg install pandas`、`pkg install numpy` 等簡單套件命令時，自動改用 Termux 實際套件名稱（例如 `python-pandas`、`python-numpy`），並保留多套件與既有安裝旗標；複雜 shell 指令不做危險改寫。

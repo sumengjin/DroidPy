@@ -81,7 +81,113 @@ assert.ok(terminalUi.includes('paused ? \'繼續\' : \'暫停\''));
 const appSource = await readFile('src/App.tsx', 'utf8');
 assert.ok(appSource.includes('pauseTermuxProcess(termuxConfig)'));
 assert.ok(appSource.includes('resumeTermuxProcess(termuxConfig)'));
+assert.ok(appSource.includes('termuxScriptStartLockRef.current = true'));
+assert.ok(appSource.includes('termuxScriptStartLockRef.current = false'));
 assert.ok(!androidBuilder.includes('private val executor = Executors.newCachedThreadPool()'));
+
+// A second streamed action must never cancel the currently running Python job.
+// Only the explicit Stop control is allowed to abort its AbortController.
+const termuxBridgeSource = await readFile('src/services/termuxBridge.ts', 'utf8');
+assert.ok(termuxBridgeSource.includes('已有 Termux 工作正在執行'));
+assert.ok(!termuxBridgeSource.includes("  abortActiveTermuxStream();\n  const controller = new AbortController();"));
+const abortHelperStart = termuxBridgeSource.indexOf('export function abortActiveTermuxStream(): void {');
+const abortHelperEnd = termuxBridgeSource.indexOf('\n}', abortHelperStart);
+assert.ok(abortHelperStart >= 0 && abortHelperEnd > abortHelperStart);
+assert.ok(!termuxBridgeSource.slice(abortHelperStart, abortHelperEnd).includes('activeStreamController = null'));
+assert.ok(termuxBridgeSource.includes('return { exitCode: -1, durationMs: 0 };'));
+assert.ok(termuxBridgeSource.includes('return { exitCode: -1, durationMs };'));
+
+// Exercise the actual crawler cookie helpers: cookie scope must be part of identity,
+// and Set-Cookie attributes must survive JSON export and generated Python requests code.
+const crawlerBundle = await build({
+  entryPoints: ['src/utils/crawlerSession.ts'],
+  bundle: true,
+  platform: 'node',
+  format: 'esm',
+  target: 'node20',
+  write: false,
+});
+const crawlerModuleUrl = `data:text/javascript;base64,${Buffer.from(crawlerBundle.outputFiles[0].text).toString('base64')}`;
+const {
+  buildCookiesJsonContent,
+  buildPythonCrawlerScript,
+  mergeCookieLists,
+  normalizeUrlInput,
+  parseRawCrawlerInput,
+  parseSetCookieLines,
+} = await import(crawlerModuleUrl);
+const scopedCookies = mergeCookieLists(
+  [
+    { name: 'sid', value: 'old-a', enabled: true, domain: '.example.com', path: '/a' },
+    { name: 'sid', value: 'old-b', enabled: true, domain: '.example.com', path: '/b' },
+  ],
+  [{ name: 'sid', value: 'new-a', enabled: true, domain: '.example.com', path: '/a' }]
+);
+assert.equal(scopedCookies.length, 2);
+assert.equal(scopedCookies.find((cookie) => cookie.path === '/a')?.value, 'new-a');
+const parsedSetCookies = parseSetCookieLines([
+  'sid=secret; Domain=.example.com; Path=/account; HttpOnly; Secure; SameSite=None; Max-Age=3600',
+]);
+assert.equal(parsedSetCookies.length, 1);
+assert.equal(parsedSetCookies[0].domain, '.example.com');
+assert.equal(parsedSetCookies[0].path, '/account');
+assert.equal(parsedSetCookies[0].httpOnly, true);
+assert.equal(parsedSetCookies[0].secure, true);
+assert.equal(parsedSetCookies[0].sameSite, 'None');
+assert.ok((parsedSetCookies[0].expiresAt ?? 0) > Math.floor(Date.now() / 1000));
+const imported = parseRawCrawlerInput(JSON.stringify({
+  cookies: [{ name: 'sid', value: 'secret', domain: '.example.com', path: '/account', secure: true, httpOnly: true, sameSite: 'Lax', expiresAt: 2000000000 }],
+}));
+assert.equal(imported.cookies[0].domain, '.example.com');
+assert.equal(imported.cookies[0].secure, true);
+const netscapeImported = parseRawCrawlerInput(
+  '# Netscape HTTP Cookie File\n#HttpOnly_.example.com\tTRUE\t/account\tTRUE\t2000000000\tsid\tsecret'
+);
+assert.equal(netscapeImported.cookies.length, 1);
+assert.equal(netscapeImported.cookies[0].httpOnly, true);
+assert.equal(netscapeImported.cookies[0].secure, true);
+assert.equal(netscapeImported.cookies[0].path, '/account');
+const crawlerSession = {
+  url: 'https://example.com/account',
+  userAgent: 'DroidPy CI',
+  cookies: parsedSetCookies,
+  extraHeaders: {},
+  capturedAt: Date.now(),
+};
+const cookieJson = JSON.parse(buildCookiesJsonContent(crawlerSession));
+assert.equal(cookieJson.cookie_list[0].sameSite, 'None');
+assert.equal(cookieJson.cookie_list[0].secure, true);
+const generatedCrawler = buildPythonCrawlerScript(crawlerSession);
+assert.ok(generatedCrawler.includes('from requests.cookies import create_cookie'));
+assert.ok(generatedCrawler.includes('data.get("cookie_list") or []'));
+assert.ok(generatedCrawler.includes('sess.cookies.set_cookie(cookie)'));
+assert.ok(generatedCrawler.includes('cookie.domain_specified = False'));
+assert.ok(generatedCrawler.includes('target_url = urlparse(url)'));
+assert.ok(generatedCrawler.includes('target_url.path or "/"'));
+assert.ok(generatedCrawler.includes('cookie_expires = int(expires_value) if expires_value is not None else None'));
+assert.equal(normalizeUrlInput('example.com'), 'https://example.com/');
+assert.throws(() => normalizeUrlInput('javascript:alert(1)'), /網址無效/);
+const crawlerTempDir = await mkdtemp(path.join(os.tmpdir(), 'droidpy-crawler-check-'));
+try {
+  const crawlerFile = path.join(crawlerTempDir, 'crawler_session.py');
+  await writeFile(crawlerFile, generatedCrawler, 'utf8');
+  const result = spawnSync('python3', ['-m', 'py_compile', crawlerFile], { encoding: 'utf8' });
+  if (result.status !== 0) {
+    throw new Error(`Generated crawler Python failed py_compile:\n${result.stdout}\n${result.stderr}`);
+  }
+} finally {
+  await rm(crawlerTempDir, { recursive: true, force: true });
+}
+
+const browserPanel = await readFile('src/components/CrawlerBrowserPanel.tsx', 'utf8');
+assert.ok(browserPanel.includes('safeAddressHref'));
+assert.ok(browserPanel.includes('Host-only cookie'));
+assert.ok(browserPanel.includes('sandbox="allow-scripts allow-forms allow-popups"'));
+assert.ok(!browserPanel.includes('allow-same-origin'));
+assert.ok(androidBuilder.includes('settings.allowFileAccess = false'));
+assert.ok(androidBuilder.includes('settings.allowContentAccess = false'));
+assert.ok(androidBuilder.includes('WebSettings.MIXED_CONTENT_NEVER_ALLOW'));
+assert.ok(androidBuilder.includes('handler?.cancel()'));
 
 // Native buffered shell commands must wait with a timeout before reading output,
 // redirect output to a bounded temporary file, and return diagnostic stderr.

@@ -84,6 +84,13 @@ export const CrawlerBrowserPanel: React.FC<CrawlerBrowserPanelProps> = ({
   );
 
   const isDesktopUa = session.userAgent === DESKTOP_CHROME_UA;
+  const safeAddressHref = useMemo(() => {
+    try {
+      return normalizeUrlInput(urlInput);
+    } catch {
+      return 'about:blank';
+    }
+  }, [urlInput]);
   const enabledCookiesCount = session.cookies.filter((c) => c.enabled).length;
   const bookmarkletCode = useMemo(() => buildBookmarkletCode(), []);
 
@@ -93,7 +100,14 @@ export const CrawlerBrowserPanel: React.FC<CrawlerBrowserPanelProps> = ({
   }, [session.url]);
 
   const navigateTo = (rawUrl: string) => {
-    const clean = normalizeUrlInput(rawUrl);
+    let clean: string;
+    try {
+      clean = normalizeUrlInput(rawUrl);
+    } catch (err) {
+      setProbeError(err instanceof Error ? err.message : String(err));
+      return;
+    }
+    setProbeError(null);
     setUrlInput(clean);
     setLoadedUrl(clean);
     setIframeNonce((n) => n + 1);
@@ -111,13 +125,26 @@ export const CrawlerBrowserPanel: React.FC<CrawlerBrowserPanelProps> = ({
   };
 
   const handleOpenNativeBrowser = () => {
-    const clean = normalizeUrlInput(urlInput);
+    let clean: string;
+    try {
+      clean = normalizeUrlInput(urlInput);
+    } catch (err) {
+      setProbeError(err instanceof Error ? err.message : String(err));
+      return;
+    }
+    setProbeError(null);
     onChangeSession({ ...session, url: clean });
     window.DroidPyNative?.openCrawlerBrowser?.(clean, isDesktopUa);
   };
 
   const handleProbeViaTermux = async () => {
-    const clean = normalizeUrlInput(urlInput);
+    let clean: string;
+    try {
+      clean = normalizeUrlInput(urlInput);
+    } catch (err) {
+      setProbeError(err instanceof Error ? err.message : String(err));
+      return;
+    }
     setUrlInput(clean);
     setProbing(true);
     setProbeError(null);
@@ -336,7 +363,7 @@ export const CrawlerBrowserPanel: React.FC<CrawlerBrowserPanelProps> = ({
             <RotateCw className="w-3.5 h-3.5" />
           </button>
           <a
-            href={normalizeUrlInput(urlInput)}
+            href={safeAddressHref}
             target="_blank"
             rel="noopener noreferrer"
             aria-label={t('brw_open_tab')}
@@ -564,6 +591,11 @@ export const CrawlerBrowserPanel: React.FC<CrawlerBrowserPanelProps> = ({
                             HttpOnly
                           </span>
                         )}
+                      </div>
+                      <div className="mt-0.5 text-[10px] text-[var(--ide-text-muted)] truncate">
+                        {[cookie.domain, cookie.path, cookie.secure ? 'Secure' : '', cookie.sameSite ? `SameSite=${cookie.sameSite}` : '']
+                          .filter(Boolean)
+                          .join(' · ') || 'Host-only cookie'}
                       </div>
                       <input
                         type="text"
