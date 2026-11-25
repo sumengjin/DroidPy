@@ -248,7 +248,7 @@ jobs:
             done
             VNAME="${REL_TAG#v}"
           fi
-          if [ "$IS_RELEASE_REF" != "true" ]; then VNAME="${VER}-Beta"; fi
+          if [ "$IS_RELEASE_REF" != "true" ]; then VNAME="${REL_TAG#v}-Beta"; fi
           CODE_VERSION="${VNAME%%-*}"
           CODE=$(echo "$CODE_VERSION" | awk -F. '{print ($1*1000000)+($2*1000)+$3}')
           echo "DROIDPY_VERSION_NAME=$VNAME" >> "$GITHUB_ENV"
