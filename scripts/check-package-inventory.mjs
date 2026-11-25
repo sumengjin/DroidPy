@@ -17,9 +17,9 @@ assert.match(frostworkSource, /def navigation\(/, 'pure-Python Frostwork navigat
 assert.match(frostworkSource, /class Page:/, 'pure-Python multi-field extraction API must be bundled');
 assert.match(frostworkSource, /def _css_nodes\(/, 'CSS selector fallback must be bundled');
 assert.match(frostworkSource, /def _xpath_nodes\(/, 'XPath selector fallback must be bundled');
-assert.match(frostworkMetadata, /Name: frostwork[\\s\\S]*Version: 0\\.2\\.2/);
+assert.ok(frostworkMetadata.includes('Name: frostwork') && frostworkMetadata.includes('Version: 0.2.2'));
 assert.match(source, /Pure-Python Frostwork fallback seed warning/);
-assert.match(source, /python\\/frostwork\\/__init__\\.py/);
+assert.ok(source.includes('python/frostwork/__init__.py'));
 
 for (const item of catalogItems) {
   const packageId = item.match(/^([^']+)/)?.[1] || 'unknown';
