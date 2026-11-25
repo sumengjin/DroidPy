@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Trash2, Copy, Check, AlertCircle, CornerDownLeft, Download, Maximize2, X, Square, FileText } from 'lucide-react';
+import { Trash2, Copy, Check, AlertCircle, CornerDownLeft, Download, Maximize2, X, FileText } from 'lucide-react';
 import { ExecutionEngine, PyodideStatus, TerminalEntry } from '../types/ide';
 import { renderAnsiText, stripAnsi } from '../utils/ansiParser';
 import { useI18n } from '../services/i18n';
@@ -174,7 +174,6 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   onSubmitInput,
   onRunRepl,
   onSendTermuxStdin,
-  onStopTermux,
   onOpenLogs,
   enableSandboxAddon = false,
   isDark,
