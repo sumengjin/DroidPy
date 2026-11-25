@@ -837,22 +837,54 @@ def _build_probe_headers(data):
 
 
 
+def _scikit_learn_source_install_command(trusted_host=False):
+    # Termux source archives can lose the executable bit on sklearn's Meson version script.
+    # Download the official PyPI sdist, restore that bit, then build against native NumPy/SciPy.
+    build_deps = _build_pip_cmd([
+        "meson-python>=0.17.1,<0.20",
+        "cython>=3.1.2,<3.2.6",
+        "joblib>=1.4.0",
+        "narwhals>=2.0.1",
+        "threadpoolctl>=3.5.0",
+    ], trusted_host=trusted_host)
+    installer_code = "\\n".join([
+        "import json, pathlib, stat, subprocess, tarfile, tempfile, urllib.parse",
+        "with tempfile.TemporaryDirectory(prefix='droidpy-sklearn-') as tmp:",
+        "    root = pathlib.Path(tmp)",
+        "    metadata = json.loads(subprocess.check_output(['curl', '-fsSL', 'https://pypi.org/pypi/scikit-learn/json'], text=True))",
+        "    sdist = next(item for item in metadata['urls'] if item['packagetype'] == 'sdist')",
+        "    archive = root / 'scikit-learn-sdist.tar.gz'",
+        "    if urllib.parse.urlparse(sdist['url']).hostname != 'files.pythonhosted.org': raise RuntimeError('Unexpected scikit-learn sdist host')",
+        "    subprocess.check_call(['curl', '-fL', sdist['url'], '-o', str(archive)])",
+        "    source_root = root / 'source'",
+        "    source_root.mkdir()",
+        "    with tarfile.open(archive, 'r:*') as package:",
+        "        package.extractall(source_root, filter='data')",
+        "    source = next(item for item in source_root.iterdir() if item.is_dir())",
+        "    version_script = source / 'sklearn' / '_build_utils' / 'version.py'",
+        "    version_script.parent.mkdir(parents=True, exist_ok=True)",
+        "    version_script.write_text('#!' + __import__('sys').executable + '\\\\nprint(' + repr(metadata['info']['version']) + ')\\\\n', encoding='utf-8')",
+        "    version_script.chmod(version_script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)",
+        "    subprocess.check_call([__import__('sys').executable, '-m', 'pip', 'install', '--no-cache-dir', '--no-build-isolation', '--no-deps', str(source)])",
+    ])
+    installer = shlex.join([sys.executable, "-c", installer_code])
+    return "pkg install -y python-numpy python-scipy ninja curl && " + shlex.join(build_deps) + " && " + installer
+
+
 def _normalize_shell_command(command):
-    # Mirror the package-manager Parsel workaround for direct terminal installs.
+    # Also recognize the absolute Termux Python path emitted by DroidPy's terminal.
     # Only rewrite a single, unambiguous package command; leave custom shell syntax untouched.
-    if re.fullmatch(r"\\s*(?:(?:python|python3)\\s+-m\\s+)?pip3?\\s+install\\s+parsel\\s*", command, re.IGNORECASE):
+    pip_prefix = r"(?:(?:[^\\s;&|]*/)?python(?:3(?:\\.\\d+)?)?\\s+-m\\s+)?"
+    if re.fullmatch(r"\\s*" + pip_prefix + r"pip3?\\s+install\\s+parsel\\s*", command, re.IGNORECASE):
         return "pkg install -y python-lxml && " + shlex.join(_build_pip_cmd(["w3lib<2.6", "parsel"]))
-    if re.fullmatch(r"\\s*(?:(?:python|python3)\\s+-m\\s+)?pip3?\\s+install\\s+scipy\\s*", command, re.IGNORECASE):
+    if re.fullmatch(r"\\s*" + pip_prefix + r"pip3?\\s+install\\s+scipy\\s*", command, re.IGNORECASE):
         return "pkg install -y python-scipy"
-    if re.fullmatch(r"\\s*(?:(?:python|python3)\\s+-m\\s+)?pip3?\\s+install\\s+polars\\s*", command, re.IGNORECASE):
+    if re.fullmatch(r"\\s*" + pip_prefix + r"pip3?\\s+install\\s+polars\\s*", command, re.IGNORECASE):
         # Polars requires Android-native Rust runtime wheels; use the prebuilt TUR package.
         return "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"
-    if re.fullmatch(r"\\s*(?:(?:python|python3)\\s+-m\\s+)?pip3?\\s+install\\s+scikit-learn\\s*", command, re.IGNORECASE):
-        # Reuse native NumPy/SciPy and disable build isolation so pip never compiles a duplicate NumPy.
-        python_cmd = shlex.join([sys.executable, "-m", "pip"])
-        build_deps = shlex.join(["install", "--no-cache-dir", "--prefer-binary", "meson-python>=0.17.1,<0.22", "cython>=3.1.2,<3.2.6", "joblib>=1.4.0", "narwhals>=2.0.1", "threadpoolctl>=3.5.0"])
-        build_sklearn = shlex.join(["install", "--no-cache-dir", "--no-build-isolation", "--no-deps", "scikit-learn"])
-        return "pkg install -y python-numpy python-scipy ninja && " + python_cmd + " " + build_deps + " && " + python_cmd + " " + build_sklearn
+    if re.fullmatch(r"\\s*" + pip_prefix + r"pip3?\\s+install\\s+scikit-learn\\s*", command, re.IGNORECASE):
+        return _scikit_learn_source_install_command()
+
     if not re.match(r"^\\s*pkg\\s+install\\b", command, re.IGNORECASE):
         return command
     if re.search(r"(?:^|\\s)(?:-y|--assume-yes)(?:\\s|$)", command, re.IGNORECASE):
@@ -1215,19 +1247,7 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
                 # Use TUR's signed Android-native Polars package and Rust runtime, not pip/maturin.
                 cmd = ["sh", "-c", "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"]
             elif target.lower() == "scikit-learn":
-                # Reuse native NumPy/SciPy; no-build-isolation prevents pip from rebuilding NumPy.
-                build_deps = _build_pip_cmd([
-                    "meson-python>=0.17.1,<0.22",
-                    "cython>=3.1.2,<3.2.6",
-                    "joblib>=1.4.0",
-                    "narwhals>=2.0.1",
-                    "threadpoolctl>=3.5.0",
-                ], trusted_host=trusted_host)
-                build_sklearn = [sys.executable, "-m", "pip", "install", "--no-cache-dir", "--no-build-isolation", "--no-deps"]
-                if trusted_host:
-                    build_sklearn.extend(["--trusted-host", "pypi.org", "--trusted-host", "files.pythonhosted.org"])
-                build_sklearn.append("scikit-learn")
-                cmd = ["sh", "-c", "pkg install -y python-numpy python-scipy ninja && " + shlex.join(build_deps) + " && " + shlex.join(build_sklearn)]
+                cmd = ["sh", "-c", _scikit_learn_source_install_command(trusted_host=trusted_host)]
             else:
                 cmd = _build_pip_cmd(pkgs, trusted_host=trusted_host)
             if self.path == "/install-stream":
