@@ -1,6 +1,6 @@
 {
   "name": "DroidPy",
-  "description": "專為 Android 系統打造的 Python IDE 開發環境，支援離線 PWA 安裝、觸控符號列、即時終端機與 PyPI 套件管理。",
+  "description": "Android 優先 Python IDE，結合離線 Pyodide 3.12、原生 Termux Python、互動式終端機、專案檔案管理、爬蟲瀏覽器與 Cookie 工作台，並支援自動建置及發布 ARM64 APK。",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -17,7 +17,7 @@ export default defineConfig(() => {
           id: '/',
           name: 'DroidPy — Android Python IDE',
           short_name: 'DroidPy',
-          description: '專為 Android 系統打造的 Python IDE 開發環境，支援離線執行、觸控符號列與 PyPI 套件。',
+          description: 'Android 優先 Python IDE，結合離線 Pyodide 3.12、原生 Termux Python、互動式終端機、爬蟲瀏覽器與 Cookie 工作台。',
           theme_color: '#0B0F17',
           background_color: '#0B0F17',
           display: 'standalone',
