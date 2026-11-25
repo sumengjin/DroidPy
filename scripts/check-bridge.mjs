@@ -134,6 +134,13 @@ const imported = parseRawCrawlerInput(JSON.stringify({
 }));
 assert.equal(imported.cookies[0].domain, '.example.com');
 assert.equal(imported.cookies[0].secure, true);
+const netscapeImported = parseRawCrawlerInput(
+  '# Netscape HTTP Cookie File\\n#HttpOnly_.example.com\\tTRUE\\t/account\\tTRUE\\t2000000000\\tsid\\tsecret'
+);
+assert.equal(netscapeImported.cookies.length, 1);
+assert.equal(netscapeImported.cookies[0].httpOnly, true);
+assert.equal(netscapeImported.cookies[0].secure, true);
+assert.equal(netscapeImported.cookies[0].path, '/account');
 const crawlerSession = {
   url: 'https://example.com/account',
   userAgent: 'DroidPy CI',
@@ -148,6 +155,8 @@ const generatedCrawler = buildPythonCrawlerScript(crawlerSession);
 assert.ok(generatedCrawler.includes('from requests.cookies import create_cookie'));
 assert.ok(generatedCrawler.includes('data.get("cookie_list") or []'));
 assert.ok(generatedCrawler.includes('sess.cookies.set_cookie(cookie)'));
+assert.ok(generatedCrawler.includes('cookie.domain_specified = False'));
+assert.ok(generatedCrawler.includes('urlparse(url).hostname'));
 assert.equal(normalizeUrlInput('example.com'), 'https://example.com/');
 assert.throws(() => normalizeUrlInput('javascript:alert(1)'), /網址無效/);
 const crawlerTempDir = await mkdtemp(path.join(os.tmpdir(), 'droidpy-crawler-check-'));
