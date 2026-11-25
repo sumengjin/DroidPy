@@ -88,7 +88,7 @@ WORKSPACE = os.path.expanduser("~/droidpy_workspace")
 os.makedirs(WORKSPACE, exist_ok=True)
 
 PROC_LOCK = threading.Lock()
-ACTIVE_PROC = {"pid": None, "pgid": None, "master_fd": None, "started_at": 0.0}
+ACTIVE_PROC = {"pid": None, "pgid": None, "master_fd": None, "started_at": 0.0, "paused": False}
 _LEGACY_CERTS_SUPPORTED = None
 
 def _set_active(pid, pgid, master_fd):
@@ -97,6 +97,7 @@ def _set_active(pid, pgid, master_fd):
         ACTIVE_PROC["pgid"] = pgid
         ACTIVE_PROC["master_fd"] = master_fd
         ACTIVE_PROC["started_at"] = time.time()
+        ACTIVE_PROC["paused"] = False
 
 def _clear_active():
     with PROC_LOCK:
@@ -104,6 +105,7 @@ def _clear_active():
         ACTIVE_PROC["pgid"] = None
         ACTIVE_PROC["master_fd"] = None
         ACTIVE_PROC["started_at"] = 0.0
+        ACTIVE_PROC["paused"] = False
 
 def _find_certifi_source():
     for getter in (
@@ -835,6 +837,14 @@ def _build_probe_headers(data):
 
 
 
+def _normalize_shell_command(command):
+    if not re.match(r"^\\s*pkg\\s+install\\b", command, re.IGNORECASE):
+        return command
+    if re.search(r"(?:^|\\s)(?:-y|--assume-yes)(?:\\s|$)", command, re.IGNORECASE):
+        return command
+    return re.sub(r"^(\\s*pkg\\s+install\\b)", r"\\1 -y", command, count=1, flags=re.IGNORECASE)
+
+
 class DroidPyBridgeHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -1108,6 +1118,22 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
             except OSError as exc:
                 return self._send_json(500, {"error": str(exc)})
 
+        if self.path in ("/pause", "/resume"):
+            with PROC_LOCK:
+                pgid = ACTIVE_PROC.get("pgid")
+                paused = ACTIVE_PROC.get("paused", False)
+            if pgid is None:
+                return self._send_json(409, {"ok": False, "error": "目前沒有正在執行的程序"})
+            should_pause = self.path == "/pause"
+            try:
+                os.killpg(pgid, signal.SIGSTOP if should_pause else signal.SIGCONT)
+                with PROC_LOCK:
+                    if ACTIVE_PROC.get("pgid") == pgid:
+                        ACTIVE_PROC["paused"] = should_pause
+                return self._send_json(200, {"ok": True, "paused": should_pause})
+            except OSError as exc:
+                return self._send_json(500, {"ok": False, "paused": paused, "error": str(exc)})
+
         if self.path == "/stop":
             with PROC_LOCK:
                 pgid = ACTIVE_PROC.get("pgid")
@@ -1183,7 +1209,7 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
             if not cmd_str:
                 return self._send_json(400, {"error": "Empty command"})
             if self.path == "/shell-stream":
-                return self._stream_pty_command(cmd_str, shell=True)
+                return self._stream_pty_command(_normalize_shell_command(cmd_str), shell=True)
 
             t0 = time.perf_counter()
             proc = subprocess.run(cmd_str, shell=True, cwd=WORKSPACE, capture_output=True, text=True, timeout=180)
@@ -1588,6 +1614,24 @@ export async function stopTermuxProcess(config: TermuxConfig): Promise<void> {
       method: 'POST',
       body: JSON.stringify({}),
     },
+    4000
+  );
+}
+
+export async function pauseTermuxProcess(config: TermuxConfig): Promise<void> {
+  await termuxFetch<{ ok: boolean; paused: boolean }>(
+    config,
+    '/pause',
+    { method: 'POST', body: JSON.stringify({}) },
+    4000
+  );
+}
+
+export async function resumeTermuxProcess(config: TermuxConfig): Promise<void> {
+  await termuxFetch<{ ok: boolean; paused: boolean }>(
+    config,
+    '/resume',
+    { method: 'POST', body: JSON.stringify({}) },
     4000
   );
 }

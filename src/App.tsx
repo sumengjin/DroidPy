@@ -101,6 +101,8 @@ import {
   parseOutdatedPipJson,
   sendTermuxStdin,
   stopTermuxProcess,
+  pauseTermuxProcess,
+  resumeTermuxProcess,
   streamInstallInTermux,
   streamRestoreBackedUpPackages,
   streamRunInTermux,
@@ -419,6 +421,8 @@ export default function App() {
   const [termuxError, setTermuxError] = useState<string | null>(null);
   const [termuxHealth, setTermuxHealth] = useState<TermuxHealthInfo | null>(null);
   const [termuxRunning, setTermuxRunning] = useState(false);
+  const [termuxPaused, setTermuxPaused] = useState(false);
+  const [termuxScriptRunning, setTermuxScriptRunning] = useState(false);
   const [backupStatus, setBackupStatus] = useState<PackageBackupStatus | null>(null);
   const [restoringBackup, setRestoringBackup] = useState(false);
   const [dismissedBackupBanner, setDismissedBackupBanner] = useState(false);
@@ -1209,6 +1213,8 @@ export default function App() {
     const entryFile = resolveRunnableEntry();
     if (!entryFile) return;
     focusOutputPane('terminal');
+    setTermuxPaused(false);
+    setTermuxScriptRunning(true);
     setTermuxRunning(true);
     setRunStartedAt(Date.now());
     setTermuxError(null);
@@ -1288,6 +1294,8 @@ export default function App() {
         appLog('termux', `Aborted execution of ${entryFile.name}`, { level: 'warn' });
       }
     } finally {
+      setTermuxScriptRunning(false);
+      setTermuxPaused(false);
       setRunStartedAt(null);
       setTermuxRunning(false);
     }
@@ -1631,6 +1639,24 @@ export default function App() {
     [termuxConfig, appendEntry]
   );
 
+  const handleToggleTermuxPause = useCallback(async () => {
+    try {
+      if (termuxPaused) {
+        await resumeTermuxProcess(termuxConfig);
+        setTermuxPaused(false);
+        appendEntry('system', '腳本已繼續執行');
+      } else {
+        await pauseTermuxProcess(termuxConfig);
+        setTermuxPaused(true);
+        appendEntry('system', '腳本已暫停');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      appendEntry('stderr', message);
+      showToast(message);
+    }
+  }, [termuxConfig, termuxPaused, appendEntry, showToast]);
+
   const handleStopTermux = useCallback(async () => {
     abortActiveTermuxStream();
     appLog('termux', 'User stopped running Termux process', { level: 'warn' });
@@ -1641,6 +1667,7 @@ export default function App() {
     } catch (err) {
       showToast(err instanceof Error ? err.message : t('toast_termux_disconnected'));
     } finally {
+      setTermuxPaused(false);
       setTermuxRunning(false);
     }
   }, [termuxConfig, appendEntry, showToast, t]);
@@ -3128,6 +3155,9 @@ export default function App() {
                       onSubmitInput={handleSubmitInput}
                       onRunRepl={handleRunRepl}
                       onSendTermuxStdin={handleSendTermuxStdin}
+                      paused={termuxPaused}
+                      canPause={termuxScriptRunning}
+                      onTogglePause={handleToggleTermuxPause}
                       onOpenLogs={() => setShowLogsModal(true)}
                       enableSandboxAddon={Boolean(settings.enableSandboxAddon)}
                       isDark={getThemeMeta(settings.theme).isDark}

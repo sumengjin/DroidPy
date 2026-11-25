@@ -38,6 +38,10 @@ assert.ok(generated.includes('request_queue_size = 16'));
 assert.ok(generated.includes('threading.BoundedSemaphore(8)'));
 assert.ok(generated.includes('self.send_header("Connection", "close")'));
 assert.ok(generated.includes('self.close_connection = True'));
+assert.ok(generated.includes('if self.path in ("/pause", "/resume"):'));
+assert.ok(generated.includes('os.killpg(pgid, signal.SIGSTOP if should_pause else signal.SIGCONT)'));
+assert.ok(generated.includes('def _normalize_shell_command(command):'));
+assert.ok(generated.includes('return re.sub(r"^(\\s*pkg\\s+install\\b)", r"\\1 -y"'));
 assert.ok(generated.includes('BoundedThreadingHTTPServer(("127.0.0.1", 8765), DroidPyBridgeHandler)'));
 
 // Native Bridge limits are checked against the actual generated Android source.
@@ -55,7 +59,32 @@ assert.ok(androidBuilder.includes('len > 8 * 1024 * 1024'));
 assert.ok(androidBuilder.includes('duplicateContentLength'));
 assert.ok(androidBuilder.includes('headers.containsKey("transfer-encoding")'));
 assert.ok(androidBuilder.includes('Only the explicit /stop action may terminate that process.'));
+assert.ok(androidBuilder.includes('"/pause"'));
+assert.ok(androidBuilder.includes('"/resume"'));
+assert.ok(androidBuilder.includes('android.os.Process.sendSignal(pid, signal)'));
+assert.ok(androidBuilder.includes('private fun normalizeShellCommand(command: String): String'));
+assert.ok(androidBuilder.includes('ProcessBuilder(shFile.absolutePath, "-c", wrappedCommand)'));
+assert.ok(androidBuilder.includes('activeProcessPidFile.takeIf { it.isFile }'));
+assert.ok(androidBuilder.includes('wrappedCommand'));
+assert.ok(!androidBuilder.includes('proc.pid()'));
+const terminalUi = await readFile('src/components/TerminalPanel.tsx', 'utf8');
+assert.ok(terminalUi.includes('paused ? \'繼續\' : \'暫停\''));
+const appSource = await readFile('src/App.tsx', 'utf8');
+assert.ok(appSource.includes('pauseTermuxProcess(termuxConfig)'));
+assert.ok(appSource.includes('resumeTermuxProcess(termuxConfig)'));
 assert.ok(!androidBuilder.includes('private val executor = Executors.newCachedThreadPool()'));
+
+// Native buffered shell commands must wait with a timeout before reading output,
+// redirect output to a bounded temporary file, and return diagnostic stderr.
+const bufferedShellStart = androidBuilder.indexOf('private fun runBufferedShellCommand(command: String): JSONObject {');
+const bufferedShellEnd = androidBuilder.indexOf('private fun streamShellCommand', bufferedShellStart);
+assert.ok(bufferedShellStart >= 0 && bufferedShellEnd > bufferedShellStart);
+const bufferedShell = androidBuilder.slice(bufferedShellStart, bufferedShellEnd);
+assert.ok(bufferedShell.includes('pb.redirectOutput(logFile)'));
+assert.ok(bufferedShell.includes('proc.waitFor(120, java.util.concurrent.TimeUnit.SECONDS)'));
+assert.ok(bufferedShell.includes('2L * 1024L * 1024L'));
+assert.ok(bufferedShell.includes('.put("stderr", stripAnsiForLog(stderrText))'));
+assert.ok(!bufferedShell.includes('proc.inputStream.bufferedReader(Charsets.UTF_8).readText()'));
 
 // Shared-storage state backups must fail closed if JSON sanitization fails;
 // otherwise malformed state could leak the per-install bridge credential.
