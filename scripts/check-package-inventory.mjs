@@ -34,8 +34,8 @@ for (const item of catalogItems) {
   );
 }
 assert.match(bridgeSource, /matplotlib:\s*'matplotlib'/);
-assert.match(catalogSource, /id: 'pandas',[\\s\\S]*?termux: \\{ mode: 'pkg', targetName: 'python-pandas' \\}/);
-assert.match(catalogSource, /id: 'matplotlib',[\\s\\S]*?termux: \\{ mode: 'pkg', targetName: 'matplotlib' \\}/);
+assert.match(catalogSource, /id: 'pandas',[\s\S]*?termux: \{ mode: 'pkg', targetName: 'python-pandas' \}/);
+assert.match(catalogSource, /id: 'matplotlib',[\s\S]*?termux: \{ mode: 'pkg', targetName: 'matplotlib' \}/);
 
 assert.match(source, /'w3lib>=2\.6' parsel/, 'embedded APK installs must use the bundled pure-Python fallback');
 assert.match(source, /w3lib>=2\.6/, 'embedded terminal routing must use the fallback');
