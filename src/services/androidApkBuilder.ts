@@ -524,6 +524,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Class-level helper: startup code invokes this throughout the initialization thread.
+    // Keep it outside the thread lambda so every call is in scope before execution.
+    private fun appendStartupLog(tag: String, msg: String) {
+        appendActivityLog(tag, msg)
+    }
+
     private fun installCrashDiagnostics() {
         synchronized(MainActivity::class.java) {
             if (crashDiagnosticsInstalled) return
@@ -1509,19 +1515,6 @@ class MainActivity : AppCompatActivity() {
             val hasExistingUsrData = usrDir.exists() && (
                 !usrDir.isDirectory || usrDir.listFiles()?.isNotEmpty() != false
             )
-
-            fun appendStartupLog(tag: String, msg: String) {
-                val line = "[$tag] $msg"
-                try {
-                    val lf = File(filesDir, "droidpy_native.log")
-                    val ts = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
-                    lf.appendText("[$ts] $line\\n")
-                } catch (_: Exception) {
-                }
-                // Mirror startup diagnostics to Logcat so they remain observable when
-                // the app exits before its WebView or in-app log viewer becomes usable.
-                android.util.Log.i("DroidPy", line)
-            }
 
             appendStartupLog("MainActivity", "onCreate startup: hasExistingInstall=$hasExistingInstall pid=\${android.os.Process.myPid()} restoredState=\${savedInstanceState != null}")
 
