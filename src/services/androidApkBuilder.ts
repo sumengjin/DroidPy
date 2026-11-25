@@ -3650,6 +3650,9 @@ def clipboard_set(text):
                             }
                         }
                         val missingPkgsOnly = (needPkgs + nativeRestoreTargets).distinct().filter { it !in currentPkgs }
+                        if (nativeRestoreTargets.isNotEmpty()) {
+                            steps.add("echo '[DroidPy] Restoring native Termux packages: " + nativeRestoreTargets.joinToString(" ") + "'")
+                        }
                         if (missingPkgsOnly.isNotEmpty()) {
                             steps.add("(pkg update -y || true)")
                             steps.add("pkg install -y " + missingPkgsOnly.joinToString(" "))
@@ -3664,9 +3667,6 @@ def clipboard_set(text):
                             val restoreFailureFile = File(workspaceDir, ".droidpy-restore-failed").absolutePath
                             steps.add("test -x $pythonCmd || { echo '[DroidPy] Python is not ready; package restore aborted.' >&2; exit 127; }")
                             steps.add("rm -f $restoreFailureFile")
-                            if (nativeRestoreTargets.isNotEmpty()) {
-                                steps.add("echo '[DroidPy] Restoring native Termux packages: " + nativeRestoreTargets.joinToString(" ") + "'")
-                            }
                             if (remainingPips.isNotEmpty()) {
                                 steps.add("if $pythonCmd -m pip install --no-cache-dir --prefer-binary " + remainingPips.joinToString(" ") + "; then echo '[DroidPy] Remaining pip packages restored.'; else echo '[DroidPy] One or more pip packages failed to restore.' >&2; touch $restoreFailureFile; fi")
                             }
