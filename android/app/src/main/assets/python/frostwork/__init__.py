@@ -256,17 +256,40 @@ def _xpath_nodes(root, selector):
     if attr_match:
         attr_name = attr_match.group(1)
         value = value[:attr_match.start()]
-    absolute = value.startswith("/")
-    segments = [part for part in value.split("/") if part and part != "."]
+
+    if value.startswith(".//"):
+        index, axis = 3, "descendant"
+    elif value.startswith("//"):
+        index, axis = 2, "descendant"
+    elif value.startswith("./"):
+        index, axis = 2, "child"
+    elif value.startswith("/"):
+        index, axis = 1, "child"
+    else:
+        raise UnsupportedSelector("Unsupported XPath path: " + value)
+
+    steps = []
+    while index < len(value):
+        slash = value.find("/", index)
+        segment = value[index:] if slash < 0 else value[index:slash]
+        if segment:
+            steps.append((axis, segment))
+        if slash < 0:
+            break
+        if value.startswith("//", slash):
+            axis, index = "descendant", slash + 2
+        else:
+            axis, index = "child", slash + 1
+
     current = [root]
-    for segment in segments:
+    for axis, segment in steps:
         match = re.fullmatch(r"([A-Za-z*][\w*-]*)(?:\[@([\w:-]+)(?:=['\"]([^'\"]*)['\"])?\])?", segment)
         if not match:
             raise UnsupportedSelector("Unsupported XPath step: " + segment)
         tag, attr, expected = match.groups()
         next_nodes = []
         for parent in current:
-            pool = list(_walk(parent)) if absolute or parent is root else [
+            pool = list(_walk(parent)) if axis == "descendant" else [
                 child for child in parent.children if isinstance(child, _Node)
             ]
             for node in pool:
@@ -278,13 +301,11 @@ def _xpath_nodes(root, selector):
                     continue
                 next_nodes.append(node)
         current = next_nodes
-        absolute = False
     if attr_name:
         return [node.attrs[attr_name] for node in current if attr_name in node.attrs]
     if text_only:
         return [child for node in current for child in node.children if isinstance(child, str)]
     return current
-
 
 def _query(root, selector, syntax="css"):
     expression = selector.strip()
