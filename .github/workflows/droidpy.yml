@@ -138,6 +138,8 @@ jobs:
           CUSTOM_KEY_ALIAS: ${{ secrets.DROIDPY_KEY_ALIAS }}
           CUSTOM_KEY_PASS: ${{ secrets.DROIDPY_KEY_PASSWORD }}
           INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          CURRENT_REPO: ${{ github.repository }}
         run: |
           INPUT_TAG="${INPUT_RELEASE_TAG:-}"
           if [ -n "$INPUT_TAG" ] && ! [[ "$INPUT_TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
@@ -159,13 +161,27 @@ jobs:
           fi
           echo "DROIDPY_RELEASE_BUILD=$IS_RELEASE_REF" >> "$GITHUB_ENV"
 
-          if [ "$IS_RELEASE_REF" = "true" ]; then
+          # Same-repository PRs may use the protected signing key for stable Beta updates.
+          # Fork PRs never receive signing secrets. Release builds always require the key.
+          USE_SIGNING_KEY="$IS_RELEASE_REF"
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ "${PR_HEAD_REPO:-}" = "${CURRENT_REPO:-}" ]; then
+            if [ -n "$CUSTOM_KS_B64" ] && [ -n "$CUSTOM_STORE_PASS" ] && [ -n "$CUSTOM_KEY_ALIAS" ] && [ -n "$CUSTOM_KEY_PASS" ]; then
+              USE_SIGNING_KEY=true
+            fi
+          fi
+          if [ "$USE_SIGNING_KEY" = "true" ]; then
             for secret_name in CUSTOM_KS_B64 CUSTOM_STORE_PASS CUSTOM_KEY_ALIAS CUSTOM_KEY_PASS; do
               if [ -z "${!secret_name}" ]; then
-                echo "::error::正式發布缺少必要的 GitHub Actions Secret：$secret_name（請確認四項 Secret 均已建立且名稱完全一致）。"
-                exit 1
+                if [ "$IS_RELEASE_REF" = "true" ]; then
+                  echo "::error::正式發布缺少必要的 GitHub Actions Secret：$secret_name（請確認四項 Secret 均已建立且名稱完全一致）。"
+                  exit 1
+                fi
+                USE_SIGNING_KEY=false
+                break
               fi
             done
+          fi
+          if [ "$USE_SIGNING_KEY" = "true" ]; then
             # Normalize pasted line breaks/spaces before decoding the one-line Base64 file.
             CUSTOM_KS_B64_CLEAN=$(printf '%s' "$CUSTOM_KS_B64" | tr -d '[:space:]')
             if ! printf '%s' "$CUSTOM_KS_B64_CLEAN" | base64 --decode > android/app/droidpy-release.keystore 2>base64-error.txt; then
@@ -223,9 +239,17 @@ jobs:
               exit 1
             fi
             echo "DROIDPY_EXPECTED_CERT_SHA256=$KEYSTORE_SHA256" >> "$GITHUB_ENV"
-            echo "已驗證新的 DroidPy Release 憑證：$KEYSTORE_SHA256"
+            if [ "$IS_RELEASE_REF" = "true" ]; then
+              echo "已驗證新的 DroidPy Release 憑證：$KEYSTORE_SHA256"
+            else
+              echo "已驗證 Beta 使用受保護的穩定 DroidPy 簽名憑證：$KEYSTORE_SHA256"
+            fi
           else
-            echo "PR／非正式建置使用 GitHub Actions 臨時 Debug 簽名；不需要正式發布金鑰。"
+            if [ "$IS_RELEASE_REF" = "true" ]; then
+              echo "::error::正式 Release 不可使用臨時 Debug 簽名。"
+              exit 1
+            fi
+            echo "非可信任 PR／Fork 使用臨時 Debug 簽名；同一來源的 Beta 更新請保持來源可信任。"
           fi
           if [ -n "$INPUT_TAG" ]; then
             REL_TAG="v${INPUT_TAG#v}"
@@ -315,7 +339,15 @@ jobs:
             fi
             echo "已確認 Release APK 使用本次受保護的新簽名憑證（SHA-256: $ACTUAL_SHA256）。"
           else
-            echo "已確認 PR Debug APK 簽名結構有效（SHA-256: $ACTUAL_SHA256）。"
+            if [ -n "${DROIDPY_EXPECTED_CERT_SHA256:-}" ]; then
+              if [ "$ACTUAL_SHA256" != "$DROIDPY_EXPECTED_CERT_SHA256" ]; then
+                echo "::error::Beta APK 簽名與受保護的穩定憑證不一致，拒絕產出可更新測試版。"
+                exit 1
+              fi
+              echo "已確認 Beta APK 使用穩定 DroidPy 憑證（SHA-256: $ACTUAL_SHA256）。"
+            else
+              echo "已確認 PR Debug APK 簽名結構有效（臨時憑證 SHA-256: $ACTUAL_SHA256）。"
+            fi
           fi
 
       - name: 整理發佈版本與 APK 檔名
