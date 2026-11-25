@@ -23,7 +23,13 @@ const workflowFile = zip.file('.github/workflows/build-apk.yml');
 assert.ok(workflowFile, 'exported Android project must include its build workflow');
 const workflow = await workflowFile.async('string');
 
-assert.ok(workflow.includes('workflow_dispatch:'));
+assert.ok(workflow.includes('workflow_dispatch:'));const releaseHeadingParser = "VER=$(sed -nE 's/^## \\[([0-9]+\\.[0-9]+\\.[0-9]+)\\].*/\\1/p' CHANGELOG.md 2>/dev/null | head -n1 || true)";
+assert.ok(workflow.includes(releaseHeadingParser));
+assert.ok(workflow.includes('actions/checkout@v5'));
+assert.ok(workflow.includes('actions/setup-node@v5'));
+assert.ok(!workflow.includes('actions/checkout@v4'));
+assert.ok(!workflow.includes('actions/setup-node@v4'));
+
 assert.ok(workflow.includes('release_tag:'));
 assert.ok(workflow.includes('permissions:'));
 assert.ok(workflow.includes('contents: read'));
