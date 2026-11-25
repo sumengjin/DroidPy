@@ -4706,6 +4706,7 @@ def clipboard_set(text):
                     }
                 }
                 code = proc.waitFor()
+                appendNativeLog("Exec", "Process exited pid=\${proc.pid()} exitCode=$code")
             } catch (e: Exception) {
                 if (activeProcessStopRequested) {
                     appendNativeLog("Exec", "Process output read ended after explicit Stop pid=\${proc?.pid()} (\${e.javaClass.simpleName}: \${e.message})")
