@@ -248,7 +248,9 @@ jobs:
             done
             VNAME="${REL_TAG#v}"
           fi
-          CODE=$(echo "$VNAME" | awk -F. '{print ($1*1000000)+($2*1000)+$3}')
+          if [ "$IS_RELEASE_REF" != "true" ]; then VNAME="${VER}-Beta"; fi
+          CODE_VERSION="${VNAME%%-*}"
+          CODE=$(echo "$CODE_VERSION" | awk -F. '{print ($1*1000000)+($2*1000)+$3}')
           echo "DROIDPY_VERSION_NAME=$VNAME" >> "$GITHUB_ENV"
           echo "DROIDPY_VERSION_CODE=$CODE" >> "$GITHUB_ENV"
           echo "DROIDPY_RESOLVED_TAG=$REL_TAG" >> "$GITHUB_ENV"
@@ -322,7 +324,7 @@ jobs:
             REL_TAG="debug-${GITHUB_RUN_NUMBER}"
             SAFE_TAG="$REL_TAG"
             ART_NAME="DroidPy-arm64-debug-${GITHUB_RUN_NUMBER}-a${GITHUB_RUN_ATTEMPT:-1}"
-            cp android/app/build/outputs/apk/debug/*.apk "release-apk/DroidPy-arm64-debug-${GITHUB_RUN_NUMBER}.apk"
+            cp android/app/build/outputs/apk/debug/*.apk "release-apk/DroidPy-arm64-${DROIDPY_VERSION_NAME}.apk"
           else
             REL_TAG="${DROIDPY_RESOLVED_TAG}"
             SAFE_TAG="${REL_TAG//\//-}"
