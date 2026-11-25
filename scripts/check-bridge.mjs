@@ -81,6 +81,8 @@ assert.ok(terminalUi.includes('paused ? \'繼續\' : \'暫停\''));
 const appSource = await readFile('src/App.tsx', 'utf8');
 assert.ok(appSource.includes('pauseTermuxProcess(termuxConfig)'));
 assert.ok(appSource.includes('resumeTermuxProcess(termuxConfig)'));
+assert.ok(appSource.includes('termuxScriptStartLockRef.current = true'));
+assert.ok(appSource.includes('termuxScriptStartLockRef.current = false'));
 assert.ok(!androidBuilder.includes('private val executor = Executors.newCachedThreadPool()'));
 
 // A second streamed action must never cancel the currently running Python job.
