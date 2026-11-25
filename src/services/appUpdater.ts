@@ -117,9 +117,9 @@ function mapGitHubReleases(rawList: RawGitHubRelease[]): AppReleaseInfo[] {
 
 export const BUILTIN_LOCAL_RELEASES: AppReleaseInfo[] = [
   {
-    tagName: 'v1.2.29',
-    version: '1.2.29',
-    name: 'DroidPy v1.2.29',
+    tagName: 'v1.2.31',
+    version: '1.2.31',
+    name: 'DroidPy v1.2.31',
     publishedAt: '2026-11-25',
     htmlUrl: '',
     prerelease: false,
@@ -130,11 +130,11 @@ export const BUILTIN_LOCAL_RELEASES: AppReleaseInfo[] = [
     ].join('\\n'),
   },
   {
-    tagName: 'v1.2.28',
-    version: '1.2.28',
-    name: 'DroidPy v1.2.28',
+    tagName: 'v1.2.30',
+    version: '1.2.30',
+    name: 'DroidPy v1.2.30',
     publishedAt: '2026-11-25',
-    htmlUrl: 'https://github.com/sumengjin/DroidPy/releases/tag/v1.2.28',
+    htmlUrl: 'https://github.com/sumengjin/DroidPy/releases/tag/v1.2.30',
     prerelease: false,
     apkAssets: [],
     body: [
