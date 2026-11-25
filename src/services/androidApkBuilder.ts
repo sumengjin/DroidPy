@@ -143,7 +143,7 @@ jobs:
             REL_TAG="v$VNAME"
           else
             REL_TAG="debug-$GITHUB_RUN_NUMBER"
-            VNAME="${VER}-Beta"
+            VNAME="\${VER}-Beta"
           fi
           SEMVER_PART=$(printf '%s' "$VNAME" | grep -oE '^[0-9]+[.][0-9]+[.][0-9]+' || echo '1.2.34')
           IFS='.' read -r CMAJ CMIN CPAT <<< "$SEMVER_PART"
@@ -216,7 +216,7 @@ jobs:
           if [ "$DROIDPY_RELEASE_BUILD" = true ]; then
             cp android/app/build/outputs/apk/release/*.apk "release-apk/${appSlug}-arm64-\${DROIDPY_RESOLVED_TAG}.apk"
           else
-            cp android/app/build/outputs/apk/debug/*.apk "release-apk/${appSlug}-arm64-${VNAME}.apk"
+            cp android/app/build/outputs/apk/debug/*.apk "release-apk/${appSlug}-arm64-\${VNAME}.apk"
           fi
 
       - name: Upload APK Artifact
