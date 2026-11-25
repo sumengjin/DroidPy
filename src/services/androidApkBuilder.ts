@@ -1281,6 +1281,14 @@ class MainActivity : AppCompatActivity() {
         webView.addJavascriptInterface(NativeDownloadBridge(), "DroidPyNative")
         webView.webChromeClient = WebChromeClient()
         webView.webViewClient = object : WebViewClient() {
+            override fun onRenderProcessGone(
+                view: WebView?,
+                detail: android.webkit.RenderProcessGoneDetail?
+            ): Boolean {
+                appendActivityLog("WebView", "Renderer process gone didCrash=${detail?.didCrash()}")
+                return false
+            }
+
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 if (request != null && !request.isForMainFrame) {
                     // The privileged JavaScript interface must never be exposed to child frames.
@@ -1797,6 +1805,7 @@ class MainActivity : AppCompatActivity() {
 
     @Suppress("DEPRECATION")
     override fun onTrimMemory(level: Int) {
+        appendActivityLog("Memory", "onTrimMemory level=$level")
         super.onTrimMemory(level)
         if (level >= TRIM_MEMORY_MODERATE) {
             runOnUiThread {
@@ -1806,6 +1815,11 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    override fun onLowMemory() {
+        appendActivityLog("Memory", "onLowMemory callback")
+        super.onLowMemory()
     }
 
     override fun onDestroy() {
