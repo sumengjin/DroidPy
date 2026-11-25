@@ -164,7 +164,7 @@ assert.ok(androidBuilder.includes('meson_launcher.chmod(0o755)'));
 assert.ok(androidBuilder.includes('subprocess.check_call([str(meson_launcher), "--version"])'));
 assert.ok(androidBuilder.includes('package.extractall(source_root, filter="data")'));
 assert.ok(androidBuilder.includes("pkg install -y python-lxml && $pythonCmd -m pip install $pipArgs 'w3lib>=2.6' parsel"));
-assert.ok(androidBuilder.includes('w3lib 2.6.0 added Frostwork'));
+assert.ok(androidBuilder.includes('DroidPy seeds a pure-Python Frostwork compatibility module'));
 assert.ok(androidBuilder.includes('val nativeRestoreTargets = linkedSetOf<String>()'));
 assert.ok(androidBuilder.includes('val remainingPips = mutableListOf<String>()'));
 assert.ok(androidBuilder.includes('Restoring native Termux packages: '));
