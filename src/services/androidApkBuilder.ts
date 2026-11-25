@@ -4742,20 +4742,20 @@ with tempfile.TemporaryDirectory(prefix="droidpy-sklearn-") as tmp:
     private fun normalizeShellCommand(command: String): String {
         // Only rewrite a single, unambiguous pip install; preserve custom shell commands.
         // Match both short Python commands and DroidPy's absolute app-private interpreter path.
-        val pipPrefix = """(?:(?:[^\\s;&|]*/)?python(?:3(?:\\.\\d+)?)?\\s+-m\\s+)?"""
+        val pipPrefix = """(?:(?:[^\s;&|]*/)?python(?:3(?:\.\d+)?)?\s+-m\s+)?"""
         val pipInstall = Regex(
-            """^\\s*""" + pipPrefix + """pip3?\\s+install\\s+([A-Za-z0-9_.-]+)\\s*$""",
+            """^\s*""" + pipPrefix + """pip3?\s+install\s+([A-Za-z0-9_.-]+)\s*$""",
             RegexOption.IGNORE_CASE
         )
         val packageMatch = pipInstall.find(command)
         if (packageMatch != null) {
             resolvePackageCompatibilityCommand(packageMatch.groupValues[1])?.let { return it }
         }
-        val installPrefix = Regex("""^\\s*pkg\\s+install\\b""", RegexOption.IGNORE_CASE)
+        val installPrefix = Regex("""^\s*pkg\s+install\b""", RegexOption.IGNORE_CASE)
         val match = installPrefix.find(command) ?: return command
         val tailStart = match.range.last + 1
         val tail = command.substring(tailStart)
-        val tokens = tail.trim().split(Regex("""\\s+""")).filter { it.isNotBlank() }
+        val tokens = tail.trim().split(Regex("""\s+""")).filter { it.isNotBlank() }
         val safeTokens = tokens.isNotEmpty() && tokens.all {
             it.matches(Regex("""(?:--?[A-Za-z][A-Za-z0-9-]*|[A-Za-z0-9][A-Za-z0-9+_.-]*)"""))
         }
@@ -4767,7 +4767,7 @@ with tempfile.TemporaryDirectory(prefix="droidpy-sklearn-") as tmp:
         } else {
             emptyList()
         }
-        val hasAssumeYes = Regex("""(?:^|\\s)(?:-y|--assume-yes)(?:\\s|$)""", RegexOption.IGNORE_CASE)
+        val hasAssumeYes = Regex("""(?:^|\s)(?:-y|--assume-yes)(?:\s|$)""", RegexOption.IGNORE_CASE)
             .containsMatchIn(tail)
         val prefix = match.value + if (hasAssumeYes) "" else " -y"
         return if (safeTokens) prefix + " " + rewritten.joinToString(" ") else {
