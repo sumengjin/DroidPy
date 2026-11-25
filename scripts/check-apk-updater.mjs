@@ -42,12 +42,13 @@ assert.ok(updater.includes('compatibleHistory.containsAll(installedCurrent)'));
 assert.ok(!updater.includes('29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA'));
 assert.ok(!updater.includes('expectedFingerprint'));
 
-// Production Release verification must follow the protected keystore selected
-// for this build, not a stale hard-coded certificate fingerprint.
+// Every APK variant must use the protected keystore and the recovered original
+// DroidPy certificate fingerprint; a changed signing key must fail closed.
 const workflow = await readFile('.github/workflows/droidpy.yml', 'utf8');
 assert.ok(workflow.includes('keytool -exportcert -keystore "$KEYSTORE_PATH"'));
 assert.ok(workflow.includes('KEYSTORE_PATH="android/app/${DROIDPY_KEYSTORE_FILE:-droidpy-custom.keystore}"'));
-assert.ok(workflow.includes('APK 簽名與本次受保護 keystore 不一致'));
-assert.ok(!workflow.includes('29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA'));
+assert.ok(workflow.includes('受保護 keystore 不符合 DroidPy 原始憑證指紋'));
+assert.ok(workflow.includes('APK 簽名不是 DroidPy 原始憑證'));
+assert.ok(workflow.includes('29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA'));
 
 console.log('Native APK updater HTTPS redirect, size, atomic download and installed-signer checks passed.');
