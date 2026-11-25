@@ -1,9 +1,14 @@
 import sys
 from pathlib import Path
+from importlib.metadata import version
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "android/app/src/main/assets/python"))
 
 from frostwork import Page, navigation, UnsupportedSelector
+
+
+def test_local_distribution_metadata_satisfies_w3lib_floor():
+    assert version('frostwork') == '0.2.2'
 
 
 def test_navigation_base_and_refresh():
