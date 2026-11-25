@@ -40,6 +40,8 @@ assert.ok(generated.includes('self.send_header("Connection", "close")'));
 assert.ok(generated.includes('self.close_connection = True'));
 assert.ok(generated.includes('if self.path in ("/pause", "/resume"):'));
 assert.ok(generated.includes('os.killpg(pgid, signal.SIGSTOP if should_pause else signal.SIGCONT)'));
+assert.ok(generated.includes('def _normalize_shell_command(command):'));
+assert.ok(generated.includes('return re.sub(r"^(\\s*pkg\\s+install\\b)", r"\\1 -y"'));
 assert.ok(generated.includes('BoundedThreadingHTTPServer(("127.0.0.1", 8765), DroidPyBridgeHandler)'));
 
 // Native Bridge limits are checked against the actual generated Android source.
@@ -60,6 +62,8 @@ assert.ok(androidBuilder.includes('Only the explicit /stop action may terminate 
 assert.ok(androidBuilder.includes('"/pause"'));
 assert.ok(androidBuilder.includes('"/resume"'));
 assert.ok(androidBuilder.includes('android.os.Process.sendSignal(pid, signal)'));
+assert.ok(androidBuilder.includes('private fun normalizeShellCommand(command: String): String'));
+assert.ok(androidBuilder.includes('ProcessBuilder(shFile.absolutePath, "-c", normalizedCommand)'));
 const terminalUi = await readFile('src/components/TerminalPanel.tsx', 'utf8');
 assert.ok(terminalUi.includes('paused ? \'繼續\' : \'暫停\''));
 const appSource = await readFile('src/App.tsx', 'utf8');
