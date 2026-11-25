@@ -4,6 +4,11 @@ All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
 
+### Fixed — Termux package restore & mobile run controls
+- **避免 NumPy 還原在手機上長時間原始碼編譯**：備份還原偵測到缺少 NumPy 時，優先透過 Termux 預編譯套件 `python-numpy` 安裝並執行 `import numpy` 驗證；其餘 pip 套件獨立繼續還原，不再把 NumPy 原始碼交給 pip 建置。
+- **整合手機版執行／停止操作**：將執行與停止狀態切換集中到右上角頂欄，從終端機輸入列移除重複的停止按鈕，避免操作入口分散。
+
+
 ### CI — Improve release signing diagnostics
 - 新增解碼後 keystore 原始位元組 SHA-256 比對，確認 GitHub Secret 是否與離線原始套件完全一致；擴充 keytool 無 stderr 時的合併輸出診斷，將簽名故障定位到具體原因。
 - 正式簽名載入前先正規化 Base64 空白，輸出不含 Secret 的解碼檔案大小；keytool 失敗時提供安全診斷，並強制核對預期 SHA-256 指紋，防止錯誤金鑰被用於正式 APK。
