@@ -637,7 +637,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
         </div>
 
         <div className="selectable-text rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] px-3.5 py-2.5 font-mono text-[11px] text-[var(--ide-text-muted)] overflow-x-auto no-scrollbar whitespace-nowrap">
-          pkg update -y && pkg install -y python clang libxml2 libxslt && pip install requests beautifulsoup4 lxml httpx
+          pkg update -y && pkg install -y python python-pip python-lxml libxml2 libxslt clang && pip install --no-cache-dir requests beautifulsoup4 httpx
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
