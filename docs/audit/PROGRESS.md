@@ -4,7 +4,7 @@
 > 最後更新：2026-11-25
 > 審核基準主分支：`e6e035776707d4bfb99ab9a1837ad2d477ca9c2d`（PR #39 合併後）
 > 本次審核更新分支：`audit/release-pipeline-and-doc-refresh`
-> 已確認最新正式版：v1.2.32；v1.2.33 的主分支 Release run #347 當時仍在建置。
+> 已確認最新正式版：v1.2.33；主分支 Release run #347 已成功。
 
 ## 目前狀態
 
@@ -17,7 +17,7 @@
 - [x] 驗證 v1.2.31、v1.2.32 Release APK 均由既有受保護簽名設定簽署，SHA-256 指紋保持 `353F581792A659420EAF1E8EC278E7F5F78C8B13F767EA0A9E3DDEA682AEB818`。
 - [x] PR #37 合併：修正 App／APK／匯出專案／離線更新版本資料，發布 v1.2.31。
 - [x] PR #38 合併：修正外部 Termux Bridge 在串流客戶端斷線時誤殺 Python 程序，發布 v1.2.32。
-- [x] PR #39 合併：套件備份 manifest 使用暫存檔、fsync、原子 rename；版本資料同步至 v1.2.33；PR CI run `45608532103` 通過。
+- [x] PR #39 合併：套件備份 manifest 使用暫存檔、fsync、原子 rename；版本資料同步至 v1.2.33；PR CI run `45608532103` 通過，正式 Release run `45608919475` 成功。
 - [x] 靜態檢查儲存清理與刪除邊界：一般清理限於暫存／快取／APT archive；Bootstrap 重建有 usr 資料保護條件；SD 卡目標經 canonical path 檢查，UI 刪除需二次確認。
 - [x] 檢查 Crawler Cookie 捕獲路徑：特權 Java Bridge 不注入第三方爬蟲 WebView；原生日誌不輸出 Cookie 值；Cookie 仍會存入工作區 `cookies.json`。
 - [x] 修正 README 對 Pyodide Python 3.12 與 Termux Python 版本的描述，避免混為同一執行環境。
@@ -41,12 +41,12 @@
 | #7 | 開啟、draft，舊分支診斷功能 | 未合併；待重新審核與 rebase |
 | #37 | 已合併 | PR CI 通過；正式 Release v1.2.31 |
 | #38 | 已合併 | PR CI run `45607384138` 通過；正式 Release v1.2.32 |
-| #39 | 已合併 | PR CI run `45608532103` 通過；正式 Release v1.2.33 當時由 main run #347 建置中 |
+| #39 | 已合併 | PR CI run `45608532103` 通過；正式 Release v1.2.33 已由 main run #347 發布成功 |
 | #40 | 審核更新中 | `audit/release-pipeline-and-doc-refresh`；待 CI 驗證 |
 
 ## 本輪重點
 
-- 版本：v1.2.33，versionCode 1002033；正式 Release 完成後再核對資產與簽名。
+- 版本：v1.2.33，versionCode 1002033；正式 APK 36,484,185 bytes，SHA-256 `59a55ff6d3d5653b4fc07676ca208622a496e529c5b3a5357006a641a11608f5`，Release 簽名指紋已核對。
 - 簽名：不旋轉、不重建、不更換既有金鑰；每次正式 Release 都比對相同 SHA-256 指紋。
 - 發布：每次合併 main 都會觸發正式 ARM64 APK 建置與 GitHub Release；未完成簽名驗證不交付 APK。
 - 稽核：CI 成功只代表自動測試／建置通過，不代表已完成 Android 10+ 實機驗收。
