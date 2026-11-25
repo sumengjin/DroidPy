@@ -30,6 +30,10 @@ for (const item of catalogItems) {
   );
 }
 assert.match(bridgeSource, /matplotlib:\s*'matplotlib'/);
+assert.match(source, /'w3lib>=2\.6' parsel/, 'embedded APK installs must use the bundled pure-Python fallback');
+assert.match(source, /w3lib>=2\.6/, 'embedded terminal routing must use the fallback');
+assert.match(bridgeSource, /w3lib<2\.6/, 'standalone Termux bridge must retain its independent compatibility pin');
+
 assert.match(catalogSource, /w3lib 2.6 使用 DroidPy 內建純 Python Frostwork 相容層/);
 assert.match(catalogSource, /Termux User Repository（TUR）預編譯套件提供/);
 assert.match(catalogSource, /Meson\/Cython 無隔離建置/);
