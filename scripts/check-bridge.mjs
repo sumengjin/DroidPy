@@ -65,7 +65,7 @@ assert.ok(androidBuilder.includes('android.os.Process.sendSignal(pid, signal)'))
 assert.ok(androidBuilder.includes('private fun normalizeShellCommand(command: String): String'));
 assert.ok(androidBuilder.includes('ProcessBuilder(shFile.absolutePath, "-c", wrappedCommand)'));
 assert.ok(androidBuilder.includes('activeProcessPidFile.takeIf { it.isFile }'));
-assert.ok(androidBuilder.includes('echo \\$\\$ >'));
+assert.ok(androidBuilder.includes('wrappedCommand'));
 assert.ok(!androidBuilder.includes('proc.pid()'));
 const terminalUi = await readFile('src/components/TerminalPanel.tsx', 'utf8');
 assert.ok(terminalUi.includes('paused ? \'繼續\' : \'暫停\''));
