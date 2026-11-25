@@ -39,9 +39,15 @@ def test_css_and_xpath_multifield_extraction():
 
 
 def test_child_and_attribute_selectors():
-    html = "<div id='root'><a class='active' href='/one'>One</a><section><a href='/two'>Two</a></section></div>"
+    html = "<div id='root'><a class='active' href='/one'>One</a><section><a class='active' href='/nested'>Nested</a><a href='/two'>Two</a></section></div>"
     item = Page().field_all("links", "#root > a.active::attr(href)").extract(html)
     assert item.get("links") == ["/one"]
+
+
+def test_xpath_descendant_axis():
+    html = "<div><section><a>Nested</a></section><a>Direct</a></div>"
+    item = Page().field_all("links", "//div//a/text()", syntax="xpath").extract(html)
+    assert item.get("links") == ["Nested", "Direct"]
 
 
 def test_unsupported_css_is_explicit():
