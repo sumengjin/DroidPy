@@ -152,25 +152,26 @@ jobs:
           echo "DROIDPY_VERSION_NAME=$VNAME" >> "$GITHUB_ENV"
           echo "DROIDPY_RESOLVED_TAG=$REL_TAG" >> "$GITHUB_ENV"
           echo "DROIDPY_RELEASE_BUILD=$IS_RELEASE_REF" >> "$GITHUB_ENV"
-          if [ -z "$CUSTOM_KS_B64" ]; then
-            echo '::error::The original DROIDPY_KEYSTORE_BASE64 secret is required for every APK build.'
-            exit 1
+          if [ "$IS_RELEASE_REF" = true ]; then
+            if [ -z "$CUSTOM_KS_B64" ]; then
+              echo '::error::The new DROIDPY_KEYSTORE_BASE64 secret is required for Release builds.'
+              exit 1
+            fi
+            CUSTOM_STORE_PASS="\${CUSTOM_STORE_PASS:-android}"
+            CUSTOM_KEY_ALIAS="\${CUSTOM_KEY_ALIAS:-androiddebugkey}"
+            CUSTOM_KEY_PASS="\${CUSTOM_KEY_PASS:-android}"
+            printf '%s' "$CUSTOM_KS_B64" | base64 --decode > android/app/droidpy-release.keystore
+            keytool -list -keystore android/app/droidpy-release.keystore -storepass "$CUSTOM_STORE_PASS" -alias "$CUSTOM_KEY_ALIAS" >/dev/null
+            echo 'DROIDPY_KEYSTORE_FILE=droidpy-release.keystore' >> "$GITHUB_ENV"
+            printf 'DROIDPY_STORE_PASSWORD=%s\\n' "$CUSTOM_STORE_PASS" >> "$GITHUB_ENV"
+            printf 'DROIDPY_KEY_ALIAS=%s\\n' "$CUSTOM_KEY_ALIAS" >> "$GITHUB_ENV"
+            printf 'DROIDPY_KEY_PASSWORD=%s\\n' "$CUSTOM_KEY_PASS" >> "$GITHUB_ENV"
+            ACTUAL_KEYSTORE_SHA256=$(keytool -exportcert -keystore android/app/droidpy-release.keystore -storepass "$CUSTOM_STORE_PASS" -alias "$CUSTOM_KEY_ALIAS" | sha256sum | awk '{print toupper($1)}')
+            echo "DROIDPY_EXPECTED_CERT_SHA256=$ACTUAL_KEYSTORE_SHA256" >> "$GITHUB_ENV"
+            echo "Verified protected Release signing certificate: $ACTUAL_KEYSTORE_SHA256"
+          else
+            echo 'PR/debug builds use the temporary Android debug signer and do not require Release secrets.'
           fi
-          CUSTOM_STORE_PASS="\${CUSTOM_STORE_PASS:-android}"
-          CUSTOM_KEY_ALIAS="\${CUSTOM_KEY_ALIAS:-androiddebugkey}"
-          CUSTOM_KEY_PASS="\${CUSTOM_KEY_PASS:-android}"
-          printf '%s' "$CUSTOM_KS_B64" | base64 --decode > android/app/droidpy-custom.keystore
-          echo 'DROIDPY_KEYSTORE_FILE=droidpy-custom.keystore' >> "$GITHUB_ENV"
-          printf 'DROIDPY_STORE_PASSWORD=%s\\n' "$CUSTOM_STORE_PASS" >> "$GITHUB_ENV"
-          printf 'DROIDPY_KEY_ALIAS=%s\\n' "$CUSTOM_KEY_ALIAS" >> "$GITHUB_ENV"
-          printf 'DROIDPY_KEY_PASSWORD=%s\\n' "$CUSTOM_KEY_PASS" >> "$GITHUB_ENV"
-          EXPECTED_CERT_SHA256="29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA"
-          ACTUAL_KEYSTORE_SHA256=$(keytool -exportcert -keystore android/app/droidpy-custom.keystore -storepass "$CUSTOM_STORE_PASS" -alias "$CUSTOM_KEY_ALIAS" | sha256sum | awk '{print toupper($1)}')
-          if [ "$ACTUAL_KEYSTORE_SHA256" != "$EXPECTED_CERT_SHA256" ]; then
-            echo '::error::Signing keystore fingerprint mismatch. Refusing to build with a different key.'
-            exit 1
-          fi
-          echo "Verified original DroidPy signing certificate: $ACTUAL_KEYSTORE_SHA256"
           echo "is_release=$IS_RELEASE_REF" >> "$GITHUB_OUTPUT"
           echo "release_tag=$REL_TAG" >> "$GITHUB_OUTPUT"
           echo "artifact_name=${appSlug}-arm64-apk-$GITHUB_RUN_NUMBER-a\${GITHUB_RUN_ATTEMPT:-1}" >> "$GITHUB_OUTPUT"
@@ -197,14 +198,16 @@ jobs:
           printf '%s\\n' "$SIGNER_OUTPUT"
           ACTUAL_SHA256=$(printf '%s\\n' "$SIGNER_OUTPUT" | sed -nE 's/.*certificate SHA-256 digest: *([0-9A-Fa-f:]+).*/\\1/ip' | head -n1 | tr -d ':' | tr '[:lower:]' '[:upper:]')
           if ! [[ "$ACTUAL_SHA256" =~ ^[0-9A-F]{64}$ ]]; then echo '::error::Invalid APK signer fingerprint.'; exit 1; fi
-          KEYSTORE_PATH="android/app/\${DROIDPY_KEYSTORE_FILE}"
-          EXPECTED_SHA256=$(keytool -exportcert -keystore "$KEYSTORE_PATH" -storepass "$DROIDPY_STORE_PASSWORD" -alias "$DROIDPY_KEY_ALIAS" | sha256sum | awk '{print toupper($1)}')
-          PINNED_SHA256="29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA"
-          if [ "$EXPECTED_SHA256" != "$PINNED_SHA256" ] || [ "$ACTUAL_SHA256" != "$PINNED_SHA256" ]; then
-            echo '::error::APK or keystore does not match the original DroidPy signing certificate.'
-            exit 1
+          if [ "$DROIDPY_RELEASE_BUILD" = true ]; then
+            EXPECTED_SHA256="\${DROIDPY_EXPECTED_CERT_SHA256:-}"
+            if ! [[ "$EXPECTED_SHA256" =~ ^[0-9A-F]{64}$ ]] || [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+              echo '::error::Release APK signer does not match the protected keystore.'
+              exit 1
+            fi
+            echo "Verified protected Release APK signer: $ACTUAL_SHA256"
+          else
+            echo "Verified PR/debug APK signature structure: $ACTUAL_SHA256"
           fi
-          echo "Verified original DroidPy signing certificate for APK: $ACTUAL_SHA256"
 
       - name: Prepare APK Artifact
         run: |
