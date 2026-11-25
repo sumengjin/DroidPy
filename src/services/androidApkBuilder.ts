@@ -3584,20 +3584,17 @@ def clipboard_set(text):
                             steps.add("(pkg update -y || true)")
                             steps.add("pkg install -y " + missingPkgsOnly.joinToString(" "))
                         }
-                        // Resolve the exact interpreter used by /run-stream. Never rely on a
-                        // standalone pip launcher that could point at a different Python.
-                        val pythonPath = File(usrDir, "bin/python").absolutePath
-                        val python3Path = File(usrDir, "bin/python3").absolutePath
-                        steps.add("PY_BIN=\\\"$pythonPath\\\"; [ -x \\\"${'\\\" ] || PY_BIN=\\\"$python3Path\\\"; [ -x \\\"\\\$PY_BIN\\\" ] || { echo '[DroidPy] Python is not ready; package restore aborted.' >&2; exit 127; }")
+                        // Bind installs and import checks to the same Termux Python used by /run-stream.
+                        val pythonCmd = "\\"\u0024{File(usrDir, "bin/python3").absolutePath}\\""
+                        steps.add("test -x $pythonCmd || { echo '[DroidPy] Python is not ready; package restore aborted.' >&2; exit 127; }")
                         val needsNumpy = needPips.any { normalizePipPkgName(it) == "numpy" }
                         val remainingPips = needPips.filter { normalizePipPkgName(it) != "numpy" }
                         if (needsNumpy) {
-                            // Termux supplies a native binary package; verify it with the same
-                            // interpreter that executes user scripts. A failed install must fail restore.
-                            steps.add("pkg install -y python-numpy && \\\"\\\$PY_BIN\\\" -c 'import numpy' && echo '[DroidPy] NumPy ready (Termux binary package).' ")
+                            // Use Termux's prebuilt native package and verify with the script interpreter.
+                            steps.add("pkg install -y python-numpy && $pythonCmd -c 'import numpy' && echo '[DroidPy] NumPy ready (Termux binary package).'")
                         }
                         if (remainingPips.isNotEmpty()) {
-                            steps.add("\\\"\\\$PY_BIN\\\" -m pip install --no-cache-dir " + remainingPips.joinToString(" "))
+                            steps.add("$pythonCmd -m pip install --no-cache-dir " + remainingPips.joinToString(" "))
                         }
                         val restoreCmd = if (steps.isEmpty()) {
                             "echo '[DroidPy] 所有已備份套件均已存在，無需還原。'"
