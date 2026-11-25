@@ -1330,7 +1330,10 @@ async function termuxFetch<T>(
     return data;
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
-      throw new Error('Termux 執行逾時，請確認 Termux 橋接程式仍在前景或背景運行');
+      const operation = path === '/run-stream' || path === '/shell-stream' || path === '/install-stream'
+        ? '執行工作'
+        : `橋接請求（${path}）`;
+      throw new Error(`Termux ${operation}逾時；請確認內建橋接仍在運行，並檢查原生診斷日誌`);
     }
     if (err instanceof TypeError) {
       throw new Error(`無法連線至 Termux 橋接服務 (${base})，請先在 Termux 啟動橋接腳本`);
@@ -1714,7 +1717,7 @@ export async function backupWorkspaceToSdcard(
         files: files.map((f) => ({ name: f.name, content: f.content })),
       }),
     },
-    10000
+    30000
   );
 }
 

@@ -56,7 +56,7 @@ assert.match(manifest, /prevPkgList \+ currentUserPkg/);
 assert.match(source, /savePackageBackupSnapshot\(forceShrink = isUninstall\)/);
 
 const bootstrapStart = source.indexOf('val hasExistingInstall =');
-const bootstrapEnd = source.indexOf('localBridge = EmbeddedTermuxBridge', bootstrapStart);
+const bootstrapEnd = source.indexOf('localBridge = getOrStartRetainedBridge', bootstrapStart);
 assert.ok(bootstrapStart >= 0 && bootstrapEnd > bootstrapStart, 'bootstrap startup guard must exist');
 const bootstrap = source.slice(bootstrapStart, bootstrapEnd);
 assert.match(bootstrap, /val hasExistingUsrData = usrDir\.exists\(\)/);

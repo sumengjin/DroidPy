@@ -489,6 +489,11 @@ import java.util.zip.ZipInputStream
 import kotlin.concurrent.thread
 
 class MainActivity : AppCompatActivity() {
+    companion object {
+        @Volatile private var retainedBridge: EmbeddedTermuxBridge? = null
+        @Volatile private var crashDiagnosticsInstalled = false
+    }
+
     private lateinit var webView: WebView
     private lateinit var rootContainer: FrameLayout
     private lateinit var crawlerOverlay: LinearLayout
@@ -505,6 +510,60 @@ class MainActivity : AppCompatActivity() {
     private val updatePrefs by lazy { getSharedPreferences("droidpy_update_flow", Context.MODE_PRIVATE) }
     private val pendingInstallKey = "pending_verified_apk_path"
     private val bridgeToken: String by lazy { loadOrCreateBridgeToken() }
+
+    private fun appendActivityLog(tag: String, message: String) {
+        try {
+            val stamp = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
+            val target = File(filesDir, "droidpy_native.log")
+            target.parentFile?.mkdirs()
+            target.appendText("[$stamp] [$tag] $message\\n", Charsets.UTF_8)
+            android.util.Log.i("DroidPy", "[$tag] $message")
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun installCrashDiagnostics() {
+        synchronized(MainActivity::class.java) {
+            if (crashDiagnosticsInstalled) return
+            crashDiagnosticsInstalled = true
+            val previous = Thread.getDefaultUncaughtExceptionHandler()
+            Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+                try {
+                    val stamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
+                    val target = File(filesDir, "droidpy_native.log")
+                    target.parentFile?.mkdirs()
+                    target.appendText("\\n[$stamp] [FATAL] Uncaught exception on \${thread.name}:\\n\${android.util.Log.getStackTraceString(error)}\\n", Charsets.UTF_8)
+                } catch (_: Exception) {
+                }
+                if (previous != null) previous.uncaughtException(thread, error)
+                else {
+                    android.os.Process.killProcess(android.os.Process.myPid())
+                    kotlin.system.exitProcess(10)
+                }
+            }
+        }
+    }
+
+    private fun getOrStartRetainedBridge(usrDir: File, workspaceDir: File, bridgeAllowedOrigin: String): EmbeddedTermuxBridge {
+        synchronized(MainActivity::class.java) {
+            val existing = retainedBridge
+            if (existing != null && existing.isRunning()) {
+                appendActivityLog("Bridge", "Reusing process-retained EmbeddedTermuxBridge")
+                return existing
+            }
+            val created = EmbeddedTermuxBridge(
+                appContext = applicationContext,
+                usrDir = usrDir,
+                workspaceDir = workspaceDir,
+                token = bridgeToken,
+                allowedOrigin = bridgeAllowedOrigin,
+                assetManager = assets
+            )
+            created.start()
+            retainedBridge = created
+            return created
+        }
+    }
 
     private fun loadOrCreateBridgeToken(): String {
         val tokenFile = File(filesDir, "droidpy_bridge_token")
@@ -1194,6 +1253,7 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        installCrashDiagnostics()
 
         rootContainer = FrameLayout(this)
         webView = WebView(this)
@@ -1221,6 +1281,14 @@ class MainActivity : AppCompatActivity() {
         webView.addJavascriptInterface(NativeDownloadBridge(), "DroidPyNative")
         webView.webChromeClient = WebChromeClient()
         webView.webViewClient = object : WebViewClient() {
+            override fun onRenderProcessGone(
+                view: WebView?,
+                detail: android.webkit.RenderProcessGoneDetail?
+            ): Boolean {
+                appendActivityLog("WebView", "Renderer process gone didCrash=" + (detail?.didCrash() ?: false))
+                return false
+            }
+
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 if (request != null && !request.isForMainFrame) {
                     // The privileged JavaScript interface must never be exposed to child frames.
@@ -1405,7 +1473,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            appendStartupLog("MainActivity", "onCreate startup: hasExistingInstall=$hasExistingInstall")
+            appendStartupLog("MainActivity", "onCreate startup: hasExistingInstall=$hasExistingInstall pid=\${android.os.Process.myPid()} restoredState=\${savedInstanceState != null}")
 
             if (!hasExistingInstall && !hasExistingUsrData) {
                 try {
@@ -1437,14 +1505,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            localBridge = EmbeddedTermuxBridge(
-                appContext = applicationContext,
-                usrDir = usrDir,
-                workspaceDir = workspaceDir,
-                token = bridgeToken,
-                allowedOrigin = bridgeAllowedOrigin,
-                assetManager = assets
-            ).also { it.start() }
+            localBridge = getOrStartRetainedBridge(usrDir, workspaceDir, bridgeAllowedOrigin)
 
             runOnUiThread {
                 if (hasBundledWww) {
@@ -1744,6 +1805,7 @@ class MainActivity : AppCompatActivity() {
 
     @Suppress("DEPRECATION")
     override fun onTrimMemory(level: Int) {
+        appendActivityLog("Memory", "onTrimMemory level=$level")
         super.onTrimMemory(level)
         if (level >= TRIM_MEMORY_MODERATE) {
             runOnUiThread {
@@ -1755,8 +1817,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onLowMemory() {
+        appendActivityLog("Memory", "onLowMemory callback")
+        super.onLowMemory()
+    }
+
     override fun onDestroy() {
-        localBridge?.stop()
+        appendActivityLog("MainActivity", "onDestroy finishing=$isFinishing changingConfig=$isChangingConfigurations")
+        if (isFinishing && !isChangingConfigurations) {
+            synchronized(MainActivity::class.java) {
+                if (retainedBridge === localBridge) {
+                    appendActivityLog("Bridge", "Stopping retained bridge because the Activity is finishing")
+                    retainedBridge?.stop()
+                    retainedBridge = null
+                }
+            }
+        } else if (isChangingConfigurations) {
+            appendActivityLog("Bridge", "Keeping embedded bridge alive across Activity configuration recreation")
+        }
         try {
             stateIoExecutor.shutdown()
         } catch (_: Exception) {
@@ -1832,6 +1910,7 @@ class EmbeddedTermuxBridge(
     @Volatile private var running = false
     @Volatile private var activeProcess: Process? = null
     @Volatile private var activeProcessPaused: Boolean = false
+    @Volatile private var activeProcessStopRequested: Boolean = false
     private val activeProcessStartedAt = AtomicLong(0L)
     private val logLock = Any()
     private val nativeLogFile: File
@@ -1931,8 +2010,10 @@ class EmbeddedTermuxBridge(
             reuseAddress = true
             bind(InetSocketAddress(InetAddress.getByName("127.0.0.1"), port), 16)
         }
+        // Long-running /run-stream and package installs must not monopolize
+        // the only core worker; health, stdin, backup and /stop need independent workers.
         val localExecutor = ThreadPoolExecutor(
-            1, 8, 60L, TimeUnit.SECONDS, ArrayBlockingQueue<Runnable>(16)
+            4, 8, 60L, TimeUnit.SECONDS, ArrayBlockingQueue<Runnable>(16)
         )
         serverSocket = localServer
         executor = localExecutor
@@ -1973,6 +2054,8 @@ class EmbeddedTermuxBridge(
         }
     }
 
+    fun isRunning(): Boolean = running
+
     fun stop() {
         running = false
         appendNativeLog("Bridge", "EmbeddedTermuxBridge stopping")
@@ -1981,13 +2064,11 @@ class EmbeddedTermuxBridge(
         val oldServer = serverSocket
         serverSocket = null
         try { oldServer?.close() } catch (_: Exception) {}
-        activeClientSockets.toList().forEach { client ->
-            try { client.close() } catch (_: Exception) {}
-        }
-        activeClientSockets.clear()
+        // Let accepted requests finish naturally. shutdownNow() interrupted the
+        // process-output reader and made a live Python job look like a bridge crash.
         val oldExecutor = executor
         executor = null
-        try { oldExecutor?.shutdownNow() } catch (_: Exception) {}
+        try { oldExecutor?.shutdown() } catch (_: Exception) {}
     }
 
     private fun ensurePrefixWrappers(): File {
@@ -2875,6 +2956,15 @@ def clipboard_set(text):
             return null
         }
         return candidate
+    }
+
+    private fun processPid(proc: Process): Int {
+        return try {
+            val pidField = proc.javaClass.getDeclaredField("pid").apply { isAccessible = true }
+            (pidField.get(proc) as? Int) ?: -1
+        } catch (_: Exception) {
+            -1
+        }
     }
 
     private fun killProcessTree(proc: Process) {
@@ -3784,8 +3874,11 @@ def clipboard_set(text):
                 method == "POST" && path == "/stop" -> {
                     val proc = activeProcess
                     if (proc != null) {
-                        appendNativeLog("Exec", "Force stopping active process tree")
+                        activeProcessStopRequested = true
+                        appendNativeLog("Exec", "Explicit Stop request: force stopping process tree pid=\${processPid(proc)}")
                         killProcessTree(proc)
+                    } else {
+                        appendNativeLog("Exec", "Explicit Stop request received; no active process")
                     }
                     activeProcessPaused = false
                     writeJson(out, 200, JSONObject().put("ok", true))
@@ -3931,6 +4024,8 @@ def clipboard_set(text):
                 }
 
                 method == "POST" && path == "/sdcard/write" -> {
+                    val backupStartedAt = System.currentTimeMillis()
+                    appendNativeLog("Storage", "SD-card write request received")
                     if (!hasStorageAccess()) {
                         writeJson(out, 403, JSONObject().put("error", "尚未授予內部儲存空間權限"))
                     } else {
@@ -3952,6 +4047,7 @@ def clipboard_set(text):
                                             count++
                                         }
                                     }
+                                    appendNativeLog("Storage", "SD-card backup completed files=$count durationMs=\${System.currentTimeMillis() - backupStartedAt} path=\${destDir.absolutePath}")
                                     writeJson(out, 200, JSONObject().put("ok", true).put("count", count).put("dir", destDir.absolutePath))
                                 }
                             } else {
@@ -3966,6 +4062,7 @@ def clipboard_set(text):
                                 }
                             }
                         } catch (e: Exception) {
+                            appendNativeLog("Storage", "SD-card write failed durationMs=\${System.currentTimeMillis() - backupStartedAt}: \${e.javaClass.simpleName}: \${e.message}")
                             writeJson(out, 403, JSONObject().put("error", e.message ?: "寫入失敗"))
                         }
                     }
@@ -4044,6 +4141,7 @@ def clipboard_set(text):
                                 }
                             }
                             val entry = File(bodyJson.optString("entry", "main.py")).name.ifBlank { "main.py" }
+                            appendNativeLog("Exec", "Run script requested: $entry")
                             val safeEntrySh = entry.replace("'", "'\\\\''")
                             val pyPath = File(usrDir, "bin/python").absolutePath
                             val py3Path = File(usrDir, "bin/python3").absolutePath
@@ -4608,7 +4706,10 @@ def clipboard_set(text):
                 proc = pb.start()
                 activeProcess = proc
                 activeProcessPaused = false
+                activeProcessStopRequested = false
                 activeProcessStartedAt.set(System.currentTimeMillis())
+                appendNativeLog("Exec", "Process started pid=\${processPid(proc)} command=\${normalizedCommand.take(120)}")
+                var clientDisconnected = false
                 val charBuf = CharArray(1024)
                 val inpReader = InputStreamReader(proc.inputStream, Charsets.UTF_8)
                 while (true) {
@@ -4617,21 +4718,28 @@ def clipboard_set(text):
                     if (n > 0) {
                         val s = String(charBuf, 0, n)
                         recordTail(s)
-                        try {
-                            sendStdout(s)
-                        } catch (_: Exception) {
-                            proc.destroyForcibly()
-                            break
+                        if (!clientDisconnected) {
+                            try {
+                                sendStdout(s)
+                            } catch (e: Exception) {
+                                clientDisconnected = true
+                                appendNativeLog("Exec", "Stream client disconnected; continuing process pid=\${processPid(proc)} (\${e.javaClass.simpleName}: \${e.message})")
+                            }
                         }
                     }
                 }
                 code = proc.waitFor()
+                appendNativeLog("Exec", "Process exited pid=\${processPid(proc)} exitCode=$code")
             } catch (e: Exception) {
-                appendNativeLog("Exec", "Exec exception: \${e.message}")
-                recordTail("[DroidPy] Exec error: \${e.message}\\n")
-                try {
-                    sendStdout("[DroidPy] Exec error: \${e.message}\\n")
-                } catch (_: Exception) {
+                if (activeProcessStopRequested) {
+                    appendNativeLog("Exec", "Process output read ended after explicit Stop pid=\${proc?.let { processPid(it) } ?: -1} (\${e.javaClass.simpleName}: \${e.message})")
+                } else {
+                    appendNativeLog("Exec", "Exec exception: \${e.javaClass.simpleName}: \${e.message}")
+                    recordTail("[DroidPy] Exec error: \${e.message}\\n")
+                    try {
+                        sendStdout("[DroidPy] Exec error: \${e.message}\\n")
+                    } catch (_: Exception) {
+                    }
                 }
             } finally {
                 try { proc?.inputStream?.close() } catch (_: Exception) {}
@@ -4639,6 +4747,7 @@ def clipboard_set(text):
                 try { proc?.outputStream?.close() } catch (_: Exception) {}
                 activeProcess = null
                 activeProcessPaused = false
+                activeProcessStopRequested = false
                 activeProcessStartedAt.set(0L)
                 try { activeProcessPidFile.delete() } catch (_: Exception) {}
                 if (isPkgOrPip) {
