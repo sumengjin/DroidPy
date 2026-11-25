@@ -852,6 +852,18 @@ def _compatibility_install_command(package_name, trusted_host=False):
         "lxml": "python-lxml",
         "cryptography": "python-cryptography",
         "matplotlib": "matplotlib",
+        "apsw": "python-apsw",
+        "bcrypt": "python-bcrypt",
+        "brotli": "python-brotli",
+        "grpcio": "python-grpcio",
+        "msgpack": "python-msgpack",
+        "psutil": "python-psutil",
+        "pycryptodomex": "python-pycryptodomex",
+        "tflite-runtime": "python-tflite-runtime",
+        "torch": "python-torch",
+        "torchaudio": "python-torchaudio",
+        "torchvision": "python-torchvision",
+        "yt-dlp": "python-yt-dlp",
     }
     if package in native_packages:
         return "pkg install -y " + shlex.quote(native_packages[package])
