@@ -4,6 +4,15 @@ All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
 
+### Fixed — Android runtime stability, bridge concurrency, and diagnostics
+- **修復橋接請求互相阻塞**：內建 Android Bridge 的核心工作執行緒由 1 增至 4（最多 8），長時間執行 Python、pip 或 pkg 時，健康檢查、標準輸入、備份與停止請求仍可獨立處理；避免 SD 卡備份因排隊而假性逾時。
+- **避免網頁串流斷線誤殺 Python**：串流用戶端斷線時，原生程序不再因輸出寫入失敗而直接 destroyForcibly；改為持續收集輸出尾段並等待程序自然結束。真正停止程序仍由明確的 /stop 請求負責。
+- **修復 Activity 重建時橋接服務被重複建立**：同一 Android 程序內保留 EmbeddedTermuxBridge，設定變更／Activity 重建時重用既有橋接，不再因 onDestroy 關閉串流與中斷程序；橋接關閉改為平順排空已接收請求。
+- **補強未知崩潰診斷**：記錄未捕獲例外的完整堆疊、Activity 銷毀原因、程序 PID／命令／退出碼、實際腳本名稱及 SD 卡備份耗時／錯誤，避免只看到模糊的 exit code 或逾時訊息。
+- **改善備份錯誤辨識**：SD 卡批次備份等待時間提高至 30 秒；逾時訊息會指出實際橋接路徑，不再把一般儲存請求誤稱為 Python 執行逾時。
+- 新增 Bridge 併發、程序生命週期、斷線行為、Activity 重建與診斷日誌的回歸檢查。
+
+
 ### Fixed — Termux execution ownership and crawler browser sessions
 - **避免重複啟動互相中斷腳本**：Termux 串流請求不再因第二個操作自動取消第一個工作；已有工作時明確拒絕新的串流請求，只有使用者明確按下停止才會中斷目前串流。明確停止造成的 HTTP Abort 不再偽裝成 Python 程序退出碼 130，讓真正的 SIGINT／程序退出碼保留診斷價值。
 - **修復爬蟲 Cookie 匯入與跨網域覆蓋**：Cookie 合併改以名稱、Domain、Path 作為識別，避免不同子網域或路徑的同名 Cookie 互相覆蓋；匯入與匯出保留 HttpOnly、Secure、SameSite、Expires／Max-Age 等可取得屬性，Netscape cookies.txt 也會保留安全旗標。
