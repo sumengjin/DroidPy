@@ -439,5 +439,33 @@ for (const [inputMode, input, expectedMode, expectedTarget] of cases) {
   assert.equal(resolved.mode, expectedMode, `${inputMode} ${input} mode`);
   assert.equal(resolved.target, expectedTarget, `${inputMode} ${input} target`);
 }
+
+// Execute the actual generated Python route functions to verify direct terminal installs.
+const routeTestFile = path.join(os.tmpdir(), 'droidpy-package-route-test.py');
+const routeTest = [
+  'import ast, re, shlex, sys',
+  'source = open(sys.argv[1], encoding="utf-8").read()',
+  'tree = ast.parse(source)',
+  'wanted = {"_compatibility_install_command", "_normalize_shell_command"}',
+  'nodes = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name in wanted]',
+  'assert {node.name for node in nodes} == wanted',
+  'namespace = {"re": re, "shlex": shlex, "_build_pip_cmd": lambda args, trusted_host=False: ["pip", "install", *args]}',
+  'exec(compile(ast.Module(body=nodes, type_ignores=[]), "<package-routes>", "exec"), namespace)',
+  'expected = {"numpy": "python-numpy", "pandas": "python-pandas", "pillow": "python-pillow", "pil": "python-pillow", "lxml": "python-lxml", "cryptography": "python-cryptography", "matplotlib": "matplotlib", "apsw": "python-apsw", "bcrypt": "python-bcrypt", "brotli": "python-brotli", "grpcio": "python-grpcio", "msgpack": "python-msgpack", "psutil": "python-psutil", "pycryptodomex": "python-pycryptodomex", "tflite-runtime": "python-tflite-runtime", "torch": "python-torch", "torchaudio": "python-torchaudio", "torchvision": "python-torchvision", "yt-dlp": "python-yt-dlp", "scipy": "python-scipy"}',
+  'for name, target in expected.items():',
+  '    command = "pkg install -y " + shlex.quote(target)',
+  '    assert namespace["_compatibility_install_command"](name) == command, (name, namespace["_compatibility_install_command"](name))',
+  '    assert namespace["_normalize_shell_command"]("pip install " + name) == command, (name, namespace["_normalize_shell_command"]("pip install " + name))',
+  'assert namespace["_normalize_shell_command"]("pip install numpy==2.0.0") == "pip install numpy==2.0.0"',
+  'assert namespace["_normalize_shell_command"]("pip install requests pandas") == "pip install requests pandas"',
+  'assert namespace["_normalize_shell_command"]("pip install scikit-learn").startswith("echo ")',
+];
+await writeFile(routeTestFile, routeTest.join('\n'), 'utf8');
+try {
+  const result = spawnSync('python3', [routeTestFile, path.join(os.tmpdir(), 'droidpy-route-generated.py')], { encoding: 'utf8' });
+  if (result.status !== 0) throw new Error(`Generated package route test failed:\n${result.stdout}\n${result.stderr}`);
+} finally {
+  await rm(routeTestFile, { force: true });
+}
 assert.ok(generated.includes('cmd = [sys.executable, "-m", "pip", "install", "--prefer-binary"]'));
 console.log('Generated Termux Bridge token/origin checks and Python syntax validation passed.');
