@@ -4375,6 +4375,15 @@ def clipboard_set(text):
         throw IllegalArgumentException("Too many redirects")
     }
 
+    private fun normalizeShellCommand(command: String): String {
+        val installPrefix = Regex("""^\s*pkg\s+install\b""", RegexOption.IGNORE_CASE)
+        if (!installPrefix.containsMatchIn(command)) return command
+        if (Regex("""(?:^|\s)(?:-y|--assume-yes)(?:\s|$)""", RegexOption.IGNORE_CASE).containsMatchIn(command)) {
+            return command
+        }
+        return installPrefix.replaceFirst(command) { match -> match.value + " -y" }
+    }
+
     private fun signalActiveProcess(signal: Int): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
         val proc = activeProcess ?: return false
@@ -4517,7 +4526,7 @@ def clipboard_set(text):
         } else {
             var proc: Process? = null
             try {
-                val pb = ProcessBuilder(shFile.absolutePath, "-c", command)
+                val pb = ProcessBuilder(shFile.absolutePath, "-c", normalizedCommand)
                 pb.directory(workspaceDir)
                 pb.redirectErrorStream(true)
                 pb.environment().putAll(buildEnv())
