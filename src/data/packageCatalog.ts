@@ -38,6 +38,11 @@ export const PACKAGE_CATEGORIES: { id: PackageCategoryId; labelKey: string }[] =
 ];
 
 export const TERMUX_PKG_NAME_HINTS: Record<string, { suggestedMode: 'pkg' | 'pip'; suggestedTarget: string; reason: string }> = {
+  pandas: {
+    suggestedMode: 'pkg',
+    suggestedTarget: 'python-pandas',
+    reason: 'Termux 預編譯 pandas 可避免手機從原始碼編譯 NumPy／pandas 相依套件。',
+  },
   numpy: {
     suggestedMode: 'pkg',
     suggestedTarget: 'python-numpy',
