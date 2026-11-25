@@ -108,10 +108,26 @@ export const CrawlerBrowserPanel: React.FC<CrawlerBrowserPanelProps> = ({
       return;
     }
     setProbeError(null);
+    setProbeResult(null);
     setUrlInput(clean);
     setLoadedUrl(clean);
     setIframeNonce((n) => n + 1);
     onChangeSession({ ...session, url: clean });
+
+    // The standalone APK intentionally uses its isolated native WebView instead
+    // of the sandboxed iframe. Route every Go/preset navigation into that WebView
+    // so the address bar always produces a visible navigation on Android.
+    if (isNativeApk) {
+      try {
+        const openBrowser = window.DroidPyNative?.openCrawlerBrowser;
+        if (!openBrowser) {
+          throw new Error('原生瀏覽器橋接不可用，請重新啟動 DroidPy');
+        }
+        openBrowser(clean, isDesktopUa);
+      } catch (err) {
+        setProbeError(err instanceof Error ? err.message : String(err));
+      }
+    }
   };
 
   const handleUrlSubmit = (e: React.FormEvent) => {
@@ -125,16 +141,7 @@ export const CrawlerBrowserPanel: React.FC<CrawlerBrowserPanelProps> = ({
   };
 
   const handleOpenNativeBrowser = () => {
-    let clean: string;
-    try {
-      clean = normalizeUrlInput(urlInput);
-    } catch (err) {
-      setProbeError(err instanceof Error ? err.message : String(err));
-      return;
-    }
-    setProbeError(null);
-    onChangeSession({ ...session, url: clean });
-    window.DroidPyNative?.openCrawlerBrowser?.(clean, isDesktopUa);
+    navigateTo(urlInput);
   };
 
   const handleProbeViaTermux = async () => {

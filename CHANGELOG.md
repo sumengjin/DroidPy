@@ -4,6 +4,11 @@ All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
 
+### Fixed — Native browser address-bar navigation
+- **修復 Android APK 網頁預覽按下「前往」沒有反應**：獨立 APK 的預覽畫面使用隔離的原生 WebView，而非一般瀏覽器的 iframe；原本地址列只更新 iframe 狀態，但 APK 畫面仍停留在提示頁。現在地址列送出、快速網址預設與「開啟原生瀏覽器」統一導向原生 WebView，並清除舊的 HTTP 探測結果，確保新網址立即開啟。
+- 補上原生瀏覽器導航分流與舊探測結果清理的回歸檢查。
+
+
 ### Fixed — Android runtime stability, bridge concurrency, and diagnostics
 - **修復橋接請求互相阻塞**：內建 Android Bridge 的核心工作執行緒由 1 增至 4（最多 8），長時間執行 Python、pip 或 pkg 時，健康檢查、標準輸入、備份與停止請求仍可獨立處理；避免 SD 卡備份因排隊而假性逾時。
 - **避免網頁串流斷線誤殺 Python**：串流用戶端斷線時，原生程序不再因輸出寫入失敗而直接 destroyForcibly；改為持續收集輸出尾段並等待程序自然結束。真正停止程序仍由明確的 /stop 請求負責。
