@@ -152,10 +152,13 @@ jobs:
           echo "DROIDPY_VERSION_NAME=$VNAME" >> "$GITHUB_ENV"
           echo "DROIDPY_RESOLVED_TAG=$REL_TAG" >> "$GITHUB_ENV"
           echo "DROIDPY_RELEASE_BUILD=$IS_RELEASE_REF" >> "$GITHUB_ENV"
-          if [ -z "$CUSTOM_KS_B64" ] || [ -z "$CUSTOM_STORE_PASS" ] || [ -z "$CUSTOM_KEY_ALIAS" ] || [ -z "$CUSTOM_KEY_PASS" ]; then
-            echo '::error::Every APK build, including Debug/PR artifacts, requires the protected original DROIDPY signing secrets.'
+          if [ -z "$CUSTOM_KS_B64" ]; then
+            echo '::error::The original DROIDPY_KEYSTORE_BASE64 secret is required for every APK build.'
             exit 1
           fi
+          CUSTOM_STORE_PASS="${CUSTOM_STORE_PASS:-android}"
+          CUSTOM_KEY_ALIAS="${CUSTOM_KEY_ALIAS:-androiddebugkey}"
+          CUSTOM_KEY_PASS="${CUSTOM_KEY_PASS:-android}"
           printf '%s' "$CUSTOM_KS_B64" | base64 --decode > android/app/droidpy-custom.keystore
           echo 'DROIDPY_KEYSTORE_FILE=droidpy-custom.keystore' >> "$GITHUB_ENV"
           printf 'DROIDPY_STORE_PASSWORD=%s\\n' "$CUSTOM_STORE_PASS" >> "$GITHUB_ENV"
@@ -4581,7 +4584,7 @@ def clipboard_set(text):
 1. 在 GitHub 建立一個新的公開或私人倉庫（Repository）。
 2. 將本壓縮檔解壓縮後的所有檔案（包含 \`.github/\` 與 \`android/\`）上傳／Push 到該倉庫的 \`main\` 分支。
    - 若倉庫同時包含前端原始碼（\`package.json\`），Workflow 會自動執行 \`npm ci && npm run build\` 並複製進 \`android/app/src/main/assets/www/\` 打包為完全離線 APK。
-3. 在 GitHub Repository → Settings → Secrets and variables → Actions，設定受保護的簽名 Secrets：\`DROIDPY_KEYSTORE_BASE64\`（原有 keystore 的 Base64）、\`DROIDPY_STORE_PASSWORD\`、\`DROIDPY_KEY_ALIAS\` 與 \`DROIDPY_KEY_PASSWORD\`。正式 Release 只會使用這組 Secrets；專案不再附帶私鑰，也不會退回公開的內嵌簽名金鑰。若尚未設定 Secrets，正式 Release 會安全失敗，不會發布使用新簽名的 APK。
+3. 在 GitHub Repository → Settings → Secrets and variables → Actions，至少設定唯一必要的簽名 Secret：\`DROIDPY_KEYSTORE_BASE64\`（原有 keystore 的 Base64）。原始 DroidPy keystore 沿用舊版預設值（store password：\`android\`、alias：\`androiddebugkey\`、key password：\`android\`）；若你的 keystore 曾自訂密碼，可另外設定 \`DROIDPY_STORE_PASSWORD\`、\`DROIDPY_KEY_ALIAS\` 與 \`DROIDPY_KEY_PASSWORD\`。專案不再附帶私鑰，也不會退回臨時簽名。缺少原始 keystore 時所有 APK 建置都會安全失敗。
 4. 一般分支的 Debug APK、PR Artifact 與正式 Release 全部使用同一把受保護簽名金鑰；CI 會核對原始憑證 SHA-256 指紋，不一致或缺少 Secrets 就停止建置，絕不退回臨時簽名。推送至 main/master 會自動建置並發布 GitHub Release；推送版本 Tag 或手動輸入 Release 標籤亦可發布。必須持續使用與手機目前安裝版本相同的原有簽名 keystore，請勿更換。
 
 ## 首次開啟 App 初始化說明
