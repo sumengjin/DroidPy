@@ -4,6 +4,11 @@ All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
 
+### Fixed — Termux process survival after client disconnect
+- **避免 Termux 原生 Python 工作因網頁串流斷線被誤殺**：用戶端中斷後，Bridge 改為停止傳送輸出但持續讀取／排空 PTY，讓使用者腳本可以自然執行完畢；只有明確呼叫授權的 /stop 才會終止程序。
+- 新增回歸檢查，確保斷線路徑不再對程序群組發送 SIGKILL，且明確停止路由仍保留。
+
+
 ### Fixed — Native browser bridge and Cookie capture
 - **修復原生瀏覽器「前往」呼叫失敗**：呼叫 `@JavascriptInterface` 方法時保留注入的 `DroidPyNative` 物件作為呼叫接收者，避免 Android WebView 回報 `Java bridge method can't be invoked on a non-injected object`。
 - **補強 APK 原生 Cookie 擷取**：擷取前驗證目前網址，成功讀取後同步至 IDE 事件與工作區 `cookies.json`；沒有 Cookie 時不再默默關閉瀏覽器，而是提示使用者確認登入狀態。寫入及事件派送失敗會顯示錯誤。
