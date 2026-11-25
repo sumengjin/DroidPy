@@ -842,7 +842,7 @@ def _normalize_shell_command(command):
     # Only rewrite a single, unambiguous package command; leave custom shell syntax untouched.
     if re.fullmatch(r"\\s*(?:(?:python|python3)\\s+-m\\s+)?pip3?\\s+install\\s+parsel\\s*", command, re.IGNORECASE):
         return "pkg install -y python-lxml && " + shlex.join(_build_pip_cmd(["w3lib<2.6", "parsel"]))
-    if re.fullmatch(r"\\s*pip3?\\s+install\\s+scipy\\s*", command, re.IGNORECASE):
+    if re.fullmatch(r"\\s*(?:(?:python|python3)\\s+-m\\s+)?pip3?\\s+install\\s+scipy\\s*", command, re.IGNORECASE):
         return "pkg install -y python-scipy"
     if not re.match(r"^\\s*pkg\\s+install\\b", command, re.IGNORECASE):
         return command
