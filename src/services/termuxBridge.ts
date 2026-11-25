@@ -837,48 +837,6 @@ def _build_probe_headers(data):
 
 
 
-def _scikit_learn_source_install_command(trusted_host=False):
-    # Termux source archives can lose the executable bit on sklearn's Meson version script.
-    # Download the official PyPI sdist, restore that bit, then build against native NumPy/SciPy.
-    build_deps = _build_pip_cmd([
-        "meson-python>=0.17.1,<0.20",
-        "cython>=3.1.2,<3.2.6",
-        "joblib>=1.4.0",
-        "narwhals>=2.0.1",
-        "threadpoolctl>=3.5.0",
-    ], trusted_host=trusted_host)
-    installer_code = "\\n".join([
-        "import json, os, pathlib, shlex, site, stat, subprocess, sysconfig, tarfile, tempfile, urllib.parse",
-        "with tempfile.TemporaryDirectory(prefix='droidpy-sklearn-') as tmp:",
-        "    root = pathlib.Path(tmp)",
-        "    metadata = json.loads(subprocess.check_output(['curl', '-fsSL', 'https://pypi.org/pypi/scikit-learn/json'], text=True))",
-        "    sdist = next(item for item in metadata['urls'] if item['packagetype'] == 'sdist')",
-        "    archive = root / 'scikit-learn-sdist.tar.gz'",
-        "    if urllib.parse.urlparse(sdist['url']).hostname != 'files.pythonhosted.org': raise RuntimeError('Unexpected scikit-learn sdist host')",
-        "    subprocess.check_call(['curl', '-fL', sdist['url'], '-o', str(archive)])",
-        "    source_root = root / 'source'",
-        "    source_root.mkdir()",
-        "    with tarfile.open(archive, 'r:*') as package:",
-        "        package.extractall(source_root, filter='data')",
-        "    source = next(item for item in source_root.iterdir() if item.is_dir())",
-        "    version_script = source / 'sklearn' / '_build_utils' / 'version.py'",
-        "    version_script.parent.mkdir(parents=True, exist_ok=True)",
-        "    version_script.write_text('#!' + __import__('sys').executable + '\\\\nprint(' + repr(metadata['info']['version']) + ')\\\\n', encoding='utf-8')",
-        "    version_script.chmod(version_script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)",
-        "    # Meson-python records this launcher in build.ninja; invoke Meson through the active Python on Android.",
-        "    meson_launcher = pathlib.Path(sysconfig.get_path('scripts')) / 'meson'",
-        "    if not meson_launcher.is_file(): meson_launcher = pathlib.Path(site.getuserbase()) / 'bin' / 'meson'",
-        "    if not meson_launcher.is_file(): raise RuntimeError('Meson user launcher is missing: ' + str(meson_launcher))",
-        "    meson_launcher.write_text('#!/system/bin/sh' + chr(10) + 'exec ' + shlex.quote(__import__('sys').executable) + ' -m mesonbuild.mesonmain \\\"$@\\\"' + chr(10), encoding='utf-8')",
-        "    meson_launcher.chmod(0o755)",
-        "    subprocess.check_call([str(meson_launcher), '--version'])",
-        "    subprocess.check_call([__import__('sys').executable, '-m', 'pip', 'install', '--no-cache-dir', '--no-build-isolation', '--no-deps', str(source)])",
-    ])
-    installer = shlex.join([sys.executable, "-c", installer_code])
-    return "pkg install -y python-numpy python-scipy ninja curl && " + shlex.join(build_deps) + " && " + installer
-
-
-
 # Central Android package compatibility routes shared by terminal pip and the install API.
 # Keep this registry conservative: only route packages with a known native Android solution.
 def _compatibility_install_command(package_name, trusted_host=False):
@@ -891,7 +849,7 @@ def _compatibility_install_command(package_name, trusted_host=False):
     if package == "polars":
         return "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"
     if package in ("scikit-learn", "sklearn"):
-        return _scikit_learn_source_install_command(trusted_host=trusted_host)
+        return "echo DroidPy: no verified Termux ARM64 / Python 3.14 prebuilt scikit-learn package is available; on-device source builds are disabled. >&2; exit 1"
     return None
 
 
