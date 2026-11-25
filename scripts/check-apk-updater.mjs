@@ -25,7 +25,10 @@ assert.ok(source.includes('Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&'));
 assert.ok(source.includes('applicationInfo.targetSdkVersion >= Build.VERSION_CODES.R'), 'all-files Settings must only be used when the app targets Android 11+');
 assert.ok(source.includes('val requiresAllFilesAccess = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&'));
 assert.ok(source.includes('appContext.applicationInfo.targetSdkVersion >= Build.VERSION_CODES.R'), 'Bridge storage checks must honor the app target SDK');
-assert.ok(source.includes('fun hasStoragePermission(): Boolean {\\n            val requiresAllFilesAccess'));
+const nativeStorageCheckStart = source.indexOf('fun hasStoragePermission(): Boolean {');
+const nativeStorageCheckEnd = source.indexOf('@JavascriptInterface\\n        fun requestStoragePermission()', nativeStorageCheckStart);
+assert.ok(nativeStorageCheckStart >= 0 && nativeStorageCheckEnd > nativeStorageCheckStart);
+assert.ok(source.slice(nativeStorageCheckStart, nativeStorageCheckEnd).includes('val requiresAllFilesAccess'), 'NativeDownloadBridge must honor target SDK when checking storage access');
 assert.ok(source.includes('val manageAll = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && appContext.applicationInfo.targetSdkVersion >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()'));
 
 assert.ok(source.includes('applicationInfo.targetSdkVersion <= Build.VERSION_CODES.Q || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager())'), 'legacy-target apps and explicitly authorized all-files apps must retain shared-storage setup');
