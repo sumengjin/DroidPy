@@ -9,6 +9,7 @@ All notable changes to **DroidPy** are documented in this file.
 - **修復原生終端機命令輸出阻塞**：不再先以無上限的 `readText()` 讀取子程序輸出、之後才等待逾時；改為輸出導向 App 私有暫存檔、先執行逾時等待、最多回傳最後 2 MiB，並回報逾時與啟動錯誤，避免大量輸出或長時間命令拖垮記憶體／卡住請求。
 - **改善套件命令辨識與清理判斷**：只將真正的 pkg／apt／pip 命令視為套件操作，避免僅因參數或套件名稱含有相似字串就觸發套件備份與快取清理；補上更新權限恢復及命令輸出上限回歸測試。
 - **新增腳本暫停／繼續**：終端機執行原生 Termux 腳本時可暫停與恢復目前程序；內嵌 Android Bridge 使用程序訊號控制，匯出的 Python Bridge 使用獨立程序群組的 SIGSTOP／SIGCONT，不會把暫停誤當成停止或終止。
+- **補齊套件目錄安裝策略**：套件目錄每個項目都明確標記 Termux 的 pip／pkg 安裝路徑；SciPy、scikit-learn、Polars 明確保留 pip 路徑並提示 Android 原生輪子／編譯限制，不再讓套件項目因缺少 Termux 設定而走不明確的預設流程；新增全目錄路由完整性檢查。
 
 
 ### Fixed — Native Termux package routing and Python archive installs
