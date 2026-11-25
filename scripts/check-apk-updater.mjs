@@ -66,7 +66,15 @@ assert.ok(workflow.includes('實際指紋：$KEYSTORE_SHA256'));
 assert.ok(workflow.includes('找不到指定金鑰別名'));
 assert.ok(workflow.includes('DROIDPY_EXPECTED_CERT_SHA256=$KEYSTORE_SHA256'));
 assert.ok(workflow.includes('Release APK 與本次受保護的新 keystore 憑證不一致'));
-assert.ok(workflow.includes("if: (github.event_name == 'push'"));
+assert.ok(workflow.includes("if: (github.event_name == 'push'"));const releaseHeadingParser = "VER=$(sed -nE 's/^## \\[([0-9]+\\.[0-9]+\\.[0-9]+)\\].*/\\1/p' CHANGELOG.md 2>/dev/null | head -n1 || true)";
+assert.ok(workflow.includes(releaseHeadingParser));
+assert.ok(workflow.includes('actions/checkout@v5'));
+assert.ok(workflow.includes('actions/setup-node@v5'));
+assert.ok(workflow.includes('actions/setup-python@v6'));
+assert.ok(!workflow.includes('actions/checkout@v4'));
+assert.ok(!workflow.includes('actions/setup-node@v4'));
+assert.ok(!workflow.includes('actions/setup-python@v5'));
+
 assert.ok(!workflow.includes('29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA'));
 assert.ok(!workflow.includes('所有 APK 都必須使用原始 keystore'));
 
