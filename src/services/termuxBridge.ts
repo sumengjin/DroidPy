@@ -878,19 +878,36 @@ def _scikit_learn_source_install_command(trusted_host=False):
     return "pkg install -y python-numpy python-scipy ninja curl && " + shlex.join(build_deps) + " && " + installer
 
 
-def _normalize_shell_command(command):
-    # Also recognize the absolute Termux Python path emitted by DroidPy's terminal.
-    # Only rewrite a single, unambiguous package command; leave custom shell syntax untouched.
-    pip_prefix = r"(?:(?:[^\\s;&|]*/)?python(?:3(?:\\.\\d+)?)?\\s+-m\\s+)?"
-    if re.fullmatch(r"\\s*" + pip_prefix + r"pip3?\\s+install\\s+parsel\\s*", command, re.IGNORECASE):
-        return "pkg install -y python-lxml && " + shlex.join(_build_pip_cmd(["w3lib<2.6", "parsel"]))
-    if re.fullmatch(r"\\s*" + pip_prefix + r"pip3?\\s+install\\s+scipy\\s*", command, re.IGNORECASE):
+
+# Central Android package compatibility routes shared by terminal pip and the install API.
+# Keep this registry conservative: only route packages with a known native Android solution.
+def _compatibility_install_command(package_name, trusted_host=False):
+    package = str(package_name).strip().lower().replace("_", "-")
+    if package == "parsel":
+        pip_cmd = shlex.join(_build_pip_cmd(["w3lib<2.6", "parsel"], trusted_host=trusted_host))
+        return "pkg install -y python-lxml && " + pip_cmd
+    if package == "scipy":
         return "pkg install -y python-scipy"
-    if re.fullmatch(r"\\s*" + pip_prefix + r"pip3?\\s+install\\s+polars\\s*", command, re.IGNORECASE):
-        # Polars requires Android-native Rust runtime wheels; use the prebuilt TUR package.
+    if package == "polars":
         return "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"
-    if re.fullmatch(r"\\s*" + pip_prefix + r"pip3?\\s+install\\s+scikit-learn\\s*", command, re.IGNORECASE):
-        return _scikit_learn_source_install_command()
+    if package in ("scikit-learn", "sklearn"):
+        return _scikit_learn_source_install_command(trusted_host=trusted_host)
+    return None
+
+
+
+def _normalize_shell_command(command):
+    # Rewrite only a single, unambiguous pip install; preserve custom shell commands.
+    pip_prefix = r"(?:(?:[^\\s;&|]*/)?python(?:3(?:\\.\\d+)?)?\\s+-m\\s+)?"
+    match = re.fullmatch(
+        r"\\s*" + pip_prefix + r"pip3?\\s+install\\s+([A-Za-z0-9_.-]+)\\s*",
+        command,
+        re.IGNORECASE,
+    )
+    if match:
+        compatibility_command = _compatibility_install_command(match.group(1))
+        if compatibility_command:
+            return compatibility_command
 
     if not re.match(r"^\\s*pkg\\s+install\\b", command, re.IGNORECASE):
         return command
@@ -1245,16 +1262,8 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
                 return self._send_json(400, {"error": "Missing package target"})
             if mode == "pkg":
                 cmd = ["pkg", "install", "-y"] + pkgs
-            elif target.lower() == "parsel":
-                # External Termux installations do not receive the APK-bundled Frostwork fallback.
-                # Keep this exported bridge on the known-compatible w3lib 2.5 line.
-                pip_cmd = shlex.join(_build_pip_cmd(["w3lib<2.6", "parsel"], trusted_host=trusted_host))
-                cmd = ["sh", "-c", "pkg install -y python-lxml && " + pip_cmd]
-            elif target.lower() == "polars":
-                # Use TUR's signed Android-native Polars package and Rust runtime, not pip/maturin.
-                cmd = ["sh", "-c", "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"]
-            elif target.lower() == "scikit-learn":
-                cmd = ["sh", "-c", _scikit_learn_source_install_command(trusted_host=trusted_host)]
+            elif len(pkgs) == 1 and _compatibility_install_command(pkgs[0], trusted_host=trusted_host):
+                cmd = ["sh", "-c", _compatibility_install_command(pkgs[0], trusted_host=trusted_host)]
             else:
                 cmd = _build_pip_cmd(pkgs, trusted_host=trusted_host)
             if self.path == "/install-stream":
