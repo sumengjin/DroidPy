@@ -64,6 +64,10 @@ assert.ok(generated.includes('if package == "scipy":'));
 assert.ok(generated.includes('if package == "polars":'));
 assert.ok(generated.includes('if package in ("scikit-learn", "sklearn"):'));
 assert.ok(generated.includes('no verified Termux ARM64 / Python 3.14 prebuilt scikit-learn package is available'));
+assert.ok(generated.includes('"pandas": "python-pandas"'));
+assert.ok(generated.includes('"numpy": "python-numpy"'));
+assert.ok(generated.includes('"matplotlib": "matplotlib"'));
+assert.ok(generated.includes('"cryptography": "python-cryptography"'));
 assert.ok(generated.includes('shlex.quote("DroidPy: no verified Termux ARM64 / Python 3.14 prebuilt scikit-learn package is available; on-device source builds are disabled.")'));
 assert.ok(generated.includes('_compatibility_install_command(pkgs[0], trusted_host=trusted_host)'));
 
@@ -152,6 +156,7 @@ assert.ok(androidBuilder.includes('"scipy" -> "pkg install -y python-scipy"'));
 assert.ok(androidBuilder.includes('"polars" -> "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"'));
 assert.ok(androidBuilder.includes('"scikit-learn", "sklearn" ->'));
 assert.ok(androidBuilder.includes('no verified Termux ARM64 / Python 3.14 prebuilt scikit-learn package is available'));
+assert.ok(androidBuilder.includes('else -> nativeTermuxPackageForPip(packageName)?.let { "pkg install -y $it" }'));
 assert.ok(androidBuilder.includes('resolvePackageCompatibilityCommand(target, trustedHost)'));
 assert.ok(androidBuilder.includes('resolvePackageCompatibilityCommand(packageMatch.groupValues[1])'));
 
