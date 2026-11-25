@@ -4272,7 +4272,7 @@ with tempfile.TemporaryDirectory(prefix="droidpy-sklearn-") as tmp:
         "--no-build-isolation", "--no-deps", str(source)
     ])
 """.trimIndent())
-                                "pkg install -y python-numpy python-scipy ninja && $pythonCmd -m pip install --no-cache-dir $trustArgs --prefer-binary 'meson-python>=0.17.1,<0.22' 'cython>=3.1.2,<3.2.6' 'joblib>=1.4.0' 'narwhals>=2.0.1' 'threadpoolctl>=3.5.0' && $pythonCmd \"$installerScript\""
+                                "pkg install -y python-numpy python-scipy ninja && $pythonCmd -m pip install --no-cache-dir $trustArgs --prefer-binary 'meson-python>=0.17.1,<0.20' 'cython>=3.1.2,<3.2.6' 'joblib>=1.4.0' 'narwhals>=2.0.1' 'threadpoolctl>=3.5.0' && $pythonCmd \"$installerScript\""
                             } else if (trustedHost) {
                                 "$pythonCmd -m pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org $target"
                             } else {
@@ -4698,7 +4698,7 @@ with tempfile.TemporaryDirectory(prefix="droidpy-sklearn-") as tmp:
         "--no-build-isolation", "--no-deps", str(source)
     ])
 """.trimIndent())
-            return "pkg install -y python-numpy python-scipy ninja && $pythonCmd -m pip install --no-cache-dir --prefer-binary 'meson-python>=0.17.1,<0.22' 'cython>=3.1.2,<3.2.6' 'joblib>=1.4.0' 'narwhals>=2.0.1' 'threadpoolctl>=3.5.0' && $pythonCmd \"$installerScript\""
+            return "pkg install -y python-numpy python-scipy ninja && $pythonCmd -m pip install --no-cache-dir --prefer-binary 'meson-python>=0.17.1,<0.20' 'cython>=3.1.2,<3.2.6' 'joblib>=1.4.0' 'narwhals>=2.0.1' 'threadpoolctl>=3.5.0' && $pythonCmd \"$installerScript\""
         }
         val installPrefix = Regex("""^\s*pkg\s+install\b""", RegexOption.IGNORE_CASE)
         val match = installPrefix.find(command) ?: return command
