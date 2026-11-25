@@ -43,7 +43,7 @@ export function mergeCookieLists(
 ): CapturedCookieItem[] {
   const map = new Map<string, CapturedCookieItem>();
   const cookieKey = (item: CapturedCookieItem) =>
-    `${item.name.trim()}\u0000${(item.domain || '').trim().toLowerCase()}\u0000${item.path || '/'}`;
+    `${item.name.trim()}\u0000${(item.domain || '').trim().toLowerCase().replace(/^\./, '')}\u0000${item.path || '/'}`;
   for (const item of existing) {
     if (item.name.trim()) {
       map.set(cookieKey(item), item);
@@ -152,7 +152,7 @@ export function parseRawCrawlerInput(rawInput: string): {
                 path: typeof obj.path === 'string' ? obj.path : undefined,
                 httpOnly: Boolean(obj.httpOnly),
                 secure: Boolean(obj.secure),
-                expiresAt: typeof obj.expiresAt === 'number' ? obj.expiresAt : undefined,
+                expiresAt: typeof obj.expiresAt === 'number' ? obj.expiresAt : typeof obj.expirationDate === 'number' ? obj.expirationDate : undefined,
                 sameSite: typeof obj.sameSite === 'string' ? obj.sameSite : undefined,
               });
             }
@@ -196,7 +196,7 @@ export function parseRawCrawlerInput(rawInput: string): {
                 path: typeof c.path === 'string' ? c.path : undefined,
                 httpOnly: Boolean(c.httpOnly),
                 secure: Boolean(c.secure),
-                expiresAt: typeof c.expiresAt === 'number' ? c.expiresAt : undefined,
+                expiresAt: typeof c.expiresAt === 'number' ? c.expiresAt : typeof c.expirationDate === 'number' ? c.expirationDate : undefined,
                 sameSite: typeof c.sameSite === 'string' ? c.sameSite : undefined,
               }));
           } else if (obj.cookies && typeof obj.cookies === 'object') {
@@ -279,8 +279,9 @@ export function parseRawCrawlerInput(rawInput: string): {
   const netscapeItems: CapturedCookieItem[] = [];
   for (const line of lines) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
+    if (!trimmed) continue;
     const httpOnly = trimmed.startsWith('#HttpOnly_');
+    if (trimmed.startsWith('#') && !httpOnly) continue;
     const cookieLine = httpOnly ? trimmed.slice('#HttpOnly_'.length) : trimmed;
     const cols = cookieLine.split('\t');
     if (cols.length >= 7) {
@@ -370,6 +371,7 @@ DroidPy Cookie Crawler Session
 """
 import json
 from pathlib import Path
+from urllib.parse import urlparse
 import requests
 from requests.cookies import create_cookie
 from bs4 import BeautifulSoup
@@ -396,15 +398,20 @@ def create_session() -> tuple[requests.Session, str]:
                     rest["HttpOnly"] = None
                 if item.get("sameSite"):
                     rest["SameSite"] = item["sameSite"]
+                cookie_domain = str(item.get("domain") or urlparse(url).hostname or "")
                 cookie = create_cookie(
                     name=str(item["name"]),
                     value=str(item.get("value") or ""),
-                    domain=str(item.get("domain") or ""),
+                    domain=cookie_domain,
                     path=str(item.get("path") or "/"),
                     secure=bool(item.get("secure")),
                     expires=item.get("expiresAt"),
                     rest=rest,
                 )
+                if not item.get("domain"):
+                    # Imported Cookie headers are host-only; do not leak them to other hosts.
+                    cookie.domain_specified = False
+                    cookie.domain_initial_dot = False
                 sess.cookies.set_cookie(cookie)
         else:
             # Backward compatibility with older cookies.json exports.
