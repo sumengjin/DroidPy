@@ -3588,7 +3588,7 @@ def clipboard_set(text):
                         // standalone pip launcher that could point at a different Python.
                         val pythonPath = File(usrDir, "bin/python").absolutePath
                         val python3Path = File(usrDir, "bin/python3").absolutePath
-                        steps.add("PY_BIN=\\\"$pythonPath\\\"; [ -x \\\"\\\$PY_BIN\\\" ] || PY_BIN=\\\"$python3Path\\\"; [ -x \\\"\\\$PY_BIN\\\" ] || { echo '[DroidPy] Python is not ready; package restore aborted.' >&2; exit 127; }")
+                        steps.add("PY_BIN=\\\"$pythonPath\\\"; [ -x \\\"${'\\\" ] || PY_BIN=\\\"$python3Path\\\"; [ -x \\\"\\\$PY_BIN\\\" ] || { echo '[DroidPy] Python is not ready; package restore aborted.' >&2; exit 127; }")
                         val needsNumpy = needPips.any { normalizePipPkgName(it) == "numpy" }
                         val remainingPips = needPips.filter { normalizePipPkgName(it) != "numpy" }
                         if (needsNumpy) {
@@ -3598,6 +3598,4419 @@ def clipboard_set(text):
                         }
                         if (remainingPips.isNotEmpty()) {
                             steps.add("\\\"\\\$PY_BIN\\\" -m pip install --no-cache-dir " + remainingPips.joinToString(" "))
+                        }
+                        val restoreCmd = if (steps.isEmpty()) {
+                            "echo '[DroidPy] 所有已備份套件均已存在，無需還原。'"
+                        } else {
+                            steps.joinToString(" && ")
+                        }
+                        streamShellCommand(out, restoreCmd)
+                    }
+                }
+
+                method == "GET" && path == "/logs" -> {
+                    val nativeLines = JSONArray()
+                    try {
+                        synchronized(logLock) {
+                            val f = nativeLogFile
+                            if (f.isFile) {
+                                f.readLines(Charsets.UTF_8).takeLast(450).forEach { nativeLines.put(it) }
+                            }
+                        }
+                    } catch (_: Exception) {
+                    }
+                    val logcatLines = JSONArray()
+                    var logcatProc: Process? = null
+                    try {
+                        val pid = android.os.Process.myPid()
+                        logcatProc = ProcessBuilder("logcat", "-d", "-t", "80", "--pid=$pid").redirectErrorStream(true).start()
+                        val txt = logcatProc.inputStream.bufferedReader(Charsets.UTF_8).readText()
+                        logcatProc.waitFor()
+                        txt.lines().filter { it.isNotBlank() }.takeLast(80).forEach { logcatLines.put(stripAnsiForLog(it)) }
+                    } catch (_: Exception) {
+                    } finally {
+                        try { logcatProc?.inputStream?.close() } catch (_: Exception) {}
+                        try { logcatProc?.errorStream?.close() } catch (_: Exception) {}
+                        try { logcatProc?.outputStream?.close() } catch (_: Exception) {}
+                    }
+                    writeJson(
+                        out,
+                        200,
+                        JSONObject()
+                            .put("ok", true)
+                            .put("logPath", nativeLogFile.absolutePath)
+                            .put("nativeLines", nativeLines)
+                            .put("logcatLines", logcatLines)
+                    )
+                }
+
+                method == "POST" && path == "/logs/clear" -> {
+                    try {
+                        synchronized(logLock) {
+                            nativeLogFile.writeText("", Charsets.UTF_8)
+                        }
+                    } catch (_: Exception) {
+                    }
+                    appendNativeLog("Logs", "Native log cleared by user")
+                    writeJson(out, 200, JSONObject().put("ok", true))
+                }
+
+                method == "POST" && path == "/stdin" -> {
+                    val data = bodyJson.optString("data", "") + "\\n"
+                    val proc = activeProcess
+                    if (proc == null) {
+                        writeJson(out, 409, JSONObject().put("error", "No active process"))
+                    } else {
+                        try {
+                            proc.outputStream.write(data.toByteArray())
+                            proc.outputStream.flush()
+                            writeJson(out, 200, JSONObject().put("ok", true))
+                        } catch (e: Exception) {
+                            writeJson(out, 500, JSONObject().put("error", e.message ?: "Write failed"))
+                        }
+                    }
+                }
+
+                method == "POST" && path == "/stop" -> {
+                    val proc = activeProcess
+                    if (proc != null) {
+                        appendNativeLog("Exec", "Force stopping active process tree")
+                        killProcessTree(proc)
+                    }
+                    writeJson(out, 200, JSONObject().put("ok", true))
+                }
+
+                method == "POST" && path == "/droid-action" -> {
+                    when (bodyJson.optString("action")) {
+                        "toast" -> {
+                            val msg = bodyJson.optString("message", "")
+                            Handler(Looper.getMainLooper()).post {
+                                Toast.makeText(appContext, msg, Toast.LENGTH_SHORT).show()
+                            }
+                            writeJson(out, 200, JSONObject().put("ok", true))
+                        }
+                        "vibrate" -> {
+                            val ms = bodyJson.optLong("pattern", 45L).coerceIn(10L, 2000L)
+                            try {
+                                val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                    (appContext.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
+                                } else {
+                                    @Suppress("DEPRECATION")
+                                    appContext.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                                }
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    vibrator.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
+                                } else {
+                                    @Suppress("DEPRECATION")
+                                    vibrator.vibrate(ms)
+                                }
+                                writeJson(out, 200, JSONObject().put("ok", true))
+                            } catch (_: Exception) {
+                                writeJson(out, 200, JSONObject().put("ok", false))
+                            }
+                        }
+                        "device_info" -> {
+                            val dm = appContext.resources.displayMetrics
+                            writeJson(
+                                out,
+                                200,
+                                JSONObject()
+                                    .put("platform", "Android \${Build.VERSION.RELEASE} (\${Build.MODEL})")
+                                    .put("deviceType", "phone")
+                                    .put("screen", "\${dm.widthPixels}x\${dm.heightPixels}")
+                                    .put("pixelRatio", dm.density.toDouble())
+                                    .put("maxTouchPoints", 5)
+                                    .put("online", true)
+                            )
+                        }
+                        else -> writeJson(out, 400, JSONObject().put("error", "Unknown action"))
+                    }
+                }
+
+                method == "GET" && path == "/sdcard/status" -> {
+                    val root = Environment.getExternalStorageDirectory()
+                    val manageAll = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Environment.isExternalStorageManager() else true
+                    val runtimeWrite = ContextCompat.checkSelfPermission(appContext, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+                    val droidpyDir = File(root, "DroidPy").absolutePath
+                    var totalBytes = 0L
+                    var freeBytes = 0L
+                    var usedBytes = 0L
+                    try {
+                        val st = StatFs(root.path)
+                        totalBytes = st.totalBytes
+                        freeBytes = st.availableBytes
+                        usedBytes = (totalBytes - freeBytes).coerceAtLeast(0L)
+                    } catch (_: Exception) {
+                    }
+                    writeJson(
+                        out,
+                        200,
+                        JSONObject()
+                            .put("granted", hasStorageAccess())
+                            .put("manageAllFiles", manageAll)
+                            .put("runtimeWrite", runtimeWrite)
+                            .put("rootPath", root.absolutePath)
+                            .put("droidpyDir", droidpyDir)
+                            .put("totalBytes", totalBytes)
+                            .put("freeBytes", freeBytes)
+                            .put("usedBytes", usedBytes)
+                    )
+                }
+
+                method == "GET" && path == "/sdcard/list" -> {
+                    val relParam = queryStr.split("&")
+                        .firstOrNull { it.startsWith("path=") }
+                        ?.substringAfter("=")
+                        ?.let { URLDecoder.decode(it, "UTF-8") } ?: ""
+                    val dir = resolveSdcardTarget(relParam)
+                    if (dir == null) {
+                        writeJson(out, 400, JSONObject().put("error", "Invalid path"))
+                    } else if (!hasStorageAccess() && !dir.canRead()) {
+                        writeJson(out, 403, JSONObject().put("error", "尚未取得手機內部儲存空間存取權限"))
+                    } else {
+                        val rootCanonical = Environment.getExternalStorageDirectory().canonicalPath
+                        val arr = JSONArray()
+                        val children = dir.listFiles()?.sortedWith(compareBy<File>({ !it.isDirectory }, { it.name.lowercase() })) ?: emptyList()
+                        for (child in children) {
+                            if (child.name.startsWith(".")) continue
+                            val childRel = child.canonicalPath.removePrefix(rootCanonical).trimStart('/')
+                            arr.put(
+                                JSONObject()
+                                    .put("name", child.name)
+                                    .put("relPath", childRel)
+                                    .put("isDir", child.isDirectory)
+                                    .put("size", if (child.isFile) child.length() else 0L)
+                                    .put("updatedAt", child.lastModified())
+                            )
+                        }
+                        val currentRel = dir.canonicalPath.removePrefix(rootCanonical).trimStart('/')
+                        writeJson(
+                            out,
+                            200,
+                            JSONObject()
+                                .put("granted", hasStorageAccess())
+                                .put("rootPath", rootCanonical)
+                                .put("currentPath", currentRel)
+                                .put("entries", arr)
+                        )
+                    }
+                }
+
+                method == "POST" && path == "/sdcard/read" -> {
+                    val relPath = bodyJson.optString("path", "")
+                    val target = resolveSdcardTarget(relPath)
+                    if (target == null || !target.exists() || !target.isFile) {
+                        writeJson(out, 404, JSONObject().put("error", "找不到目標檔案"))
+                    } else if (target.length() > 512 * 1024) {
+                        writeJson(out, 413, JSONObject().put("error", "檔案超過 512 KB 上限"))
+                    } else {
+                        try {
+                            writeJson(
+                                out,
+                                200,
+                                JSONObject()
+                                    .put("name", target.name)
+                                    .put("relPath", relPath)
+                                    .put("content", target.readText(Charsets.UTF_8))
+                            )
+                        } catch (e: Exception) {
+                            writeJson(out, 403, JSONObject().put("error", e.message ?: "讀取失敗"))
+                        }
+                    }
+                }
+
+                method == "POST" && path == "/sdcard/write" -> {
+                    if (!hasStorageAccess()) {
+                        writeJson(out, 403, JSONObject().put("error", "尚未授予內部儲存空間權限"))
+                    } else {
+                        try {
+                            val batch = bodyJson.optJSONArray("files")
+                            if (batch != null) {
+                                val folderRel = bodyJson.optString("dir", "DroidPy").ifBlank { "DroidPy" }
+                                val destDir = resolveSdcardTarget(folderRel)
+                                if (destDir == null) {
+                                    writeJson(out, 400, JSONObject().put("error", "Invalid folder"))
+                                } else {
+                                    destDir.mkdirs()
+                                    var count = 0
+                                    for (i in 0 until batch.length()) {
+                                        val item = batch.getJSONObject(i)
+                                        val name = File(item.optString("name", "")).name
+                                        if (name.isNotBlank()) {
+                                            File(destDir, name).writeText(item.optString("content", ""), Charsets.UTF_8)
+                                            count++
+                                        }
+                                    }
+                                    writeJson(out, 200, JSONObject().put("ok", true).put("count", count).put("dir", destDir.absolutePath))
+                                }
+                            } else {
+                                val relPath = bodyJson.optString("path", "")
+                                val target = resolveSdcardTarget(relPath)
+                                if (target == null) {
+                                    writeJson(out, 400, JSONObject().put("error", "Invalid path"))
+                                } else {
+                                    target.parentFile?.mkdirs()
+                                    target.writeText(bodyJson.optString("content", ""), Charsets.UTF_8)
+                                    writeJson(out, 200, JSONObject().put("ok", true).put("path", target.absolutePath))
+                                }
+                            }
+                        } catch (e: Exception) {
+                            writeJson(out, 403, JSONObject().put("error", e.message ?: "寫入失敗"))
+                        }
+                    }
+                }
+
+                method == "POST" && path == "/sdcard/mkdir" -> {
+                    val relPath = bodyJson.optString("path", "")
+                    val target = resolveSdcardTarget(relPath)
+                    if (target == null) {
+                        writeJson(out, 400, JSONObject().put("error", "Invalid path"))
+                    } else if (!hasStorageAccess()) {
+                        writeJson(out, 403, JSONObject().put("error", "尚未授予內部儲存空間權限"))
+                    } else {
+                        val created = target.exists() || target.mkdirs()
+                        writeJson(out, if (created) 200 else 500, JSONObject().put("ok", created))
+                    }
+                }
+
+                method == "POST" && path == "/sdcard/delete" -> {
+                    val relPath = bodyJson.optString("path", "")
+                    val rootCanonical = Environment.getExternalStorageDirectory().canonicalPath
+                    val target = resolveSdcardTarget(relPath)
+                    if (target == null || target.canonicalPath == rootCanonical) {
+                        writeJson(out, 400, JSONObject().put("error", "Invalid path"))
+                    } else if (!hasStorageAccess()) {
+                        writeJson(out, 403, JSONObject().put("error", "尚未授予內部儲存空間權限"))
+                    } else {
+                        val deleted = if (target.isDirectory) target.deleteRecursively() else target.delete()
+                        writeJson(out, if (deleted) 200 else 500, JSONObject().put("ok", deleted))
+                    }
+                }
+
+                method == "GET" && path == "/storage/app-usage" -> {
+                    writeJson(out, 200, collectAppStorageUsage())
+                }
+
+                method == "POST" && path == "/storage/cleanup" -> {
+                    val freed = pruneStaleCacheAndTemp(clearAptLists = true)
+                    appendNativeLog("Storage", "Cleaned stale temp/cache, freed=\${freed}B")
+                    writeJson(
+                        out,
+                        200,
+                        JSONObject()
+                            .put("ok", true)
+                            .put("freedBytes", freed)
+                            .put("usageAfter", collectAppStorageUsage())
+                    )
+                }
+
+                method == "POST" && path == "/maintenance/cleanup-processes" -> {
+                    val manual = bodyJson.optBoolean("manual", true)
+                    val res = cleanupStuckPythonProcesses(manual = manual)
+                    appendNativeLog("Watchdog", "Cleanup checked=\${res.optInt("scannedCount")} killed=\${res.optInt("killedCount")} manual=$manual")
+                    writeJson(out, 200, res)
+                }
+
+                method == "POST" && path == "/shell" -> {
+                    val cmd = bodyJson.optString("command", "").trim()
+                    if (cmd.isEmpty()) {
+                        writeJson(out, 400, JSONObject().put("error", "Missing command"))
+                    } else {
+                        val res = runBufferedShellCommand(cmd)
+                        writeJson(out, 200, res)
+                    }
+                }
+
+                method == "POST" && (path == "/run-stream" || path == "/install-stream" || path == "/shell-stream") -> {
+                    val shellCmd = when (path) {
+                        "/run-stream" -> {
+                            val arr = bodyJson.optJSONArray("files") ?: JSONArray()
+                            for (i in 0 until arr.length()) {
+                                val f = arr.getJSONObject(i)
+                                val name = File(f.optString("name", "")).name
+                                if (name.isNotBlank()) {
+                                    File(workspaceDir, name).writeText(f.optString("content", ""))
+                                }
+                            }
+                            val entry = File(bodyJson.optString("entry", "main.py")).name.ifBlank { "main.py" }
+                            val safeEntrySh = entry.replace("'", "'\\\\''")
+                            val pyPath = File(usrDir, "bin/python").absolutePath
+                            val py3Path = File(usrDir, "bin/python3").absolutePath
+                            val binDirPath = File(usrDir, "bin").absolutePath
+                            "PY_BIN=\\"$pyPath\\"; [ -x \\"\${'$'}PY_BIN\\" ] || PY_BIN=\\"$py3Path\\"; if [ ! -x \\"\${'$'}PY_BIN\\" ]; then for c in \\"$binDirPath/python3.\\"*; do [ -f \\"\${'$'}c\\" ] || continue; case \\"\${'$'}c\\" in *-config) continue ;; esac; chmod 755 \\"\${'$'}c\\" 2>/dev/null || true; PY_BIN=\\"\${'$'}c\\"; break; done; fi; if [ ! -x \\"\${'$'}PY_BIN\\" ]; then echo \\"[DroidPy] 尚未安裝 Termux 原生 Python！請至「Termux 橋接」點擊「一鍵初始化 Python + 爬蟲環境」，或先將終端機切換為「沙盒」執行。\\"; exit 127; fi; exec \\"\${'$'}PY_BIN\\" -u '$safeEntrySh'"
+                        }
+                        "/install-stream" -> {
+                            val mode = bodyJson.optString("mode", "pip")
+                            val target = bodyJson.optString("target", "").trim()
+                            val trustedHost = bodyJson.optBoolean("trustedHost", false)
+                            if (mode == "pkg") {
+                                "pkg install -y $target"
+                            } else if (trustedHost) {
+                                "pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org $target"
+                            } else {
+                                "pip install --no-cache-dir $target"
+                            }
+                        }
+                        else -> bodyJson.optString("command", "")
+                    }
+                    streamShellCommand(out, shellCmd)
+                }
+
+                method == "GET" && path == "/files" -> {
+                    val allowed = listOf(".py", ".json", ".csv", ".txt", ".md", ".html", ".xml", ".yaml", ".yml", ".ini", ".cfg", ".log", ".sh", ".toml")
+                    val arr = JSONArray()
+                    workspaceDir.listFiles()?.sortedBy { it.name }?.forEach { f ->
+                        if (f.isFile && !f.name.startsWith(".") && f.length() <= 180 * 1024) {
+                            val lower = f.name.lowercase()
+                            if (allowed.any { lower.endsWith(it) } || f.name == "requirements.txt") {
+                                try {
+                                    arr.put(
+                                        JSONObject()
+                                            .put("name", f.name)
+                                            .put("content", f.readText(Charsets.UTF_8))
+                                            .put("updatedAt", f.lastModified())
+                                    )
+                                } catch (_: Exception) {
+                                }
+                            }
+                        }
+                    }
+                    writeJson(out, 200, JSONObject().put("files", arr))
+                }
+
+                method == "POST" && path == "/probe-url" -> {
+                    try {
+                        writeJson(out, 200, probeUrlSafely(bodyJson.optString("url", "").trim(), bodyJson))
+                    } catch (e: IllegalArgumentException) {
+                        writeJson(out, 400, JSONObject().put("error", e.message ?: "Invalid probe URL"))
+                    } catch (_: Exception) {
+                        writeJson(out, 502, JSONObject().put("error", "Unable to safely probe target URL"))
+                    }
+                }
+
+                else -> writeJson(out, 404, JSONObject().put("error", "Not found"))
+            }
+        }
+    }
+
+    private data class SafeProbeResponse(
+        val statusCode: Int,
+        val headers: Map<String, List<String>>,
+        val body: ByteArray
+    )
+
+    private fun isPublicProbeAddress(address: InetAddress): Boolean {
+        if (address.isAnyLocalAddress || address.isLoopbackAddress ||
+            address.isLinkLocalAddress || address.isSiteLocalAddress ||
+            address.isMulticastAddress) return false
+        val b = address.address.map { it.toInt() and 0xff }
+        if (address is Inet4Address) {
+            val a0 = b[0]
+            val a1 = b[1]
+            val a2 = b[2]
+            if (a0 == 0 || a0 == 10 || a0 == 127 || a0 >= 224) return false
+            if (a0 == 100 && a1 in 64..127) return false
+            if (a0 == 169 && a1 == 254) return false
+            if (a0 == 172 && a1 in 16..31) return false
+            if (a0 == 192 && (a1 == 0 || a1 == 2 || a1 == 168)) return false
+            if (a0 == 192 && a1 == 88 && a2 == 99) return false
+            if (a0 == 192 && a1 == 31 && a2 == 196) return false
+            if (a0 == 192 && a1 == 52 && a2 == 193) return false
+            if (a0 == 192 && a1 == 175 && a2 == 48) return false
+            if (a0 == 198 && a1 in 18..19) return false
+            if (a0 == 198 && a1 == 51 && a2 == 100) return false
+            if (a0 == 203 && a1 == 0 && a2 == 113) return false
+            return true
+        }
+        if (address is Inet6Address) {
+            if ((b[0] and 0xe0) != 0x20) return false
+            if (b[0] == 0x20 && b[1] == 0x01) {
+                if (b[2] == 0x0d && b[3] == 0xb8) return false
+                if (b[2] == 0x00 && b[3] <= 0x01) return false
+                if (b[2] == 0x00 && b[3] == 0x02) return false
+                if (b[2] == 0x00 && b[3] == 0x10) return false
+                if (b[2] == 0x00 && b[3] == 0x20) return false
+            }
+            if (b[0] == 0x20 && b[1] == 0x02) return false
+            if (b[0] == 0x3f && b[1] == 0xff) return false
+            return true
+        }
+        return false
+    }
+
+    private fun validateProbeUrl(url: URL): String {
+        val scheme = url.protocol.lowercase()
+        if (scheme != "http" && scheme != "https") {
+            throw IllegalArgumentException("Only HTTP and HTTPS URLs are allowed")
+        }
+        if (URI(url.toString()).rawUserInfo != null) {
+            throw IllegalArgumentException("URLs containing credentials are not allowed")
+        }
+        val rawHost = url.host.removePrefix("[").removeSuffix("]").trimEnd('.').lowercase()
+        if (rawHost.isBlank() || rawHost == "localhost" ||
+            rawHost.endsWith(".localhost") || rawHost.endsWith(".local") ||
+            rawHost.endsWith(".internal") || rawHost.endsWith(".test") ||
+            rawHost.contains("%")) {
+            throw IllegalArgumentException("Local hostnames and scoped IP addresses are not allowed")
+        }
+        return if (rawHost.contains(":")) rawHost else IDN.toASCII(rawHost)
+    }
+
+    private fun readProbeLine(input: BufferedInputStream, maxBytes: Int = 8192): String {
+        val output = ByteArrayOutputStream()
+        while (true) {
+            val value = input.read()
+            if (value < 0) {
+                if (output.size() == 0) return ""
+                break
+            }
+            if (value == 10) break
+            if (value != 13) output.write(value)
+            if (output.size() > maxBytes) throw IllegalArgumentException("HTTP response header line too large")
+        }
+        return output.toString("ISO-8859-1")
+    }
+
+    private fun readProbeExact(input: BufferedInputStream, output: ByteArrayOutputStream, count: Int) {
+        var remaining = count
+        val buffer = ByteArray(4096)
+        while (remaining > 0) {
+            val n = input.read(buffer, 0, minOf(buffer.size, remaining))
+            if (n < 0) throw java.io.EOFException("Incomplete HTTP response body")
+            output.write(buffer, 0, n)
+            remaining -= n
+        }
+    }
+
+    private fun readProbeBody(input: BufferedInputStream, headers: Map<String, List<String>>): ByteArray {
+        val maxBytes = 24000
+        val output = ByteArrayOutputStream()
+        val transferEncoding = headers["transfer-encoding"]?.joinToString(",")?.lowercase().orEmpty()
+        if (transferEncoding.isNotBlank() && headers.containsKey("content-length")) {
+            throw IllegalArgumentException("Ambiguous HTTP response framing")
+        }
+        if (transferEncoding.isNotBlank() && transferEncoding.trim() != "chunked") {
+            throw IllegalArgumentException("Unsupported HTTP transfer encoding")
+        }
+        if (transferEncoding.contains("chunked")) {
+            while (output.size() < maxBytes) {
+                val sizeLine = readProbeLine(input).substringBefore(';').trim()
+                val chunkSize = sizeLine.toLongOrNull(16)
+                    ?: throw IllegalArgumentException("Invalid chunked response")
+                if (chunkSize < 0L) throw IllegalArgumentException("Invalid chunk size")
+                if (chunkSize == 0L) {
+                    while (readProbeLine(input).isNotEmpty()) { }
+                    break
+                }
+                val remaining = maxBytes - output.size()
+                val toRead = minOf(chunkSize, remaining.toLong()).toInt()
+                readProbeExact(input, output, toRead)
+                if (toRead.toLong() < chunkSize) break
+                if (input.read() != 13 || input.read() != 10) {
+                    throw IllegalArgumentException("Invalid chunk delimiter")
+                }
+            }
+            return output.toByteArray()
+        }
+        val contentLengths = headers["content-length"]
+        if (contentLengths != null && contentLengths.size != 1) {
+            throw IllegalArgumentException("Ambiguous Content-Length")
+        }
+        val lengthHeader = contentLengths?.firstOrNull()
+        if (lengthHeader != null) {
+            val length = lengthHeader.toLongOrNull()
+                ?: throw IllegalArgumentException("Invalid Content-Length")
+            if (length < 0) throw IllegalArgumentException("Invalid Content-Length")
+            readProbeExact(input, output, minOf(length, maxBytes.toLong()).toInt())
+            return output.toByteArray()
+        }
+        val buffer = ByteArray(4096)
+        while (output.size() < maxBytes) {
+            val n = input.read(buffer, 0, minOf(buffer.size, maxBytes - output.size()))
+            if (n < 0) break
+            if (n > 0) output.write(buffer, 0, n)
+        }
+        return output.toByteArray()
+    }
+
+    private fun performPinnedProbeRequest(url: URL, requestHeaders: Map<String, String>): SafeProbeResponse {
+        val host = validateProbeUrl(url)
+        val port = if (url.port > 0) url.port else if (url.protocol.equals("https", true)) 443 else 80
+        val addresses = InetAddress.getAllByName(host)
+        if (addresses.isEmpty() || addresses.any { !isPublicProbeAddress(it) }) {
+            throw IllegalArgumentException("Target resolves to a non-public IP address")
+        }
+        var lastError: Exception? = null
+        for (pinnedAddress in addresses) {
+            try {
+                val rawSocket = Socket()
+                try {
+                    rawSocket.connect(InetSocketAddress(pinnedAddress, port), 15000)
+                    rawSocket.soTimeout = 18000
+                } catch (error: Exception) {
+                    try { rawSocket.close() } catch (_: Exception) {}
+                    throw error
+                }
+                val activeSocket: Socket = if (url.protocol.equals("https", true)) {
+                    try {
+                        val factory = SSLSocketFactory.getDefault() as SSLSocketFactory
+                        val ssl = factory.createSocket(rawSocket, host, port, true) as SSLSocket
+                        val parameters = ssl.sslParameters
+                        parameters.endpointIdentificationAlgorithm = "HTTPS"
+                        if (!host.contains(":") && !host.matches(Regex("^[0-9.]+$"))) {
+                            parameters.serverNames = listOf(SNIHostName(host))
+                        }
+                        ssl.sslParameters = parameters
+                        ssl.startHandshake()
+                        ssl
+                    } catch (error: Exception) {
+                        try { rawSocket.close() } catch (_: Exception) {}
+                        throw error
+                    }
+                } else {
+                    rawSocket
+                }
+
+                activeSocket.use { socket ->
+                    val hostHeader = if (host.contains(":")) "[$host]" else host
+                    val authority = if ((url.protocol.equals("https", true) && port == 443) ||
+                        (url.protocol.equals("http", true) && port == 80)) hostHeader else "$hostHeader:$port"
+                    val requestTarget = (url.path.ifBlank { "/" }) + (url.query?.let { "?" + it } ?: "")
+                    if (requestTarget.contains("\\r") || requestTarget.contains("\\n")) {
+                        throw IllegalArgumentException("Invalid request path")
+                    }
+                    val request = StringBuilder()
+                        .append("GET ").append(requestTarget).append(" HTTP/1.1\\r\\n")
+                        .append("Host: ").append(authority).append("\\r\\n")
+                        .append("Connection: close\\r\\n")
+                        .append("Accept-Encoding: identity\\r\\n")
+                    for ((name, value) in requestHeaders) {
+                        request.append(name).append(": ").append(value).append("\\r\\n")
+                    }
+                    request.append("\\r\\n")
+                    socket.getOutputStream().write(request.toString().toByteArray(Charsets.ISO_8859_1))
+                    socket.getOutputStream().flush()
+
+                    val input = BufferedInputStream(socket.getInputStream())
+                    val statusLine = readProbeLine(input)
+                    val statusParts = statusLine.split(" ", limit = 3)
+                    val statusCode = statusParts.getOrNull(1)?.toIntOrNull()
+                        ?: throw IllegalArgumentException("Invalid HTTP status line")
+                    val responseHeaders = linkedMapOf<String, MutableList<String>>()
+                    var totalHeaderBytes = statusLine.length
+                    var headerCount = 0
+                    while (true) {
+                        val line = readProbeLine(input)
+                        if (line.isEmpty()) break
+                        totalHeaderBytes += line.length
+                        headerCount++
+                        if (totalHeaderBytes > 32768 || headerCount > 100) {
+                            throw IllegalArgumentException("HTTP response headers too large")
+                        }
+                        val separator = line.indexOf(':')
+                        if (separator <= 0) throw IllegalArgumentException("Invalid HTTP response header")
+                        val name = line.substring(0, separator).trim().lowercase()
+                        val value = line.substring(separator + 1).trim()
+                        responseHeaders.getOrPut(name) { mutableListOf() }.add(value)
+                    }
+                    val body = readProbeBody(input, responseHeaders)
+                    return SafeProbeResponse(statusCode, responseHeaders, body)
+                }
+            } catch (error: Exception) {
+                lastError = error
+            }
+        }
+        throw lastError ?: java.io.IOException("No reachable public address for target")
+    }
+
+    private fun probeOrigin(url: URL): String {
+        val host = url.host.lowercase()
+        val port = if (url.port > 0) url.port else if (url.protocol.equals("https", true)) 443 else 80
+        return url.protocol.lowercase() + "://" + host + ":" + port
+    }
+
+    private fun buildProbeHeaders(bodyJson: JSONObject): MutableMap<String, String> {
+        val userAgent = bodyJson.optString("userAgent", "").ifBlank {
+            "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36"
+        }
+        if (userAgent.length > 512 || userAgent.any { it.code < 32 && it.code != 9 } || userAgent.contains(127.toChar())) {
+            throw IllegalArgumentException("Invalid User-Agent header")
+        }
+        val headers = linkedMapOf(
+            "User-Agent" to userAgent,
+            "Accept" to "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8"
+        )
+        val cookie = bodyJson.optString("cookieHeader", "").trim()
+        if (cookie.isNotEmpty()) {
+            if (cookie.length > 8192 || cookie.any { it.code < 32 && it.code != 9 } || cookie.contains(127.toChar())) {
+                throw IllegalArgumentException("Invalid Cookie header")
+            }
+            headers["Cookie"] = cookie
+        }
+        val forbidden = setOf(
+            "host", "connection", "content-length", "transfer-encoding",
+            "proxy-authorization", "proxy-connection", "keep-alive",
+            "upgrade", "te", "trailer", "cookie", "accept-encoding"
+        )
+        val extra = bodyJson.optJSONObject("extraHeaders")
+        if (extra != null) {
+            if (extra.length() > 32) throw IllegalArgumentException("Too many custom headers")
+            val keys = extra.keys()
+            while (keys.hasNext()) {
+                val name = keys.next().trim()
+                val value = extra.optString(name, "")
+                if (name.isBlank() || name.length > 128 || value.length > 4096 ||
+                    !Regex("^[A-Za-z0-9!#$%&'*+.^_|~-]+$").matches(name) ||
+                    value.any { it.code < 32 && it.code != 9 } || value.contains(127.toChar()) ||
+                    name.lowercase() in forbidden) {
+                    throw IllegalArgumentException("Invalid or restricted custom header")
+                }
+                val existingName = headers.keys.firstOrNull { it.equals(name, ignoreCase = true) }
+                headers[existingName ?: name] = value
+            }
+        }
+        return headers
+    }
+
+    private fun probeUrlSafely(targetUrl: String, bodyJson: JSONObject): JSONObject {
+        if (targetUrl.isBlank() || targetUrl.length > 4096 || targetUrl.any { it.isWhitespace() }) {
+            throw IllegalArgumentException("Invalid or oversized URL")
+        }
+        var current = URL(targetUrl)
+        val headers = buildProbeHeaders(bodyJson)
+        for (redirectCount in 0..5) {
+            val response = performPinnedProbeRequest(current, headers)
+            val location = response.headers["location"]?.firstOrNull()
+            if (response.statusCode in setOf(301, 302, 303, 307, 308) &&
+                !location.isNullOrBlank() && redirectCount < 5) {
+                val next = URL(current, location)
+                if (probeOrigin(current) != probeOrigin(next)) {
+                    headers.keys.removeAll { it.lowercase() in setOf("cookie", "authorization", "proxy-authorization", "referer") }
+                }
+                current = next
+                continue
+            }
+            val bodyText = String(response.body, Charsets.UTF_8)
+            val setCookies = JSONArray()
+            val responseHeaders = JSONObject()
+            response.headers.forEach { (name, values) ->
+                if (name.equals("set-cookie", true)) {
+                    values.forEach { setCookies.put(it.take(4096)) }
+                } else {
+                    responseHeaders.put(name, values.joinToString(", ").take(2048))
+                }
+            }
+            val titleMatch = Regex("<title[^>]*>(.*?)</title>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)).find(bodyText)
+            val title = titleMatch?.groupValues?.getOrNull(1)?.replace(Regex("\\\\s+"), " ")?.trim() ?: ""
+            return JSONObject()
+                .put("ok", response.statusCode in 200..399)
+                .put("url", targetUrl)
+                .put("finalUrl", current.toString())
+                .put("statusCode", response.statusCode)
+                .put("title", title)
+                .put("setCookies", setCookies)
+                .put("headers", responseHeaders)
+                .put("bodyPreview", bodyText.take(8000))
+        }
+        throw IllegalArgumentException("Too many redirects")
+    }
+
+    private fun runBufferedShellCommand(command: String): JSONObject {
+        val t0 = System.currentTimeMillis()
+        val shFile = File(usrDir, "bin/sh")
+        var code = 1
+        var stdoutText = ""
+        val isPkgOrPip = command.contains("pip") || command.contains("pkg") || command.contains("apt")
+        if (!shFile.exists()) {
+            stdoutText = "[DroidPy] Bootstrap sh not ready"
+        } else {
+            var proc: Process? = null
+            try {
+                val pb = ProcessBuilder(shFile.absolutePath, "-c", command)
+                pb.directory(workspaceDir)
+                pb.redirectErrorStream(true)
+                pb.environment().putAll(buildEnv())
+                proc = pb.start()
+                stdoutText = proc.inputStream.bufferedReader(Charsets.UTF_8).readText()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val done = proc.waitFor(120, java.util.concurrent.TimeUnit.SECONDS)
+                    code = if (done) proc.exitValue() else 124
+                    if (!done) proc.destroyForcibly()
+                } else {
+                    code = proc.waitFor()
+                }
+            } catch (e: Exception) {
+                stdoutText = e.message ?: "Shell execution error"
+            } finally {
+                try { proc?.inputStream?.close() } catch (_: Exception) {}
+                try { proc?.errorStream?.close() } catch (_: Exception) {}
+                try { proc?.outputStream?.close() } catch (_: Exception) {}
+                if (isPkgOrPip) {
+                    pruneStaleCacheAndTemp(clearAptLists = false)
+                }
+            }
+        }
+        if (code == 0 && isPkgOrPip) {
+            val isUninstall = command.contains("uninstall") || command.contains("remove") || command.contains("purge")
+            savePackageBackupSnapshot(forceShrink = isUninstall)
+        }
+        return JSONObject()
+            .put("exitCode", code)
+            .put("stdout", stripAnsiForLog(stdoutText))
+            .put("stderr", "")
+            .put("durationMs", System.currentTimeMillis() - t0)
+    }
+
+    private fun streamShellCommand(out: OutputStream, command: String) {
+        val t0 = System.currentTimeMillis()
+        val shFile = File(usrDir, "bin/sh")
+        val isPkgOrPip = command.contains("pip") || command.contains("pkg") || command.contains("apt")
+        appendNativeLog("Exec", "Stream shell start: \${command.take(180)}")
+
+        out.write((
+            "HTTP/1.1 200 OK\\r\\n" +
+            corsHeaders() +
+            "Content-Type: application/x-ndjson; charset=utf-8\\r\\n" +
+            "Connection: close\\r\\n\\r\\n"
+        ).toByteArray())
+        out.flush()
+
+        fun sendStdout(text: String) {
+            val line = JSONObject().put("type", "stdout").put("data", text).toString() + "\\n"
+            out.write(line.toByteArray(Charsets.UTF_8))
+            out.flush()
+        }
+
+        if (!shFile.exists()) {
+            try {
+                sendStdout("[DroidPy] Waiting for Termux bootstrap extraction...\\n")
+            } catch (_: Exception) {
+                return
+            }
+            var waited = 0
+            while (!shFile.exists() && waited < 45000) {
+                try { Thread.sleep(250) } catch (_: InterruptedException) { break }
+                waited += 250
+            }
+        }
+
+        var code = 1
+        val outputTail = StringBuilder()
+        fun recordTail(chunk: String) {
+            val cleaned = stripAnsiForLog(chunk)
+            if (cleaned.isNotEmpty()) {
+                outputTail.append(cleaned)
+                if (outputTail.length > 2400) {
+                    outputTail.delete(0, outputTail.length - 1600)
+                }
+            }
+        }
+        if (!shFile.exists()) {
+            appendNativeLog("Exec", "Bootstrap missing sh at \${shFile.absolutePath}")
+            try {
+                sendStdout("[DroidPy] Bootstrap not ready at \${shFile.absolutePath}\\n")
+            } catch (_: Exception) {
+            }
+        } else {
+            var proc: Process? = null
+            try {
+                val pb = ProcessBuilder(shFile.absolutePath, "-c", command)
+                pb.directory(workspaceDir)
+                pb.redirectErrorStream(true)
+                pb.environment().putAll(buildEnv())
+
+                proc = pb.start()
+                activeProcess = proc
+                activeProcessStartedAt.set(System.currentTimeMillis())
+                val charBuf = CharArray(1024)
+                val inpReader = InputStreamReader(proc.inputStream, Charsets.UTF_8)
+                while (true) {
+                    val n = inpReader.read(charBuf)
+                    if (n < 0) break
+                    if (n > 0) {
+                        val s = String(charBuf, 0, n)
+                        recordTail(s)
+                        try {
+                            sendStdout(s)
+                        } catch (_: Exception) {
+                            proc.destroyForcibly()
+                            break
+                        }
+                    }
+                }
+                code = proc.waitFor()
+            } catch (e: Exception) {
+                appendNativeLog("Exec", "Exec exception: \${e.message}")
+                recordTail("[DroidPy] Exec error: \${e.message}\\n")
+                try {
+                    sendStdout("[DroidPy] Exec error: \${e.message}\\n")
+                } catch (_: Exception) {
+                }
+            } finally {
+                try { proc?.inputStream?.close() } catch (_: Exception) {}
+                try { proc?.errorStream?.close() } catch (_: Exception) {}
+                try { proc?.outputStream?.close() } catch (_: Exception) {}
+                activeProcess = null
+                activeProcessStartedAt.set(0L)
+                if (isPkgOrPip) {
+                    pruneStaleCacheAndTemp(clearAptLists = false)
+                }
+            }
+        }
+
+        val elapsed = System.currentTimeMillis() - t0
+        appendNativeLog("Exec", "Stream shell finished: exitCode=$code, durationMs=$elapsed")
+        if (code == 0 && isPkgOrPip) {
+            val isUninstall = command.contains("uninstall") || command.contains("remove") || command.contains("purge")
+            savePackageBackupSnapshot(forceShrink = isUninstall)
+        }
+        if (code != 0 && outputTail.isNotBlank()) {
+            val tailCompact = stripAnsiForLog(outputTail.toString()).trim().takeLast(1200)
+            appendNativeLog("Exec", "Non-zero exit ($code) output tail:\\n$tailCompact")
+        }
+
+        val doneLine = JSONObject()
+            .put("type", "done")
+            .put("exitCode", code)
+            .put("durationMs", elapsed)
+            .toString() + "\\n"
+        try {
+            out.write(doneLine.toByteArray(Charsets.UTF_8))
+            out.flush()
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun corsHeaders(allowPrivateNetwork: Boolean = false): String {
+        val pnaHeader = if (allowPrivateNetwork) "Access-Control-Allow-Private-Network: true\\r\\n" else ""
+        return "Access-Control-Allow-Origin: $allowedOrigin\\r\\n" +
+            "Vary: Origin\\r\\n" +
+            pnaHeader +
+            "Access-Control-Allow-Methods: GET, POST, OPTIONS\\r\\n" +
+            "Access-Control-Allow-Headers: Content-Type, X-DroidPy-Token\\r\\n"
+    }
+
+    private fun serveBundledWebAsset(out: OutputStream, requestPath: String): Boolean {
+        val mgr = assetManager ?: return false
+        val rel = requestPath.trimStart('/').trimEnd('/')
+        if (rel.contains("..")) return false
+        val candidate = rel.ifEmpty { "index.html" }
+
+        fun readAssetBytes(assetRel: String): ByteArray? = try {
+            mgr.open("www/$assetRel").use { it.readBytes() }
+        } catch (_: Exception) {
+            null
+        }
+
+        var resolvedPath = candidate
+        var bytes = readAssetBytes(resolvedPath)
+        if (bytes == null && !candidate.substringAfterLast('/', "").contains('.')) {
+            resolvedPath = "index.html"
+            bytes = readAssetBytes(resolvedPath)
+        }
+        if (bytes == null) return false
+
+        writeHeaders(out, 200, mimeTypeForPath(resolvedPath), bytes.size)
+        out.write(bytes)
+        out.flush()
+        return true
+    }
+
+    private fun mimeTypeForPath(path: String): String {
+        val lower = path.lowercase()
+        return when {
+            lower.endsWith(".html") -> "text/html; charset=utf-8"
+            lower.endsWith(".js") || lower.endsWith(".mjs") -> "application/javascript; charset=utf-8"
+            lower.endsWith(".css") -> "text/css; charset=utf-8"
+            lower.endsWith(".json") || lower.endsWith(".webmanifest") -> "application/json; charset=utf-8"
+            lower.endsWith(".svg") -> "image/svg+xml"
+            lower.endsWith(".png") -> "image/png"
+            lower.endsWith(".jpg") || lower.endsWith(".jpeg") -> "image/jpeg"
+            lower.endsWith(".ico") -> "image/x-icon"
+            lower.endsWith(".wasm") -> "application/wasm"
+            lower.endsWith(".woff2") -> "font/woff2"
+            lower.endsWith(".txt") -> "text/plain; charset=utf-8"
+            else -> "application/octet-stream"
+        }
+    }
+
+    private fun statusReason(status: Int): String = when (status) {
+        200 -> "OK"
+        204 -> "No Content"
+        400 -> "Bad Request"
+        401 -> "Unauthorized"
+        404 -> "Not Found"
+        409 -> "Conflict"
+        502 -> "Bad Gateway"
+        else -> "OK"
+    }
+
+    private fun writeHeaders(
+        out: OutputStream,
+        status: Int,
+        contentType: String,
+        length: Int,
+        allowPrivateNetwork: Boolean = false
+    ) {
+        out.write((
+            "HTTP/1.1 $status \${statusReason(status)}\\r\\n" +
+            corsHeaders(allowPrivateNetwork) +
+            "Content-Type: $contentType\\r\\n" +
+            "Content-Length: $length\\r\\n" +
+            "Connection: close\\r\\n\\r\\n"
+        ).toByteArray())
+        out.flush()
+    }
+
+    private fun writeJson(out: OutputStream, status: Int, json: JSONObject) {
+        val bytes = json.toString().toByteArray(Charsets.UTF_8)
+        writeHeaders(out, status, "application/json; charset=utf-8", bytes.size)
+        out.write(bytes)
+        out.flush()
+    }
+}
+`
+  );
+
+  // 6. Launcher icon resources & deterministic APK signing keystore
+  // Never include a private signing key in exported Android projects.
+  zip.file('android/app/src/main/res/drawable/ic_launcher_background.xml', ANDROID_ICON_BACKGROUND_XML);
+  zip.file('android/app/src/main/res/drawable/ic_launcher_foreground.xml', ANDROID_ICON_FOREGROUND_XML);
+  zip.file('android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml', ANDROID_ADAPTIVE_ICON_XML);
+  zip.file('android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml', ANDROID_ADAPTIVE_ICON_XML);
+  for (const [density, b64] of Object.entries(ANDROID_MIPMAP_PNG_BASE64)) {
+    zip.file(`android/app/src/main/res/mipmap-${density}/ic_launcher.png`, b64, { base64: true });
+    zip.file(`android/app/src/main/res/mipmap-${density}/ic_launcher_round.png`, b64, { base64: true });
+  }
+
+  // 7. Seed user's current Python workspace files into android/app/src/main/assets/workspace/
+  for (const file of opts.files) {
+    zip.file(`android/app/src/main/assets/workspace/${file.name}`, file.content);
+  }
+
+  // 8. README.md (rendered automatically by GitHub) + README_GITHUB_APK.md
+  const githubApkReadme = `# ${safeTitle} 獨立 Android APK（GitHub 自動打包專案）
+
+本專案已預先配置好 **GitHub Actions 自動編譯流程**、**內嵌 Termux Bootstrap 環境**、**受保護的 APK Release 簽名流程** 與 **原生爬蟲瀏覽器（Cookie 擷取）**：
+打包成 APK 安裝至手機後，**無須另外安裝 Termux App**，也不受瀏覽器 CORS 限制，可直接執行 Python 網路爬蟲（\`requests\`、\`beautifulsoup4\`、\`lxml\`、\`yt-dlp\`）、\`ffmpeg\` 與 \`clang\` 原生套件。
+
+## 發布與自動打包步驟
+
+1. 在 GitHub 建立一個新的公開或私人倉庫（Repository）。
+2. 將本壓縮檔解壓縮後的所有檔案（包含 \`.github/\` 與 \`android/\`）上傳／Push 到該倉庫的 \`main\` 分支。
+   - 若倉庫同時包含前端原始碼（\`package.json\`），Workflow 會自動執行 \`npm ci && npm run build\` 並複製進 \`android/app/src/main/assets/www/\` 打包為完全離線 APK。
+3. 在 GitHub Repository → Settings → Secrets and variables → Actions，為正式發布設定新的簽名 Secrets：\`DROIDPY_KEYSTORE_BASE64\`、\`DROIDPY_STORE_PASSWORD\`、\`DROIDPY_KEY_ALIAS\`、\`DROIDPY_KEY_PASSWORD\`。請使用自己新建立的 keystore；不要把 keystore、Base64 或密碼提交到 Git。妥善離線備份 keystore 與密碼，遺失後將無法再以同一憑證發布更新。
+4. PR／Debug 建置使用臨時 Debug 簽名，不需要 Release Secrets；合併至 main/master 後，push workflow 會自動使用新的受保護 keystore 建置 Release APK、比對 APK 與 keystore 的 SHA-256 憑證指紋，成功後才發布 GitHub Release。缺少 Secrets、解碼失敗或簽名不一致時會停止，不會發布。
+5. **簽名金鑰已更換**：舊版已安裝 App 的簽名與新金鑰不同，不能直接覆蓋更新。請先使用 App 內備份功能匯出工作區／狀態資料，再解除安裝舊版並安裝新 Release；重新安裝後再匯入備份。
+
+## 首次開啟 App 初始化說明
+
+1. APK 首次啟動時會自動將內嵌 Termux Bootstrap 解壓至 App 私有目錄並啟動 \`127.0.0.1:8765\` 橋接服務。
+2. 開啟 DroidPy 後進入 **「Termux 橋接」**，點擊 **「一鍵初始化 Python + 爬蟲環境」**，系統將自動安裝：
+   \`(pkg update -y || true) && pkg install -y python python-pip python-lxml libxml2 libxslt clang && pip install --no-cache-dir requests beautifulsoup4 httpx\`
+3. 如需抓取需登入的網站資料，開啟 **「爬蟲瀏覽器」** → 點擊 **「APK 原生瀏覽器登入抓 Cookie」** 完成登入並點右上角 **「擷取 Cookie」**，即可直接讀取包含 \`HttpOnly\` 的認證 Cookie 並寫入工作區 \`cookies.json\`。
+`;
+
+  const changelogContent = `# Changelog / 更新日誌
+
+## [1.2.16] - 2026-11-24
+- **深度修復 \`pip\` \`truststore\` \`Errno 13\`、選項獨立視窗設計、手機文字防溢出與寫實 3D 四季天光**：
+  - 於 \`sitecustomize.py\` 植入記憶體備援 certifi CA 憑證與攔截 \`truststore\` / \`load_verify_locations\`，配合 \`pip.conf\` 與目錄權限規範徹底根除 Android Python 3.14 \`PermissionError: [Errno 13]\`。
+  - 工具箱抽屜改採「選項目錄 → 獨立操作視窗（頂部附返回按鈕）」，全面精簡「Python／內建 Python」文案並修復 360px 手機版文字按鈕溢出問題。
+  - 升級 Three.js 寫實 3D 背景支援春櫻／夏雨／秋楓／冬雪與真實晨昏星月天光漸變。
+
+## [1.2.14] - 2026-11-23
+- **修復「已安裝套件為空」、安裝失敗暫存清理、亂碼淨化、\`/shell\` 404 與長時使用卡頓**：
+  - \`EmbeddedTermuxBridge.kt\` 擴大掃描 \`site-packages\`／\`dist-packages\` 並補上 \`importlib.metadata\` 回退驗證、移除 \`EXTERNALLY-MANAGED\`、導出 \`PIP_USER=0\`／\`PIP_NO_CACHE_DIR=1\` 與 \`PYTHONUTF8=1\`。
+  - 開機與每次 \`pip\`／\`pkg\` 結束自動清理 \`tmp/pip-*\`、\`.cache/pip\`、\`tmp_pkg_stage\` 與 \`.deb\` 暫存，新增 \`GET /storage/app-usage\`、\`POST /storage/cleanup\` 與 \`POST /shell\`。
+  - 強化 ANSI 與控制字元淨化、隱藏「純淨文字」按鈕，並最佳化手機介面不溢出與長時運行流暢度。
+
+## [1.2.13] - 2026-11-23
+- **原生 Python 直譯器預設、沙盒轉為附加功能、ANSI 純淨文字與跨環境路徑／重裝還原修復**：
+  - 預設執行引擎改為原生 **Python 直譯器**（Termux／內嵌 ARM64），**Pyodide WASM 沙盒**轉為設定內可開啟的附加功能，終端與面板按鈕同步精簡並補強 \`subprocess\`（Errno 138）、無 \`wasm32\` wheel 套件（如 \`parsel\`）與互動輸入 \`KeyboardInterrupt\` 友善防呆。
+  - 新增序列緩衝與強效 ANSI 控制碼淨化器（根除 \`[0m\`、\`[38;5;...m\`、\`;88mO\`、\`91mn\` 殘留），原生 Android \`droidpy_native.log\` 與匯出日誌全面濾除跳脫序列，終端機工具列與編輯器設定加入「純淨文字模式」。
+  - 腳本執行與 \`droid.device_info()\` 環境偵測預設為手機（Android）環境。
+  - 修正 \`/health\` \`pipPkgs\` 讀取 \`METADATA\`/\`PKG-INFO\` 精準計數、\`termuxFetch\` 404/錯誤詳情回報消除 \`Unhandled rejection: Not found\`；強化重裝／更新保留 \`usr/\` 與 \`/sdcard/DroidPy/.droidpy_backup/\` 套件清單備份與一鍵還原。
+  - 所有「日誌」按鈕名稱統一精簡為「日誌」，裝置儲存文案改為「手機」。
+
+## [1.2.12] - 2026-11-22
+- **終端機實時時分秒計時（\`HH:MM:SS\`）、套件解除安裝、精準更新檢測與長按選字複製修復**：
+  - 終端機與程式執行日誌耗時由毫秒全面改為 \`HH:MM:SS\`，執行期間每秒／每 250ms 即時跳動顯示經過時間。
+  - 程式內更新視窗改為僅顯示當前安裝版本或目標新版本的更新日誌，精簡閱讀體驗。
+  - Pyodide 沙盒與 Termux 原生引擎同步新增「解除安裝」功能（\`micropip.uninstall\`／\`pip uninstall -y\`／\`pkg uninstall -y\`＋重定位 \`dpkg/status\` 清理）並保護核心系統套件；新增「一鍵更新所有套件」統一按鈕。
+  - 實作 PEP 440 版本比對與 \`cp312\`/\`emscripten\`/\`none-any.whl\` 過濾＋Termux \`pip list --outdated --format=json\` 實測檢查，徹底修正已安裝最新版套件仍誤報「可更新」的問題；並確保「啟動時自動更新套件」僅於開啟程式時執行一次。
+  - 修復手機 Android WebView 非編輯區與終端機區長按無法選字複製的問題（\`isLongClickable\`、\`.terminal-selectable\`/\`.selectable-text\`、選取時暫停自動捲底、終端機「複製選取」快捷按鈕＋原生 \`ClipboardManager\` 三重複製回退）。
+
+## [1.2.11] - 2026-11-22
+- **新增更多趣味 Python 腳本範例、分類篩選與熱門／冷門 60+ 完整套件目錄**：
+  - 範本庫新增數位雨、曼德布羅碎形、生命遊戲、迷宮尋路、21 點、猜數字、Wordle、Hacker News 爬蟲、CSV 視覺化、愛心曲線、番茄鐘、密碼生成器等共 18 支即跑範例與 7 大分類篩選。
+  - 套件目錄擴充 60+ 熱門與冷門實用套件（7 大分類）並加入即時模糊聯想提示與 Termux APT 名稱指引，同時支援手動與啟動時自動更新已安裝套件。
+  - 新增程式內 GitHub Release 版本檢查、更新日誌展示與原生 \`FileProvider\` APK 下載覆蓋安裝功能；並於 \`buildEnv()\` 導出 \`SHELL\`／\`CONFIG_SHELL\`／\`CMAKE_SH\` 徹底修復 \`make[1]: /data/data/com.termux/files/usr/bin/sh: Permission denied\` 錯誤。
+
+## [1.2.10] - 2026-11-22
+- **根治實機 \`PermissionError: [Errno 13] Permission denied\`（\`pip\` Truststore 與 C 擴充編譯 \`build_clib\`）**：
+  - \`pip\` Wrapper 於執行時動態偵測可用 CA 憑證（含備援複製 \`certifi.where()\`）並強制設定 \`PIP_CERT\`／\`SSL_CERT_DIR\`，徹底避免一鍵初始化同一次執行鏈中 \`pip\` 呼叫 \`_create_truststore_ssl_context()\` 存取舊路徑觸發 \`Errno 13\`。
+  - \`relocate_debs()\` 與 \`buildEnv()\` 自動重寫 \`_sysconfigdata*.py\`／\`Makefile\`／\`pkgconfig\` 內的舊 Termux 路徑、為 \`etc\`／\`lib\`／\`llvm\` 工具鏈設定正確權限，並於偵測到 \`clang\` 時導出 \`CC\`、\`CXX\`、\`AR\`、\`RANLIB\`、\`LDSHARED\`，解決編譯 C 擴充庫時的 \`Permission denied\`。
+  - Termux 快捷套件新增預編譯 \`python-pillow\`、\`python-lxml\` 與純 Python \`flask\`。
+
+## [1.2.9] - 2026-11-22
+- **修復實機日誌回報之 \`pip install\` 退出碼 2 與 \`pkg update\` 退出碼 100 問題**：
+  - 遞迴修復 \`usr/etc\`、\`usr/share\`、\`usr/lib\` 與 \`usr/bin\` 符號連結，並改以 \`resolveCaBundleFile()\` 僅於憑證檔實際存在時才設定 \`PIP_CERT\`／\`SSL_CERT_FILE\`／\`REQUESTS_CA_BUNDLE\`（避免無 \`etc/tls/cert.pem\` 時 \`pip\` 因找不到憑證路徑而直接以 \`exit=2\` 崩潰），同時補齊 \`PIP_CACHE_DIR\` 與 \`ensurepip\` 回退檢查。
+  - 為 \`sources.list*\` 補上 \`[trusted=yes]\` 與重定位路徑修正，並於 \`APT_OPTS\` 補齊 \`AllowDowngradeToInsecureRepositories\` 與 \`apt-key\`／\`gpgv\` 路徑，解決 \`pkg update\` 退出碼 \`100\`。
+  - 加強 \`droidpy_native.log\` 與前端 \`appLogger\`：非 0 結束碼之指令自動記錄錯誤輸出尾段；\`chart_demo.py\` 缺少 \`matplotlib\` 時提供清楚引擎切換提示。
+
+## [1.2.8] - 2026-11-21
+- **徹底修復 Termux Python / 套件重開機恢復預設與 \`apt.conf.d\` Permission denied**：
+  - \`MainActivity.kt\` 改以 \`.droidpy_bootstrap_ok\` 標記與多路徑檢查保護 \`filesDir/usr\`，並於啟動時自動修復 \`bin/sh\` 與符號連結，永不再因 symlink 異常而重設清空已安裝的 Python 與爬蟲套件。
+  - \`EmbeddedTermuxBridge.kt\` 每次執行皆無條件寫入完整 \`etc/apt/apt.conf\`（含 \`Dir::Etc::parts\` 等核心路徑）並改寫殘留路徑與更新 \`dpkg/status\`，同時於 \`/health\` 回傳已保留的 pip / pkg 套件清單。
+  - 沙盒模式（Pyodide）同步持久化已安裝套件清單並於重啟時自動恢復；執行 \`utils.py\` 等模組檔新增 \`__main__\` 輸出與明確執行完成提示。
+- **適配手機與平板操作差異、將低頻功能移入負屏抽屜、保留歷史版本 APK 並加入「程式執行所有日誌」**：
+  - 新增應用程式全生命週期日誌記錄器與 Android 原生 \`/logs\`（含 \`droidpy_native.log\` 與 \`logcat\`）檢視匯出面板。
+
+## [1.2.7] - 2026-11-21
+- 歷史版本曾使用固定簽名金鑰；目前正式發布改用使用者自行保管的 GitHub Actions keystore Secrets。直接更換憑證會使舊版 APK 無法原地覆蓋更新，需先備份 App 資料再重新安裝。
+
+## [1.2.6] - 2026-11-21
+- 修復「授權資料夾」、「授權本機資料夾」與「更新容量」三個按鈕點擊無響應問題：移除裝置目錄按鈕的 \`disabled\` 鎖死，在 APK 環境直接串接 Android 內部儲存權限設定與 \`StatFs\` 真實裝置容量並即時跳出更新提示；在一般瀏覽器／iframe 環境自動退回原生資料夾檔案選擇器 (\`webkitdirectory\`)。
+- 修復獨立 APK 內嵌 Termux 初始化失敗（截圖中 \`apt.conf.d Permission denied\`、\`InRelease\` 金鑰失效、\`relocate_debs\` 解壓靜默中止與 Python 3.14 編譯 \`lxml\` 失敗問題）：改以 \`tar --overwrite\` 精準搬移 \`.deb\` 檔案並顯示即時解壓進度、補齊 \`Dir::Etc::parts\` / \`APT_CONFIG\` / 金鑰符號連結修正、改用預編譯 \`python-lxml\`，並確保完成後立即刷新 Python 偵測狀態。
+
+## [1.2.5] - 2026-11-21
+- 為 Android 獨立 APK 加上 DroidPy 專屬應用程式圖徽（Adaptive Vector Icon + 全解析度 \`mipmap-*\` PNG 回退），於系統桌面、多工視圖與安裝畫面顯示標誌性翡翠綠＋琥珀橘 Logo。
+- 在 \`MainActivity.kt\` 加入「返回兩次退出 App」防誤觸保護：於主畫面首次按下返回鍵（或全面屏側滑返回）顯示 2 秒「再按一次返回鍵退出 DroidPy」提示，2 秒內再次返回即立即寫盤儲存並安全退出。
+
+## [1.2.4] - 2026-11-21
+- 新增 App 私有原生狀態檔 \`droidpy_ide_state.json\` 雙重持久化與 \`onPause()\` 即時刷寫，確保退出或滑掉重開完整保留所有檔案與設定。
+- 新增 \`android:requestLegacyExternalStorage="true"\`、完整 \`/sdcard\` 權限偵測、\`/sdcard/*\` API 與「Android 手機內部儲存空間管理」介面，可實際瀏覽、建立資料夾與讀寫 \`/storage/emulated/0\`。
+- 修正 Termux Python \`PYTHONHOME\` 與內建原生 \`droid.py\`（支援 \`import droid\` 與 \`/droid-action\`），並強化 \`POST /stop\` 程序樹終止與前端 \`AbortController\`，確保「停止執行」立即解除並恢復「執行程式」按鈕。
+
+## [1.2.3] - 2026-11-21
+- 修復獨立 APK \`EmbeddedTermuxBridge.kt\` HTTP \`Content-Length\` 位元組長度錯判導致含中文註解的腳本永久卡死的問題（改用位元組流讀取並正確解碼 UTF-8）。
+- 修復 APK 串流輸出在雙位元組/三位元組 UTF-8 邊界截斷產生亂碼的問題（改用 \`InputStreamReader\` 字元串流解碼）。
+- 修復 \`MainActivity.kt\` 外部 \`https://\` 連結誤在 IDE WebView 內開啟及下載檔名未跳脫之異常，並補強 Bootstrap 完整解壓檢查與 \`pkg\` 金鑰信任選項。
+`;
+
+  zip.file('README.md', githubApkReadme);
+  zip.file('README_GITHUB_APK.md', githubApkReadme);
+  zip.file('CHANGELOG.md', changelogContent);
+
+  return zip.generateAsync({ type: 'blob' });
+}
+}PY_BIN\\\" ] || PY_BIN=\\\"$python3Path\\\"; [ -x \\\"${'\\\" ] || { echo '[DroidPy] Python is not ready; package restore aborted.' >&2; exit 127; }")
+                        val needsNumpy = needPips.any { normalizePipPkgName(it) == "numpy" }
+                        val remainingPips = needPips.filter { normalizePipPkgName(it) != "numpy" }
+                        if (needsNumpy) {
+                            // Termux supplies a native binary package; verify it with the same
+                            // interpreter that executes user scripts. A failed install must fail restore.
+                            steps.add("pkg install -y python-numpy && \\\"\\\$PY_BIN\\\" -c 'import numpy' && echo '[DroidPy] NumPy ready (Termux binary package).' ")
+                        }
+                        if (remainingPips.isNotEmpty()) {
+                            steps.add("\\\"\\\$PY_BIN\\\" -m pip install --no-cache-dir " + remainingPips.joinToString(" "))
+                        }
+                        val restoreCmd = if (steps.isEmpty()) {
+                            "echo '[DroidPy] 所有已備份套件均已存在，無需還原。'"
+                        } else {
+                            steps.joinToString(" && ")
+                        }
+                        streamShellCommand(out, restoreCmd)
+                    }
+                }
+
+                method == "GET" && path == "/logs" -> {
+                    val nativeLines = JSONArray()
+                    try {
+                        synchronized(logLock) {
+                            val f = nativeLogFile
+                            if (f.isFile) {
+                                f.readLines(Charsets.UTF_8).takeLast(450).forEach { nativeLines.put(it) }
+                            }
+                        }
+                    } catch (_: Exception) {
+                    }
+                    val logcatLines = JSONArray()
+                    var logcatProc: Process? = null
+                    try {
+                        val pid = android.os.Process.myPid()
+                        logcatProc = ProcessBuilder("logcat", "-d", "-t", "80", "--pid=$pid").redirectErrorStream(true).start()
+                        val txt = logcatProc.inputStream.bufferedReader(Charsets.UTF_8).readText()
+                        logcatProc.waitFor()
+                        txt.lines().filter { it.isNotBlank() }.takeLast(80).forEach { logcatLines.put(stripAnsiForLog(it)) }
+                    } catch (_: Exception) {
+                    } finally {
+                        try { logcatProc?.inputStream?.close() } catch (_: Exception) {}
+                        try { logcatProc?.errorStream?.close() } catch (_: Exception) {}
+                        try { logcatProc?.outputStream?.close() } catch (_: Exception) {}
+                    }
+                    writeJson(
+                        out,
+                        200,
+                        JSONObject()
+                            .put("ok", true)
+                            .put("logPath", nativeLogFile.absolutePath)
+                            .put("nativeLines", nativeLines)
+                            .put("logcatLines", logcatLines)
+                    )
+                }
+
+                method == "POST" && path == "/logs/clear" -> {
+                    try {
+                        synchronized(logLock) {
+                            nativeLogFile.writeText("", Charsets.UTF_8)
+                        }
+                    } catch (_: Exception) {
+                    }
+                    appendNativeLog("Logs", "Native log cleared by user")
+                    writeJson(out, 200, JSONObject().put("ok", true))
+                }
+
+                method == "POST" && path == "/stdin" -> {
+                    val data = bodyJson.optString("data", "") + "\\n"
+                    val proc = activeProcess
+                    if (proc == null) {
+                        writeJson(out, 409, JSONObject().put("error", "No active process"))
+                    } else {
+                        try {
+                            proc.outputStream.write(data.toByteArray())
+                            proc.outputStream.flush()
+                            writeJson(out, 200, JSONObject().put("ok", true))
+                        } catch (e: Exception) {
+                            writeJson(out, 500, JSONObject().put("error", e.message ?: "Write failed"))
+                        }
+                    }
+                }
+
+                method == "POST" && path == "/stop" -> {
+                    val proc = activeProcess
+                    if (proc != null) {
+                        appendNativeLog("Exec", "Force stopping active process tree")
+                        killProcessTree(proc)
+                    }
+                    writeJson(out, 200, JSONObject().put("ok", true))
+                }
+
+                method == "POST" && path == "/droid-action" -> {
+                    when (bodyJson.optString("action")) {
+                        "toast" -> {
+                            val msg = bodyJson.optString("message", "")
+                            Handler(Looper.getMainLooper()).post {
+                                Toast.makeText(appContext, msg, Toast.LENGTH_SHORT).show()
+                            }
+                            writeJson(out, 200, JSONObject().put("ok", true))
+                        }
+                        "vibrate" -> {
+                            val ms = bodyJson.optLong("pattern", 45L).coerceIn(10L, 2000L)
+                            try {
+                                val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                    (appContext.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
+                                } else {
+                                    @Suppress("DEPRECATION")
+                                    appContext.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                                }
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    vibrator.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
+                                } else {
+                                    @Suppress("DEPRECATION")
+                                    vibrator.vibrate(ms)
+                                }
+                                writeJson(out, 200, JSONObject().put("ok", true))
+                            } catch (_: Exception) {
+                                writeJson(out, 200, JSONObject().put("ok", false))
+                            }
+                        }
+                        "device_info" -> {
+                            val dm = appContext.resources.displayMetrics
+                            writeJson(
+                                out,
+                                200,
+                                JSONObject()
+                                    .put("platform", "Android \${Build.VERSION.RELEASE} (\${Build.MODEL})")
+                                    .put("deviceType", "phone")
+                                    .put("screen", "\${dm.widthPixels}x\${dm.heightPixels}")
+                                    .put("pixelRatio", dm.density.toDouble())
+                                    .put("maxTouchPoints", 5)
+                                    .put("online", true)
+                            )
+                        }
+                        else -> writeJson(out, 400, JSONObject().put("error", "Unknown action"))
+                    }
+                }
+
+                method == "GET" && path == "/sdcard/status" -> {
+                    val root = Environment.getExternalStorageDirectory()
+                    val manageAll = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Environment.isExternalStorageManager() else true
+                    val runtimeWrite = ContextCompat.checkSelfPermission(appContext, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+                    val droidpyDir = File(root, "DroidPy").absolutePath
+                    var totalBytes = 0L
+                    var freeBytes = 0L
+                    var usedBytes = 0L
+                    try {
+                        val st = StatFs(root.path)
+                        totalBytes = st.totalBytes
+                        freeBytes = st.availableBytes
+                        usedBytes = (totalBytes - freeBytes).coerceAtLeast(0L)
+                    } catch (_: Exception) {
+                    }
+                    writeJson(
+                        out,
+                        200,
+                        JSONObject()
+                            .put("granted", hasStorageAccess())
+                            .put("manageAllFiles", manageAll)
+                            .put("runtimeWrite", runtimeWrite)
+                            .put("rootPath", root.absolutePath)
+                            .put("droidpyDir", droidpyDir)
+                            .put("totalBytes", totalBytes)
+                            .put("freeBytes", freeBytes)
+                            .put("usedBytes", usedBytes)
+                    )
+                }
+
+                method == "GET" && path == "/sdcard/list" -> {
+                    val relParam = queryStr.split("&")
+                        .firstOrNull { it.startsWith("path=") }
+                        ?.substringAfter("=")
+                        ?.let { URLDecoder.decode(it, "UTF-8") } ?: ""
+                    val dir = resolveSdcardTarget(relParam)
+                    if (dir == null) {
+                        writeJson(out, 400, JSONObject().put("error", "Invalid path"))
+                    } else if (!hasStorageAccess() && !dir.canRead()) {
+                        writeJson(out, 403, JSONObject().put("error", "尚未取得手機內部儲存空間存取權限"))
+                    } else {
+                        val rootCanonical = Environment.getExternalStorageDirectory().canonicalPath
+                        val arr = JSONArray()
+                        val children = dir.listFiles()?.sortedWith(compareBy<File>({ !it.isDirectory }, { it.name.lowercase() })) ?: emptyList()
+                        for (child in children) {
+                            if (child.name.startsWith(".")) continue
+                            val childRel = child.canonicalPath.removePrefix(rootCanonical).trimStart('/')
+                            arr.put(
+                                JSONObject()
+                                    .put("name", child.name)
+                                    .put("relPath", childRel)
+                                    .put("isDir", child.isDirectory)
+                                    .put("size", if (child.isFile) child.length() else 0L)
+                                    .put("updatedAt", child.lastModified())
+                            )
+                        }
+                        val currentRel = dir.canonicalPath.removePrefix(rootCanonical).trimStart('/')
+                        writeJson(
+                            out,
+                            200,
+                            JSONObject()
+                                .put("granted", hasStorageAccess())
+                                .put("rootPath", rootCanonical)
+                                .put("currentPath", currentRel)
+                                .put("entries", arr)
+                        )
+                    }
+                }
+
+                method == "POST" && path == "/sdcard/read" -> {
+                    val relPath = bodyJson.optString("path", "")
+                    val target = resolveSdcardTarget(relPath)
+                    if (target == null || !target.exists() || !target.isFile) {
+                        writeJson(out, 404, JSONObject().put("error", "找不到目標檔案"))
+                    } else if (target.length() > 512 * 1024) {
+                        writeJson(out, 413, JSONObject().put("error", "檔案超過 512 KB 上限"))
+                    } else {
+                        try {
+                            writeJson(
+                                out,
+                                200,
+                                JSONObject()
+                                    .put("name", target.name)
+                                    .put("relPath", relPath)
+                                    .put("content", target.readText(Charsets.UTF_8))
+                            )
+                        } catch (e: Exception) {
+                            writeJson(out, 403, JSONObject().put("error", e.message ?: "讀取失敗"))
+                        }
+                    }
+                }
+
+                method == "POST" && path == "/sdcard/write" -> {
+                    if (!hasStorageAccess()) {
+                        writeJson(out, 403, JSONObject().put("error", "尚未授予內部儲存空間權限"))
+                    } else {
+                        try {
+                            val batch = bodyJson.optJSONArray("files")
+                            if (batch != null) {
+                                val folderRel = bodyJson.optString("dir", "DroidPy").ifBlank { "DroidPy" }
+                                val destDir = resolveSdcardTarget(folderRel)
+                                if (destDir == null) {
+                                    writeJson(out, 400, JSONObject().put("error", "Invalid folder"))
+                                } else {
+                                    destDir.mkdirs()
+                                    var count = 0
+                                    for (i in 0 until batch.length()) {
+                                        val item = batch.getJSONObject(i)
+                                        val name = File(item.optString("name", "")).name
+                                        if (name.isNotBlank()) {
+                                            File(destDir, name).writeText(item.optString("content", ""), Charsets.UTF_8)
+                                            count++
+                                        }
+                                    }
+                                    writeJson(out, 200, JSONObject().put("ok", true).put("count", count).put("dir", destDir.absolutePath))
+                                }
+                            } else {
+                                val relPath = bodyJson.optString("path", "")
+                                val target = resolveSdcardTarget(relPath)
+                                if (target == null) {
+                                    writeJson(out, 400, JSONObject().put("error", "Invalid path"))
+                                } else {
+                                    target.parentFile?.mkdirs()
+                                    target.writeText(bodyJson.optString("content", ""), Charsets.UTF_8)
+                                    writeJson(out, 200, JSONObject().put("ok", true).put("path", target.absolutePath))
+                                }
+                            }
+                        } catch (e: Exception) {
+                            writeJson(out, 403, JSONObject().put("error", e.message ?: "寫入失敗"))
+                        }
+                    }
+                }
+
+                method == "POST" && path == "/sdcard/mkdir" -> {
+                    val relPath = bodyJson.optString("path", "")
+                    val target = resolveSdcardTarget(relPath)
+                    if (target == null) {
+                        writeJson(out, 400, JSONObject().put("error", "Invalid path"))
+                    } else if (!hasStorageAccess()) {
+                        writeJson(out, 403, JSONObject().put("error", "尚未授予內部儲存空間權限"))
+                    } else {
+                        val created = target.exists() || target.mkdirs()
+                        writeJson(out, if (created) 200 else 500, JSONObject().put("ok", created))
+                    }
+                }
+
+                method == "POST" && path == "/sdcard/delete" -> {
+                    val relPath = bodyJson.optString("path", "")
+                    val rootCanonical = Environment.getExternalStorageDirectory().canonicalPath
+                    val target = resolveSdcardTarget(relPath)
+                    if (target == null || target.canonicalPath == rootCanonical) {
+                        writeJson(out, 400, JSONObject().put("error", "Invalid path"))
+                    } else if (!hasStorageAccess()) {
+                        writeJson(out, 403, JSONObject().put("error", "尚未授予內部儲存空間權限"))
+                    } else {
+                        val deleted = if (target.isDirectory) target.deleteRecursively() else target.delete()
+                        writeJson(out, if (deleted) 200 else 500, JSONObject().put("ok", deleted))
+                    }
+                }
+
+                method == "GET" && path == "/storage/app-usage" -> {
+                    writeJson(out, 200, collectAppStorageUsage())
+                }
+
+                method == "POST" && path == "/storage/cleanup" -> {
+                    val freed = pruneStaleCacheAndTemp(clearAptLists = true)
+                    appendNativeLog("Storage", "Cleaned stale temp/cache, freed=\${freed}B")
+                    writeJson(
+                        out,
+                        200,
+                        JSONObject()
+                            .put("ok", true)
+                            .put("freedBytes", freed)
+                            .put("usageAfter", collectAppStorageUsage())
+                    )
+                }
+
+                method == "POST" && path == "/maintenance/cleanup-processes" -> {
+                    val manual = bodyJson.optBoolean("manual", true)
+                    val res = cleanupStuckPythonProcesses(manual = manual)
+                    appendNativeLog("Watchdog", "Cleanup checked=\${res.optInt("scannedCount")} killed=\${res.optInt("killedCount")} manual=$manual")
+                    writeJson(out, 200, res)
+                }
+
+                method == "POST" && path == "/shell" -> {
+                    val cmd = bodyJson.optString("command", "").trim()
+                    if (cmd.isEmpty()) {
+                        writeJson(out, 400, JSONObject().put("error", "Missing command"))
+                    } else {
+                        val res = runBufferedShellCommand(cmd)
+                        writeJson(out, 200, res)
+                    }
+                }
+
+                method == "POST" && (path == "/run-stream" || path == "/install-stream" || path == "/shell-stream") -> {
+                    val shellCmd = when (path) {
+                        "/run-stream" -> {
+                            val arr = bodyJson.optJSONArray("files") ?: JSONArray()
+                            for (i in 0 until arr.length()) {
+                                val f = arr.getJSONObject(i)
+                                val name = File(f.optString("name", "")).name
+                                if (name.isNotBlank()) {
+                                    File(workspaceDir, name).writeText(f.optString("content", ""))
+                                }
+                            }
+                            val entry = File(bodyJson.optString("entry", "main.py")).name.ifBlank { "main.py" }
+                            val safeEntrySh = entry.replace("'", "'\\\\''")
+                            val pyPath = File(usrDir, "bin/python").absolutePath
+                            val py3Path = File(usrDir, "bin/python3").absolutePath
+                            val binDirPath = File(usrDir, "bin").absolutePath
+                            "PY_BIN=\\"$pyPath\\"; [ -x \\"\${'$'}PY_BIN\\" ] || PY_BIN=\\"$py3Path\\"; if [ ! -x \\"\${'$'}PY_BIN\\" ]; then for c in \\"$binDirPath/python3.\\"*; do [ -f \\"\${'$'}c\\" ] || continue; case \\"\${'$'}c\\" in *-config) continue ;; esac; chmod 755 \\"\${'$'}c\\" 2>/dev/null || true; PY_BIN=\\"\${'$'}c\\"; break; done; fi; if [ ! -x \\"\${'$'}PY_BIN\\" ]; then echo \\"[DroidPy] 尚未安裝 Termux 原生 Python！請至「Termux 橋接」點擊「一鍵初始化 Python + 爬蟲環境」，或先將終端機切換為「沙盒」執行。\\"; exit 127; fi; exec \\"\${'$'}PY_BIN\\" -u '$safeEntrySh'"
+                        }
+                        "/install-stream" -> {
+                            val mode = bodyJson.optString("mode", "pip")
+                            val target = bodyJson.optString("target", "").trim()
+                            val trustedHost = bodyJson.optBoolean("trustedHost", false)
+                            if (mode == "pkg") {
+                                "pkg install -y $target"
+                            } else if (trustedHost) {
+                                "pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org $target"
+                            } else {
+                                "pip install --no-cache-dir $target"
+                            }
+                        }
+                        else -> bodyJson.optString("command", "")
+                    }
+                    streamShellCommand(out, shellCmd)
+                }
+
+                method == "GET" && path == "/files" -> {
+                    val allowed = listOf(".py", ".json", ".csv", ".txt", ".md", ".html", ".xml", ".yaml", ".yml", ".ini", ".cfg", ".log", ".sh", ".toml")
+                    val arr = JSONArray()
+                    workspaceDir.listFiles()?.sortedBy { it.name }?.forEach { f ->
+                        if (f.isFile && !f.name.startsWith(".") && f.length() <= 180 * 1024) {
+                            val lower = f.name.lowercase()
+                            if (allowed.any { lower.endsWith(it) } || f.name == "requirements.txt") {
+                                try {
+                                    arr.put(
+                                        JSONObject()
+                                            .put("name", f.name)
+                                            .put("content", f.readText(Charsets.UTF_8))
+                                            .put("updatedAt", f.lastModified())
+                                    )
+                                } catch (_: Exception) {
+                                }
+                            }
+                        }
+                    }
+                    writeJson(out, 200, JSONObject().put("files", arr))
+                }
+
+                method == "POST" && path == "/probe-url" -> {
+                    try {
+                        writeJson(out, 200, probeUrlSafely(bodyJson.optString("url", "").trim(), bodyJson))
+                    } catch (e: IllegalArgumentException) {
+                        writeJson(out, 400, JSONObject().put("error", e.message ?: "Invalid probe URL"))
+                    } catch (_: Exception) {
+                        writeJson(out, 502, JSONObject().put("error", "Unable to safely probe target URL"))
+                    }
+                }
+
+                else -> writeJson(out, 404, JSONObject().put("error", "Not found"))
+            }
+        }
+    }
+
+    private data class SafeProbeResponse(
+        val statusCode: Int,
+        val headers: Map<String, List<String>>,
+        val body: ByteArray
+    )
+
+    private fun isPublicProbeAddress(address: InetAddress): Boolean {
+        if (address.isAnyLocalAddress || address.isLoopbackAddress ||
+            address.isLinkLocalAddress || address.isSiteLocalAddress ||
+            address.isMulticastAddress) return false
+        val b = address.address.map { it.toInt() and 0xff }
+        if (address is Inet4Address) {
+            val a0 = b[0]
+            val a1 = b[1]
+            val a2 = b[2]
+            if (a0 == 0 || a0 == 10 || a0 == 127 || a0 >= 224) return false
+            if (a0 == 100 && a1 in 64..127) return false
+            if (a0 == 169 && a1 == 254) return false
+            if (a0 == 172 && a1 in 16..31) return false
+            if (a0 == 192 && (a1 == 0 || a1 == 2 || a1 == 168)) return false
+            if (a0 == 192 && a1 == 88 && a2 == 99) return false
+            if (a0 == 192 && a1 == 31 && a2 == 196) return false
+            if (a0 == 192 && a1 == 52 && a2 == 193) return false
+            if (a0 == 192 && a1 == 175 && a2 == 48) return false
+            if (a0 == 198 && a1 in 18..19) return false
+            if (a0 == 198 && a1 == 51 && a2 == 100) return false
+            if (a0 == 203 && a1 == 0 && a2 == 113) return false
+            return true
+        }
+        if (address is Inet6Address) {
+            if ((b[0] and 0xe0) != 0x20) return false
+            if (b[0] == 0x20 && b[1] == 0x01) {
+                if (b[2] == 0x0d && b[3] == 0xb8) return false
+                if (b[2] == 0x00 && b[3] <= 0x01) return false
+                if (b[2] == 0x00 && b[3] == 0x02) return false
+                if (b[2] == 0x00 && b[3] == 0x10) return false
+                if (b[2] == 0x00 && b[3] == 0x20) return false
+            }
+            if (b[0] == 0x20 && b[1] == 0x02) return false
+            if (b[0] == 0x3f && b[1] == 0xff) return false
+            return true
+        }
+        return false
+    }
+
+    private fun validateProbeUrl(url: URL): String {
+        val scheme = url.protocol.lowercase()
+        if (scheme != "http" && scheme != "https") {
+            throw IllegalArgumentException("Only HTTP and HTTPS URLs are allowed")
+        }
+        if (URI(url.toString()).rawUserInfo != null) {
+            throw IllegalArgumentException("URLs containing credentials are not allowed")
+        }
+        val rawHost = url.host.removePrefix("[").removeSuffix("]").trimEnd('.').lowercase()
+        if (rawHost.isBlank() || rawHost == "localhost" ||
+            rawHost.endsWith(".localhost") || rawHost.endsWith(".local") ||
+            rawHost.endsWith(".internal") || rawHost.endsWith(".test") ||
+            rawHost.contains("%")) {
+            throw IllegalArgumentException("Local hostnames and scoped IP addresses are not allowed")
+        }
+        return if (rawHost.contains(":")) rawHost else IDN.toASCII(rawHost)
+    }
+
+    private fun readProbeLine(input: BufferedInputStream, maxBytes: Int = 8192): String {
+        val output = ByteArrayOutputStream()
+        while (true) {
+            val value = input.read()
+            if (value < 0) {
+                if (output.size() == 0) return ""
+                break
+            }
+            if (value == 10) break
+            if (value != 13) output.write(value)
+            if (output.size() > maxBytes) throw IllegalArgumentException("HTTP response header line too large")
+        }
+        return output.toString("ISO-8859-1")
+    }
+
+    private fun readProbeExact(input: BufferedInputStream, output: ByteArrayOutputStream, count: Int) {
+        var remaining = count
+        val buffer = ByteArray(4096)
+        while (remaining > 0) {
+            val n = input.read(buffer, 0, minOf(buffer.size, remaining))
+            if (n < 0) throw java.io.EOFException("Incomplete HTTP response body")
+            output.write(buffer, 0, n)
+            remaining -= n
+        }
+    }
+
+    private fun readProbeBody(input: BufferedInputStream, headers: Map<String, List<String>>): ByteArray {
+        val maxBytes = 24000
+        val output = ByteArrayOutputStream()
+        val transferEncoding = headers["transfer-encoding"]?.joinToString(",")?.lowercase().orEmpty()
+        if (transferEncoding.isNotBlank() && headers.containsKey("content-length")) {
+            throw IllegalArgumentException("Ambiguous HTTP response framing")
+        }
+        if (transferEncoding.isNotBlank() && transferEncoding.trim() != "chunked") {
+            throw IllegalArgumentException("Unsupported HTTP transfer encoding")
+        }
+        if (transferEncoding.contains("chunked")) {
+            while (output.size() < maxBytes) {
+                val sizeLine = readProbeLine(input).substringBefore(';').trim()
+                val chunkSize = sizeLine.toLongOrNull(16)
+                    ?: throw IllegalArgumentException("Invalid chunked response")
+                if (chunkSize < 0L) throw IllegalArgumentException("Invalid chunk size")
+                if (chunkSize == 0L) {
+                    while (readProbeLine(input).isNotEmpty()) { }
+                    break
+                }
+                val remaining = maxBytes - output.size()
+                val toRead = minOf(chunkSize, remaining.toLong()).toInt()
+                readProbeExact(input, output, toRead)
+                if (toRead.toLong() < chunkSize) break
+                if (input.read() != 13 || input.read() != 10) {
+                    throw IllegalArgumentException("Invalid chunk delimiter")
+                }
+            }
+            return output.toByteArray()
+        }
+        val contentLengths = headers["content-length"]
+        if (contentLengths != null && contentLengths.size != 1) {
+            throw IllegalArgumentException("Ambiguous Content-Length")
+        }
+        val lengthHeader = contentLengths?.firstOrNull()
+        if (lengthHeader != null) {
+            val length = lengthHeader.toLongOrNull()
+                ?: throw IllegalArgumentException("Invalid Content-Length")
+            if (length < 0) throw IllegalArgumentException("Invalid Content-Length")
+            readProbeExact(input, output, minOf(length, maxBytes.toLong()).toInt())
+            return output.toByteArray()
+        }
+        val buffer = ByteArray(4096)
+        while (output.size() < maxBytes) {
+            val n = input.read(buffer, 0, minOf(buffer.size, maxBytes - output.size()))
+            if (n < 0) break
+            if (n > 0) output.write(buffer, 0, n)
+        }
+        return output.toByteArray()
+    }
+
+    private fun performPinnedProbeRequest(url: URL, requestHeaders: Map<String, String>): SafeProbeResponse {
+        val host = validateProbeUrl(url)
+        val port = if (url.port > 0) url.port else if (url.protocol.equals("https", true)) 443 else 80
+        val addresses = InetAddress.getAllByName(host)
+        if (addresses.isEmpty() || addresses.any { !isPublicProbeAddress(it) }) {
+            throw IllegalArgumentException("Target resolves to a non-public IP address")
+        }
+        var lastError: Exception? = null
+        for (pinnedAddress in addresses) {
+            try {
+                val rawSocket = Socket()
+                try {
+                    rawSocket.connect(InetSocketAddress(pinnedAddress, port), 15000)
+                    rawSocket.soTimeout = 18000
+                } catch (error: Exception) {
+                    try { rawSocket.close() } catch (_: Exception) {}
+                    throw error
+                }
+                val activeSocket: Socket = if (url.protocol.equals("https", true)) {
+                    try {
+                        val factory = SSLSocketFactory.getDefault() as SSLSocketFactory
+                        val ssl = factory.createSocket(rawSocket, host, port, true) as SSLSocket
+                        val parameters = ssl.sslParameters
+                        parameters.endpointIdentificationAlgorithm = "HTTPS"
+                        if (!host.contains(":") && !host.matches(Regex("^[0-9.]+$"))) {
+                            parameters.serverNames = listOf(SNIHostName(host))
+                        }
+                        ssl.sslParameters = parameters
+                        ssl.startHandshake()
+                        ssl
+                    } catch (error: Exception) {
+                        try { rawSocket.close() } catch (_: Exception) {}
+                        throw error
+                    }
+                } else {
+                    rawSocket
+                }
+
+                activeSocket.use { socket ->
+                    val hostHeader = if (host.contains(":")) "[$host]" else host
+                    val authority = if ((url.protocol.equals("https", true) && port == 443) ||
+                        (url.protocol.equals("http", true) && port == 80)) hostHeader else "$hostHeader:$port"
+                    val requestTarget = (url.path.ifBlank { "/" }) + (url.query?.let { "?" + it } ?: "")
+                    if (requestTarget.contains("\\r") || requestTarget.contains("\\n")) {
+                        throw IllegalArgumentException("Invalid request path")
+                    }
+                    val request = StringBuilder()
+                        .append("GET ").append(requestTarget).append(" HTTP/1.1\\r\\n")
+                        .append("Host: ").append(authority).append("\\r\\n")
+                        .append("Connection: close\\r\\n")
+                        .append("Accept-Encoding: identity\\r\\n")
+                    for ((name, value) in requestHeaders) {
+                        request.append(name).append(": ").append(value).append("\\r\\n")
+                    }
+                    request.append("\\r\\n")
+                    socket.getOutputStream().write(request.toString().toByteArray(Charsets.ISO_8859_1))
+                    socket.getOutputStream().flush()
+
+                    val input = BufferedInputStream(socket.getInputStream())
+                    val statusLine = readProbeLine(input)
+                    val statusParts = statusLine.split(" ", limit = 3)
+                    val statusCode = statusParts.getOrNull(1)?.toIntOrNull()
+                        ?: throw IllegalArgumentException("Invalid HTTP status line")
+                    val responseHeaders = linkedMapOf<String, MutableList<String>>()
+                    var totalHeaderBytes = statusLine.length
+                    var headerCount = 0
+                    while (true) {
+                        val line = readProbeLine(input)
+                        if (line.isEmpty()) break
+                        totalHeaderBytes += line.length
+                        headerCount++
+                        if (totalHeaderBytes > 32768 || headerCount > 100) {
+                            throw IllegalArgumentException("HTTP response headers too large")
+                        }
+                        val separator = line.indexOf(':')
+                        if (separator <= 0) throw IllegalArgumentException("Invalid HTTP response header")
+                        val name = line.substring(0, separator).trim().lowercase()
+                        val value = line.substring(separator + 1).trim()
+                        responseHeaders.getOrPut(name) { mutableListOf() }.add(value)
+                    }
+                    val body = readProbeBody(input, responseHeaders)
+                    return SafeProbeResponse(statusCode, responseHeaders, body)
+                }
+            } catch (error: Exception) {
+                lastError = error
+            }
+        }
+        throw lastError ?: java.io.IOException("No reachable public address for target")
+    }
+
+    private fun probeOrigin(url: URL): String {
+        val host = url.host.lowercase()
+        val port = if (url.port > 0) url.port else if (url.protocol.equals("https", true)) 443 else 80
+        return url.protocol.lowercase() + "://" + host + ":" + port
+    }
+
+    private fun buildProbeHeaders(bodyJson: JSONObject): MutableMap<String, String> {
+        val userAgent = bodyJson.optString("userAgent", "").ifBlank {
+            "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36"
+        }
+        if (userAgent.length > 512 || userAgent.any { it.code < 32 && it.code != 9 } || userAgent.contains(127.toChar())) {
+            throw IllegalArgumentException("Invalid User-Agent header")
+        }
+        val headers = linkedMapOf(
+            "User-Agent" to userAgent,
+            "Accept" to "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8"
+        )
+        val cookie = bodyJson.optString("cookieHeader", "").trim()
+        if (cookie.isNotEmpty()) {
+            if (cookie.length > 8192 || cookie.any { it.code < 32 && it.code != 9 } || cookie.contains(127.toChar())) {
+                throw IllegalArgumentException("Invalid Cookie header")
+            }
+            headers["Cookie"] = cookie
+        }
+        val forbidden = setOf(
+            "host", "connection", "content-length", "transfer-encoding",
+            "proxy-authorization", "proxy-connection", "keep-alive",
+            "upgrade", "te", "trailer", "cookie", "accept-encoding"
+        )
+        val extra = bodyJson.optJSONObject("extraHeaders")
+        if (extra != null) {
+            if (extra.length() > 32) throw IllegalArgumentException("Too many custom headers")
+            val keys = extra.keys()
+            while (keys.hasNext()) {
+                val name = keys.next().trim()
+                val value = extra.optString(name, "")
+                if (name.isBlank() || name.length > 128 || value.length > 4096 ||
+                    !Regex("^[A-Za-z0-9!#$%&'*+.^_|~-]+$").matches(name) ||
+                    value.any { it.code < 32 && it.code != 9 } || value.contains(127.toChar()) ||
+                    name.lowercase() in forbidden) {
+                    throw IllegalArgumentException("Invalid or restricted custom header")
+                }
+                val existingName = headers.keys.firstOrNull { it.equals(name, ignoreCase = true) }
+                headers[existingName ?: name] = value
+            }
+        }
+        return headers
+    }
+
+    private fun probeUrlSafely(targetUrl: String, bodyJson: JSONObject): JSONObject {
+        if (targetUrl.isBlank() || targetUrl.length > 4096 || targetUrl.any { it.isWhitespace() }) {
+            throw IllegalArgumentException("Invalid or oversized URL")
+        }
+        var current = URL(targetUrl)
+        val headers = buildProbeHeaders(bodyJson)
+        for (redirectCount in 0..5) {
+            val response = performPinnedProbeRequest(current, headers)
+            val location = response.headers["location"]?.firstOrNull()
+            if (response.statusCode in setOf(301, 302, 303, 307, 308) &&
+                !location.isNullOrBlank() && redirectCount < 5) {
+                val next = URL(current, location)
+                if (probeOrigin(current) != probeOrigin(next)) {
+                    headers.keys.removeAll { it.lowercase() in setOf("cookie", "authorization", "proxy-authorization", "referer") }
+                }
+                current = next
+                continue
+            }
+            val bodyText = String(response.body, Charsets.UTF_8)
+            val setCookies = JSONArray()
+            val responseHeaders = JSONObject()
+            response.headers.forEach { (name, values) ->
+                if (name.equals("set-cookie", true)) {
+                    values.forEach { setCookies.put(it.take(4096)) }
+                } else {
+                    responseHeaders.put(name, values.joinToString(", ").take(2048))
+                }
+            }
+            val titleMatch = Regex("<title[^>]*>(.*?)</title>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)).find(bodyText)
+            val title = titleMatch?.groupValues?.getOrNull(1)?.replace(Regex("\\\\s+"), " ")?.trim() ?: ""
+            return JSONObject()
+                .put("ok", response.statusCode in 200..399)
+                .put("url", targetUrl)
+                .put("finalUrl", current.toString())
+                .put("statusCode", response.statusCode)
+                .put("title", title)
+                .put("setCookies", setCookies)
+                .put("headers", responseHeaders)
+                .put("bodyPreview", bodyText.take(8000))
+        }
+        throw IllegalArgumentException("Too many redirects")
+    }
+
+    private fun runBufferedShellCommand(command: String): JSONObject {
+        val t0 = System.currentTimeMillis()
+        val shFile = File(usrDir, "bin/sh")
+        var code = 1
+        var stdoutText = ""
+        val isPkgOrPip = command.contains("pip") || command.contains("pkg") || command.contains("apt")
+        if (!shFile.exists()) {
+            stdoutText = "[DroidPy] Bootstrap sh not ready"
+        } else {
+            var proc: Process? = null
+            try {
+                val pb = ProcessBuilder(shFile.absolutePath, "-c", command)
+                pb.directory(workspaceDir)
+                pb.redirectErrorStream(true)
+                pb.environment().putAll(buildEnv())
+                proc = pb.start()
+                stdoutText = proc.inputStream.bufferedReader(Charsets.UTF_8).readText()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val done = proc.waitFor(120, java.util.concurrent.TimeUnit.SECONDS)
+                    code = if (done) proc.exitValue() else 124
+                    if (!done) proc.destroyForcibly()
+                } else {
+                    code = proc.waitFor()
+                }
+            } catch (e: Exception) {
+                stdoutText = e.message ?: "Shell execution error"
+            } finally {
+                try { proc?.inputStream?.close() } catch (_: Exception) {}
+                try { proc?.errorStream?.close() } catch (_: Exception) {}
+                try { proc?.outputStream?.close() } catch (_: Exception) {}
+                if (isPkgOrPip) {
+                    pruneStaleCacheAndTemp(clearAptLists = false)
+                }
+            }
+        }
+        if (code == 0 && isPkgOrPip) {
+            val isUninstall = command.contains("uninstall") || command.contains("remove") || command.contains("purge")
+            savePackageBackupSnapshot(forceShrink = isUninstall)
+        }
+        return JSONObject()
+            .put("exitCode", code)
+            .put("stdout", stripAnsiForLog(stdoutText))
+            .put("stderr", "")
+            .put("durationMs", System.currentTimeMillis() - t0)
+    }
+
+    private fun streamShellCommand(out: OutputStream, command: String) {
+        val t0 = System.currentTimeMillis()
+        val shFile = File(usrDir, "bin/sh")
+        val isPkgOrPip = command.contains("pip") || command.contains("pkg") || command.contains("apt")
+        appendNativeLog("Exec", "Stream shell start: \${command.take(180)}")
+
+        out.write((
+            "HTTP/1.1 200 OK\\r\\n" +
+            corsHeaders() +
+            "Content-Type: application/x-ndjson; charset=utf-8\\r\\n" +
+            "Connection: close\\r\\n\\r\\n"
+        ).toByteArray())
+        out.flush()
+
+        fun sendStdout(text: String) {
+            val line = JSONObject().put("type", "stdout").put("data", text).toString() + "\\n"
+            out.write(line.toByteArray(Charsets.UTF_8))
+            out.flush()
+        }
+
+        if (!shFile.exists()) {
+            try {
+                sendStdout("[DroidPy] Waiting for Termux bootstrap extraction...\\n")
+            } catch (_: Exception) {
+                return
+            }
+            var waited = 0
+            while (!shFile.exists() && waited < 45000) {
+                try { Thread.sleep(250) } catch (_: InterruptedException) { break }
+                waited += 250
+            }
+        }
+
+        var code = 1
+        val outputTail = StringBuilder()
+        fun recordTail(chunk: String) {
+            val cleaned = stripAnsiForLog(chunk)
+            if (cleaned.isNotEmpty()) {
+                outputTail.append(cleaned)
+                if (outputTail.length > 2400) {
+                    outputTail.delete(0, outputTail.length - 1600)
+                }
+            }
+        }
+        if (!shFile.exists()) {
+            appendNativeLog("Exec", "Bootstrap missing sh at \${shFile.absolutePath}")
+            try {
+                sendStdout("[DroidPy] Bootstrap not ready at \${shFile.absolutePath}\\n")
+            } catch (_: Exception) {
+            }
+        } else {
+            var proc: Process? = null
+            try {
+                val pb = ProcessBuilder(shFile.absolutePath, "-c", command)
+                pb.directory(workspaceDir)
+                pb.redirectErrorStream(true)
+                pb.environment().putAll(buildEnv())
+
+                proc = pb.start()
+                activeProcess = proc
+                activeProcessStartedAt.set(System.currentTimeMillis())
+                val charBuf = CharArray(1024)
+                val inpReader = InputStreamReader(proc.inputStream, Charsets.UTF_8)
+                while (true) {
+                    val n = inpReader.read(charBuf)
+                    if (n < 0) break
+                    if (n > 0) {
+                        val s = String(charBuf, 0, n)
+                        recordTail(s)
+                        try {
+                            sendStdout(s)
+                        } catch (_: Exception) {
+                            proc.destroyForcibly()
+                            break
+                        }
+                    }
+                }
+                code = proc.waitFor()
+            } catch (e: Exception) {
+                appendNativeLog("Exec", "Exec exception: \${e.message}")
+                recordTail("[DroidPy] Exec error: \${e.message}\\n")
+                try {
+                    sendStdout("[DroidPy] Exec error: \${e.message}\\n")
+                } catch (_: Exception) {
+                }
+            } finally {
+                try { proc?.inputStream?.close() } catch (_: Exception) {}
+                try { proc?.errorStream?.close() } catch (_: Exception) {}
+                try { proc?.outputStream?.close() } catch (_: Exception) {}
+                activeProcess = null
+                activeProcessStartedAt.set(0L)
+                if (isPkgOrPip) {
+                    pruneStaleCacheAndTemp(clearAptLists = false)
+                }
+            }
+        }
+
+        val elapsed = System.currentTimeMillis() - t0
+        appendNativeLog("Exec", "Stream shell finished: exitCode=$code, durationMs=$elapsed")
+        if (code == 0 && isPkgOrPip) {
+            val isUninstall = command.contains("uninstall") || command.contains("remove") || command.contains("purge")
+            savePackageBackupSnapshot(forceShrink = isUninstall)
+        }
+        if (code != 0 && outputTail.isNotBlank()) {
+            val tailCompact = stripAnsiForLog(outputTail.toString()).trim().takeLast(1200)
+            appendNativeLog("Exec", "Non-zero exit ($code) output tail:\\n$tailCompact")
+        }
+
+        val doneLine = JSONObject()
+            .put("type", "done")
+            .put("exitCode", code)
+            .put("durationMs", elapsed)
+            .toString() + "\\n"
+        try {
+            out.write(doneLine.toByteArray(Charsets.UTF_8))
+            out.flush()
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun corsHeaders(allowPrivateNetwork: Boolean = false): String {
+        val pnaHeader = if (allowPrivateNetwork) "Access-Control-Allow-Private-Network: true\\r\\n" else ""
+        return "Access-Control-Allow-Origin: $allowedOrigin\\r\\n" +
+            "Vary: Origin\\r\\n" +
+            pnaHeader +
+            "Access-Control-Allow-Methods: GET, POST, OPTIONS\\r\\n" +
+            "Access-Control-Allow-Headers: Content-Type, X-DroidPy-Token\\r\\n"
+    }
+
+    private fun serveBundledWebAsset(out: OutputStream, requestPath: String): Boolean {
+        val mgr = assetManager ?: return false
+        val rel = requestPath.trimStart('/').trimEnd('/')
+        if (rel.contains("..")) return false
+        val candidate = rel.ifEmpty { "index.html" }
+
+        fun readAssetBytes(assetRel: String): ByteArray? = try {
+            mgr.open("www/$assetRel").use { it.readBytes() }
+        } catch (_: Exception) {
+            null
+        }
+
+        var resolvedPath = candidate
+        var bytes = readAssetBytes(resolvedPath)
+        if (bytes == null && !candidate.substringAfterLast('/', "").contains('.')) {
+            resolvedPath = "index.html"
+            bytes = readAssetBytes(resolvedPath)
+        }
+        if (bytes == null) return false
+
+        writeHeaders(out, 200, mimeTypeForPath(resolvedPath), bytes.size)
+        out.write(bytes)
+        out.flush()
+        return true
+    }
+
+    private fun mimeTypeForPath(path: String): String {
+        val lower = path.lowercase()
+        return when {
+            lower.endsWith(".html") -> "text/html; charset=utf-8"
+            lower.endsWith(".js") || lower.endsWith(".mjs") -> "application/javascript; charset=utf-8"
+            lower.endsWith(".css") -> "text/css; charset=utf-8"
+            lower.endsWith(".json") || lower.endsWith(".webmanifest") -> "application/json; charset=utf-8"
+            lower.endsWith(".svg") -> "image/svg+xml"
+            lower.endsWith(".png") -> "image/png"
+            lower.endsWith(".jpg") || lower.endsWith(".jpeg") -> "image/jpeg"
+            lower.endsWith(".ico") -> "image/x-icon"
+            lower.endsWith(".wasm") -> "application/wasm"
+            lower.endsWith(".woff2") -> "font/woff2"
+            lower.endsWith(".txt") -> "text/plain; charset=utf-8"
+            else -> "application/octet-stream"
+        }
+    }
+
+    private fun statusReason(status: Int): String = when (status) {
+        200 -> "OK"
+        204 -> "No Content"
+        400 -> "Bad Request"
+        401 -> "Unauthorized"
+        404 -> "Not Found"
+        409 -> "Conflict"
+        502 -> "Bad Gateway"
+        else -> "OK"
+    }
+
+    private fun writeHeaders(
+        out: OutputStream,
+        status: Int,
+        contentType: String,
+        length: Int,
+        allowPrivateNetwork: Boolean = false
+    ) {
+        out.write((
+            "HTTP/1.1 $status \${statusReason(status)}\\r\\n" +
+            corsHeaders(allowPrivateNetwork) +
+            "Content-Type: $contentType\\r\\n" +
+            "Content-Length: $length\\r\\n" +
+            "Connection: close\\r\\n\\r\\n"
+        ).toByteArray())
+        out.flush()
+    }
+
+    private fun writeJson(out: OutputStream, status: Int, json: JSONObject) {
+        val bytes = json.toString().toByteArray(Charsets.UTF_8)
+        writeHeaders(out, status, "application/json; charset=utf-8", bytes.size)
+        out.write(bytes)
+        out.flush()
+    }
+}
+`
+  );
+
+  // 6. Launcher icon resources & deterministic APK signing keystore
+  // Never include a private signing key in exported Android projects.
+  zip.file('android/app/src/main/res/drawable/ic_launcher_background.xml', ANDROID_ICON_BACKGROUND_XML);
+  zip.file('android/app/src/main/res/drawable/ic_launcher_foreground.xml', ANDROID_ICON_FOREGROUND_XML);
+  zip.file('android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml', ANDROID_ADAPTIVE_ICON_XML);
+  zip.file('android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml', ANDROID_ADAPTIVE_ICON_XML);
+  for (const [density, b64] of Object.entries(ANDROID_MIPMAP_PNG_BASE64)) {
+    zip.file(`android/app/src/main/res/mipmap-${density}/ic_launcher.png`, b64, { base64: true });
+    zip.file(`android/app/src/main/res/mipmap-${density}/ic_launcher_round.png`, b64, { base64: true });
+  }
+
+  // 7. Seed user's current Python workspace files into android/app/src/main/assets/workspace/
+  for (const file of opts.files) {
+    zip.file(`android/app/src/main/assets/workspace/${file.name}`, file.content);
+  }
+
+  // 8. README.md (rendered automatically by GitHub) + README_GITHUB_APK.md
+  const githubApkReadme = `# ${safeTitle} 獨立 Android APK（GitHub 自動打包專案）
+
+本專案已預先配置好 **GitHub Actions 自動編譯流程**、**內嵌 Termux Bootstrap 環境**、**受保護的 APK Release 簽名流程** 與 **原生爬蟲瀏覽器（Cookie 擷取）**：
+打包成 APK 安裝至手機後，**無須另外安裝 Termux App**，也不受瀏覽器 CORS 限制，可直接執行 Python 網路爬蟲（\`requests\`、\`beautifulsoup4\`、\`lxml\`、\`yt-dlp\`）、\`ffmpeg\` 與 \`clang\` 原生套件。
+
+## 發布與自動打包步驟
+
+1. 在 GitHub 建立一個新的公開或私人倉庫（Repository）。
+2. 將本壓縮檔解壓縮後的所有檔案（包含 \`.github/\` 與 \`android/\`）上傳／Push 到該倉庫的 \`main\` 分支。
+   - 若倉庫同時包含前端原始碼（\`package.json\`），Workflow 會自動執行 \`npm ci && npm run build\` 並複製進 \`android/app/src/main/assets/www/\` 打包為完全離線 APK。
+3. 在 GitHub Repository → Settings → Secrets and variables → Actions，為正式發布設定新的簽名 Secrets：\`DROIDPY_KEYSTORE_BASE64\`、\`DROIDPY_STORE_PASSWORD\`、\`DROIDPY_KEY_ALIAS\`、\`DROIDPY_KEY_PASSWORD\`。請使用自己新建立的 keystore；不要把 keystore、Base64 或密碼提交到 Git。妥善離線備份 keystore 與密碼，遺失後將無法再以同一憑證發布更新。
+4. PR／Debug 建置使用臨時 Debug 簽名，不需要 Release Secrets；合併至 main/master 後，push workflow 會自動使用新的受保護 keystore 建置 Release APK、比對 APK 與 keystore 的 SHA-256 憑證指紋，成功後才發布 GitHub Release。缺少 Secrets、解碼失敗或簽名不一致時會停止，不會發布。
+5. **簽名金鑰已更換**：舊版已安裝 App 的簽名與新金鑰不同，不能直接覆蓋更新。請先使用 App 內備份功能匯出工作區／狀態資料，再解除安裝舊版並安裝新 Release；重新安裝後再匯入備份。
+
+## 首次開啟 App 初始化說明
+
+1. APK 首次啟動時會自動將內嵌 Termux Bootstrap 解壓至 App 私有目錄並啟動 \`127.0.0.1:8765\` 橋接服務。
+2. 開啟 DroidPy 後進入 **「Termux 橋接」**，點擊 **「一鍵初始化 Python + 爬蟲環境」**，系統將自動安裝：
+   \`(pkg update -y || true) && pkg install -y python python-pip python-lxml libxml2 libxslt clang && pip install --no-cache-dir requests beautifulsoup4 httpx\`
+3. 如需抓取需登入的網站資料，開啟 **「爬蟲瀏覽器」** → 點擊 **「APK 原生瀏覽器登入抓 Cookie」** 完成登入並點右上角 **「擷取 Cookie」**，即可直接讀取包含 \`HttpOnly\` 的認證 Cookie 並寫入工作區 \`cookies.json\`。
+`;
+
+  const changelogContent = `# Changelog / 更新日誌
+
+## [1.2.16] - 2026-11-24
+- **深度修復 \`pip\` \`truststore\` \`Errno 13\`、選項獨立視窗設計、手機文字防溢出與寫實 3D 四季天光**：
+  - 於 \`sitecustomize.py\` 植入記憶體備援 certifi CA 憑證與攔截 \`truststore\` / \`load_verify_locations\`，配合 \`pip.conf\` 與目錄權限規範徹底根除 Android Python 3.14 \`PermissionError: [Errno 13]\`。
+  - 工具箱抽屜改採「選項目錄 → 獨立操作視窗（頂部附返回按鈕）」，全面精簡「Python／內建 Python」文案並修復 360px 手機版文字按鈕溢出問題。
+  - 升級 Three.js 寫實 3D 背景支援春櫻／夏雨／秋楓／冬雪與真實晨昏星月天光漸變。
+
+## [1.2.14] - 2026-11-23
+- **修復「已安裝套件為空」、安裝失敗暫存清理、亂碼淨化、\`/shell\` 404 與長時使用卡頓**：
+  - \`EmbeddedTermuxBridge.kt\` 擴大掃描 \`site-packages\`／\`dist-packages\` 並補上 \`importlib.metadata\` 回退驗證、移除 \`EXTERNALLY-MANAGED\`、導出 \`PIP_USER=0\`／\`PIP_NO_CACHE_DIR=1\` 與 \`PYTHONUTF8=1\`。
+  - 開機與每次 \`pip\`／\`pkg\` 結束自動清理 \`tmp/pip-*\`、\`.cache/pip\`、\`tmp_pkg_stage\` 與 \`.deb\` 暫存，新增 \`GET /storage/app-usage\`、\`POST /storage/cleanup\` 與 \`POST /shell\`。
+  - 強化 ANSI 與控制字元淨化、隱藏「純淨文字」按鈕，並最佳化手機介面不溢出與長時運行流暢度。
+
+## [1.2.13] - 2026-11-23
+- **原生 Python 直譯器預設、沙盒轉為附加功能、ANSI 純淨文字與跨環境路徑／重裝還原修復**：
+  - 預設執行引擎改為原生 **Python 直譯器**（Termux／內嵌 ARM64），**Pyodide WASM 沙盒**轉為設定內可開啟的附加功能，終端與面板按鈕同步精簡並補強 \`subprocess\`（Errno 138）、無 \`wasm32\` wheel 套件（如 \`parsel\`）與互動輸入 \`KeyboardInterrupt\` 友善防呆。
+  - 新增序列緩衝與強效 ANSI 控制碼淨化器（根除 \`[0m\`、\`[38;5;...m\`、\`;88mO\`、\`91mn\` 殘留），原生 Android \`droidpy_native.log\` 與匯出日誌全面濾除跳脫序列，終端機工具列與編輯器設定加入「純淨文字模式」。
+  - 腳本執行與 \`droid.device_info()\` 環境偵測預設為手機（Android）環境。
+  - 修正 \`/health\` \`pipPkgs\` 讀取 \`METADATA\`/\`PKG-INFO\` 精準計數、\`termuxFetch\` 404/錯誤詳情回報消除 \`Unhandled rejection: Not found\`；強化重裝／更新保留 \`usr/\` 與 \`/sdcard/DroidPy/.droidpy_backup/\` 套件清單備份與一鍵還原。
+  - 所有「日誌」按鈕名稱統一精簡為「日誌」，裝置儲存文案改為「手機」。
+
+## [1.2.12] - 2026-11-22
+- **終端機實時時分秒計時（\`HH:MM:SS\`）、套件解除安裝、精準更新檢測與長按選字複製修復**：
+  - 終端機與程式執行日誌耗時由毫秒全面改為 \`HH:MM:SS\`，執行期間每秒／每 250ms 即時跳動顯示經過時間。
+  - 程式內更新視窗改為僅顯示當前安裝版本或目標新版本的更新日誌，精簡閱讀體驗。
+  - Pyodide 沙盒與 Termux 原生引擎同步新增「解除安裝」功能（\`micropip.uninstall\`／\`pip uninstall -y\`／\`pkg uninstall -y\`＋重定位 \`dpkg/status\` 清理）並保護核心系統套件；新增「一鍵更新所有套件」統一按鈕。
+  - 實作 PEP 440 版本比對與 \`cp312\`/\`emscripten\`/\`none-any.whl\` 過濾＋Termux \`pip list --outdated --format=json\` 實測檢查，徹底修正已安裝最新版套件仍誤報「可更新」的問題；並確保「啟動時自動更新套件」僅於開啟程式時執行一次。
+  - 修復手機 Android WebView 非編輯區與終端機區長按無法選字複製的問題（\`isLongClickable\`、\`.terminal-selectable\`/\`.selectable-text\`、選取時暫停自動捲底、終端機「複製選取」快捷按鈕＋原生 \`ClipboardManager\` 三重複製回退）。
+
+## [1.2.11] - 2026-11-22
+- **新增更多趣味 Python 腳本範例、分類篩選與熱門／冷門 60+ 完整套件目錄**：
+  - 範本庫新增數位雨、曼德布羅碎形、生命遊戲、迷宮尋路、21 點、猜數字、Wordle、Hacker News 爬蟲、CSV 視覺化、愛心曲線、番茄鐘、密碼生成器等共 18 支即跑範例與 7 大分類篩選。
+  - 套件目錄擴充 60+ 熱門與冷門實用套件（7 大分類）並加入即時模糊聯想提示與 Termux APT 名稱指引，同時支援手動與啟動時自動更新已安裝套件。
+  - 新增程式內 GitHub Release 版本檢查、更新日誌展示與原生 \`FileProvider\` APK 下載覆蓋安裝功能；並於 \`buildEnv()\` 導出 \`SHELL\`／\`CONFIG_SHELL\`／\`CMAKE_SH\` 徹底修復 \`make[1]: /data/data/com.termux/files/usr/bin/sh: Permission denied\` 錯誤。
+
+## [1.2.10] - 2026-11-22
+- **根治實機 \`PermissionError: [Errno 13] Permission denied\`（\`pip\` Truststore 與 C 擴充編譯 \`build_clib\`）**：
+  - \`pip\` Wrapper 於執行時動態偵測可用 CA 憑證（含備援複製 \`certifi.where()\`）並強制設定 \`PIP_CERT\`／\`SSL_CERT_DIR\`，徹底避免一鍵初始化同一次執行鏈中 \`pip\` 呼叫 \`_create_truststore_ssl_context()\` 存取舊路徑觸發 \`Errno 13\`。
+  - \`relocate_debs()\` 與 \`buildEnv()\` 自動重寫 \`_sysconfigdata*.py\`／\`Makefile\`／\`pkgconfig\` 內的舊 Termux 路徑、為 \`etc\`／\`lib\`／\`llvm\` 工具鏈設定正確權限，並於偵測到 \`clang\` 時導出 \`CC\`、\`CXX\`、\`AR\`、\`RANLIB\`、\`LDSHARED\`，解決編譯 C 擴充庫時的 \`Permission denied\`。
+  - Termux 快捷套件新增預編譯 \`python-pillow\`、\`python-lxml\` 與純 Python \`flask\`。
+
+## [1.2.9] - 2026-11-22
+- **修復實機日誌回報之 \`pip install\` 退出碼 2 與 \`pkg update\` 退出碼 100 問題**：
+  - 遞迴修復 \`usr/etc\`、\`usr/share\`、\`usr/lib\` 與 \`usr/bin\` 符號連結，並改以 \`resolveCaBundleFile()\` 僅於憑證檔實際存在時才設定 \`PIP_CERT\`／\`SSL_CERT_FILE\`／\`REQUESTS_CA_BUNDLE\`（避免無 \`etc/tls/cert.pem\` 時 \`pip\` 因找不到憑證路徑而直接以 \`exit=2\` 崩潰），同時補齊 \`PIP_CACHE_DIR\` 與 \`ensurepip\` 回退檢查。
+  - 為 \`sources.list*\` 補上 \`[trusted=yes]\` 與重定位路徑修正，並於 \`APT_OPTS\` 補齊 \`AllowDowngradeToInsecureRepositories\` 與 \`apt-key\`／\`gpgv\` 路徑，解決 \`pkg update\` 退出碼 \`100\`。
+  - 加強 \`droidpy_native.log\` 與前端 \`appLogger\`：非 0 結束碼之指令自動記錄錯誤輸出尾段；\`chart_demo.py\` 缺少 \`matplotlib\` 時提供清楚引擎切換提示。
+
+## [1.2.8] - 2026-11-21
+- **徹底修復 Termux Python / 套件重開機恢復預設與 \`apt.conf.d\` Permission denied**：
+  - \`MainActivity.kt\` 改以 \`.droidpy_bootstrap_ok\` 標記與多路徑檢查保護 \`filesDir/usr\`，並於啟動時自動修復 \`bin/sh\` 與符號連結，永不再因 symlink 異常而重設清空已安裝的 Python 與爬蟲套件。
+  - \`EmbeddedTermuxBridge.kt\` 每次執行皆無條件寫入完整 \`etc/apt/apt.conf\`（含 \`Dir::Etc::parts\` 等核心路徑）並改寫殘留路徑與更新 \`dpkg/status\`，同時於 \`/health\` 回傳已保留的 pip / pkg 套件清單。
+  - 沙盒模式（Pyodide）同步持久化已安裝套件清單並於重啟時自動恢復；執行 \`utils.py\` 等模組檔新增 \`__main__\` 輸出與明確執行完成提示。
+- **適配手機與平板操作差異、將低頻功能移入負屏抽屜、保留歷史版本 APK 並加入「程式執行所有日誌」**：
+  - 新增應用程式全生命週期日誌記錄器與 Android 原生 \`/logs\`（含 \`droidpy_native.log\` 與 \`logcat\`）檢視匯出面板。
+
+## [1.2.7] - 2026-11-21
+- 歷史版本曾使用固定簽名金鑰；目前正式發布改用使用者自行保管的 GitHub Actions keystore Secrets。直接更換憑證會使舊版 APK 無法原地覆蓋更新，需先備份 App 資料再重新安裝。
+
+## [1.2.6] - 2026-11-21
+- 修復「授權資料夾」、「授權本機資料夾」與「更新容量」三個按鈕點擊無響應問題：移除裝置目錄按鈕的 \`disabled\` 鎖死，在 APK 環境直接串接 Android 內部儲存權限設定與 \`StatFs\` 真實裝置容量並即時跳出更新提示；在一般瀏覽器／iframe 環境自動退回原生資料夾檔案選擇器 (\`webkitdirectory\`)。
+- 修復獨立 APK 內嵌 Termux 初始化失敗（截圖中 \`apt.conf.d Permission denied\`、\`InRelease\` 金鑰失效、\`relocate_debs\` 解壓靜默中止與 Python 3.14 編譯 \`lxml\` 失敗問題）：改以 \`tar --overwrite\` 精準搬移 \`.deb\` 檔案並顯示即時解壓進度、補齊 \`Dir::Etc::parts\` / \`APT_CONFIG\` / 金鑰符號連結修正、改用預編譯 \`python-lxml\`，並確保完成後立即刷新 Python 偵測狀態。
+
+## [1.2.5] - 2026-11-21
+- 為 Android 獨立 APK 加上 DroidPy 專屬應用程式圖徽（Adaptive Vector Icon + 全解析度 \`mipmap-*\` PNG 回退），於系統桌面、多工視圖與安裝畫面顯示標誌性翡翠綠＋琥珀橘 Logo。
+- 在 \`MainActivity.kt\` 加入「返回兩次退出 App」防誤觸保護：於主畫面首次按下返回鍵（或全面屏側滑返回）顯示 2 秒「再按一次返回鍵退出 DroidPy」提示，2 秒內再次返回即立即寫盤儲存並安全退出。
+
+## [1.2.4] - 2026-11-21
+- 新增 App 私有原生狀態檔 \`droidpy_ide_state.json\` 雙重持久化與 \`onPause()\` 即時刷寫，確保退出或滑掉重開完整保留所有檔案與設定。
+- 新增 \`android:requestLegacyExternalStorage="true"\`、完整 \`/sdcard\` 權限偵測、\`/sdcard/*\` API 與「Android 手機內部儲存空間管理」介面，可實際瀏覽、建立資料夾與讀寫 \`/storage/emulated/0\`。
+- 修正 Termux Python \`PYTHONHOME\` 與內建原生 \`droid.py\`（支援 \`import droid\` 與 \`/droid-action\`），並強化 \`POST /stop\` 程序樹終止與前端 \`AbortController\`，確保「停止執行」立即解除並恢復「執行程式」按鈕。
+
+## [1.2.3] - 2026-11-21
+- 修復獨立 APK \`EmbeddedTermuxBridge.kt\` HTTP \`Content-Length\` 位元組長度錯判導致含中文註解的腳本永久卡死的問題（改用位元組流讀取並正確解碼 UTF-8）。
+- 修復 APK 串流輸出在雙位元組/三位元組 UTF-8 邊界截斷產生亂碼的問題（改用 \`InputStreamReader\` 字元串流解碼）。
+- 修復 \`MainActivity.kt\` 外部 \`https://\` 連結誤在 IDE WebView 內開啟及下載檔名未跳脫之異常，並補強 Bootstrap 完整解壓檢查與 \`pkg\` 金鑰信任選項。
+`;
+
+  zip.file('README.md', githubApkReadme);
+  zip.file('README_GITHUB_APK.md', githubApkReadme);
+  zip.file('CHANGELOG.md', changelogContent);
+
+  return zip.generateAsync({ type: 'blob' });
+}
+}PY_BIN\\\" ] || { echo '[DroidPy] Python is not ready; package restore aborted.' >&2; exit 127; }")
+                        val needsNumpy = needPips.any { normalizePipPkgName(it) == "numpy" }
+                        val remainingPips = needPips.filter { normalizePipPkgName(it) != "numpy" }
+                        if (needsNumpy) {
+                            // Termux supplies a native binary package; verify it with the same
+                            // interpreter that executes user scripts. A failed install must fail restore.
+                            steps.add("pkg install -y python-numpy && \\\"${'\\\" -c 'import numpy' && echo '[DroidPy] NumPy ready (Termux binary package).' ")
+                        }
+                        if (remainingPips.isNotEmpty()) {
+                            steps.add("\\\"\\\$PY_BIN\\\" -m pip install --no-cache-dir " + remainingPips.joinToString(" "))
+                        }
+                        val restoreCmd = if (steps.isEmpty()) {
+                            "echo '[DroidPy] 所有已備份套件均已存在，無需還原。'"
+                        } else {
+                            steps.joinToString(" && ")
+                        }
+                        streamShellCommand(out, restoreCmd)
+                    }
+                }
+
+                method == "GET" && path == "/logs" -> {
+                    val nativeLines = JSONArray()
+                    try {
+                        synchronized(logLock) {
+                            val f = nativeLogFile
+                            if (f.isFile) {
+                                f.readLines(Charsets.UTF_8).takeLast(450).forEach { nativeLines.put(it) }
+                            }
+                        }
+                    } catch (_: Exception) {
+                    }
+                    val logcatLines = JSONArray()
+                    var logcatProc: Process? = null
+                    try {
+                        val pid = android.os.Process.myPid()
+                        logcatProc = ProcessBuilder("logcat", "-d", "-t", "80", "--pid=$pid").redirectErrorStream(true).start()
+                        val txt = logcatProc.inputStream.bufferedReader(Charsets.UTF_8).readText()
+                        logcatProc.waitFor()
+                        txt.lines().filter { it.isNotBlank() }.takeLast(80).forEach { logcatLines.put(stripAnsiForLog(it)) }
+                    } catch (_: Exception) {
+                    } finally {
+                        try { logcatProc?.inputStream?.close() } catch (_: Exception) {}
+                        try { logcatProc?.errorStream?.close() } catch (_: Exception) {}
+                        try { logcatProc?.outputStream?.close() } catch (_: Exception) {}
+                    }
+                    writeJson(
+                        out,
+                        200,
+                        JSONObject()
+                            .put("ok", true)
+                            .put("logPath", nativeLogFile.absolutePath)
+                            .put("nativeLines", nativeLines)
+                            .put("logcatLines", logcatLines)
+                    )
+                }
+
+                method == "POST" && path == "/logs/clear" -> {
+                    try {
+                        synchronized(logLock) {
+                            nativeLogFile.writeText("", Charsets.UTF_8)
+                        }
+                    } catch (_: Exception) {
+                    }
+                    appendNativeLog("Logs", "Native log cleared by user")
+                    writeJson(out, 200, JSONObject().put("ok", true))
+                }
+
+                method == "POST" && path == "/stdin" -> {
+                    val data = bodyJson.optString("data", "") + "\\n"
+                    val proc = activeProcess
+                    if (proc == null) {
+                        writeJson(out, 409, JSONObject().put("error", "No active process"))
+                    } else {
+                        try {
+                            proc.outputStream.write(data.toByteArray())
+                            proc.outputStream.flush()
+                            writeJson(out, 200, JSONObject().put("ok", true))
+                        } catch (e: Exception) {
+                            writeJson(out, 500, JSONObject().put("error", e.message ?: "Write failed"))
+                        }
+                    }
+                }
+
+                method == "POST" && path == "/stop" -> {
+                    val proc = activeProcess
+                    if (proc != null) {
+                        appendNativeLog("Exec", "Force stopping active process tree")
+                        killProcessTree(proc)
+                    }
+                    writeJson(out, 200, JSONObject().put("ok", true))
+                }
+
+                method == "POST" && path == "/droid-action" -> {
+                    when (bodyJson.optString("action")) {
+                        "toast" -> {
+                            val msg = bodyJson.optString("message", "")
+                            Handler(Looper.getMainLooper()).post {
+                                Toast.makeText(appContext, msg, Toast.LENGTH_SHORT).show()
+                            }
+                            writeJson(out, 200, JSONObject().put("ok", true))
+                        }
+                        "vibrate" -> {
+                            val ms = bodyJson.optLong("pattern", 45L).coerceIn(10L, 2000L)
+                            try {
+                                val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                    (appContext.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
+                                } else {
+                                    @Suppress("DEPRECATION")
+                                    appContext.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                                }
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    vibrator.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
+                                } else {
+                                    @Suppress("DEPRECATION")
+                                    vibrator.vibrate(ms)
+                                }
+                                writeJson(out, 200, JSONObject().put("ok", true))
+                            } catch (_: Exception) {
+                                writeJson(out, 200, JSONObject().put("ok", false))
+                            }
+                        }
+                        "device_info" -> {
+                            val dm = appContext.resources.displayMetrics
+                            writeJson(
+                                out,
+                                200,
+                                JSONObject()
+                                    .put("platform", "Android \${Build.VERSION.RELEASE} (\${Build.MODEL})")
+                                    .put("deviceType", "phone")
+                                    .put("screen", "\${dm.widthPixels}x\${dm.heightPixels}")
+                                    .put("pixelRatio", dm.density.toDouble())
+                                    .put("maxTouchPoints", 5)
+                                    .put("online", true)
+                            )
+                        }
+                        else -> writeJson(out, 400, JSONObject().put("error", "Unknown action"))
+                    }
+                }
+
+                method == "GET" && path == "/sdcard/status" -> {
+                    val root = Environment.getExternalStorageDirectory()
+                    val manageAll = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Environment.isExternalStorageManager() else true
+                    val runtimeWrite = ContextCompat.checkSelfPermission(appContext, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+                    val droidpyDir = File(root, "DroidPy").absolutePath
+                    var totalBytes = 0L
+                    var freeBytes = 0L
+                    var usedBytes = 0L
+                    try {
+                        val st = StatFs(root.path)
+                        totalBytes = st.totalBytes
+                        freeBytes = st.availableBytes
+                        usedBytes = (totalBytes - freeBytes).coerceAtLeast(0L)
+                    } catch (_: Exception) {
+                    }
+                    writeJson(
+                        out,
+                        200,
+                        JSONObject()
+                            .put("granted", hasStorageAccess())
+                            .put("manageAllFiles", manageAll)
+                            .put("runtimeWrite", runtimeWrite)
+                            .put("rootPath", root.absolutePath)
+                            .put("droidpyDir", droidpyDir)
+                            .put("totalBytes", totalBytes)
+                            .put("freeBytes", freeBytes)
+                            .put("usedBytes", usedBytes)
+                    )
+                }
+
+                method == "GET" && path == "/sdcard/list" -> {
+                    val relParam = queryStr.split("&")
+                        .firstOrNull { it.startsWith("path=") }
+                        ?.substringAfter("=")
+                        ?.let { URLDecoder.decode(it, "UTF-8") } ?: ""
+                    val dir = resolveSdcardTarget(relParam)
+                    if (dir == null) {
+                        writeJson(out, 400, JSONObject().put("error", "Invalid path"))
+                    } else if (!hasStorageAccess() && !dir.canRead()) {
+                        writeJson(out, 403, JSONObject().put("error", "尚未取得手機內部儲存空間存取權限"))
+                    } else {
+                        val rootCanonical = Environment.getExternalStorageDirectory().canonicalPath
+                        val arr = JSONArray()
+                        val children = dir.listFiles()?.sortedWith(compareBy<File>({ !it.isDirectory }, { it.name.lowercase() })) ?: emptyList()
+                        for (child in children) {
+                            if (child.name.startsWith(".")) continue
+                            val childRel = child.canonicalPath.removePrefix(rootCanonical).trimStart('/')
+                            arr.put(
+                                JSONObject()
+                                    .put("name", child.name)
+                                    .put("relPath", childRel)
+                                    .put("isDir", child.isDirectory)
+                                    .put("size", if (child.isFile) child.length() else 0L)
+                                    .put("updatedAt", child.lastModified())
+                            )
+                        }
+                        val currentRel = dir.canonicalPath.removePrefix(rootCanonical).trimStart('/')
+                        writeJson(
+                            out,
+                            200,
+                            JSONObject()
+                                .put("granted", hasStorageAccess())
+                                .put("rootPath", rootCanonical)
+                                .put("currentPath", currentRel)
+                                .put("entries", arr)
+                        )
+                    }
+                }
+
+                method == "POST" && path == "/sdcard/read" -> {
+                    val relPath = bodyJson.optString("path", "")
+                    val target = resolveSdcardTarget(relPath)
+                    if (target == null || !target.exists() || !target.isFile) {
+                        writeJson(out, 404, JSONObject().put("error", "找不到目標檔案"))
+                    } else if (target.length() > 512 * 1024) {
+                        writeJson(out, 413, JSONObject().put("error", "檔案超過 512 KB 上限"))
+                    } else {
+                        try {
+                            writeJson(
+                                out,
+                                200,
+                                JSONObject()
+                                    .put("name", target.name)
+                                    .put("relPath", relPath)
+                                    .put("content", target.readText(Charsets.UTF_8))
+                            )
+                        } catch (e: Exception) {
+                            writeJson(out, 403, JSONObject().put("error", e.message ?: "讀取失敗"))
+                        }
+                    }
+                }
+
+                method == "POST" && path == "/sdcard/write" -> {
+                    if (!hasStorageAccess()) {
+                        writeJson(out, 403, JSONObject().put("error", "尚未授予內部儲存空間權限"))
+                    } else {
+                        try {
+                            val batch = bodyJson.optJSONArray("files")
+                            if (batch != null) {
+                                val folderRel = bodyJson.optString("dir", "DroidPy").ifBlank { "DroidPy" }
+                                val destDir = resolveSdcardTarget(folderRel)
+                                if (destDir == null) {
+                                    writeJson(out, 400, JSONObject().put("error", "Invalid folder"))
+                                } else {
+                                    destDir.mkdirs()
+                                    var count = 0
+                                    for (i in 0 until batch.length()) {
+                                        val item = batch.getJSONObject(i)
+                                        val name = File(item.optString("name", "")).name
+                                        if (name.isNotBlank()) {
+                                            File(destDir, name).writeText(item.optString("content", ""), Charsets.UTF_8)
+                                            count++
+                                        }
+                                    }
+                                    writeJson(out, 200, JSONObject().put("ok", true).put("count", count).put("dir", destDir.absolutePath))
+                                }
+                            } else {
+                                val relPath = bodyJson.optString("path", "")
+                                val target = resolveSdcardTarget(relPath)
+                                if (target == null) {
+                                    writeJson(out, 400, JSONObject().put("error", "Invalid path"))
+                                } else {
+                                    target.parentFile?.mkdirs()
+                                    target.writeText(bodyJson.optString("content", ""), Charsets.UTF_8)
+                                    writeJson(out, 200, JSONObject().put("ok", true).put("path", target.absolutePath))
+                                }
+                            }
+                        } catch (e: Exception) {
+                            writeJson(out, 403, JSONObject().put("error", e.message ?: "寫入失敗"))
+                        }
+                    }
+                }
+
+                method == "POST" && path == "/sdcard/mkdir" -> {
+                    val relPath = bodyJson.optString("path", "")
+                    val target = resolveSdcardTarget(relPath)
+                    if (target == null) {
+                        writeJson(out, 400, JSONObject().put("error", "Invalid path"))
+                    } else if (!hasStorageAccess()) {
+                        writeJson(out, 403, JSONObject().put("error", "尚未授予內部儲存空間權限"))
+                    } else {
+                        val created = target.exists() || target.mkdirs()
+                        writeJson(out, if (created) 200 else 500, JSONObject().put("ok", created))
+                    }
+                }
+
+                method == "POST" && path == "/sdcard/delete" -> {
+                    val relPath = bodyJson.optString("path", "")
+                    val rootCanonical = Environment.getExternalStorageDirectory().canonicalPath
+                    val target = resolveSdcardTarget(relPath)
+                    if (target == null || target.canonicalPath == rootCanonical) {
+                        writeJson(out, 400, JSONObject().put("error", "Invalid path"))
+                    } else if (!hasStorageAccess()) {
+                        writeJson(out, 403, JSONObject().put("error", "尚未授予內部儲存空間權限"))
+                    } else {
+                        val deleted = if (target.isDirectory) target.deleteRecursively() else target.delete()
+                        writeJson(out, if (deleted) 200 else 500, JSONObject().put("ok", deleted))
+                    }
+                }
+
+                method == "GET" && path == "/storage/app-usage" -> {
+                    writeJson(out, 200, collectAppStorageUsage())
+                }
+
+                method == "POST" && path == "/storage/cleanup" -> {
+                    val freed = pruneStaleCacheAndTemp(clearAptLists = true)
+                    appendNativeLog("Storage", "Cleaned stale temp/cache, freed=\${freed}B")
+                    writeJson(
+                        out,
+                        200,
+                        JSONObject()
+                            .put("ok", true)
+                            .put("freedBytes", freed)
+                            .put("usageAfter", collectAppStorageUsage())
+                    )
+                }
+
+                method == "POST" && path == "/maintenance/cleanup-processes" -> {
+                    val manual = bodyJson.optBoolean("manual", true)
+                    val res = cleanupStuckPythonProcesses(manual = manual)
+                    appendNativeLog("Watchdog", "Cleanup checked=\${res.optInt("scannedCount")} killed=\${res.optInt("killedCount")} manual=$manual")
+                    writeJson(out, 200, res)
+                }
+
+                method == "POST" && path == "/shell" -> {
+                    val cmd = bodyJson.optString("command", "").trim()
+                    if (cmd.isEmpty()) {
+                        writeJson(out, 400, JSONObject().put("error", "Missing command"))
+                    } else {
+                        val res = runBufferedShellCommand(cmd)
+                        writeJson(out, 200, res)
+                    }
+                }
+
+                method == "POST" && (path == "/run-stream" || path == "/install-stream" || path == "/shell-stream") -> {
+                    val shellCmd = when (path) {
+                        "/run-stream" -> {
+                            val arr = bodyJson.optJSONArray("files") ?: JSONArray()
+                            for (i in 0 until arr.length()) {
+                                val f = arr.getJSONObject(i)
+                                val name = File(f.optString("name", "")).name
+                                if (name.isNotBlank()) {
+                                    File(workspaceDir, name).writeText(f.optString("content", ""))
+                                }
+                            }
+                            val entry = File(bodyJson.optString("entry", "main.py")).name.ifBlank { "main.py" }
+                            val safeEntrySh = entry.replace("'", "'\\\\''")
+                            val pyPath = File(usrDir, "bin/python").absolutePath
+                            val py3Path = File(usrDir, "bin/python3").absolutePath
+                            val binDirPath = File(usrDir, "bin").absolutePath
+                            "PY_BIN=\\"$pyPath\\"; [ -x \\"\${'$'}PY_BIN\\" ] || PY_BIN=\\"$py3Path\\"; if [ ! -x \\"\${'$'}PY_BIN\\" ]; then for c in \\"$binDirPath/python3.\\"*; do [ -f \\"\${'$'}c\\" ] || continue; case \\"\${'$'}c\\" in *-config) continue ;; esac; chmod 755 \\"\${'$'}c\\" 2>/dev/null || true; PY_BIN=\\"\${'$'}c\\"; break; done; fi; if [ ! -x \\"\${'$'}PY_BIN\\" ]; then echo \\"[DroidPy] 尚未安裝 Termux 原生 Python！請至「Termux 橋接」點擊「一鍵初始化 Python + 爬蟲環境」，或先將終端機切換為「沙盒」執行。\\"; exit 127; fi; exec \\"\${'$'}PY_BIN\\" -u '$safeEntrySh'"
+                        }
+                        "/install-stream" -> {
+                            val mode = bodyJson.optString("mode", "pip")
+                            val target = bodyJson.optString("target", "").trim()
+                            val trustedHost = bodyJson.optBoolean("trustedHost", false)
+                            if (mode == "pkg") {
+                                "pkg install -y $target"
+                            } else if (trustedHost) {
+                                "pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org $target"
+                            } else {
+                                "pip install --no-cache-dir $target"
+                            }
+                        }
+                        else -> bodyJson.optString("command", "")
+                    }
+                    streamShellCommand(out, shellCmd)
+                }
+
+                method == "GET" && path == "/files" -> {
+                    val allowed = listOf(".py", ".json", ".csv", ".txt", ".md", ".html", ".xml", ".yaml", ".yml", ".ini", ".cfg", ".log", ".sh", ".toml")
+                    val arr = JSONArray()
+                    workspaceDir.listFiles()?.sortedBy { it.name }?.forEach { f ->
+                        if (f.isFile && !f.name.startsWith(".") && f.length() <= 180 * 1024) {
+                            val lower = f.name.lowercase()
+                            if (allowed.any { lower.endsWith(it) } || f.name == "requirements.txt") {
+                                try {
+                                    arr.put(
+                                        JSONObject()
+                                            .put("name", f.name)
+                                            .put("content", f.readText(Charsets.UTF_8))
+                                            .put("updatedAt", f.lastModified())
+                                    )
+                                } catch (_: Exception) {
+                                }
+                            }
+                        }
+                    }
+                    writeJson(out, 200, JSONObject().put("files", arr))
+                }
+
+                method == "POST" && path == "/probe-url" -> {
+                    try {
+                        writeJson(out, 200, probeUrlSafely(bodyJson.optString("url", "").trim(), bodyJson))
+                    } catch (e: IllegalArgumentException) {
+                        writeJson(out, 400, JSONObject().put("error", e.message ?: "Invalid probe URL"))
+                    } catch (_: Exception) {
+                        writeJson(out, 502, JSONObject().put("error", "Unable to safely probe target URL"))
+                    }
+                }
+
+                else -> writeJson(out, 404, JSONObject().put("error", "Not found"))
+            }
+        }
+    }
+
+    private data class SafeProbeResponse(
+        val statusCode: Int,
+        val headers: Map<String, List<String>>,
+        val body: ByteArray
+    )
+
+    private fun isPublicProbeAddress(address: InetAddress): Boolean {
+        if (address.isAnyLocalAddress || address.isLoopbackAddress ||
+            address.isLinkLocalAddress || address.isSiteLocalAddress ||
+            address.isMulticastAddress) return false
+        val b = address.address.map { it.toInt() and 0xff }
+        if (address is Inet4Address) {
+            val a0 = b[0]
+            val a1 = b[1]
+            val a2 = b[2]
+            if (a0 == 0 || a0 == 10 || a0 == 127 || a0 >= 224) return false
+            if (a0 == 100 && a1 in 64..127) return false
+            if (a0 == 169 && a1 == 254) return false
+            if (a0 == 172 && a1 in 16..31) return false
+            if (a0 == 192 && (a1 == 0 || a1 == 2 || a1 == 168)) return false
+            if (a0 == 192 && a1 == 88 && a2 == 99) return false
+            if (a0 == 192 && a1 == 31 && a2 == 196) return false
+            if (a0 == 192 && a1 == 52 && a2 == 193) return false
+            if (a0 == 192 && a1 == 175 && a2 == 48) return false
+            if (a0 == 198 && a1 in 18..19) return false
+            if (a0 == 198 && a1 == 51 && a2 == 100) return false
+            if (a0 == 203 && a1 == 0 && a2 == 113) return false
+            return true
+        }
+        if (address is Inet6Address) {
+            if ((b[0] and 0xe0) != 0x20) return false
+            if (b[0] == 0x20 && b[1] == 0x01) {
+                if (b[2] == 0x0d && b[3] == 0xb8) return false
+                if (b[2] == 0x00 && b[3] <= 0x01) return false
+                if (b[2] == 0x00 && b[3] == 0x02) return false
+                if (b[2] == 0x00 && b[3] == 0x10) return false
+                if (b[2] == 0x00 && b[3] == 0x20) return false
+            }
+            if (b[0] == 0x20 && b[1] == 0x02) return false
+            if (b[0] == 0x3f && b[1] == 0xff) return false
+            return true
+        }
+        return false
+    }
+
+    private fun validateProbeUrl(url: URL): String {
+        val scheme = url.protocol.lowercase()
+        if (scheme != "http" && scheme != "https") {
+            throw IllegalArgumentException("Only HTTP and HTTPS URLs are allowed")
+        }
+        if (URI(url.toString()).rawUserInfo != null) {
+            throw IllegalArgumentException("URLs containing credentials are not allowed")
+        }
+        val rawHost = url.host.removePrefix("[").removeSuffix("]").trimEnd('.').lowercase()
+        if (rawHost.isBlank() || rawHost == "localhost" ||
+            rawHost.endsWith(".localhost") || rawHost.endsWith(".local") ||
+            rawHost.endsWith(".internal") || rawHost.endsWith(".test") ||
+            rawHost.contains("%")) {
+            throw IllegalArgumentException("Local hostnames and scoped IP addresses are not allowed")
+        }
+        return if (rawHost.contains(":")) rawHost else IDN.toASCII(rawHost)
+    }
+
+    private fun readProbeLine(input: BufferedInputStream, maxBytes: Int = 8192): String {
+        val output = ByteArrayOutputStream()
+        while (true) {
+            val value = input.read()
+            if (value < 0) {
+                if (output.size() == 0) return ""
+                break
+            }
+            if (value == 10) break
+            if (value != 13) output.write(value)
+            if (output.size() > maxBytes) throw IllegalArgumentException("HTTP response header line too large")
+        }
+        return output.toString("ISO-8859-1")
+    }
+
+    private fun readProbeExact(input: BufferedInputStream, output: ByteArrayOutputStream, count: Int) {
+        var remaining = count
+        val buffer = ByteArray(4096)
+        while (remaining > 0) {
+            val n = input.read(buffer, 0, minOf(buffer.size, remaining))
+            if (n < 0) throw java.io.EOFException("Incomplete HTTP response body")
+            output.write(buffer, 0, n)
+            remaining -= n
+        }
+    }
+
+    private fun readProbeBody(input: BufferedInputStream, headers: Map<String, List<String>>): ByteArray {
+        val maxBytes = 24000
+        val output = ByteArrayOutputStream()
+        val transferEncoding = headers["transfer-encoding"]?.joinToString(",")?.lowercase().orEmpty()
+        if (transferEncoding.isNotBlank() && headers.containsKey("content-length")) {
+            throw IllegalArgumentException("Ambiguous HTTP response framing")
+        }
+        if (transferEncoding.isNotBlank() && transferEncoding.trim() != "chunked") {
+            throw IllegalArgumentException("Unsupported HTTP transfer encoding")
+        }
+        if (transferEncoding.contains("chunked")) {
+            while (output.size() < maxBytes) {
+                val sizeLine = readProbeLine(input).substringBefore(';').trim()
+                val chunkSize = sizeLine.toLongOrNull(16)
+                    ?: throw IllegalArgumentException("Invalid chunked response")
+                if (chunkSize < 0L) throw IllegalArgumentException("Invalid chunk size")
+                if (chunkSize == 0L) {
+                    while (readProbeLine(input).isNotEmpty()) { }
+                    break
+                }
+                val remaining = maxBytes - output.size()
+                val toRead = minOf(chunkSize, remaining.toLong()).toInt()
+                readProbeExact(input, output, toRead)
+                if (toRead.toLong() < chunkSize) break
+                if (input.read() != 13 || input.read() != 10) {
+                    throw IllegalArgumentException("Invalid chunk delimiter")
+                }
+            }
+            return output.toByteArray()
+        }
+        val contentLengths = headers["content-length"]
+        if (contentLengths != null && contentLengths.size != 1) {
+            throw IllegalArgumentException("Ambiguous Content-Length")
+        }
+        val lengthHeader = contentLengths?.firstOrNull()
+        if (lengthHeader != null) {
+            val length = lengthHeader.toLongOrNull()
+                ?: throw IllegalArgumentException("Invalid Content-Length")
+            if (length < 0) throw IllegalArgumentException("Invalid Content-Length")
+            readProbeExact(input, output, minOf(length, maxBytes.toLong()).toInt())
+            return output.toByteArray()
+        }
+        val buffer = ByteArray(4096)
+        while (output.size() < maxBytes) {
+            val n = input.read(buffer, 0, minOf(buffer.size, maxBytes - output.size()))
+            if (n < 0) break
+            if (n > 0) output.write(buffer, 0, n)
+        }
+        return output.toByteArray()
+    }
+
+    private fun performPinnedProbeRequest(url: URL, requestHeaders: Map<String, String>): SafeProbeResponse {
+        val host = validateProbeUrl(url)
+        val port = if (url.port > 0) url.port else if (url.protocol.equals("https", true)) 443 else 80
+        val addresses = InetAddress.getAllByName(host)
+        if (addresses.isEmpty() || addresses.any { !isPublicProbeAddress(it) }) {
+            throw IllegalArgumentException("Target resolves to a non-public IP address")
+        }
+        var lastError: Exception? = null
+        for (pinnedAddress in addresses) {
+            try {
+                val rawSocket = Socket()
+                try {
+                    rawSocket.connect(InetSocketAddress(pinnedAddress, port), 15000)
+                    rawSocket.soTimeout = 18000
+                } catch (error: Exception) {
+                    try { rawSocket.close() } catch (_: Exception) {}
+                    throw error
+                }
+                val activeSocket: Socket = if (url.protocol.equals("https", true)) {
+                    try {
+                        val factory = SSLSocketFactory.getDefault() as SSLSocketFactory
+                        val ssl = factory.createSocket(rawSocket, host, port, true) as SSLSocket
+                        val parameters = ssl.sslParameters
+                        parameters.endpointIdentificationAlgorithm = "HTTPS"
+                        if (!host.contains(":") && !host.matches(Regex("^[0-9.]+$"))) {
+                            parameters.serverNames = listOf(SNIHostName(host))
+                        }
+                        ssl.sslParameters = parameters
+                        ssl.startHandshake()
+                        ssl
+                    } catch (error: Exception) {
+                        try { rawSocket.close() } catch (_: Exception) {}
+                        throw error
+                    }
+                } else {
+                    rawSocket
+                }
+
+                activeSocket.use { socket ->
+                    val hostHeader = if (host.contains(":")) "[$host]" else host
+                    val authority = if ((url.protocol.equals("https", true) && port == 443) ||
+                        (url.protocol.equals("http", true) && port == 80)) hostHeader else "$hostHeader:$port"
+                    val requestTarget = (url.path.ifBlank { "/" }) + (url.query?.let { "?" + it } ?: "")
+                    if (requestTarget.contains("\\r") || requestTarget.contains("\\n")) {
+                        throw IllegalArgumentException("Invalid request path")
+                    }
+                    val request = StringBuilder()
+                        .append("GET ").append(requestTarget).append(" HTTP/1.1\\r\\n")
+                        .append("Host: ").append(authority).append("\\r\\n")
+                        .append("Connection: close\\r\\n")
+                        .append("Accept-Encoding: identity\\r\\n")
+                    for ((name, value) in requestHeaders) {
+                        request.append(name).append(": ").append(value).append("\\r\\n")
+                    }
+                    request.append("\\r\\n")
+                    socket.getOutputStream().write(request.toString().toByteArray(Charsets.ISO_8859_1))
+                    socket.getOutputStream().flush()
+
+                    val input = BufferedInputStream(socket.getInputStream())
+                    val statusLine = readProbeLine(input)
+                    val statusParts = statusLine.split(" ", limit = 3)
+                    val statusCode = statusParts.getOrNull(1)?.toIntOrNull()
+                        ?: throw IllegalArgumentException("Invalid HTTP status line")
+                    val responseHeaders = linkedMapOf<String, MutableList<String>>()
+                    var totalHeaderBytes = statusLine.length
+                    var headerCount = 0
+                    while (true) {
+                        val line = readProbeLine(input)
+                        if (line.isEmpty()) break
+                        totalHeaderBytes += line.length
+                        headerCount++
+                        if (totalHeaderBytes > 32768 || headerCount > 100) {
+                            throw IllegalArgumentException("HTTP response headers too large")
+                        }
+                        val separator = line.indexOf(':')
+                        if (separator <= 0) throw IllegalArgumentException("Invalid HTTP response header")
+                        val name = line.substring(0, separator).trim().lowercase()
+                        val value = line.substring(separator + 1).trim()
+                        responseHeaders.getOrPut(name) { mutableListOf() }.add(value)
+                    }
+                    val body = readProbeBody(input, responseHeaders)
+                    return SafeProbeResponse(statusCode, responseHeaders, body)
+                }
+            } catch (error: Exception) {
+                lastError = error
+            }
+        }
+        throw lastError ?: java.io.IOException("No reachable public address for target")
+    }
+
+    private fun probeOrigin(url: URL): String {
+        val host = url.host.lowercase()
+        val port = if (url.port > 0) url.port else if (url.protocol.equals("https", true)) 443 else 80
+        return url.protocol.lowercase() + "://" + host + ":" + port
+    }
+
+    private fun buildProbeHeaders(bodyJson: JSONObject): MutableMap<String, String> {
+        val userAgent = bodyJson.optString("userAgent", "").ifBlank {
+            "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36"
+        }
+        if (userAgent.length > 512 || userAgent.any { it.code < 32 && it.code != 9 } || userAgent.contains(127.toChar())) {
+            throw IllegalArgumentException("Invalid User-Agent header")
+        }
+        val headers = linkedMapOf(
+            "User-Agent" to userAgent,
+            "Accept" to "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8"
+        )
+        val cookie = bodyJson.optString("cookieHeader", "").trim()
+        if (cookie.isNotEmpty()) {
+            if (cookie.length > 8192 || cookie.any { it.code < 32 && it.code != 9 } || cookie.contains(127.toChar())) {
+                throw IllegalArgumentException("Invalid Cookie header")
+            }
+            headers["Cookie"] = cookie
+        }
+        val forbidden = setOf(
+            "host", "connection", "content-length", "transfer-encoding",
+            "proxy-authorization", "proxy-connection", "keep-alive",
+            "upgrade", "te", "trailer", "cookie", "accept-encoding"
+        )
+        val extra = bodyJson.optJSONObject("extraHeaders")
+        if (extra != null) {
+            if (extra.length() > 32) throw IllegalArgumentException("Too many custom headers")
+            val keys = extra.keys()
+            while (keys.hasNext()) {
+                val name = keys.next().trim()
+                val value = extra.optString(name, "")
+                if (name.isBlank() || name.length > 128 || value.length > 4096 ||
+                    !Regex("^[A-Za-z0-9!#$%&'*+.^_|~-]+$").matches(name) ||
+                    value.any { it.code < 32 && it.code != 9 } || value.contains(127.toChar()) ||
+                    name.lowercase() in forbidden) {
+                    throw IllegalArgumentException("Invalid or restricted custom header")
+                }
+                val existingName = headers.keys.firstOrNull { it.equals(name, ignoreCase = true) }
+                headers[existingName ?: name] = value
+            }
+        }
+        return headers
+    }
+
+    private fun probeUrlSafely(targetUrl: String, bodyJson: JSONObject): JSONObject {
+        if (targetUrl.isBlank() || targetUrl.length > 4096 || targetUrl.any { it.isWhitespace() }) {
+            throw IllegalArgumentException("Invalid or oversized URL")
+        }
+        var current = URL(targetUrl)
+        val headers = buildProbeHeaders(bodyJson)
+        for (redirectCount in 0..5) {
+            val response = performPinnedProbeRequest(current, headers)
+            val location = response.headers["location"]?.firstOrNull()
+            if (response.statusCode in setOf(301, 302, 303, 307, 308) &&
+                !location.isNullOrBlank() && redirectCount < 5) {
+                val next = URL(current, location)
+                if (probeOrigin(current) != probeOrigin(next)) {
+                    headers.keys.removeAll { it.lowercase() in setOf("cookie", "authorization", "proxy-authorization", "referer") }
+                }
+                current = next
+                continue
+            }
+            val bodyText = String(response.body, Charsets.UTF_8)
+            val setCookies = JSONArray()
+            val responseHeaders = JSONObject()
+            response.headers.forEach { (name, values) ->
+                if (name.equals("set-cookie", true)) {
+                    values.forEach { setCookies.put(it.take(4096)) }
+                } else {
+                    responseHeaders.put(name, values.joinToString(", ").take(2048))
+                }
+            }
+            val titleMatch = Regex("<title[^>]*>(.*?)</title>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)).find(bodyText)
+            val title = titleMatch?.groupValues?.getOrNull(1)?.replace(Regex("\\\\s+"), " ")?.trim() ?: ""
+            return JSONObject()
+                .put("ok", response.statusCode in 200..399)
+                .put("url", targetUrl)
+                .put("finalUrl", current.toString())
+                .put("statusCode", response.statusCode)
+                .put("title", title)
+                .put("setCookies", setCookies)
+                .put("headers", responseHeaders)
+                .put("bodyPreview", bodyText.take(8000))
+        }
+        throw IllegalArgumentException("Too many redirects")
+    }
+
+    private fun runBufferedShellCommand(command: String): JSONObject {
+        val t0 = System.currentTimeMillis()
+        val shFile = File(usrDir, "bin/sh")
+        var code = 1
+        var stdoutText = ""
+        val isPkgOrPip = command.contains("pip") || command.contains("pkg") || command.contains("apt")
+        if (!shFile.exists()) {
+            stdoutText = "[DroidPy] Bootstrap sh not ready"
+        } else {
+            var proc: Process? = null
+            try {
+                val pb = ProcessBuilder(shFile.absolutePath, "-c", command)
+                pb.directory(workspaceDir)
+                pb.redirectErrorStream(true)
+                pb.environment().putAll(buildEnv())
+                proc = pb.start()
+                stdoutText = proc.inputStream.bufferedReader(Charsets.UTF_8).readText()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val done = proc.waitFor(120, java.util.concurrent.TimeUnit.SECONDS)
+                    code = if (done) proc.exitValue() else 124
+                    if (!done) proc.destroyForcibly()
+                } else {
+                    code = proc.waitFor()
+                }
+            } catch (e: Exception) {
+                stdoutText = e.message ?: "Shell execution error"
+            } finally {
+                try { proc?.inputStream?.close() } catch (_: Exception) {}
+                try { proc?.errorStream?.close() } catch (_: Exception) {}
+                try { proc?.outputStream?.close() } catch (_: Exception) {}
+                if (isPkgOrPip) {
+                    pruneStaleCacheAndTemp(clearAptLists = false)
+                }
+            }
+        }
+        if (code == 0 && isPkgOrPip) {
+            val isUninstall = command.contains("uninstall") || command.contains("remove") || command.contains("purge")
+            savePackageBackupSnapshot(forceShrink = isUninstall)
+        }
+        return JSONObject()
+            .put("exitCode", code)
+            .put("stdout", stripAnsiForLog(stdoutText))
+            .put("stderr", "")
+            .put("durationMs", System.currentTimeMillis() - t0)
+    }
+
+    private fun streamShellCommand(out: OutputStream, command: String) {
+        val t0 = System.currentTimeMillis()
+        val shFile = File(usrDir, "bin/sh")
+        val isPkgOrPip = command.contains("pip") || command.contains("pkg") || command.contains("apt")
+        appendNativeLog("Exec", "Stream shell start: \${command.take(180)}")
+
+        out.write((
+            "HTTP/1.1 200 OK\\r\\n" +
+            corsHeaders() +
+            "Content-Type: application/x-ndjson; charset=utf-8\\r\\n" +
+            "Connection: close\\r\\n\\r\\n"
+        ).toByteArray())
+        out.flush()
+
+        fun sendStdout(text: String) {
+            val line = JSONObject().put("type", "stdout").put("data", text).toString() + "\\n"
+            out.write(line.toByteArray(Charsets.UTF_8))
+            out.flush()
+        }
+
+        if (!shFile.exists()) {
+            try {
+                sendStdout("[DroidPy] Waiting for Termux bootstrap extraction...\\n")
+            } catch (_: Exception) {
+                return
+            }
+            var waited = 0
+            while (!shFile.exists() && waited < 45000) {
+                try { Thread.sleep(250) } catch (_: InterruptedException) { break }
+                waited += 250
+            }
+        }
+
+        var code = 1
+        val outputTail = StringBuilder()
+        fun recordTail(chunk: String) {
+            val cleaned = stripAnsiForLog(chunk)
+            if (cleaned.isNotEmpty()) {
+                outputTail.append(cleaned)
+                if (outputTail.length > 2400) {
+                    outputTail.delete(0, outputTail.length - 1600)
+                }
+            }
+        }
+        if (!shFile.exists()) {
+            appendNativeLog("Exec", "Bootstrap missing sh at \${shFile.absolutePath}")
+            try {
+                sendStdout("[DroidPy] Bootstrap not ready at \${shFile.absolutePath}\\n")
+            } catch (_: Exception) {
+            }
+        } else {
+            var proc: Process? = null
+            try {
+                val pb = ProcessBuilder(shFile.absolutePath, "-c", command)
+                pb.directory(workspaceDir)
+                pb.redirectErrorStream(true)
+                pb.environment().putAll(buildEnv())
+
+                proc = pb.start()
+                activeProcess = proc
+                activeProcessStartedAt.set(System.currentTimeMillis())
+                val charBuf = CharArray(1024)
+                val inpReader = InputStreamReader(proc.inputStream, Charsets.UTF_8)
+                while (true) {
+                    val n = inpReader.read(charBuf)
+                    if (n < 0) break
+                    if (n > 0) {
+                        val s = String(charBuf, 0, n)
+                        recordTail(s)
+                        try {
+                            sendStdout(s)
+                        } catch (_: Exception) {
+                            proc.destroyForcibly()
+                            break
+                        }
+                    }
+                }
+                code = proc.waitFor()
+            } catch (e: Exception) {
+                appendNativeLog("Exec", "Exec exception: \${e.message}")
+                recordTail("[DroidPy] Exec error: \${e.message}\\n")
+                try {
+                    sendStdout("[DroidPy] Exec error: \${e.message}\\n")
+                } catch (_: Exception) {
+                }
+            } finally {
+                try { proc?.inputStream?.close() } catch (_: Exception) {}
+                try { proc?.errorStream?.close() } catch (_: Exception) {}
+                try { proc?.outputStream?.close() } catch (_: Exception) {}
+                activeProcess = null
+                activeProcessStartedAt.set(0L)
+                if (isPkgOrPip) {
+                    pruneStaleCacheAndTemp(clearAptLists = false)
+                }
+            }
+        }
+
+        val elapsed = System.currentTimeMillis() - t0
+        appendNativeLog("Exec", "Stream shell finished: exitCode=$code, durationMs=$elapsed")
+        if (code == 0 && isPkgOrPip) {
+            val isUninstall = command.contains("uninstall") || command.contains("remove") || command.contains("purge")
+            savePackageBackupSnapshot(forceShrink = isUninstall)
+        }
+        if (code != 0 && outputTail.isNotBlank()) {
+            val tailCompact = stripAnsiForLog(outputTail.toString()).trim().takeLast(1200)
+            appendNativeLog("Exec", "Non-zero exit ($code) output tail:\\n$tailCompact")
+        }
+
+        val doneLine = JSONObject()
+            .put("type", "done")
+            .put("exitCode", code)
+            .put("durationMs", elapsed)
+            .toString() + "\\n"
+        try {
+            out.write(doneLine.toByteArray(Charsets.UTF_8))
+            out.flush()
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun corsHeaders(allowPrivateNetwork: Boolean = false): String {
+        val pnaHeader = if (allowPrivateNetwork) "Access-Control-Allow-Private-Network: true\\r\\n" else ""
+        return "Access-Control-Allow-Origin: $allowedOrigin\\r\\n" +
+            "Vary: Origin\\r\\n" +
+            pnaHeader +
+            "Access-Control-Allow-Methods: GET, POST, OPTIONS\\r\\n" +
+            "Access-Control-Allow-Headers: Content-Type, X-DroidPy-Token\\r\\n"
+    }
+
+    private fun serveBundledWebAsset(out: OutputStream, requestPath: String): Boolean {
+        val mgr = assetManager ?: return false
+        val rel = requestPath.trimStart('/').trimEnd('/')
+        if (rel.contains("..")) return false
+        val candidate = rel.ifEmpty { "index.html" }
+
+        fun readAssetBytes(assetRel: String): ByteArray? = try {
+            mgr.open("www/$assetRel").use { it.readBytes() }
+        } catch (_: Exception) {
+            null
+        }
+
+        var resolvedPath = candidate
+        var bytes = readAssetBytes(resolvedPath)
+        if (bytes == null && !candidate.substringAfterLast('/', "").contains('.')) {
+            resolvedPath = "index.html"
+            bytes = readAssetBytes(resolvedPath)
+        }
+        if (bytes == null) return false
+
+        writeHeaders(out, 200, mimeTypeForPath(resolvedPath), bytes.size)
+        out.write(bytes)
+        out.flush()
+        return true
+    }
+
+    private fun mimeTypeForPath(path: String): String {
+        val lower = path.lowercase()
+        return when {
+            lower.endsWith(".html") -> "text/html; charset=utf-8"
+            lower.endsWith(".js") || lower.endsWith(".mjs") -> "application/javascript; charset=utf-8"
+            lower.endsWith(".css") -> "text/css; charset=utf-8"
+            lower.endsWith(".json") || lower.endsWith(".webmanifest") -> "application/json; charset=utf-8"
+            lower.endsWith(".svg") -> "image/svg+xml"
+            lower.endsWith(".png") -> "image/png"
+            lower.endsWith(".jpg") || lower.endsWith(".jpeg") -> "image/jpeg"
+            lower.endsWith(".ico") -> "image/x-icon"
+            lower.endsWith(".wasm") -> "application/wasm"
+            lower.endsWith(".woff2") -> "font/woff2"
+            lower.endsWith(".txt") -> "text/plain; charset=utf-8"
+            else -> "application/octet-stream"
+        }
+    }
+
+    private fun statusReason(status: Int): String = when (status) {
+        200 -> "OK"
+        204 -> "No Content"
+        400 -> "Bad Request"
+        401 -> "Unauthorized"
+        404 -> "Not Found"
+        409 -> "Conflict"
+        502 -> "Bad Gateway"
+        else -> "OK"
+    }
+
+    private fun writeHeaders(
+        out: OutputStream,
+        status: Int,
+        contentType: String,
+        length: Int,
+        allowPrivateNetwork: Boolean = false
+    ) {
+        out.write((
+            "HTTP/1.1 $status \${statusReason(status)}\\r\\n" +
+            corsHeaders(allowPrivateNetwork) +
+            "Content-Type: $contentType\\r\\n" +
+            "Content-Length: $length\\r\\n" +
+            "Connection: close\\r\\n\\r\\n"
+        ).toByteArray())
+        out.flush()
+    }
+
+    private fun writeJson(out: OutputStream, status: Int, json: JSONObject) {
+        val bytes = json.toString().toByteArray(Charsets.UTF_8)
+        writeHeaders(out, status, "application/json; charset=utf-8", bytes.size)
+        out.write(bytes)
+        out.flush()
+    }
+}
+`
+  );
+
+  // 6. Launcher icon resources & deterministic APK signing keystore
+  // Never include a private signing key in exported Android projects.
+  zip.file('android/app/src/main/res/drawable/ic_launcher_background.xml', ANDROID_ICON_BACKGROUND_XML);
+  zip.file('android/app/src/main/res/drawable/ic_launcher_foreground.xml', ANDROID_ICON_FOREGROUND_XML);
+  zip.file('android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml', ANDROID_ADAPTIVE_ICON_XML);
+  zip.file('android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml', ANDROID_ADAPTIVE_ICON_XML);
+  for (const [density, b64] of Object.entries(ANDROID_MIPMAP_PNG_BASE64)) {
+    zip.file(`android/app/src/main/res/mipmap-${density}/ic_launcher.png`, b64, { base64: true });
+    zip.file(`android/app/src/main/res/mipmap-${density}/ic_launcher_round.png`, b64, { base64: true });
+  }
+
+  // 7. Seed user's current Python workspace files into android/app/src/main/assets/workspace/
+  for (const file of opts.files) {
+    zip.file(`android/app/src/main/assets/workspace/${file.name}`, file.content);
+  }
+
+  // 8. README.md (rendered automatically by GitHub) + README_GITHUB_APK.md
+  const githubApkReadme = `# ${safeTitle} 獨立 Android APK（GitHub 自動打包專案）
+
+本專案已預先配置好 **GitHub Actions 自動編譯流程**、**內嵌 Termux Bootstrap 環境**、**受保護的 APK Release 簽名流程** 與 **原生爬蟲瀏覽器（Cookie 擷取）**：
+打包成 APK 安裝至手機後，**無須另外安裝 Termux App**，也不受瀏覽器 CORS 限制，可直接執行 Python 網路爬蟲（\`requests\`、\`beautifulsoup4\`、\`lxml\`、\`yt-dlp\`）、\`ffmpeg\` 與 \`clang\` 原生套件。
+
+## 發布與自動打包步驟
+
+1. 在 GitHub 建立一個新的公開或私人倉庫（Repository）。
+2. 將本壓縮檔解壓縮後的所有檔案（包含 \`.github/\` 與 \`android/\`）上傳／Push 到該倉庫的 \`main\` 分支。
+   - 若倉庫同時包含前端原始碼（\`package.json\`），Workflow 會自動執行 \`npm ci && npm run build\` 並複製進 \`android/app/src/main/assets/www/\` 打包為完全離線 APK。
+3. 在 GitHub Repository → Settings → Secrets and variables → Actions，為正式發布設定新的簽名 Secrets：\`DROIDPY_KEYSTORE_BASE64\`、\`DROIDPY_STORE_PASSWORD\`、\`DROIDPY_KEY_ALIAS\`、\`DROIDPY_KEY_PASSWORD\`。請使用自己新建立的 keystore；不要把 keystore、Base64 或密碼提交到 Git。妥善離線備份 keystore 與密碼，遺失後將無法再以同一憑證發布更新。
+4. PR／Debug 建置使用臨時 Debug 簽名，不需要 Release Secrets；合併至 main/master 後，push workflow 會自動使用新的受保護 keystore 建置 Release APK、比對 APK 與 keystore 的 SHA-256 憑證指紋，成功後才發布 GitHub Release。缺少 Secrets、解碼失敗或簽名不一致時會停止，不會發布。
+5. **簽名金鑰已更換**：舊版已安裝 App 的簽名與新金鑰不同，不能直接覆蓋更新。請先使用 App 內備份功能匯出工作區／狀態資料，再解除安裝舊版並安裝新 Release；重新安裝後再匯入備份。
+
+## 首次開啟 App 初始化說明
+
+1. APK 首次啟動時會自動將內嵌 Termux Bootstrap 解壓至 App 私有目錄並啟動 \`127.0.0.1:8765\` 橋接服務。
+2. 開啟 DroidPy 後進入 **「Termux 橋接」**，點擊 **「一鍵初始化 Python + 爬蟲環境」**，系統將自動安裝：
+   \`(pkg update -y || true) && pkg install -y python python-pip python-lxml libxml2 libxslt clang && pip install --no-cache-dir requests beautifulsoup4 httpx\`
+3. 如需抓取需登入的網站資料，開啟 **「爬蟲瀏覽器」** → 點擊 **「APK 原生瀏覽器登入抓 Cookie」** 完成登入並點右上角 **「擷取 Cookie」**，即可直接讀取包含 \`HttpOnly\` 的認證 Cookie 並寫入工作區 \`cookies.json\`。
+`;
+
+  const changelogContent = `# Changelog / 更新日誌
+
+## [1.2.16] - 2026-11-24
+- **深度修復 \`pip\` \`truststore\` \`Errno 13\`、選項獨立視窗設計、手機文字防溢出與寫實 3D 四季天光**：
+  - 於 \`sitecustomize.py\` 植入記憶體備援 certifi CA 憑證與攔截 \`truststore\` / \`load_verify_locations\`，配合 \`pip.conf\` 與目錄權限規範徹底根除 Android Python 3.14 \`PermissionError: [Errno 13]\`。
+  - 工具箱抽屜改採「選項目錄 → 獨立操作視窗（頂部附返回按鈕）」，全面精簡「Python／內建 Python」文案並修復 360px 手機版文字按鈕溢出問題。
+  - 升級 Three.js 寫實 3D 背景支援春櫻／夏雨／秋楓／冬雪與真實晨昏星月天光漸變。
+
+## [1.2.14] - 2026-11-23
+- **修復「已安裝套件為空」、安裝失敗暫存清理、亂碼淨化、\`/shell\` 404 與長時使用卡頓**：
+  - \`EmbeddedTermuxBridge.kt\` 擴大掃描 \`site-packages\`／\`dist-packages\` 並補上 \`importlib.metadata\` 回退驗證、移除 \`EXTERNALLY-MANAGED\`、導出 \`PIP_USER=0\`／\`PIP_NO_CACHE_DIR=1\` 與 \`PYTHONUTF8=1\`。
+  - 開機與每次 \`pip\`／\`pkg\` 結束自動清理 \`tmp/pip-*\`、\`.cache/pip\`、\`tmp_pkg_stage\` 與 \`.deb\` 暫存，新增 \`GET /storage/app-usage\`、\`POST /storage/cleanup\` 與 \`POST /shell\`。
+  - 強化 ANSI 與控制字元淨化、隱藏「純淨文字」按鈕，並最佳化手機介面不溢出與長時運行流暢度。
+
+## [1.2.13] - 2026-11-23
+- **原生 Python 直譯器預設、沙盒轉為附加功能、ANSI 純淨文字與跨環境路徑／重裝還原修復**：
+  - 預設執行引擎改為原生 **Python 直譯器**（Termux／內嵌 ARM64），**Pyodide WASM 沙盒**轉為設定內可開啟的附加功能，終端與面板按鈕同步精簡並補強 \`subprocess\`（Errno 138）、無 \`wasm32\` wheel 套件（如 \`parsel\`）與互動輸入 \`KeyboardInterrupt\` 友善防呆。
+  - 新增序列緩衝與強效 ANSI 控制碼淨化器（根除 \`[0m\`、\`[38;5;...m\`、\`;88mO\`、\`91mn\` 殘留），原生 Android \`droidpy_native.log\` 與匯出日誌全面濾除跳脫序列，終端機工具列與編輯器設定加入「純淨文字模式」。
+  - 腳本執行與 \`droid.device_info()\` 環境偵測預設為手機（Android）環境。
+  - 修正 \`/health\` \`pipPkgs\` 讀取 \`METADATA\`/\`PKG-INFO\` 精準計數、\`termuxFetch\` 404/錯誤詳情回報消除 \`Unhandled rejection: Not found\`；強化重裝／更新保留 \`usr/\` 與 \`/sdcard/DroidPy/.droidpy_backup/\` 套件清單備份與一鍵還原。
+  - 所有「日誌」按鈕名稱統一精簡為「日誌」，裝置儲存文案改為「手機」。
+
+## [1.2.12] - 2026-11-22
+- **終端機實時時分秒計時（\`HH:MM:SS\`）、套件解除安裝、精準更新檢測與長按選字複製修復**：
+  - 終端機與程式執行日誌耗時由毫秒全面改為 \`HH:MM:SS\`，執行期間每秒／每 250ms 即時跳動顯示經過時間。
+  - 程式內更新視窗改為僅顯示當前安裝版本或目標新版本的更新日誌，精簡閱讀體驗。
+  - Pyodide 沙盒與 Termux 原生引擎同步新增「解除安裝」功能（\`micropip.uninstall\`／\`pip uninstall -y\`／\`pkg uninstall -y\`＋重定位 \`dpkg/status\` 清理）並保護核心系統套件；新增「一鍵更新所有套件」統一按鈕。
+  - 實作 PEP 440 版本比對與 \`cp312\`/\`emscripten\`/\`none-any.whl\` 過濾＋Termux \`pip list --outdated --format=json\` 實測檢查，徹底修正已安裝最新版套件仍誤報「可更新」的問題；並確保「啟動時自動更新套件」僅於開啟程式時執行一次。
+  - 修復手機 Android WebView 非編輯區與終端機區長按無法選字複製的問題（\`isLongClickable\`、\`.terminal-selectable\`/\`.selectable-text\`、選取時暫停自動捲底、終端機「複製選取」快捷按鈕＋原生 \`ClipboardManager\` 三重複製回退）。
+
+## [1.2.11] - 2026-11-22
+- **新增更多趣味 Python 腳本範例、分類篩選與熱門／冷門 60+ 完整套件目錄**：
+  - 範本庫新增數位雨、曼德布羅碎形、生命遊戲、迷宮尋路、21 點、猜數字、Wordle、Hacker News 爬蟲、CSV 視覺化、愛心曲線、番茄鐘、密碼生成器等共 18 支即跑範例與 7 大分類篩選。
+  - 套件目錄擴充 60+ 熱門與冷門實用套件（7 大分類）並加入即時模糊聯想提示與 Termux APT 名稱指引，同時支援手動與啟動時自動更新已安裝套件。
+  - 新增程式內 GitHub Release 版本檢查、更新日誌展示與原生 \`FileProvider\` APK 下載覆蓋安裝功能；並於 \`buildEnv()\` 導出 \`SHELL\`／\`CONFIG_SHELL\`／\`CMAKE_SH\` 徹底修復 \`make[1]: /data/data/com.termux/files/usr/bin/sh: Permission denied\` 錯誤。
+
+## [1.2.10] - 2026-11-22
+- **根治實機 \`PermissionError: [Errno 13] Permission denied\`（\`pip\` Truststore 與 C 擴充編譯 \`build_clib\`）**：
+  - \`pip\` Wrapper 於執行時動態偵測可用 CA 憑證（含備援複製 \`certifi.where()\`）並強制設定 \`PIP_CERT\`／\`SSL_CERT_DIR\`，徹底避免一鍵初始化同一次執行鏈中 \`pip\` 呼叫 \`_create_truststore_ssl_context()\` 存取舊路徑觸發 \`Errno 13\`。
+  - \`relocate_debs()\` 與 \`buildEnv()\` 自動重寫 \`_sysconfigdata*.py\`／\`Makefile\`／\`pkgconfig\` 內的舊 Termux 路徑、為 \`etc\`／\`lib\`／\`llvm\` 工具鏈設定正確權限，並於偵測到 \`clang\` 時導出 \`CC\`、\`CXX\`、\`AR\`、\`RANLIB\`、\`LDSHARED\`，解決編譯 C 擴充庫時的 \`Permission denied\`。
+  - Termux 快捷套件新增預編譯 \`python-pillow\`、\`python-lxml\` 與純 Python \`flask\`。
+
+## [1.2.9] - 2026-11-22
+- **修復實機日誌回報之 \`pip install\` 退出碼 2 與 \`pkg update\` 退出碼 100 問題**：
+  - 遞迴修復 \`usr/etc\`、\`usr/share\`、\`usr/lib\` 與 \`usr/bin\` 符號連結，並改以 \`resolveCaBundleFile()\` 僅於憑證檔實際存在時才設定 \`PIP_CERT\`／\`SSL_CERT_FILE\`／\`REQUESTS_CA_BUNDLE\`（避免無 \`etc/tls/cert.pem\` 時 \`pip\` 因找不到憑證路徑而直接以 \`exit=2\` 崩潰），同時補齊 \`PIP_CACHE_DIR\` 與 \`ensurepip\` 回退檢查。
+  - 為 \`sources.list*\` 補上 \`[trusted=yes]\` 與重定位路徑修正，並於 \`APT_OPTS\` 補齊 \`AllowDowngradeToInsecureRepositories\` 與 \`apt-key\`／\`gpgv\` 路徑，解決 \`pkg update\` 退出碼 \`100\`。
+  - 加強 \`droidpy_native.log\` 與前端 \`appLogger\`：非 0 結束碼之指令自動記錄錯誤輸出尾段；\`chart_demo.py\` 缺少 \`matplotlib\` 時提供清楚引擎切換提示。
+
+## [1.2.8] - 2026-11-21
+- **徹底修復 Termux Python / 套件重開機恢復預設與 \`apt.conf.d\` Permission denied**：
+  - \`MainActivity.kt\` 改以 \`.droidpy_bootstrap_ok\` 標記與多路徑檢查保護 \`filesDir/usr\`，並於啟動時自動修復 \`bin/sh\` 與符號連結，永不再因 symlink 異常而重設清空已安裝的 Python 與爬蟲套件。
+  - \`EmbeddedTermuxBridge.kt\` 每次執行皆無條件寫入完整 \`etc/apt/apt.conf\`（含 \`Dir::Etc::parts\` 等核心路徑）並改寫殘留路徑與更新 \`dpkg/status\`，同時於 \`/health\` 回傳已保留的 pip / pkg 套件清單。
+  - 沙盒模式（Pyodide）同步持久化已安裝套件清單並於重啟時自動恢復；執行 \`utils.py\` 等模組檔新增 \`__main__\` 輸出與明確執行完成提示。
+- **適配手機與平板操作差異、將低頻功能移入負屏抽屜、保留歷史版本 APK 並加入「程式執行所有日誌」**：
+  - 新增應用程式全生命週期日誌記錄器與 Android 原生 \`/logs\`（含 \`droidpy_native.log\` 與 \`logcat\`）檢視匯出面板。
+
+## [1.2.7] - 2026-11-21
+- 歷史版本曾使用固定簽名金鑰；目前正式發布改用使用者自行保管的 GitHub Actions keystore Secrets。直接更換憑證會使舊版 APK 無法原地覆蓋更新，需先備份 App 資料再重新安裝。
+
+## [1.2.6] - 2026-11-21
+- 修復「授權資料夾」、「授權本機資料夾」與「更新容量」三個按鈕點擊無響應問題：移除裝置目錄按鈕的 \`disabled\` 鎖死，在 APK 環境直接串接 Android 內部儲存權限設定與 \`StatFs\` 真實裝置容量並即時跳出更新提示；在一般瀏覽器／iframe 環境自動退回原生資料夾檔案選擇器 (\`webkitdirectory\`)。
+- 修復獨立 APK 內嵌 Termux 初始化失敗（截圖中 \`apt.conf.d Permission denied\`、\`InRelease\` 金鑰失效、\`relocate_debs\` 解壓靜默中止與 Python 3.14 編譯 \`lxml\` 失敗問題）：改以 \`tar --overwrite\` 精準搬移 \`.deb\` 檔案並顯示即時解壓進度、補齊 \`Dir::Etc::parts\` / \`APT_CONFIG\` / 金鑰符號連結修正、改用預編譯 \`python-lxml\`，並確保完成後立即刷新 Python 偵測狀態。
+
+## [1.2.5] - 2026-11-21
+- 為 Android 獨立 APK 加上 DroidPy 專屬應用程式圖徽（Adaptive Vector Icon + 全解析度 \`mipmap-*\` PNG 回退），於系統桌面、多工視圖與安裝畫面顯示標誌性翡翠綠＋琥珀橘 Logo。
+- 在 \`MainActivity.kt\` 加入「返回兩次退出 App」防誤觸保護：於主畫面首次按下返回鍵（或全面屏側滑返回）顯示 2 秒「再按一次返回鍵退出 DroidPy」提示，2 秒內再次返回即立即寫盤儲存並安全退出。
+
+## [1.2.4] - 2026-11-21
+- 新增 App 私有原生狀態檔 \`droidpy_ide_state.json\` 雙重持久化與 \`onPause()\` 即時刷寫，確保退出或滑掉重開完整保留所有檔案與設定。
+- 新增 \`android:requestLegacyExternalStorage="true"\`、完整 \`/sdcard\` 權限偵測、\`/sdcard/*\` API 與「Android 手機內部儲存空間管理」介面，可實際瀏覽、建立資料夾與讀寫 \`/storage/emulated/0\`。
+- 修正 Termux Python \`PYTHONHOME\` 與內建原生 \`droid.py\`（支援 \`import droid\` 與 \`/droid-action\`），並強化 \`POST /stop\` 程序樹終止與前端 \`AbortController\`，確保「停止執行」立即解除並恢復「執行程式」按鈕。
+
+## [1.2.3] - 2026-11-21
+- 修復獨立 APK \`EmbeddedTermuxBridge.kt\` HTTP \`Content-Length\` 位元組長度錯判導致含中文註解的腳本永久卡死的問題（改用位元組流讀取並正確解碼 UTF-8）。
+- 修復 APK 串流輸出在雙位元組/三位元組 UTF-8 邊界截斷產生亂碼的問題（改用 \`InputStreamReader\` 字元串流解碼）。
+- 修復 \`MainActivity.kt\` 外部 \`https://\` 連結誤在 IDE WebView 內開啟及下載檔名未跳脫之異常，並補強 Bootstrap 完整解壓檢查與 \`pkg\` 金鑰信任選項。
+`;
+
+  zip.file('README.md', githubApkReadme);
+  zip.file('README_GITHUB_APK.md', githubApkReadme);
+  zip.file('CHANGELOG.md', changelogContent);
+
+  return zip.generateAsync({ type: 'blob' });
+}
+}PY_BIN\\\" -c 'import numpy' && echo '[DroidPy] NumPy ready (Termux binary package).' ")
+                        }
+                        if (remainingPips.isNotEmpty()) {
+                            steps.add("\\\"${'\\\" -m pip install --no-cache-dir " + remainingPips.joinToString(" "))
+                        }
+                        val restoreCmd = if (steps.isEmpty()) {
+                            "echo '[DroidPy] 所有已備份套件均已存在，無需還原。'"
+                        } else {
+                            steps.joinToString(" && ")
+                        }
+                        streamShellCommand(out, restoreCmd)
+                    }
+                }
+
+                method == "GET" && path == "/logs" -> {
+                    val nativeLines = JSONArray()
+                    try {
+                        synchronized(logLock) {
+                            val f = nativeLogFile
+                            if (f.isFile) {
+                                f.readLines(Charsets.UTF_8).takeLast(450).forEach { nativeLines.put(it) }
+                            }
+                        }
+                    } catch (_: Exception) {
+                    }
+                    val logcatLines = JSONArray()
+                    var logcatProc: Process? = null
+                    try {
+                        val pid = android.os.Process.myPid()
+                        logcatProc = ProcessBuilder("logcat", "-d", "-t", "80", "--pid=$pid").redirectErrorStream(true).start()
+                        val txt = logcatProc.inputStream.bufferedReader(Charsets.UTF_8).readText()
+                        logcatProc.waitFor()
+                        txt.lines().filter { it.isNotBlank() }.takeLast(80).forEach { logcatLines.put(stripAnsiForLog(it)) }
+                    } catch (_: Exception) {
+                    } finally {
+                        try { logcatProc?.inputStream?.close() } catch (_: Exception) {}
+                        try { logcatProc?.errorStream?.close() } catch (_: Exception) {}
+                        try { logcatProc?.outputStream?.close() } catch (_: Exception) {}
+                    }
+                    writeJson(
+                        out,
+                        200,
+                        JSONObject()
+                            .put("ok", true)
+                            .put("logPath", nativeLogFile.absolutePath)
+                            .put("nativeLines", nativeLines)
+                            .put("logcatLines", logcatLines)
+                    )
+                }
+
+                method == "POST" && path == "/logs/clear" -> {
+                    try {
+                        synchronized(logLock) {
+                            nativeLogFile.writeText("", Charsets.UTF_8)
+                        }
+                    } catch (_: Exception) {
+                    }
+                    appendNativeLog("Logs", "Native log cleared by user")
+                    writeJson(out, 200, JSONObject().put("ok", true))
+                }
+
+                method == "POST" && path == "/stdin" -> {
+                    val data = bodyJson.optString("data", "") + "\\n"
+                    val proc = activeProcess
+                    if (proc == null) {
+                        writeJson(out, 409, JSONObject().put("error", "No active process"))
+                    } else {
+                        try {
+                            proc.outputStream.write(data.toByteArray())
+                            proc.outputStream.flush()
+                            writeJson(out, 200, JSONObject().put("ok", true))
+                        } catch (e: Exception) {
+                            writeJson(out, 500, JSONObject().put("error", e.message ?: "Write failed"))
+                        }
+                    }
+                }
+
+                method == "POST" && path == "/stop" -> {
+                    val proc = activeProcess
+                    if (proc != null) {
+                        appendNativeLog("Exec", "Force stopping active process tree")
+                        killProcessTree(proc)
+                    }
+                    writeJson(out, 200, JSONObject().put("ok", true))
+                }
+
+                method == "POST" && path == "/droid-action" -> {
+                    when (bodyJson.optString("action")) {
+                        "toast" -> {
+                            val msg = bodyJson.optString("message", "")
+                            Handler(Looper.getMainLooper()).post {
+                                Toast.makeText(appContext, msg, Toast.LENGTH_SHORT).show()
+                            }
+                            writeJson(out, 200, JSONObject().put("ok", true))
+                        }
+                        "vibrate" -> {
+                            val ms = bodyJson.optLong("pattern", 45L).coerceIn(10L, 2000L)
+                            try {
+                                val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                    (appContext.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
+                                } else {
+                                    @Suppress("DEPRECATION")
+                                    appContext.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                                }
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    vibrator.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
+                                } else {
+                                    @Suppress("DEPRECATION")
+                                    vibrator.vibrate(ms)
+                                }
+                                writeJson(out, 200, JSONObject().put("ok", true))
+                            } catch (_: Exception) {
+                                writeJson(out, 200, JSONObject().put("ok", false))
+                            }
+                        }
+                        "device_info" -> {
+                            val dm = appContext.resources.displayMetrics
+                            writeJson(
+                                out,
+                                200,
+                                JSONObject()
+                                    .put("platform", "Android \${Build.VERSION.RELEASE} (\${Build.MODEL})")
+                                    .put("deviceType", "phone")
+                                    .put("screen", "\${dm.widthPixels}x\${dm.heightPixels}")
+                                    .put("pixelRatio", dm.density.toDouble())
+                                    .put("maxTouchPoints", 5)
+                                    .put("online", true)
+                            )
+                        }
+                        else -> writeJson(out, 400, JSONObject().put("error", "Unknown action"))
+                    }
+                }
+
+                method == "GET" && path == "/sdcard/status" -> {
+                    val root = Environment.getExternalStorageDirectory()
+                    val manageAll = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Environment.isExternalStorageManager() else true
+                    val runtimeWrite = ContextCompat.checkSelfPermission(appContext, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+                    val droidpyDir = File(root, "DroidPy").absolutePath
+                    var totalBytes = 0L
+                    var freeBytes = 0L
+                    var usedBytes = 0L
+                    try {
+                        val st = StatFs(root.path)
+                        totalBytes = st.totalBytes
+                        freeBytes = st.availableBytes
+                        usedBytes = (totalBytes - freeBytes).coerceAtLeast(0L)
+                    } catch (_: Exception) {
+                    }
+                    writeJson(
+                        out,
+                        200,
+                        JSONObject()
+                            .put("granted", hasStorageAccess())
+                            .put("manageAllFiles", manageAll)
+                            .put("runtimeWrite", runtimeWrite)
+                            .put("rootPath", root.absolutePath)
+                            .put("droidpyDir", droidpyDir)
+                            .put("totalBytes", totalBytes)
+                            .put("freeBytes", freeBytes)
+                            .put("usedBytes", usedBytes)
+                    )
+                }
+
+                method == "GET" && path == "/sdcard/list" -> {
+                    val relParam = queryStr.split("&")
+                        .firstOrNull { it.startsWith("path=") }
+                        ?.substringAfter("=")
+                        ?.let { URLDecoder.decode(it, "UTF-8") } ?: ""
+                    val dir = resolveSdcardTarget(relParam)
+                    if (dir == null) {
+                        writeJson(out, 400, JSONObject().put("error", "Invalid path"))
+                    } else if (!hasStorageAccess() && !dir.canRead()) {
+                        writeJson(out, 403, JSONObject().put("error", "尚未取得手機內部儲存空間存取權限"))
+                    } else {
+                        val rootCanonical = Environment.getExternalStorageDirectory().canonicalPath
+                        val arr = JSONArray()
+                        val children = dir.listFiles()?.sortedWith(compareBy<File>({ !it.isDirectory }, { it.name.lowercase() })) ?: emptyList()
+                        for (child in children) {
+                            if (child.name.startsWith(".")) continue
+                            val childRel = child.canonicalPath.removePrefix(rootCanonical).trimStart('/')
+                            arr.put(
+                                JSONObject()
+                                    .put("name", child.name)
+                                    .put("relPath", childRel)
+                                    .put("isDir", child.isDirectory)
+                                    .put("size", if (child.isFile) child.length() else 0L)
+                                    .put("updatedAt", child.lastModified())
+                            )
+                        }
+                        val currentRel = dir.canonicalPath.removePrefix(rootCanonical).trimStart('/')
+                        writeJson(
+                            out,
+                            200,
+                            JSONObject()
+                                .put("granted", hasStorageAccess())
+                                .put("rootPath", rootCanonical)
+                                .put("currentPath", currentRel)
+                                .put("entries", arr)
+                        )
+                    }
+                }
+
+                method == "POST" && path == "/sdcard/read" -> {
+                    val relPath = bodyJson.optString("path", "")
+                    val target = resolveSdcardTarget(relPath)
+                    if (target == null || !target.exists() || !target.isFile) {
+                        writeJson(out, 404, JSONObject().put("error", "找不到目標檔案"))
+                    } else if (target.length() > 512 * 1024) {
+                        writeJson(out, 413, JSONObject().put("error", "檔案超過 512 KB 上限"))
+                    } else {
+                        try {
+                            writeJson(
+                                out,
+                                200,
+                                JSONObject()
+                                    .put("name", target.name)
+                                    .put("relPath", relPath)
+                                    .put("content", target.readText(Charsets.UTF_8))
+                            )
+                        } catch (e: Exception) {
+                            writeJson(out, 403, JSONObject().put("error", e.message ?: "讀取失敗"))
+                        }
+                    }
+                }
+
+                method == "POST" && path == "/sdcard/write" -> {
+                    if (!hasStorageAccess()) {
+                        writeJson(out, 403, JSONObject().put("error", "尚未授予內部儲存空間權限"))
+                    } else {
+                        try {
+                            val batch = bodyJson.optJSONArray("files")
+                            if (batch != null) {
+                                val folderRel = bodyJson.optString("dir", "DroidPy").ifBlank { "DroidPy" }
+                                val destDir = resolveSdcardTarget(folderRel)
+                                if (destDir == null) {
+                                    writeJson(out, 400, JSONObject().put("error", "Invalid folder"))
+                                } else {
+                                    destDir.mkdirs()
+                                    var count = 0
+                                    for (i in 0 until batch.length()) {
+                                        val item = batch.getJSONObject(i)
+                                        val name = File(item.optString("name", "")).name
+                                        if (name.isNotBlank()) {
+                                            File(destDir, name).writeText(item.optString("content", ""), Charsets.UTF_8)
+                                            count++
+                                        }
+                                    }
+                                    writeJson(out, 200, JSONObject().put("ok", true).put("count", count).put("dir", destDir.absolutePath))
+                                }
+                            } else {
+                                val relPath = bodyJson.optString("path", "")
+                                val target = resolveSdcardTarget(relPath)
+                                if (target == null) {
+                                    writeJson(out, 400, JSONObject().put("error", "Invalid path"))
+                                } else {
+                                    target.parentFile?.mkdirs()
+                                    target.writeText(bodyJson.optString("content", ""), Charsets.UTF_8)
+                                    writeJson(out, 200, JSONObject().put("ok", true).put("path", target.absolutePath))
+                                }
+                            }
+                        } catch (e: Exception) {
+                            writeJson(out, 403, JSONObject().put("error", e.message ?: "寫入失敗"))
+                        }
+                    }
+                }
+
+                method == "POST" && path == "/sdcard/mkdir" -> {
+                    val relPath = bodyJson.optString("path", "")
+                    val target = resolveSdcardTarget(relPath)
+                    if (target == null) {
+                        writeJson(out, 400, JSONObject().put("error", "Invalid path"))
+                    } else if (!hasStorageAccess()) {
+                        writeJson(out, 403, JSONObject().put("error", "尚未授予內部儲存空間權限"))
+                    } else {
+                        val created = target.exists() || target.mkdirs()
+                        writeJson(out, if (created) 200 else 500, JSONObject().put("ok", created))
+                    }
+                }
+
+                method == "POST" && path == "/sdcard/delete" -> {
+                    val relPath = bodyJson.optString("path", "")
+                    val rootCanonical = Environment.getExternalStorageDirectory().canonicalPath
+                    val target = resolveSdcardTarget(relPath)
+                    if (target == null || target.canonicalPath == rootCanonical) {
+                        writeJson(out, 400, JSONObject().put("error", "Invalid path"))
+                    } else if (!hasStorageAccess()) {
+                        writeJson(out, 403, JSONObject().put("error", "尚未授予內部儲存空間權限"))
+                    } else {
+                        val deleted = if (target.isDirectory) target.deleteRecursively() else target.delete()
+                        writeJson(out, if (deleted) 200 else 500, JSONObject().put("ok", deleted))
+                    }
+                }
+
+                method == "GET" && path == "/storage/app-usage" -> {
+                    writeJson(out, 200, collectAppStorageUsage())
+                }
+
+                method == "POST" && path == "/storage/cleanup" -> {
+                    val freed = pruneStaleCacheAndTemp(clearAptLists = true)
+                    appendNativeLog("Storage", "Cleaned stale temp/cache, freed=\${freed}B")
+                    writeJson(
+                        out,
+                        200,
+                        JSONObject()
+                            .put("ok", true)
+                            .put("freedBytes", freed)
+                            .put("usageAfter", collectAppStorageUsage())
+                    )
+                }
+
+                method == "POST" && path == "/maintenance/cleanup-processes" -> {
+                    val manual = bodyJson.optBoolean("manual", true)
+                    val res = cleanupStuckPythonProcesses(manual = manual)
+                    appendNativeLog("Watchdog", "Cleanup checked=\${res.optInt("scannedCount")} killed=\${res.optInt("killedCount")} manual=$manual")
+                    writeJson(out, 200, res)
+                }
+
+                method == "POST" && path == "/shell" -> {
+                    val cmd = bodyJson.optString("command", "").trim()
+                    if (cmd.isEmpty()) {
+                        writeJson(out, 400, JSONObject().put("error", "Missing command"))
+                    } else {
+                        val res = runBufferedShellCommand(cmd)
+                        writeJson(out, 200, res)
+                    }
+                }
+
+                method == "POST" && (path == "/run-stream" || path == "/install-stream" || path == "/shell-stream") -> {
+                    val shellCmd = when (path) {
+                        "/run-stream" -> {
+                            val arr = bodyJson.optJSONArray("files") ?: JSONArray()
+                            for (i in 0 until arr.length()) {
+                                val f = arr.getJSONObject(i)
+                                val name = File(f.optString("name", "")).name
+                                if (name.isNotBlank()) {
+                                    File(workspaceDir, name).writeText(f.optString("content", ""))
+                                }
+                            }
+                            val entry = File(bodyJson.optString("entry", "main.py")).name.ifBlank { "main.py" }
+                            val safeEntrySh = entry.replace("'", "'\\\\''")
+                            val pyPath = File(usrDir, "bin/python").absolutePath
+                            val py3Path = File(usrDir, "bin/python3").absolutePath
+                            val binDirPath = File(usrDir, "bin").absolutePath
+                            "PY_BIN=\\"$pyPath\\"; [ -x \\"\${'$'}PY_BIN\\" ] || PY_BIN=\\"$py3Path\\"; if [ ! -x \\"\${'$'}PY_BIN\\" ]; then for c in \\"$binDirPath/python3.\\"*; do [ -f \\"\${'$'}c\\" ] || continue; case \\"\${'$'}c\\" in *-config) continue ;; esac; chmod 755 \\"\${'$'}c\\" 2>/dev/null || true; PY_BIN=\\"\${'$'}c\\"; break; done; fi; if [ ! -x \\"\${'$'}PY_BIN\\" ]; then echo \\"[DroidPy] 尚未安裝 Termux 原生 Python！請至「Termux 橋接」點擊「一鍵初始化 Python + 爬蟲環境」，或先將終端機切換為「沙盒」執行。\\"; exit 127; fi; exec \\"\${'$'}PY_BIN\\" -u '$safeEntrySh'"
+                        }
+                        "/install-stream" -> {
+                            val mode = bodyJson.optString("mode", "pip")
+                            val target = bodyJson.optString("target", "").trim()
+                            val trustedHost = bodyJson.optBoolean("trustedHost", false)
+                            if (mode == "pkg") {
+                                "pkg install -y $target"
+                            } else if (trustedHost) {
+                                "pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org $target"
+                            } else {
+                                "pip install --no-cache-dir $target"
+                            }
+                        }
+                        else -> bodyJson.optString("command", "")
+                    }
+                    streamShellCommand(out, shellCmd)
+                }
+
+                method == "GET" && path == "/files" -> {
+                    val allowed = listOf(".py", ".json", ".csv", ".txt", ".md", ".html", ".xml", ".yaml", ".yml", ".ini", ".cfg", ".log", ".sh", ".toml")
+                    val arr = JSONArray()
+                    workspaceDir.listFiles()?.sortedBy { it.name }?.forEach { f ->
+                        if (f.isFile && !f.name.startsWith(".") && f.length() <= 180 * 1024) {
+                            val lower = f.name.lowercase()
+                            if (allowed.any { lower.endsWith(it) } || f.name == "requirements.txt") {
+                                try {
+                                    arr.put(
+                                        JSONObject()
+                                            .put("name", f.name)
+                                            .put("content", f.readText(Charsets.UTF_8))
+                                            .put("updatedAt", f.lastModified())
+                                    )
+                                } catch (_: Exception) {
+                                }
+                            }
+                        }
+                    }
+                    writeJson(out, 200, JSONObject().put("files", arr))
+                }
+
+                method == "POST" && path == "/probe-url" -> {
+                    try {
+                        writeJson(out, 200, probeUrlSafely(bodyJson.optString("url", "").trim(), bodyJson))
+                    } catch (e: IllegalArgumentException) {
+                        writeJson(out, 400, JSONObject().put("error", e.message ?: "Invalid probe URL"))
+                    } catch (_: Exception) {
+                        writeJson(out, 502, JSONObject().put("error", "Unable to safely probe target URL"))
+                    }
+                }
+
+                else -> writeJson(out, 404, JSONObject().put("error", "Not found"))
+            }
+        }
+    }
+
+    private data class SafeProbeResponse(
+        val statusCode: Int,
+        val headers: Map<String, List<String>>,
+        val body: ByteArray
+    )
+
+    private fun isPublicProbeAddress(address: InetAddress): Boolean {
+        if (address.isAnyLocalAddress || address.isLoopbackAddress ||
+            address.isLinkLocalAddress || address.isSiteLocalAddress ||
+            address.isMulticastAddress) return false
+        val b = address.address.map { it.toInt() and 0xff }
+        if (address is Inet4Address) {
+            val a0 = b[0]
+            val a1 = b[1]
+            val a2 = b[2]
+            if (a0 == 0 || a0 == 10 || a0 == 127 || a0 >= 224) return false
+            if (a0 == 100 && a1 in 64..127) return false
+            if (a0 == 169 && a1 == 254) return false
+            if (a0 == 172 && a1 in 16..31) return false
+            if (a0 == 192 && (a1 == 0 || a1 == 2 || a1 == 168)) return false
+            if (a0 == 192 && a1 == 88 && a2 == 99) return false
+            if (a0 == 192 && a1 == 31 && a2 == 196) return false
+            if (a0 == 192 && a1 == 52 && a2 == 193) return false
+            if (a0 == 192 && a1 == 175 && a2 == 48) return false
+            if (a0 == 198 && a1 in 18..19) return false
+            if (a0 == 198 && a1 == 51 && a2 == 100) return false
+            if (a0 == 203 && a1 == 0 && a2 == 113) return false
+            return true
+        }
+        if (address is Inet6Address) {
+            if ((b[0] and 0xe0) != 0x20) return false
+            if (b[0] == 0x20 && b[1] == 0x01) {
+                if (b[2] == 0x0d && b[3] == 0xb8) return false
+                if (b[2] == 0x00 && b[3] <= 0x01) return false
+                if (b[2] == 0x00 && b[3] == 0x02) return false
+                if (b[2] == 0x00 && b[3] == 0x10) return false
+                if (b[2] == 0x00 && b[3] == 0x20) return false
+            }
+            if (b[0] == 0x20 && b[1] == 0x02) return false
+            if (b[0] == 0x3f && b[1] == 0xff) return false
+            return true
+        }
+        return false
+    }
+
+    private fun validateProbeUrl(url: URL): String {
+        val scheme = url.protocol.lowercase()
+        if (scheme != "http" && scheme != "https") {
+            throw IllegalArgumentException("Only HTTP and HTTPS URLs are allowed")
+        }
+        if (URI(url.toString()).rawUserInfo != null) {
+            throw IllegalArgumentException("URLs containing credentials are not allowed")
+        }
+        val rawHost = url.host.removePrefix("[").removeSuffix("]").trimEnd('.').lowercase()
+        if (rawHost.isBlank() || rawHost == "localhost" ||
+            rawHost.endsWith(".localhost") || rawHost.endsWith(".local") ||
+            rawHost.endsWith(".internal") || rawHost.endsWith(".test") ||
+            rawHost.contains("%")) {
+            throw IllegalArgumentException("Local hostnames and scoped IP addresses are not allowed")
+        }
+        return if (rawHost.contains(":")) rawHost else IDN.toASCII(rawHost)
+    }
+
+    private fun readProbeLine(input: BufferedInputStream, maxBytes: Int = 8192): String {
+        val output = ByteArrayOutputStream()
+        while (true) {
+            val value = input.read()
+            if (value < 0) {
+                if (output.size() == 0) return ""
+                break
+            }
+            if (value == 10) break
+            if (value != 13) output.write(value)
+            if (output.size() > maxBytes) throw IllegalArgumentException("HTTP response header line too large")
+        }
+        return output.toString("ISO-8859-1")
+    }
+
+    private fun readProbeExact(input: BufferedInputStream, output: ByteArrayOutputStream, count: Int) {
+        var remaining = count
+        val buffer = ByteArray(4096)
+        while (remaining > 0) {
+            val n = input.read(buffer, 0, minOf(buffer.size, remaining))
+            if (n < 0) throw java.io.EOFException("Incomplete HTTP response body")
+            output.write(buffer, 0, n)
+            remaining -= n
+        }
+    }
+
+    private fun readProbeBody(input: BufferedInputStream, headers: Map<String, List<String>>): ByteArray {
+        val maxBytes = 24000
+        val output = ByteArrayOutputStream()
+        val transferEncoding = headers["transfer-encoding"]?.joinToString(",")?.lowercase().orEmpty()
+        if (transferEncoding.isNotBlank() && headers.containsKey("content-length")) {
+            throw IllegalArgumentException("Ambiguous HTTP response framing")
+        }
+        if (transferEncoding.isNotBlank() && transferEncoding.trim() != "chunked") {
+            throw IllegalArgumentException("Unsupported HTTP transfer encoding")
+        }
+        if (transferEncoding.contains("chunked")) {
+            while (output.size() < maxBytes) {
+                val sizeLine = readProbeLine(input).substringBefore(';').trim()
+                val chunkSize = sizeLine.toLongOrNull(16)
+                    ?: throw IllegalArgumentException("Invalid chunked response")
+                if (chunkSize < 0L) throw IllegalArgumentException("Invalid chunk size")
+                if (chunkSize == 0L) {
+                    while (readProbeLine(input).isNotEmpty()) { }
+                    break
+                }
+                val remaining = maxBytes - output.size()
+                val toRead = minOf(chunkSize, remaining.toLong()).toInt()
+                readProbeExact(input, output, toRead)
+                if (toRead.toLong() < chunkSize) break
+                if (input.read() != 13 || input.read() != 10) {
+                    throw IllegalArgumentException("Invalid chunk delimiter")
+                }
+            }
+            return output.toByteArray()
+        }
+        val contentLengths = headers["content-length"]
+        if (contentLengths != null && contentLengths.size != 1) {
+            throw IllegalArgumentException("Ambiguous Content-Length")
+        }
+        val lengthHeader = contentLengths?.firstOrNull()
+        if (lengthHeader != null) {
+            val length = lengthHeader.toLongOrNull()
+                ?: throw IllegalArgumentException("Invalid Content-Length")
+            if (length < 0) throw IllegalArgumentException("Invalid Content-Length")
+            readProbeExact(input, output, minOf(length, maxBytes.toLong()).toInt())
+            return output.toByteArray()
+        }
+        val buffer = ByteArray(4096)
+        while (output.size() < maxBytes) {
+            val n = input.read(buffer, 0, minOf(buffer.size, maxBytes - output.size()))
+            if (n < 0) break
+            if (n > 0) output.write(buffer, 0, n)
+        }
+        return output.toByteArray()
+    }
+
+    private fun performPinnedProbeRequest(url: URL, requestHeaders: Map<String, String>): SafeProbeResponse {
+        val host = validateProbeUrl(url)
+        val port = if (url.port > 0) url.port else if (url.protocol.equals("https", true)) 443 else 80
+        val addresses = InetAddress.getAllByName(host)
+        if (addresses.isEmpty() || addresses.any { !isPublicProbeAddress(it) }) {
+            throw IllegalArgumentException("Target resolves to a non-public IP address")
+        }
+        var lastError: Exception? = null
+        for (pinnedAddress in addresses) {
+            try {
+                val rawSocket = Socket()
+                try {
+                    rawSocket.connect(InetSocketAddress(pinnedAddress, port), 15000)
+                    rawSocket.soTimeout = 18000
+                } catch (error: Exception) {
+                    try { rawSocket.close() } catch (_: Exception) {}
+                    throw error
+                }
+                val activeSocket: Socket = if (url.protocol.equals("https", true)) {
+                    try {
+                        val factory = SSLSocketFactory.getDefault() as SSLSocketFactory
+                        val ssl = factory.createSocket(rawSocket, host, port, true) as SSLSocket
+                        val parameters = ssl.sslParameters
+                        parameters.endpointIdentificationAlgorithm = "HTTPS"
+                        if (!host.contains(":") && !host.matches(Regex("^[0-9.]+$"))) {
+                            parameters.serverNames = listOf(SNIHostName(host))
+                        }
+                        ssl.sslParameters = parameters
+                        ssl.startHandshake()
+                        ssl
+                    } catch (error: Exception) {
+                        try { rawSocket.close() } catch (_: Exception) {}
+                        throw error
+                    }
+                } else {
+                    rawSocket
+                }
+
+                activeSocket.use { socket ->
+                    val hostHeader = if (host.contains(":")) "[$host]" else host
+                    val authority = if ((url.protocol.equals("https", true) && port == 443) ||
+                        (url.protocol.equals("http", true) && port == 80)) hostHeader else "$hostHeader:$port"
+                    val requestTarget = (url.path.ifBlank { "/" }) + (url.query?.let { "?" + it } ?: "")
+                    if (requestTarget.contains("\\r") || requestTarget.contains("\\n")) {
+                        throw IllegalArgumentException("Invalid request path")
+                    }
+                    val request = StringBuilder()
+                        .append("GET ").append(requestTarget).append(" HTTP/1.1\\r\\n")
+                        .append("Host: ").append(authority).append("\\r\\n")
+                        .append("Connection: close\\r\\n")
+                        .append("Accept-Encoding: identity\\r\\n")
+                    for ((name, value) in requestHeaders) {
+                        request.append(name).append(": ").append(value).append("\\r\\n")
+                    }
+                    request.append("\\r\\n")
+                    socket.getOutputStream().write(request.toString().toByteArray(Charsets.ISO_8859_1))
+                    socket.getOutputStream().flush()
+
+                    val input = BufferedInputStream(socket.getInputStream())
+                    val statusLine = readProbeLine(input)
+                    val statusParts = statusLine.split(" ", limit = 3)
+                    val statusCode = statusParts.getOrNull(1)?.toIntOrNull()
+                        ?: throw IllegalArgumentException("Invalid HTTP status line")
+                    val responseHeaders = linkedMapOf<String, MutableList<String>>()
+                    var totalHeaderBytes = statusLine.length
+                    var headerCount = 0
+                    while (true) {
+                        val line = readProbeLine(input)
+                        if (line.isEmpty()) break
+                        totalHeaderBytes += line.length
+                        headerCount++
+                        if (totalHeaderBytes > 32768 || headerCount > 100) {
+                            throw IllegalArgumentException("HTTP response headers too large")
+                        }
+                        val separator = line.indexOf(':')
+                        if (separator <= 0) throw IllegalArgumentException("Invalid HTTP response header")
+                        val name = line.substring(0, separator).trim().lowercase()
+                        val value = line.substring(separator + 1).trim()
+                        responseHeaders.getOrPut(name) { mutableListOf() }.add(value)
+                    }
+                    val body = readProbeBody(input, responseHeaders)
+                    return SafeProbeResponse(statusCode, responseHeaders, body)
+                }
+            } catch (error: Exception) {
+                lastError = error
+            }
+        }
+        throw lastError ?: java.io.IOException("No reachable public address for target")
+    }
+
+    private fun probeOrigin(url: URL): String {
+        val host = url.host.lowercase()
+        val port = if (url.port > 0) url.port else if (url.protocol.equals("https", true)) 443 else 80
+        return url.protocol.lowercase() + "://" + host + ":" + port
+    }
+
+    private fun buildProbeHeaders(bodyJson: JSONObject): MutableMap<String, String> {
+        val userAgent = bodyJson.optString("userAgent", "").ifBlank {
+            "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0.0.0 Mobile Safari/537.36"
+        }
+        if (userAgent.length > 512 || userAgent.any { it.code < 32 && it.code != 9 } || userAgent.contains(127.toChar())) {
+            throw IllegalArgumentException("Invalid User-Agent header")
+        }
+        val headers = linkedMapOf(
+            "User-Agent" to userAgent,
+            "Accept" to "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8"
+        )
+        val cookie = bodyJson.optString("cookieHeader", "").trim()
+        if (cookie.isNotEmpty()) {
+            if (cookie.length > 8192 || cookie.any { it.code < 32 && it.code != 9 } || cookie.contains(127.toChar())) {
+                throw IllegalArgumentException("Invalid Cookie header")
+            }
+            headers["Cookie"] = cookie
+        }
+        val forbidden = setOf(
+            "host", "connection", "content-length", "transfer-encoding",
+            "proxy-authorization", "proxy-connection", "keep-alive",
+            "upgrade", "te", "trailer", "cookie", "accept-encoding"
+        )
+        val extra = bodyJson.optJSONObject("extraHeaders")
+        if (extra != null) {
+            if (extra.length() > 32) throw IllegalArgumentException("Too many custom headers")
+            val keys = extra.keys()
+            while (keys.hasNext()) {
+                val name = keys.next().trim()
+                val value = extra.optString(name, "")
+                if (name.isBlank() || name.length > 128 || value.length > 4096 ||
+                    !Regex("^[A-Za-z0-9!#$%&'*+.^_|~-]+$").matches(name) ||
+                    value.any { it.code < 32 && it.code != 9 } || value.contains(127.toChar()) ||
+                    name.lowercase() in forbidden) {
+                    throw IllegalArgumentException("Invalid or restricted custom header")
+                }
+                val existingName = headers.keys.firstOrNull { it.equals(name, ignoreCase = true) }
+                headers[existingName ?: name] = value
+            }
+        }
+        return headers
+    }
+
+    private fun probeUrlSafely(targetUrl: String, bodyJson: JSONObject): JSONObject {
+        if (targetUrl.isBlank() || targetUrl.length > 4096 || targetUrl.any { it.isWhitespace() }) {
+            throw IllegalArgumentException("Invalid or oversized URL")
+        }
+        var current = URL(targetUrl)
+        val headers = buildProbeHeaders(bodyJson)
+        for (redirectCount in 0..5) {
+            val response = performPinnedProbeRequest(current, headers)
+            val location = response.headers["location"]?.firstOrNull()
+            if (response.statusCode in setOf(301, 302, 303, 307, 308) &&
+                !location.isNullOrBlank() && redirectCount < 5) {
+                val next = URL(current, location)
+                if (probeOrigin(current) != probeOrigin(next)) {
+                    headers.keys.removeAll { it.lowercase() in setOf("cookie", "authorization", "proxy-authorization", "referer") }
+                }
+                current = next
+                continue
+            }
+            val bodyText = String(response.body, Charsets.UTF_8)
+            val setCookies = JSONArray()
+            val responseHeaders = JSONObject()
+            response.headers.forEach { (name, values) ->
+                if (name.equals("set-cookie", true)) {
+                    values.forEach { setCookies.put(it.take(4096)) }
+                } else {
+                    responseHeaders.put(name, values.joinToString(", ").take(2048))
+                }
+            }
+            val titleMatch = Regex("<title[^>]*>(.*?)</title>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)).find(bodyText)
+            val title = titleMatch?.groupValues?.getOrNull(1)?.replace(Regex("\\\\s+"), " ")?.trim() ?: ""
+            return JSONObject()
+                .put("ok", response.statusCode in 200..399)
+                .put("url", targetUrl)
+                .put("finalUrl", current.toString())
+                .put("statusCode", response.statusCode)
+                .put("title", title)
+                .put("setCookies", setCookies)
+                .put("headers", responseHeaders)
+                .put("bodyPreview", bodyText.take(8000))
+        }
+        throw IllegalArgumentException("Too many redirects")
+    }
+
+    private fun runBufferedShellCommand(command: String): JSONObject {
+        val t0 = System.currentTimeMillis()
+        val shFile = File(usrDir, "bin/sh")
+        var code = 1
+        var stdoutText = ""
+        val isPkgOrPip = command.contains("pip") || command.contains("pkg") || command.contains("apt")
+        if (!shFile.exists()) {
+            stdoutText = "[DroidPy] Bootstrap sh not ready"
+        } else {
+            var proc: Process? = null
+            try {
+                val pb = ProcessBuilder(shFile.absolutePath, "-c", command)
+                pb.directory(workspaceDir)
+                pb.redirectErrorStream(true)
+                pb.environment().putAll(buildEnv())
+                proc = pb.start()
+                stdoutText = proc.inputStream.bufferedReader(Charsets.UTF_8).readText()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val done = proc.waitFor(120, java.util.concurrent.TimeUnit.SECONDS)
+                    code = if (done) proc.exitValue() else 124
+                    if (!done) proc.destroyForcibly()
+                } else {
+                    code = proc.waitFor()
+                }
+            } catch (e: Exception) {
+                stdoutText = e.message ?: "Shell execution error"
+            } finally {
+                try { proc?.inputStream?.close() } catch (_: Exception) {}
+                try { proc?.errorStream?.close() } catch (_: Exception) {}
+                try { proc?.outputStream?.close() } catch (_: Exception) {}
+                if (isPkgOrPip) {
+                    pruneStaleCacheAndTemp(clearAptLists = false)
+                }
+            }
+        }
+        if (code == 0 && isPkgOrPip) {
+            val isUninstall = command.contains("uninstall") || command.contains("remove") || command.contains("purge")
+            savePackageBackupSnapshot(forceShrink = isUninstall)
+        }
+        return JSONObject()
+            .put("exitCode", code)
+            .put("stdout", stripAnsiForLog(stdoutText))
+            .put("stderr", "")
+            .put("durationMs", System.currentTimeMillis() - t0)
+    }
+
+    private fun streamShellCommand(out: OutputStream, command: String) {
+        val t0 = System.currentTimeMillis()
+        val shFile = File(usrDir, "bin/sh")
+        val isPkgOrPip = command.contains("pip") || command.contains("pkg") || command.contains("apt")
+        appendNativeLog("Exec", "Stream shell start: \${command.take(180)}")
+
+        out.write((
+            "HTTP/1.1 200 OK\\r\\n" +
+            corsHeaders() +
+            "Content-Type: application/x-ndjson; charset=utf-8\\r\\n" +
+            "Connection: close\\r\\n\\r\\n"
+        ).toByteArray())
+        out.flush()
+
+        fun sendStdout(text: String) {
+            val line = JSONObject().put("type", "stdout").put("data", text).toString() + "\\n"
+            out.write(line.toByteArray(Charsets.UTF_8))
+            out.flush()
+        }
+
+        if (!shFile.exists()) {
+            try {
+                sendStdout("[DroidPy] Waiting for Termux bootstrap extraction...\\n")
+            } catch (_: Exception) {
+                return
+            }
+            var waited = 0
+            while (!shFile.exists() && waited < 45000) {
+                try { Thread.sleep(250) } catch (_: InterruptedException) { break }
+                waited += 250
+            }
+        }
+
+        var code = 1
+        val outputTail = StringBuilder()
+        fun recordTail(chunk: String) {
+            val cleaned = stripAnsiForLog(chunk)
+            if (cleaned.isNotEmpty()) {
+                outputTail.append(cleaned)
+                if (outputTail.length > 2400) {
+                    outputTail.delete(0, outputTail.length - 1600)
+                }
+            }
+        }
+        if (!shFile.exists()) {
+            appendNativeLog("Exec", "Bootstrap missing sh at \${shFile.absolutePath}")
+            try {
+                sendStdout("[DroidPy] Bootstrap not ready at \${shFile.absolutePath}\\n")
+            } catch (_: Exception) {
+            }
+        } else {
+            var proc: Process? = null
+            try {
+                val pb = ProcessBuilder(shFile.absolutePath, "-c", command)
+                pb.directory(workspaceDir)
+                pb.redirectErrorStream(true)
+                pb.environment().putAll(buildEnv())
+
+                proc = pb.start()
+                activeProcess = proc
+                activeProcessStartedAt.set(System.currentTimeMillis())
+                val charBuf = CharArray(1024)
+                val inpReader = InputStreamReader(proc.inputStream, Charsets.UTF_8)
+                while (true) {
+                    val n = inpReader.read(charBuf)
+                    if (n < 0) break
+                    if (n > 0) {
+                        val s = String(charBuf, 0, n)
+                        recordTail(s)
+                        try {
+                            sendStdout(s)
+                        } catch (_: Exception) {
+                            proc.destroyForcibly()
+                            break
+                        }
+                    }
+                }
+                code = proc.waitFor()
+            } catch (e: Exception) {
+                appendNativeLog("Exec", "Exec exception: \${e.message}")
+                recordTail("[DroidPy] Exec error: \${e.message}\\n")
+                try {
+                    sendStdout("[DroidPy] Exec error: \${e.message}\\n")
+                } catch (_: Exception) {
+                }
+            } finally {
+                try { proc?.inputStream?.close() } catch (_: Exception) {}
+                try { proc?.errorStream?.close() } catch (_: Exception) {}
+                try { proc?.outputStream?.close() } catch (_: Exception) {}
+                activeProcess = null
+                activeProcessStartedAt.set(0L)
+                if (isPkgOrPip) {
+                    pruneStaleCacheAndTemp(clearAptLists = false)
+                }
+            }
+        }
+
+        val elapsed = System.currentTimeMillis() - t0
+        appendNativeLog("Exec", "Stream shell finished: exitCode=$code, durationMs=$elapsed")
+        if (code == 0 && isPkgOrPip) {
+            val isUninstall = command.contains("uninstall") || command.contains("remove") || command.contains("purge")
+            savePackageBackupSnapshot(forceShrink = isUninstall)
+        }
+        if (code != 0 && outputTail.isNotBlank()) {
+            val tailCompact = stripAnsiForLog(outputTail.toString()).trim().takeLast(1200)
+            appendNativeLog("Exec", "Non-zero exit ($code) output tail:\\n$tailCompact")
+        }
+
+        val doneLine = JSONObject()
+            .put("type", "done")
+            .put("exitCode", code)
+            .put("durationMs", elapsed)
+            .toString() + "\\n"
+        try {
+            out.write(doneLine.toByteArray(Charsets.UTF_8))
+            out.flush()
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun corsHeaders(allowPrivateNetwork: Boolean = false): String {
+        val pnaHeader = if (allowPrivateNetwork) "Access-Control-Allow-Private-Network: true\\r\\n" else ""
+        return "Access-Control-Allow-Origin: $allowedOrigin\\r\\n" +
+            "Vary: Origin\\r\\n" +
+            pnaHeader +
+            "Access-Control-Allow-Methods: GET, POST, OPTIONS\\r\\n" +
+            "Access-Control-Allow-Headers: Content-Type, X-DroidPy-Token\\r\\n"
+    }
+
+    private fun serveBundledWebAsset(out: OutputStream, requestPath: String): Boolean {
+        val mgr = assetManager ?: return false
+        val rel = requestPath.trimStart('/').trimEnd('/')
+        if (rel.contains("..")) return false
+        val candidate = rel.ifEmpty { "index.html" }
+
+        fun readAssetBytes(assetRel: String): ByteArray? = try {
+            mgr.open("www/$assetRel").use { it.readBytes() }
+        } catch (_: Exception) {
+            null
+        }
+
+        var resolvedPath = candidate
+        var bytes = readAssetBytes(resolvedPath)
+        if (bytes == null && !candidate.substringAfterLast('/', "").contains('.')) {
+            resolvedPath = "index.html"
+            bytes = readAssetBytes(resolvedPath)
+        }
+        if (bytes == null) return false
+
+        writeHeaders(out, 200, mimeTypeForPath(resolvedPath), bytes.size)
+        out.write(bytes)
+        out.flush()
+        return true
+    }
+
+    private fun mimeTypeForPath(path: String): String {
+        val lower = path.lowercase()
+        return when {
+            lower.endsWith(".html") -> "text/html; charset=utf-8"
+            lower.endsWith(".js") || lower.endsWith(".mjs") -> "application/javascript; charset=utf-8"
+            lower.endsWith(".css") -> "text/css; charset=utf-8"
+            lower.endsWith(".json") || lower.endsWith(".webmanifest") -> "application/json; charset=utf-8"
+            lower.endsWith(".svg") -> "image/svg+xml"
+            lower.endsWith(".png") -> "image/png"
+            lower.endsWith(".jpg") || lower.endsWith(".jpeg") -> "image/jpeg"
+            lower.endsWith(".ico") -> "image/x-icon"
+            lower.endsWith(".wasm") -> "application/wasm"
+            lower.endsWith(".woff2") -> "font/woff2"
+            lower.endsWith(".txt") -> "text/plain; charset=utf-8"
+            else -> "application/octet-stream"
+        }
+    }
+
+    private fun statusReason(status: Int): String = when (status) {
+        200 -> "OK"
+        204 -> "No Content"
+        400 -> "Bad Request"
+        401 -> "Unauthorized"
+        404 -> "Not Found"
+        409 -> "Conflict"
+        502 -> "Bad Gateway"
+        else -> "OK"
+    }
+
+    private fun writeHeaders(
+        out: OutputStream,
+        status: Int,
+        contentType: String,
+        length: Int,
+        allowPrivateNetwork: Boolean = false
+    ) {
+        out.write((
+            "HTTP/1.1 $status \${statusReason(status)}\\r\\n" +
+            corsHeaders(allowPrivateNetwork) +
+            "Content-Type: $contentType\\r\\n" +
+            "Content-Length: $length\\r\\n" +
+            "Connection: close\\r\\n\\r\\n"
+        ).toByteArray())
+        out.flush()
+    }
+
+    private fun writeJson(out: OutputStream, status: Int, json: JSONObject) {
+        val bytes = json.toString().toByteArray(Charsets.UTF_8)
+        writeHeaders(out, status, "application/json; charset=utf-8", bytes.size)
+        out.write(bytes)
+        out.flush()
+    }
+}
+`
+  );
+
+  // 6. Launcher icon resources & deterministic APK signing keystore
+  // Never include a private signing key in exported Android projects.
+  zip.file('android/app/src/main/res/drawable/ic_launcher_background.xml', ANDROID_ICON_BACKGROUND_XML);
+  zip.file('android/app/src/main/res/drawable/ic_launcher_foreground.xml', ANDROID_ICON_FOREGROUND_XML);
+  zip.file('android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml', ANDROID_ADAPTIVE_ICON_XML);
+  zip.file('android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml', ANDROID_ADAPTIVE_ICON_XML);
+  for (const [density, b64] of Object.entries(ANDROID_MIPMAP_PNG_BASE64)) {
+    zip.file(`android/app/src/main/res/mipmap-${density}/ic_launcher.png`, b64, { base64: true });
+    zip.file(`android/app/src/main/res/mipmap-${density}/ic_launcher_round.png`, b64, { base64: true });
+  }
+
+  // 7. Seed user's current Python workspace files into android/app/src/main/assets/workspace/
+  for (const file of opts.files) {
+    zip.file(`android/app/src/main/assets/workspace/${file.name}`, file.content);
+  }
+
+  // 8. README.md (rendered automatically by GitHub) + README_GITHUB_APK.md
+  const githubApkReadme = `# ${safeTitle} 獨立 Android APK（GitHub 自動打包專案）
+
+本專案已預先配置好 **GitHub Actions 自動編譯流程**、**內嵌 Termux Bootstrap 環境**、**受保護的 APK Release 簽名流程** 與 **原生爬蟲瀏覽器（Cookie 擷取）**：
+打包成 APK 安裝至手機後，**無須另外安裝 Termux App**，也不受瀏覽器 CORS 限制，可直接執行 Python 網路爬蟲（\`requests\`、\`beautifulsoup4\`、\`lxml\`、\`yt-dlp\`）、\`ffmpeg\` 與 \`clang\` 原生套件。
+
+## 發布與自動打包步驟
+
+1. 在 GitHub 建立一個新的公開或私人倉庫（Repository）。
+2. 將本壓縮檔解壓縮後的所有檔案（包含 \`.github/\` 與 \`android/\`）上傳／Push 到該倉庫的 \`main\` 分支。
+   - 若倉庫同時包含前端原始碼（\`package.json\`），Workflow 會自動執行 \`npm ci && npm run build\` 並複製進 \`android/app/src/main/assets/www/\` 打包為完全離線 APK。
+3. 在 GitHub Repository → Settings → Secrets and variables → Actions，為正式發布設定新的簽名 Secrets：\`DROIDPY_KEYSTORE_BASE64\`、\`DROIDPY_STORE_PASSWORD\`、\`DROIDPY_KEY_ALIAS\`、\`DROIDPY_KEY_PASSWORD\`。請使用自己新建立的 keystore；不要把 keystore、Base64 或密碼提交到 Git。妥善離線備份 keystore 與密碼，遺失後將無法再以同一憑證發布更新。
+4. PR／Debug 建置使用臨時 Debug 簽名，不需要 Release Secrets；合併至 main/master 後，push workflow 會自動使用新的受保護 keystore 建置 Release APK、比對 APK 與 keystore 的 SHA-256 憑證指紋，成功後才發布 GitHub Release。缺少 Secrets、解碼失敗或簽名不一致時會停止，不會發布。
+5. **簽名金鑰已更換**：舊版已安裝 App 的簽名與新金鑰不同，不能直接覆蓋更新。請先使用 App 內備份功能匯出工作區／狀態資料，再解除安裝舊版並安裝新 Release；重新安裝後再匯入備份。
+
+## 首次開啟 App 初始化說明
+
+1. APK 首次啟動時會自動將內嵌 Termux Bootstrap 解壓至 App 私有目錄並啟動 \`127.0.0.1:8765\` 橋接服務。
+2. 開啟 DroidPy 後進入 **「Termux 橋接」**，點擊 **「一鍵初始化 Python + 爬蟲環境」**，系統將自動安裝：
+   \`(pkg update -y || true) && pkg install -y python python-pip python-lxml libxml2 libxslt clang && pip install --no-cache-dir requests beautifulsoup4 httpx\`
+3. 如需抓取需登入的網站資料，開啟 **「爬蟲瀏覽器」** → 點擊 **「APK 原生瀏覽器登入抓 Cookie」** 完成登入並點右上角 **「擷取 Cookie」**，即可直接讀取包含 \`HttpOnly\` 的認證 Cookie 並寫入工作區 \`cookies.json\`。
+`;
+
+  const changelogContent = `# Changelog / 更新日誌
+
+## [1.2.16] - 2026-11-24
+- **深度修復 \`pip\` \`truststore\` \`Errno 13\`、選項獨立視窗設計、手機文字防溢出與寫實 3D 四季天光**：
+  - 於 \`sitecustomize.py\` 植入記憶體備援 certifi CA 憑證與攔截 \`truststore\` / \`load_verify_locations\`，配合 \`pip.conf\` 與目錄權限規範徹底根除 Android Python 3.14 \`PermissionError: [Errno 13]\`。
+  - 工具箱抽屜改採「選項目錄 → 獨立操作視窗（頂部附返回按鈕）」，全面精簡「Python／內建 Python」文案並修復 360px 手機版文字按鈕溢出問題。
+  - 升級 Three.js 寫實 3D 背景支援春櫻／夏雨／秋楓／冬雪與真實晨昏星月天光漸變。
+
+## [1.2.14] - 2026-11-23
+- **修復「已安裝套件為空」、安裝失敗暫存清理、亂碼淨化、\`/shell\` 404 與長時使用卡頓**：
+  - \`EmbeddedTermuxBridge.kt\` 擴大掃描 \`site-packages\`／\`dist-packages\` 並補上 \`importlib.metadata\` 回退驗證、移除 \`EXTERNALLY-MANAGED\`、導出 \`PIP_USER=0\`／\`PIP_NO_CACHE_DIR=1\` 與 \`PYTHONUTF8=1\`。
+  - 開機與每次 \`pip\`／\`pkg\` 結束自動清理 \`tmp/pip-*\`、\`.cache/pip\`、\`tmp_pkg_stage\` 與 \`.deb\` 暫存，新增 \`GET /storage/app-usage\`、\`POST /storage/cleanup\` 與 \`POST /shell\`。
+  - 強化 ANSI 與控制字元淨化、隱藏「純淨文字」按鈕，並最佳化手機介面不溢出與長時運行流暢度。
+
+## [1.2.13] - 2026-11-23
+- **原生 Python 直譯器預設、沙盒轉為附加功能、ANSI 純淨文字與跨環境路徑／重裝還原修復**：
+  - 預設執行引擎改為原生 **Python 直譯器**（Termux／內嵌 ARM64），**Pyodide WASM 沙盒**轉為設定內可開啟的附加功能，終端與面板按鈕同步精簡並補強 \`subprocess\`（Errno 138）、無 \`wasm32\` wheel 套件（如 \`parsel\`）與互動輸入 \`KeyboardInterrupt\` 友善防呆。
+  - 新增序列緩衝與強效 ANSI 控制碼淨化器（根除 \`[0m\`、\`[38;5;...m\`、\`;88mO\`、\`91mn\` 殘留），原生 Android \`droidpy_native.log\` 與匯出日誌全面濾除跳脫序列，終端機工具列與編輯器設定加入「純淨文字模式」。
+  - 腳本執行與 \`droid.device_info()\` 環境偵測預設為手機（Android）環境。
+  - 修正 \`/health\` \`pipPkgs\` 讀取 \`METADATA\`/\`PKG-INFO\` 精準計數、\`termuxFetch\` 404/錯誤詳情回報消除 \`Unhandled rejection: Not found\`；強化重裝／更新保留 \`usr/\` 與 \`/sdcard/DroidPy/.droidpy_backup/\` 套件清單備份與一鍵還原。
+  - 所有「日誌」按鈕名稱統一精簡為「日誌」，裝置儲存文案改為「手機」。
+
+## [1.2.12] - 2026-11-22
+- **終端機實時時分秒計時（\`HH:MM:SS\`）、套件解除安裝、精準更新檢測與長按選字複製修復**：
+  - 終端機與程式執行日誌耗時由毫秒全面改為 \`HH:MM:SS\`，執行期間每秒／每 250ms 即時跳動顯示經過時間。
+  - 程式內更新視窗改為僅顯示當前安裝版本或目標新版本的更新日誌，精簡閱讀體驗。
+  - Pyodide 沙盒與 Termux 原生引擎同步新增「解除安裝」功能（\`micropip.uninstall\`／\`pip uninstall -y\`／\`pkg uninstall -y\`＋重定位 \`dpkg/status\` 清理）並保護核心系統套件；新增「一鍵更新所有套件」統一按鈕。
+  - 實作 PEP 440 版本比對與 \`cp312\`/\`emscripten\`/\`none-any.whl\` 過濾＋Termux \`pip list --outdated --format=json\` 實測檢查，徹底修正已安裝最新版套件仍誤報「可更新」的問題；並確保「啟動時自動更新套件」僅於開啟程式時執行一次。
+  - 修復手機 Android WebView 非編輯區與終端機區長按無法選字複製的問題（\`isLongClickable\`、\`.terminal-selectable\`/\`.selectable-text\`、選取時暫停自動捲底、終端機「複製選取」快捷按鈕＋原生 \`ClipboardManager\` 三重複製回退）。
+
+## [1.2.11] - 2026-11-22
+- **新增更多趣味 Python 腳本範例、分類篩選與熱門／冷門 60+ 完整套件目錄**：
+  - 範本庫新增數位雨、曼德布羅碎形、生命遊戲、迷宮尋路、21 點、猜數字、Wordle、Hacker News 爬蟲、CSV 視覺化、愛心曲線、番茄鐘、密碼生成器等共 18 支即跑範例與 7 大分類篩選。
+  - 套件目錄擴充 60+ 熱門與冷門實用套件（7 大分類）並加入即時模糊聯想提示與 Termux APT 名稱指引，同時支援手動與啟動時自動更新已安裝套件。
+  - 新增程式內 GitHub Release 版本檢查、更新日誌展示與原生 \`FileProvider\` APK 下載覆蓋安裝功能；並於 \`buildEnv()\` 導出 \`SHELL\`／\`CONFIG_SHELL\`／\`CMAKE_SH\` 徹底修復 \`make[1]: /data/data/com.termux/files/usr/bin/sh: Permission denied\` 錯誤。
+
+## [1.2.10] - 2026-11-22
+- **根治實機 \`PermissionError: [Errno 13] Permission denied\`（\`pip\` Truststore 與 C 擴充編譯 \`build_clib\`）**：
+  - \`pip\` Wrapper 於執行時動態偵測可用 CA 憑證（含備援複製 \`certifi.where()\`）並強制設定 \`PIP_CERT\`／\`SSL_CERT_DIR\`，徹底避免一鍵初始化同一次執行鏈中 \`pip\` 呼叫 \`_create_truststore_ssl_context()\` 存取舊路徑觸發 \`Errno 13\`。
+  - \`relocate_debs()\` 與 \`buildEnv()\` 自動重寫 \`_sysconfigdata*.py\`／\`Makefile\`／\`pkgconfig\` 內的舊 Termux 路徑、為 \`etc\`／\`lib\`／\`llvm\` 工具鏈設定正確權限，並於偵測到 \`clang\` 時導出 \`CC\`、\`CXX\`、\`AR\`、\`RANLIB\`、\`LDSHARED\`，解決編譯 C 擴充庫時的 \`Permission denied\`。
+  - Termux 快捷套件新增預編譯 \`python-pillow\`、\`python-lxml\` 與純 Python \`flask\`。
+
+## [1.2.9] - 2026-11-22
+- **修復實機日誌回報之 \`pip install\` 退出碼 2 與 \`pkg update\` 退出碼 100 問題**：
+  - 遞迴修復 \`usr/etc\`、\`usr/share\`、\`usr/lib\` 與 \`usr/bin\` 符號連結，並改以 \`resolveCaBundleFile()\` 僅於憑證檔實際存在時才設定 \`PIP_CERT\`／\`SSL_CERT_FILE\`／\`REQUESTS_CA_BUNDLE\`（避免無 \`etc/tls/cert.pem\` 時 \`pip\` 因找不到憑證路徑而直接以 \`exit=2\` 崩潰），同時補齊 \`PIP_CACHE_DIR\` 與 \`ensurepip\` 回退檢查。
+  - 為 \`sources.list*\` 補上 \`[trusted=yes]\` 與重定位路徑修正，並於 \`APT_OPTS\` 補齊 \`AllowDowngradeToInsecureRepositories\` 與 \`apt-key\`／\`gpgv\` 路徑，解決 \`pkg update\` 退出碼 \`100\`。
+  - 加強 \`droidpy_native.log\` 與前端 \`appLogger\`：非 0 結束碼之指令自動記錄錯誤輸出尾段；\`chart_demo.py\` 缺少 \`matplotlib\` 時提供清楚引擎切換提示。
+
+## [1.2.8] - 2026-11-21
+- **徹底修復 Termux Python / 套件重開機恢復預設與 \`apt.conf.d\` Permission denied**：
+  - \`MainActivity.kt\` 改以 \`.droidpy_bootstrap_ok\` 標記與多路徑檢查保護 \`filesDir/usr\`，並於啟動時自動修復 \`bin/sh\` 與符號連結，永不再因 symlink 異常而重設清空已安裝的 Python 與爬蟲套件。
+  - \`EmbeddedTermuxBridge.kt\` 每次執行皆無條件寫入完整 \`etc/apt/apt.conf\`（含 \`Dir::Etc::parts\` 等核心路徑）並改寫殘留路徑與更新 \`dpkg/status\`，同時於 \`/health\` 回傳已保留的 pip / pkg 套件清單。
+  - 沙盒模式（Pyodide）同步持久化已安裝套件清單並於重啟時自動恢復；執行 \`utils.py\` 等模組檔新增 \`__main__\` 輸出與明確執行完成提示。
+- **適配手機與平板操作差異、將低頻功能移入負屏抽屜、保留歷史版本 APK 並加入「程式執行所有日誌」**：
+  - 新增應用程式全生命週期日誌記錄器與 Android 原生 \`/logs\`（含 \`droidpy_native.log\` 與 \`logcat\`）檢視匯出面板。
+
+## [1.2.7] - 2026-11-21
+- 歷史版本曾使用固定簽名金鑰；目前正式發布改用使用者自行保管的 GitHub Actions keystore Secrets。直接更換憑證會使舊版 APK 無法原地覆蓋更新，需先備份 App 資料再重新安裝。
+
+## [1.2.6] - 2026-11-21
+- 修復「授權資料夾」、「授權本機資料夾」與「更新容量」三個按鈕點擊無響應問題：移除裝置目錄按鈕的 \`disabled\` 鎖死，在 APK 環境直接串接 Android 內部儲存權限設定與 \`StatFs\` 真實裝置容量並即時跳出更新提示；在一般瀏覽器／iframe 環境自動退回原生資料夾檔案選擇器 (\`webkitdirectory\`)。
+- 修復獨立 APK 內嵌 Termux 初始化失敗（截圖中 \`apt.conf.d Permission denied\`、\`InRelease\` 金鑰失效、\`relocate_debs\` 解壓靜默中止與 Python 3.14 編譯 \`lxml\` 失敗問題）：改以 \`tar --overwrite\` 精準搬移 \`.deb\` 檔案並顯示即時解壓進度、補齊 \`Dir::Etc::parts\` / \`APT_CONFIG\` / 金鑰符號連結修正、改用預編譯 \`python-lxml\`，並確保完成後立即刷新 Python 偵測狀態。
+
+## [1.2.5] - 2026-11-21
+- 為 Android 獨立 APK 加上 DroidPy 專屬應用程式圖徽（Adaptive Vector Icon + 全解析度 \`mipmap-*\` PNG 回退），於系統桌面、多工視圖與安裝畫面顯示標誌性翡翠綠＋琥珀橘 Logo。
+- 在 \`MainActivity.kt\` 加入「返回兩次退出 App」防誤觸保護：於主畫面首次按下返回鍵（或全面屏側滑返回）顯示 2 秒「再按一次返回鍵退出 DroidPy」提示，2 秒內再次返回即立即寫盤儲存並安全退出。
+
+## [1.2.4] - 2026-11-21
+- 新增 App 私有原生狀態檔 \`droidpy_ide_state.json\` 雙重持久化與 \`onPause()\` 即時刷寫，確保退出或滑掉重開完整保留所有檔案與設定。
+- 新增 \`android:requestLegacyExternalStorage="true"\`、完整 \`/sdcard\` 權限偵測、\`/sdcard/*\` API 與「Android 手機內部儲存空間管理」介面，可實際瀏覽、建立資料夾與讀寫 \`/storage/emulated/0\`。
+- 修正 Termux Python \`PYTHONHOME\` 與內建原生 \`droid.py\`（支援 \`import droid\` 與 \`/droid-action\`），並強化 \`POST /stop\` 程序樹終止與前端 \`AbortController\`，確保「停止執行」立即解除並恢復「執行程式」按鈕。
+
+## [1.2.3] - 2026-11-21
+- 修復獨立 APK \`EmbeddedTermuxBridge.kt\` HTTP \`Content-Length\` 位元組長度錯判導致含中文註解的腳本永久卡死的問題（改用位元組流讀取並正確解碼 UTF-8）。
+- 修復 APK 串流輸出在雙位元組/三位元組 UTF-8 邊界截斷產生亂碼的問題（改用 \`InputStreamReader\` 字元串流解碼）。
+- 修復 \`MainActivity.kt\` 外部 \`https://\` 連結誤在 IDE WebView 內開啟及下載檔名未跳脫之異常，並補強 Bootstrap 完整解壓檢查與 \`pkg\` 金鑰信任選項。
+`;
+
+  zip.file('README.md', githubApkReadme);
+  zip.file('README_GITHUB_APK.md', githubApkReadme);
+  zip.file('CHANGELOG.md', changelogContent);
+
+  return zip.generateAsync({ type: 'blob' });
+}
+}PY_BIN\\\" -m pip install --no-cache-dir " + remainingPips.joinToString(" "))
                         }
                         val restoreCmd = if (steps.isEmpty()) {
                             "echo '[DroidPy] 所有已備份套件均已存在，無需還原。'"
