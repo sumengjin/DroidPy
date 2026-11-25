@@ -83,7 +83,7 @@ assert.ok(androidBuilder.includes('retainedBridge'));
 assert.ok(androidBuilder.includes('Keeping embedded bridge alive across Activity configuration recreation'));
 assert.ok(androidBuilder.includes('installCrashDiagnostics()'));
 assert.ok(androidBuilder.includes('[FATAL] Uncaught exception'));
-assert.ok(androidBuilder.includes('android.util.Log.i("DroidPy", line)'));
+assert.ok(androidBuilder.includes('android.util.Log.i("DroidPy", "[$tag] $message")'), "startup diagnostics must mirror tagged messages to Logcat");
 assert.ok(androidBuilder.includes('appendStartupLog("Bridge", "Starting embedded bridge")'));
 assert.ok(androidBuilder.includes('Embedded bridge started successfully'));
 assert.ok(androidBuilder.includes('Embedded bridge startup FAILED:'));
