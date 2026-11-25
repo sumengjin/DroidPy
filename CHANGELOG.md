@@ -3,6 +3,7 @@
 All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
+- **讓 Android 啟動診斷可從 Logcat 讀取**：原有啟動階段紀錄只寫入 App 私有檔案，啟動早期閃退時無法直接從 Termux 的 Logcat 觀察；現在同步輸出到 `DroidPy` 日誌標籤，並明確記錄內嵌 Bridge 啟動前後及失敗堆疊，方便定位 Beta 閃退階段。
 - **修復內嵌 Android Bridge 用戶端斷線造成工作執行緒崩潰**：客戶端提前關閉連線時，`writeJson`／`writeHeaders` 的 `Broken pipe` 現在會被視為正常請求結束，不再讓未捕獲的 `IOException` 以 `FATAL EXCEPTION` 終止整個 App；加入回歸檢查。
 - **修復首次啟動授予儲存權限後可能崩潰的流程競態**：不再於 `onCreate` 尚未完成 WebView／Termux Bridge 初始化時自動跳轉系統設定；改為使用者實際操作儲存功能時才請求授權。Android 11 以上只開啟「所有檔案存取權」設定，不再同時彈出舊式 READ/WRITE 執行期權限視窗；Android 10 以下保留原有讀寫權限流程，並加入診斷紀錄。
 - **測試版與正式版可並存**：未發布 APK 的版本名稱加上 `-Beta`，Debug 變體使用獨立 `.beta` 套件 ID，FileProvider authority 隨變體套件 ID 變化；正式版套件 ID、簽名與 Release 發布流程維持不變。
