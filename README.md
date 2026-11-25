@@ -1,9 +1,10 @@
 # DroidPy — Android-First Python 3.12 IDE, Termux Bridge & Standalone Crawler APK
 
-**DroidPy** 是一個專為 Android 手機觸控操作與行動網路爬蟲設計的 **Python 3.12 開發環境（PWA + Termux 原生橋接 + 獨立 APK 自動建置）**。  
-無須依賴電腦，直接在手機上就能寫程式、跑資料視覺化、登入網站擷取 Cookie，並透過 GitHub Actions 一鍵編譯成可離線執行的獨立 Android `.apk`。
+**DroidPy** 是一套以 Android 手機為優先的 Python 開發環境，結合離線 Pyodide、原生 Termux 執行引擎、互動式終端機、檔案管理、爬蟲瀏覽器與 Cookie 工作台，並透過 GitHub Actions 自動建置及發布 ARM64 Android APK。
 
-> **English Summary**: DroidPy is a mobile-first Python 3.12 IDE combining an offline Pyodide WebAssembly sandbox, a localhost Termux PTY bridge (`127.0.0.1:8765`), an integrated Crawler Browser with native Android `CookieManager` capture (including `HttpOnly` cookies), and a 1-click GitHub Actions standalone APK exporter with embedded Termux bootstrap (`aarch64`).
+無須依賴電腦即可在手機上編寫、執行及管理 Python 專案。Pyodide 與 Termux 是兩個不同的執行環境：前者適合離線純 Python 與支援的科學運算套件；後者提供 Android/Linux 原生套件、網路工具及系統命令。可攜式程式碼可盡量共用，但兩邊安裝的套件不會自動互通。
+
+> **English Summary**: DroidPy is an Android-first Python IDE featuring an offline Pyodide sandbox, native Termux runtime, interactive terminal, project file management, a native crawler browser with Android CookieManager capture, and automated ARM64 APK builds and GitHub Releases.
 
 ---
 
@@ -17,7 +18,8 @@
 | **獨立 APK 內建環境** | 免裝外部 Termux App、一裝即用 | 匯出的 GitHub 專案內含 `EmbeddedTermuxBridge.kt` 與 `bootstrap-aarch64.zip`，打開 App 自動啟動本地 Python/Termux 橋接並支援一鍵初始化爬蟲環境。 |
 
 ### 2. 爬蟲瀏覽器與 Cookie 工作台（Crawler Browser）
-- **APK 原生雙開瀏覽器**：在獨立 APK 內透過 `MainActivity.kt` 原生 `WebView` 開啟任意網站登入操作，點擊 **「擷取 Cookie」** 即透過 `android.webkit.CookieManager` 讀取包含 **`HttpOnly`** 的完整認證 Cookie，自動寫入工作區 `cookies.json`。
+- **APK 原生登入瀏覽器**：獨立 APK 使用隔離的 Android `WebView` 開啟網站，登入後可透過原生 **「擷取 Cookie」** 按鈕讀取該網址可供 HTTP 請求使用的 Cookie（包含 `HttpOnly` Cookie），並同步回 IDE 工作階段及 `cookies.json`。原生 JavaScript Bridge 僅保留在受信任的 IDE WebView，不注入第三方網站，避免登入頁取得 App 私有操作權限。
+- **Cookie 擷取回饋與診斷**：擷取成功、目前網址沒有 Cookie、網址無效或寫入失敗時均提供明確提示；原生執行日誌記錄擷取流程與結果，但不記錄 Cookie 值或登入憑證。
 - **Termux 原生請求探測（`POST /probe-url`）**：從手機原生網路層直接測試目標網址，檢查 HTTP 狀態碼、最終跳轉網址、`Set-Cookie` 與 HTML 預覽。
 - **cURL / Header / 書籤小工具匯入**：支援貼上 Chrome DevTools `Copy as cURL`、原始 `Cookie:` 標頭、JSON、Netscape `cookies.txt` 或手機 Chrome Bookmarklet 結果，一鍵產生可直接執行的 `crawler_session.py`。
 

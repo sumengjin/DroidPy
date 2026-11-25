@@ -1037,48 +1037,70 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun captureCrawlerCookiesAndReturn() {
-        CookieManager.getInstance().flush()
-        val targetUrl = crawlerWebView.url ?: crawlerUrlInput.text.toString().trim()
-        val rawCookie = CookieManager.getInstance().getCookie(targetUrl) ?: ""
-        val ua = crawlerWebView.settings.userAgentString ?: mobileUaString
+        appendActivityLog("Crawler", "Cookie capture requested")
+        try {
+            val targetUrl = crawlerWebView.url ?: crawlerUrlInput.text.toString().trim()
+            val parsed = Uri.parse(targetUrl)
+            if ((!parsed.scheme.equals("http", true) && !parsed.scheme.equals("https", true)) ||
+                parsed.host.isNullOrBlank()
+            ) {
+                Toast.makeText(this, "請先開啟並登入要擷取 Cookie 的網站", Toast.LENGTH_LONG).show()
+                appendActivityLog("Crawler", "Cookie capture skipped: invalid or empty URL")
+                return
+            }
 
-        val cookieMap = JSONObject()
-        var count = 0
-        rawCookie.split(";").forEach { part ->
-            val trimmed = part.trim()
-            val eq = trimmed.indexOf('=')
-            if (eq > 0) {
-                val k = trimmed.substring(0, eq).trim()
-                val v = trimmed.substring(eq + 1).trim()
-                if (k.isNotEmpty()) {
-                    cookieMap.put(k, v)
-                    count++
+            CookieManager.getInstance().flush()
+            val rawCookie = CookieManager.getInstance().getCookie(targetUrl) ?: ""
+            val ua = crawlerWebView.settings.userAgentString ?: mobileUaString
+            val cookieMap = JSONObject()
+            var count = 0
+            rawCookie.split(";").forEach { part ->
+                val trimmed = part.trim()
+                val eq = trimmed.indexOf('=')
+                if (eq > 0) {
+                    val key = trimmed.substring(0, eq).trim()
+                    val value = trimmed.substring(eq + 1).trim()
+                    if (key.isNotEmpty()) {
+                        cookieMap.put(key, value)
+                        count++
+                    }
                 }
             }
-        }
 
-        val payload = JSONObject()
-            .put("url", targetUrl)
-            .put("userAgent", ua)
-            .put("cookieHeader", rawCookie)
-            .put("cookies", cookieMap)
-            .put("capturedAt", System.currentTimeMillis())
+            if (count == 0) {
+                Toast.makeText(this, "目前網站沒有可擷取的 Cookie；請確認已登入並停留在登入後頁面", Toast.LENGTH_LONG).show()
+                appendActivityLog("Crawler", "Cookie capture found no cookies for host=" + (parsed.host ?: "unknown"))
+                return
+            }
 
-        try {
+            val payload = JSONObject()
+                .put("url", targetUrl)
+                .put("userAgent", ua)
+                .put("cookieHeader", rawCookie)
+                .put("cookies", cookieMap)
+                .put("capturedAt", System.currentTimeMillis())
+
             val workspaceDir = File(filesDir, "droidpy_workspace").apply { mkdirs() }
             val sessionJson = JSONObject()
                 .put("url", targetUrl)
                 .put("headers", JSONObject().put("User-Agent", ua))
                 .put("cookies", cookieMap)
                 .put("cookie_header", rawCookie)
-            File(workspaceDir, "cookies.json").writeText(sessionJson.toString(2))
-        } catch (_: Exception) {
-        }
+            File(workspaceDir, "cookies.json").writeText(sessionJson.toString(2), Charsets.UTF_8)
 
-        val js = "window.dispatchEvent(new CustomEvent('droidpy-native-cookies', { detail: \${payload.toString()} }));"
-        webView.evaluateJavascript(js, null)
-        crawlerOverlay.visibility = View.GONE
-        Toast.makeText(this, "已擷取 $count 筆 Cookie 並同步至 DroidPy", Toast.LENGTH_SHORT).show()
+            // Deliver only to the trusted IDE WebView. The logged-in third-party
+            // crawler WebView never receives the privileged DroidPyNative bridge.
+            val js = "window.dispatchEvent(new CustomEvent('droidpy-native-cookies', { detail: \${payload.toString()} }));"
+            webView.evaluateJavascript(js) { result ->
+                appendActivityLog("Crawler", "Cookie capture event dispatched; cookies=$count result=$result")
+            }
+            crawlerOverlay.visibility = View.GONE
+            appendActivityLog("Crawler", "Cookie capture completed; cookies=$count host=" + (parsed.host ?: "unknown"))
+            Toast.makeText(this, "已擷取 $count 筆 Cookie 並同步至 DroidPy", Toast.LENGTH_LONG).show()
+        } catch (error: Exception) {
+            appendActivityLog("Crawler", "Cookie capture failed: " + (error.message ?: error.javaClass.simpleName))
+            Toast.makeText(this, "Cookie 擷取失敗：" + (error.message ?: "未知錯誤"), Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun dp(value: Int): Int =
@@ -1154,7 +1176,12 @@ class MainActivity : AppCompatActivity() {
             typeface = Typeface.DEFAULT_BOLD
             textSize = 12f
             setPadding(dp(10), dp(4), dp(10), dp(4))
-            setOnClickListener { captureCrawlerCookiesAndReturn() }
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                appendActivityLog("Crawler", "Cookie capture button clicked")
+                captureCrawlerCookiesAndReturn()
+            }
         }
 
         val btnLp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(36)).apply {
