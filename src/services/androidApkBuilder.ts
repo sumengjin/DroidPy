@@ -1285,7 +1285,7 @@ class MainActivity : AppCompatActivity() {
                 view: WebView?,
                 detail: android.webkit.RenderProcessGoneDetail?
             ): Boolean {
-                appendActivityLog("WebView", "Renderer process gone didCrash=${detail?.didCrash()}")
+                appendActivityLog("WebView", "Renderer process gone didCrash=\${detail?.didCrash()}")
                 return false
             }
 
