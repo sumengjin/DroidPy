@@ -2958,6 +2958,15 @@ def clipboard_set(text):
         return candidate
     }
 
+    private fun processPid(proc: Process): Int {
+        return try {
+            val pidField = proc.javaClass.getDeclaredField("pid").apply { isAccessible = true }
+            (pidField.get(proc) as? Int) ?: -1
+        } catch (_: Exception) {
+            -1
+        }
+    }
+
     private fun killProcessTree(proc: Process) {
         try {
             val pidField = proc.javaClass.getDeclaredField("pid").apply { isAccessible = true }
@@ -3866,7 +3875,7 @@ def clipboard_set(text):
                     val proc = activeProcess
                     if (proc != null) {
                         activeProcessStopRequested = true
-                        appendNativeLog("Exec", "Explicit Stop request: force stopping process tree pid=\${proc.pid()}")
+                        appendNativeLog("Exec", "Explicit Stop request: force stopping process tree pid=\${processPid(proc)}")
                         killProcessTree(proc)
                     } else {
                         appendNativeLog("Exec", "Explicit Stop request received; no active process")
@@ -4699,7 +4708,7 @@ def clipboard_set(text):
                 activeProcessPaused = false
                 activeProcessStopRequested = false
                 activeProcessStartedAt.set(System.currentTimeMillis())
-                appendNativeLog("Exec", "Process started pid=\${proc.pid()} command=\${normalizedCommand.take(120)}")
+                appendNativeLog("Exec", "Process started pid=\${processPid(proc)} command=\${normalizedCommand.take(120)}")
                 var clientDisconnected = false
                 val charBuf = CharArray(1024)
                 val inpReader = InputStreamReader(proc.inputStream, Charsets.UTF_8)
@@ -4714,16 +4723,16 @@ def clipboard_set(text):
                                 sendStdout(s)
                             } catch (e: Exception) {
                                 clientDisconnected = true
-                                appendNativeLog("Exec", "Stream client disconnected; continuing process pid=\${proc.pid()} (\${e.javaClass.simpleName}: \${e.message})")
+                                appendNativeLog("Exec", "Stream client disconnected; continuing process pid=\${processPid(proc)} (\${e.javaClass.simpleName}: \${e.message})")
                             }
                         }
                     }
                 }
                 code = proc.waitFor()
-                appendNativeLog("Exec", "Process exited pid=\${proc.pid()} exitCode=$code")
+                appendNativeLog("Exec", "Process exited pid=\${processPid(proc)} exitCode=$code")
             } catch (e: Exception) {
                 if (activeProcessStopRequested) {
-                    appendNativeLog("Exec", "Process output read ended after explicit Stop pid=\${proc?.pid()} (\${e.javaClass.simpleName}: \${e.message})")
+                    appendNativeLog("Exec", "Process output read ended after explicit Stop pid=\${proc?.let { processPid(it) } ?: -1} (\${e.javaClass.simpleName}: \${e.message})")
                 } else {
                     appendNativeLog("Exec", "Exec exception: \${e.javaClass.simpleName}: \${e.message}")
                     recordTail("[DroidPy] Exec error: \${e.message}\\n")
