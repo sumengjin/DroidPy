@@ -46,7 +46,7 @@ const pythonStream = generated.slice(pythonStreamStart, pythonStreamEnd);
 assert.ok(pythonStream.includes('client_disconnected = False'));
 assert.ok(pythonStream.includes('def emit_stream_event(event):'));
 assert.ok(pythonStream.includes('client_disconnected = True'));
-assert.ok(pythonStream.includes('Keep draining the PTY'));
+assert.ok(pythonStream.includes('The HTTP client does not own the child process.'));
 assert.ok(!pythonStream.includes('os.killpg(proc.pid, signal.SIGKILL)'));
 const explicitStopStart = generated.indexOf('        if self.path == "/stop":');
 const explicitStopEnd = generated.indexOf('        if self.path in ("/run"', explicitStopStart);
