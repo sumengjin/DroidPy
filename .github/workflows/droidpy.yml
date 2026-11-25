@@ -158,25 +158,22 @@ jobs:
             IS_RELEASE_REF=true
           fi
 
-          if [ "$IS_RELEASE_REF" != "true" ]; then
-            rm -f android/app/droidpy-custom.keystore android/app/droidpy-debug.p12
-            echo "Branch/PR/manual debug build uses Gradle ephemeral debug signer; no production key is loaded."
-          elif [ -n "$CUSTOM_KS_B64" ]; then
-            if [ -z "$CUSTOM_STORE_PASS" ] || [ -z "$CUSTOM_KEY_ALIAS" ] || [ -z "$CUSTOM_KEY_PASS" ]; then
-              echo "::error::受保護的 signing secrets 缺少必要值。"
-              exit 1
-            fi
-            printf '%s' "$CUSTOM_KS_B64" | base64 --decode > android/app/droidpy-custom.keystore
-            echo "DROIDPY_KEYSTORE_FILE=droidpy-custom.keystore" >> "$GITHUB_ENV"
-            printf 'DROIDPY_STORE_PASSWORD=%s\n' "$CUSTOM_STORE_PASS" >> "$GITHUB_ENV"
-            printf 'DROIDPY_KEY_ALIAS=%s\n' "$CUSTOM_KEY_ALIAS" >> "$GITHUB_ENV"
-            printf 'DROIDPY_KEY_PASSWORD=%s\n' "$CUSTOM_KEY_PASS" >> "$GITHUB_ENV"
-            echo "使用受保護的 GitHub Actions signing secrets"
-          else
-            echo "::error::正式 Release 必須設定受保護的 DROIDPY_KEYSTORE_BASE64、DROIDPY_STORE_PASSWORD、DROIDPY_KEY_ALIAS 與 DROIDPY_KEY_PASSWORD。拒絕使用公開原始碼中的私鑰 fallback。"
+          if [ -z "$CUSTOM_KS_B64" ] || [ -z "$CUSTOM_STORE_PASS" ] || [ -z "$CUSTOM_KEY_ALIAS" ] || [ -z "$CUSTOM_KEY_PASS" ]; then
+            echo "::error::所有 APK（包括 Debug／PR Artifact）都必須使用同一組受保護的 DROIDPY signing secrets；拒絕臨時或自動生成簽名。"
             exit 1
           fi
-
+          printf '%s' "$CUSTOM_KS_B64" | base64 --decode > android/app/droidpy-custom.keystore
+          echo "DROIDPY_KEYSTORE_FILE=droidpy-custom.keystore" >> "$GITHUB_ENV"
+          printf 'DROIDPY_STORE_PASSWORD=%s\\n' "$CUSTOM_STORE_PASS" >> "$GITHUB_ENV"
+          printf 'DROIDPY_KEY_ALIAS=%s\\n' "$CUSTOM_KEY_ALIAS" >> "$GITHUB_ENV"
+          printf 'DROIDPY_KEY_PASSWORD=%s\\n' "$CUSTOM_KEY_PASS" >> "$GITHUB_ENV"
+          PINNED_SHA256="29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA"
+          KEYSTORE_SHA256=$(keytool -exportcert -keystore android/app/droidpy-custom.keystore -storepass "$CUSTOM_STORE_PASS" -alias "$CUSTOM_KEY_ALIAS" | sha256sum | awk '{print toupper($1)}')
+          if [ "$KEYSTORE_SHA256" != "$PINNED_SHA256" ]; then
+            echo "::error::簽名金鑰與 DroidPy 原始憑證不一致，已停止建置／發布。"
+            exit 1
+          fi
+          echo "已確認使用 DroidPy 原始簽名憑證：$KEYSTORE_SHA256"
           if [ -n "$INPUT_TAG" ]; then
             REL_TAG="v${INPUT_TAG#v}"
             VNAME="${REL_TAG#v}"
