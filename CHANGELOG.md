@@ -3,6 +3,7 @@
 All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
+- **統一終端機與套件管理介面的官方預編譯路由**：直接輸入 `pip install numpy`、`pandas`、`matplotlib`、`pillow`、`lxml`、`cryptography` 等單一套件時，APK 內建與獨立 Termux Bridge 現在都會優先改用 Termux APT 預編譯套件；版本限制、extras、多套件與 requirements 命令不會被錯誤改寫。
 - **調整 Pandas 與 Matplotlib 的 Android 安裝來源**：套件目錄與一鍵安裝提示統一使用 Termux 預編譯 `python-pandas`／`matplotlib`，避免 pip 在手機上重複編譯 NumPy、pandas 或 contourpy 等原生依賴。
 - **集中管理 Android 套件相容路由**：APK 內建 Bridge 與獨立 Termux Bridge 都將 Parsel、SciPy、Polars 的特殊安裝規則集中管理；scikit-learn 因缺少已驗證的 Android ARM64／Python 3.14 預編譯版本，兩種環境均改為明確提示不可安裝，APK 內建環境使用 Frostwork 純 Python 相容層，獨立 Termux 環境保留安全的 w3lib 相容限制，避免兩種執行環境混用不適用的模組。
 - **新增 Android 純 Python Frostwork 相容替代層**：APK 啟動時將本地相容模組與套件中繼資料種入 DroidPy 使用者匯入路徑，支援 w3lib 2.6 所需的 `navigation()`、常用 CSS／XPath 選擇器、多欄位文字／屬性擷取；無法支援的選擇器會明確報錯，不要求 Rust／Maturin 編譯，也不覆蓋已安裝的上游 Frostwork。此版本以相容性與功能覆蓋為優先，並非 Rust 版本的效能或完整 API 等價物。
