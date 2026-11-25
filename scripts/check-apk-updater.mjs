@@ -78,7 +78,7 @@ assert.ok(source.includes('versionCode = System.getenv("DROIDPY_VERSION_CODE")?.
 assert.ok(source.includes('versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.31"'));
 assert.ok(source.includes('packageManager.getPackageInfo(packageName, 0).versionName ?: "1.2.31"'));
 assert.ok(source.includes('                "1.2.31"\n            }'));
-assert.ok(source.includes('VCODE=$(( ${CMAJ:-1} * 1000000 + ${CMIN:-0} * 1000 + ${CPAT:-0} ))'));
+assert.ok(source.includes('VCODE=$(( \\${CMAJ:-1} * 1000000 + \\${CMIN:-0} * 1000 + \\${CPAT:-0} ))'));
 
 const updaterSource = await readFile('src/services/appUpdater.ts', 'utf8');
 assert.ok(updaterSource.includes("tagName: 'v1.2.31'"));
