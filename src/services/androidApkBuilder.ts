@@ -4685,7 +4685,7 @@ def clipboard_set(text):
                 activeProcessPaused = false
                 activeProcessStopRequested = false
                 activeProcessStartedAt.set(System.currentTimeMillis())
-                appendNativeLog("Exec", "Process started pid=${proc.pid()} command=${normalizedCommand.take(120)}")
+                appendNativeLog("Exec", "Process started pid=\${proc.pid()} command=\${normalizedCommand.take(120)}")
                 var clientDisconnected = false
                 val charBuf = CharArray(1024)
                 val inpReader = InputStreamReader(proc.inputStream, Charsets.UTF_8)
@@ -4700,7 +4700,7 @@ def clipboard_set(text):
                                 sendStdout(s)
                             } catch (e: Exception) {
                                 clientDisconnected = true
-                                appendNativeLog("Exec", "Stream client disconnected; continuing process pid=${proc.pid()} (${e.javaClass.simpleName}: ${e.message})")
+                                appendNativeLog("Exec", "Stream client disconnected; continuing process pid=\${proc.pid()} (\${e.javaClass.simpleName}: \${e.message})")
                             }
                         }
                     }
