@@ -4648,13 +4648,14 @@ def clipboard_set(text):
     }
 
     private fun runBufferedShellCommand(command: String): JSONObject {
+        val normalizedCommand = normalizeShellCommand(command)
         val t0 = System.currentTimeMillis()
         val shFile = File(usrDir, "bin/sh")
         var code = 1
         var stdoutText = ""
         var stderrText = ""
         val isPkgOrPip = Regex("""(^|[;&|]\s*)(?:pkg|apt|apt-get|pip|python(?:3)?\s+-m\s+pip)\b""")
-            .containsMatchIn(command)
+            .containsMatchIn(normalizedCommand)
         val logDir = File(usrDir, "tmp").apply { mkdirs() }
         var logFile: File? = null
         var proc: Process? = null
@@ -4663,7 +4664,7 @@ def clipboard_set(text):
                 stderrText = "[DroidPy] Bootstrap shell 尚未就緒：\${shFile.absolutePath}"
             } else {
                 logFile = File.createTempFile("droidpy-shell-", ".log", logDir)
-                val pb = ProcessBuilder(shFile.absolutePath, "-c", command)
+                val pb = ProcessBuilder(shFile.absolutePath, "-c", normalizedCommand)
                 pb.directory(workspaceDir)
                 pb.redirectErrorStream(true)
                 pb.redirectOutput(logFile)
@@ -4711,7 +4712,7 @@ def clipboard_set(text):
             }
         }
         if (code == 0 && isPkgOrPip) {
-            val isUninstall = Regex("""\b(uninstall|remove|purge)\b""", RegexOption.IGNORE_CASE).containsMatchIn(command)
+            val isUninstall = Regex("""\b(uninstall|remove|purge)\b""", RegexOption.IGNORE_CASE).containsMatchIn(normalizedCommand)
             savePackageBackupSnapshot(forceShrink = isUninstall)
         }
         return JSONObject()
