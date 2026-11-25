@@ -323,9 +323,9 @@ def _query(root, selector, syntax="css"):
         nodes = _xpath_nodes(root, expression)
     else:
         raise ValueError("syntax must be 'css' or 'xpath'")
-    if pseudo == "attr":
+    if pseudo and pseudo[0] == "attr":
         return [node.attrs[pseudo[1]] for node in nodes if isinstance(node, _Node) and pseudo[1] in node.attrs]
-    if pseudo == "text":
+    if pseudo and pseudo[0] == "text":
         return [node.text() for node in nodes if isinstance(node, _Node)]
     return [node.text() if isinstance(node, _Node) else str(node) for node in nodes]
 
