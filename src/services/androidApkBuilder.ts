@@ -194,7 +194,7 @@ jobs:
           printf '%s\\n' "$SIGNER_OUTPUT"
           ACTUAL_SHA256=$(printf '%s\\n' "$SIGNER_OUTPUT" | sed -nE 's/.*certificate SHA-256 digest: *([0-9A-Fa-f:]+).*/\\1/ip' | head -n1 | tr -d ':' | tr '[:lower:]' '[:upper:]')
           if ! [[ "$ACTUAL_SHA256" =~ ^[0-9A-F]{64}$ ]]; then echo '::error::Invalid APK signer fingerprint.'; exit 1; fi
-          KEYSTORE_PATH="android/app/${DROIDPY_KEYSTORE_FILE}"
+          KEYSTORE_PATH="android/app/\${DROIDPY_KEYSTORE_FILE}"
           EXPECTED_SHA256=$(keytool -exportcert -keystore "$KEYSTORE_PATH" -storepass "$DROIDPY_STORE_PASSWORD" -alias "$DROIDPY_KEY_ALIAS" | sha256sum | awk '{print toupper($1)}')
           PINNED_SHA256="29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA"
           if [ "$EXPECTED_SHA256" != "$PINNED_SHA256" ] || [ "$ACTUAL_SHA256" != "$PINNED_SHA256" ]; then
