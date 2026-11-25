@@ -3451,6 +3451,32 @@ def clipboard_set(text):
     private val aptDefaultPipSet = setOf("pip", "setuptools", "wheel", "ensurepip", "distlib", "packaging", "lxml")
     private val defaultUserPkgCandidates = setOf("python", "python-pip", "python-lxml", "libxml2", "libxslt", "clang", "ffmpeg", "git", "nodejs", "openssh")
 
+    private fun writeAtomicTextFile(target: File, text: String): Boolean {
+        val parent = target.parentFile ?: return false
+        if (!parent.isDirectory && !parent.mkdirs()) return false
+        val temp = try {
+            File.createTempFile("droidpy-manifest-", ".tmp", parent)
+        } catch (_: Exception) {
+            return false
+        }
+        return try {
+            temp.outputStream().use { output ->
+                output.write(text.toByteArray(Charsets.UTF_8))
+                output.fd.sync()
+            }
+            temp.setReadable(true, false)
+            temp.setWritable(true, false)
+            // The temporary file is created beside the target, so rename stays
+            // on the same filesystem and atomically replaces the old snapshot.
+            android.system.Os.rename(temp.absolutePath, target.absolutePath)
+            true
+        } catch (_: Exception) {
+            false
+        } finally {
+            try { temp.delete() } catch (_: Exception) {}
+        }
+    }
+
     private fun savePackageBackupSnapshot(
         pipInventory: PipInventory = collectInstalledPipInventory(),
         pkgInventory: PkgInventory = collectInstalledPkgInventory(),
@@ -3500,12 +3526,21 @@ def clipboard_set(text):
                 .put("pipPackages", JSONArray(mergedPip))
                 .put("pkgPackages", JSONArray(mergedPkg))
             val text = manifest.toString()
-            manifestFile.writeText(text, Charsets.UTF_8)
-            if (hasStorageAccess()) {
-                val backupDir = File(Environment.getExternalStorageDirectory(), "DroidPy/.droidpy_backup").apply { mkdirs() }
-                File(backupDir, "packages_manifest.json").writeText(text, Charsets.UTF_8)
+            val localSaved = writeAtomicTextFile(manifestFile, text)
+            val backupFile = if (hasStorageAccess()) {
+                File(Environment.getExternalStorageDirectory(), "DroidPy/.droidpy_backup/packages_manifest.json")
+            } else null
+            val externalSaved = backupFile?.let { writeAtomicTextFile(it, text) } ?: false
+            if (!localSaved && !externalSaved) {
+                appendNativeLog("Package", "Package backup manifest save failed; previous copies were preserved")
+            } else if (!localSaved || (backupFile != null && !externalSaved)) {
+                appendNativeLog("Package", "Package backup manifest saved to only one location")
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            try {
+                appendNativeLog("Package", "Package backup manifest update failed: ${e.javaClass.simpleName}")
+            } catch (_: Exception) {
+            }
         }
     }
 
