@@ -883,7 +883,7 @@ def _normalize_shell_command(command):
     # Only rewrite a single, unambiguous package command; leave custom shell syntax untouched.
     pip_prefix = r"(?:(?:[^\\s;&|]*/)?python(?:3(?:\\.\\d+)?)?\\s+-m\\s+)?"
     if re.fullmatch(r"\\s*" + pip_prefix + r"pip3?\\s+install\\s+parsel\\s*", command, re.IGNORECASE):
-        return "pkg install -y python-lxml && " + shlex.join(_build_pip_cmd(["w3lib<2.6", "parsel"]))
+        return "pkg install -y python-lxml && " + shlex.join(_build_pip_cmd(["w3lib>=2.6", "parsel"]))
     if re.fullmatch(r"\\s*" + pip_prefix + r"pip3?\\s+install\\s+scipy\\s*", command, re.IGNORECASE):
         return "pkg install -y python-scipy"
     if re.fullmatch(r"\\s*" + pip_prefix + r"pip3?\\s+install\\s+polars\\s*", command, re.IGNORECASE):
@@ -1246,9 +1246,9 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
             if mode == "pkg":
                 cmd = ["pkg", "install", "-y"] + pkgs
             elif target.lower() == "parsel":
-                # w3lib 2.6.0 adds Frostwork, whose Rust extension cannot currently build for Android/Bionic.
-                # Install Termux's prebuilt lxml first, then keep this Parsel install on w3lib < 2.6.
-                pip_cmd = shlex.join(_build_pip_cmd(["w3lib<2.6", "parsel"], trusted_host=trusted_host))
+                # The bundled pure-Python Frostwork compatibility layer supplies w3lib 2.6 navigation without Rust/Maturin.
+                # Install Termux's prebuilt lxml first, then use current w3lib and Parsel.
+                pip_cmd = shlex.join(_build_pip_cmd(["w3lib>=2.6", "parsel"], trusted_host=trusted_host))
                 cmd = ["sh", "-c", "pkg install -y python-lxml && " + pip_cmd]
             elif target.lower() == "polars":
                 # Use TUR's signed Android-native Polars package and Rust runtime, not pip/maturin.
