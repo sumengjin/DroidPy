@@ -3600,14 +3600,17 @@ def clipboard_set(text):
                         // Use the same embedded Termux interpreter for imports and pip installs.
                         val pythonCmd = File(usrDir, "bin/python3").absolutePath
                         if (pipInventory.complete) {
+                            val restoreFailureFile = File(workspaceDir, ".droidpy-restore-failed").absolutePath
                             steps.add("test -x $pythonCmd || { echo '[DroidPy] Python is not ready; package restore aborted.' >&2; exit 127; }")
+                            steps.add("rm -f $restoreFailureFile")
                             if (needsNumpy) {
-                                // Use Termux's prebuilt native package and verify it with the script interpreter.
-                                steps.add("pkg install -y python-numpy && $pythonCmd -c 'import numpy' && echo '[DroidPy] NumPy ready (Termux binary package).'")
+                                // A NumPy failure is recorded but must not block unrelated pure-Python restores.
+                                steps.add("if pkg install -y python-numpy && $pythonCmd -c 'import numpy'; then echo '[DroidPy] NumPy ready (Termux binary package).' ; else echo '[DroidPy] NumPy install/import failed; continuing with other packages.' >&2; touch $restoreFailureFile; fi")
                             }
                             if (remainingPips.isNotEmpty()) {
-                                steps.add("$pythonCmd -m pip install --no-cache-dir " + remainingPips.joinToString(" "))
+                                steps.add("if $pythonCmd -m pip install --no-cache-dir " + remainingPips.joinToString(" ") + "; then echo '[DroidPy] Remaining pip packages restored.'; else echo '[DroidPy] One or more pip packages failed to restore.' >&2; touch $restoreFailureFile; fi")
                             }
+                            steps.add("test ! -f $restoreFailureFile")
                         }
                         val restoreCmd = if (steps.isEmpty()) {
                             "echo '[DroidPy] 所有已備份套件均已存在，無需還原。'"
