@@ -117,32 +117,44 @@ function mapGitHubReleases(rawList: RawGitHubRelease[]): AppReleaseInfo[] {
 
 export const BUILTIN_LOCAL_RELEASES: AppReleaseInfo[] = [
   {
-    tagName: 'v1.2.31',
-    version: '1.2.31',
-    name: 'DroidPy v1.2.31',
+    tagName: 'v1.2.33',
+    version: '1.2.33',
+    name: 'DroidPy v1.2.33',
     publishedAt: '2026-11-25',
     htmlUrl: '',
     prerelease: false,
     apkAssets: [],
     body: [
-      '• 修正 App 版本常數、原生 APK 預設版本與離線更新資訊長期停留在舊版的問題',
-      '• 統一主專案與匯出 Android 專案的版本回退值，避免更新視窗誤判目前版本',
+      '• 將 Termux 套件備份清單改為暫存檔、fsync 與原子替換，寫入失敗保留舊快照',
+      '• 同步 App、APK、匯出專案與離線更新版本資訊，統一 versionCode 編碼',
     ].join('\n'),
   },
   {
-    tagName: 'v1.2.30',
-    version: '1.2.30',
-    name: 'DroidPy v1.2.30',
+    tagName: 'v1.2.32',
+    version: '1.2.32',
+    name: 'DroidPy v1.2.32',
     publishedAt: '2026-11-25',
-    htmlUrl: 'https://github.com/sumengjin/DroidPy/releases/tag/v1.2.30',
+    htmlUrl: 'https://github.com/sumengjin/DroidPy/releases/tag/v1.2.32',
     prerelease: false,
     apkAssets: [],
     body: [
-      '• 修復 Android Bridge 併發阻塞、Activity 重建與 Python 程序生命週期問題',
-      '• 改善斷線處理、停止流程、崩潰診斷與 SD 卡備份逾時記錄',
+      '• 修正外部 Termux Bridge 在網頁串流斷線時誤送 SIGKILL 的問題',
+      '• 斷線後繼續排空 PTY 輸出，只有明確 /stop 才終止 Python 程序',
     ].join('\n'),
   },
-
+  {
+    tagName: 'v1.2.31',
+    version: '1.2.31',
+    name: 'DroidPy v1.2.31',
+    publishedAt: '2026-11-25',
+    htmlUrl: 'https://github.com/sumengjin/DroidPy/releases/tag/v1.2.31',
+    prerelease: false,
+    apkAssets: [],
+    body: [
+      '• 修正 App 版本常數、原生 APK 預設版本與離線更新資訊長期停留在舊版的問題',
+      '• 統一主專案與匯出 Android 專案的 versionCode 編碼公式',
+    ].join('\n'),
+  },
   {
     tagName: 'v1.2.16',
     version: '1.2.16',
