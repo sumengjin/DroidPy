@@ -5,7 +5,8 @@ All notable changes to **DroidPy** are documented in this file.
 ## [Unreleased]
 
 ### CI — Improve release signing diagnostics
-- 更新 APK 更新器回歸檢查，與新版正式簽名 Secret／Base64／金鑰庫／別名診斷訊息保持一致，避免測試仍依賴已移除的舊錯誤文案。
+- 正式簽名載入前先正規化 Base64 空白，輸出不含 Secret 的解碼檔案大小；keytool 失敗時提供安全診斷，並強制核對預期 SHA-256 指紋，防止錯誤金鑰被用於正式 APK。
+- 更新 APK 更新器回歸檢查，覆蓋簽名金鑰指紋固定驗證與診斷路徑。
 
 ### Security — Rotate DroidPy Release signing key
 - **正式簽名金鑰輪替**：正式 Release 不再接受或鎖定歷史公開的舊簽名憑證，改由專用 GitHub Actions Secrets 提供新 keystore；CI 從該 keystore 動態取得 SHA-256 指紋，並逐次驗證 Release APK 確實由同一把金鑰簽署。
