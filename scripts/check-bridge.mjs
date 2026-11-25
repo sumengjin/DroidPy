@@ -56,20 +56,21 @@ assert.ok(generated.slice(explicitStopStart, explicitStopEnd).includes('os.killp
 assert.ok(generated.includes('os.killpg(pgid, signal.SIGSTOP if should_pause else signal.SIGCONT)'));
 assert.ok(generated.includes('def _normalize_shell_command(command):'));
 assert.ok(generated.includes('python-polars'));
-assert.ok(generated.includes('--no-build-isolation'));
-assert.ok(generated.includes('meson-python>=0.17.1,<0.20'));
+
+
 assert.ok(generated.includes('def _compatibility_install_command(package_name, trusted_host=False):'));
 assert.ok(generated.includes('if package == "parsel":'));
 assert.ok(generated.includes('if package == "scipy":'));
 assert.ok(generated.includes('if package == "polars":'));
 assert.ok(generated.includes('if package in ("scikit-learn", "sklearn"):'));
+assert.ok(generated.includes('no verified Termux ARM64 / Python 3.14 prebuilt scikit-learn package is available'));
 assert.ok(generated.includes('_compatibility_install_command(pkgs[0], trusted_host=trusted_host)'));
-assert.ok(generated.includes('pkg install -y python-numpy python-scipy ninja'));
-assert.ok(generated.includes('meson_launcher = pathlib.Path(site.getuserbase()) / \'bin\' / \'meson\''));
-assert.ok(generated.includes('sysconfig.get_path(\'scripts\')'));
-assert.ok(generated.includes('mesonbuild.mesonmain'));
-assert.ok(generated.includes("subprocess.check_call([str(meson_launcher), '--version'])"));
-assert.ok(generated.includes('cython>=3.1.2,<3.2.6'));
+
+
+
+
+
+
 assert.ok(generated.includes('return re.sub(r"^(\\s*pkg\\s+install\\b)", r"\\1 -y"'));
 assert.ok(generated.includes('BoundedThreadingHTTPServer(("127.0.0.1", 8765), DroidPyBridgeHandler)'));
 
@@ -149,10 +150,11 @@ assert.ok(androidBuilder.includes("w3lib>=2.6' parsel"));
 assert.ok(androidBuilder.includes('"scipy" -> "pkg install -y python-scipy"'));
 assert.ok(androidBuilder.includes('"polars" -> "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"'));
 assert.ok(androidBuilder.includes('"scikit-learn", "sklearn" ->'));
+assert.ok(androidBuilder.includes('no verified Termux ARM64 / Python 3.14 prebuilt scikit-learn package is available'));
 assert.ok(androidBuilder.includes('resolvePackageCompatibilityCommand(target, trustedHost)'));
 assert.ok(androidBuilder.includes('resolvePackageCompatibilityCommand(packageMatch.groupValues[1])'));
-assert.ok(androidBuilder.includes('"--no-build-isolation", "--no-deps"'));
-assert.ok(androidBuilder.includes('subprocess.check_call(['));
+
+
 assert.ok(androidBuilder.includes('"polars" to "python-polars"'));
 assert.ok(androidBuilder.includes('"matplotlib" to "matplotlib"'));
 assert.ok(androidBuilder.includes('nativeTermuxPackageForPip(name)'));
@@ -220,9 +222,10 @@ assert.ok(termuxBridgeSource.includes('shlex.join(_build_pip_cmd(["w3lib<2.6", "
 assert.ok(termuxBridgeSource.includes('pkg install -y python-scipy'));
 assert.ok(termuxBridgeSource.includes('normalized_cmd = _normalize_shell_command(cmd_str)'));
 assert.ok(termuxBridgeSource.includes('Rewrite only a single, unambiguous pip install'));
-assert.ok(termuxBridgeSource.includes('_scikit_learn_source_install_command'));
-assert.ok(termuxBridgeSource.includes('version_script.write_text'));
-assert.ok(termuxBridgeSource.includes('version_script.chmod'));
+assert.ok(!termuxBridgeSource.includes('_scikit_learn_source_install_command'));
+
+
+
 assert.ok(termuxBridgeSource.includes('pip_prefix = r"(?:(?:[^\\\\s;&|]*/)?python'));
 
 assert.ok(!termuxBridgeSource.includes("  abortActiveTermuxStream();\n  const controller = new AbortController();"));
