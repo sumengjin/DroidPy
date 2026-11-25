@@ -421,6 +421,7 @@ export default function App() {
   const [termuxError, setTermuxError] = useState<string | null>(null);
   const [termuxHealth, setTermuxHealth] = useState<TermuxHealthInfo | null>(null);
   const [termuxRunning, setTermuxRunning] = useState(false);
+  const termuxScriptStartLockRef = useRef(false);
   const [termuxPaused, setTermuxPaused] = useState(false);
   const [termuxScriptRunning, setTermuxScriptRunning] = useState(false);
   const [backupStatus, setBackupStatus] = useState<PackageBackupStatus | null>(null);
@@ -1206,12 +1207,14 @@ export default function App() {
   );
 
   const handleRunInTermux = useCallback(async () => {
-    if (termuxRunning) {
+    if (termuxRunning || termuxScriptStartLockRef.current) {
       showToast(t('cta_running'));
       return;
     }
     const entryFile = resolveRunnableEntry();
     if (!entryFile) return;
+    // React state updates are asynchronous; lock synchronously to ignore rapid double taps.
+    termuxScriptStartLockRef.current = true;
     focusOutputPane('terminal');
     setTermuxPaused(false);
     setTermuxScriptRunning(true);
@@ -1294,6 +1297,7 @@ export default function App() {
         appLog('termux', `Aborted execution of ${entryFile.name}`, { level: 'warn' });
       }
     } finally {
+      termuxScriptStartLockRef.current = false;
       setTermuxScriptRunning(false);
       setTermuxPaused(false);
       setRunStartedAt(null);
