@@ -489,6 +489,11 @@ import java.util.zip.ZipInputStream
 import kotlin.concurrent.thread
 
 class MainActivity : AppCompatActivity() {
+    companion object {
+        @Volatile private var retainedBridge: EmbeddedTermuxBridge? = null
+        @Volatile private var crashDiagnosticsInstalled = false
+    }
+
     private lateinit var webView: WebView
     private lateinit var rootContainer: FrameLayout
     private lateinit var crawlerOverlay: LinearLayout
@@ -505,6 +510,49 @@ class MainActivity : AppCompatActivity() {
     private val updatePrefs by lazy { getSharedPreferences("droidpy_update_flow", Context.MODE_PRIVATE) }
     private val pendingInstallKey = "pending_verified_apk_path"
     private val bridgeToken: String by lazy { loadOrCreateBridgeToken() }
+
+    private fun installCrashDiagnostics() {
+        synchronized(MainActivity::class.java) {
+            if (crashDiagnosticsInstalled) return
+            crashDiagnosticsInstalled = true
+            val previous = Thread.getDefaultUncaughtExceptionHandler()
+            Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+                try {
+                    val stamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
+                    val target = File(filesDir, "droidpy_native.log")
+                    target.parentFile?.mkdirs()
+                    target.appendText("\\n[$stamp] [FATAL] Uncaught exception on ${thread.name}:\\n${android.util.Log.getStackTraceString(error)}\\n", Charsets.UTF_8)
+                } catch (_: Exception) {
+                }
+                if (previous != null) previous.uncaughtException(thread, error)
+                else {
+                    android.os.Process.killProcess(android.os.Process.myPid())
+                    kotlin.system.exitProcess(10)
+                }
+            }
+        }
+    }
+
+    private fun getOrStartRetainedBridge(usrDir: File, workspaceDir: File, bridgeAllowedOrigin: String): EmbeddedTermuxBridge {
+        synchronized(MainActivity::class.java) {
+            val existing = retainedBridge
+            if (existing != null && existing.isRunning()) {
+                appendStartupLog("Bridge", "Reusing process-retained EmbeddedTermuxBridge")
+                return existing
+            }
+            val created = EmbeddedTermuxBridge(
+                appContext = applicationContext,
+                usrDir = usrDir,
+                workspaceDir = workspaceDir,
+                token = bridgeToken,
+                allowedOrigin = bridgeAllowedOrigin,
+                assetManager = assets
+            )
+            created.start()
+            retainedBridge = created
+            return created
+        }
+    }
 
     private fun loadOrCreateBridgeToken(): String {
         val tokenFile = File(filesDir, "droidpy_bridge_token")
@@ -1194,6 +1242,7 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        installCrashDiagnostics()
 
         rootContainer = FrameLayout(this)
         webView = WebView(this)
@@ -1437,14 +1486,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            localBridge = EmbeddedTermuxBridge(
-                appContext = applicationContext,
-                usrDir = usrDir,
-                workspaceDir = workspaceDir,
-                token = bridgeToken,
-                allowedOrigin = bridgeAllowedOrigin,
-                assetManager = assets
-            ).also { it.start() }
+            localBridge = getOrStartRetainedBridge(usrDir, workspaceDir, bridgeAllowedOrigin)
 
             runOnUiThread {
                 if (hasBundledWww) {
@@ -1756,7 +1798,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        localBridge?.stop()
+        appendStartupLog("MainActivity", "onDestroy finishing=$isFinishing changingConfig=$isChangingConfigurations")
+        if (isFinishing && !isChangingConfigurations) {
+            synchronized(MainActivity::class.java) {
+                if (retainedBridge === localBridge) {
+                    appendStartupLog("Bridge", "Stopping retained bridge because the Activity is finishing")
+                    retainedBridge?.stop()
+                    retainedBridge = null
+                }
+            }
+        } else if (isChangingConfigurations) {
+            appendStartupLog("Bridge", "Keeping embedded bridge alive across Activity configuration recreation")
+        }
         try {
             stateIoExecutor.shutdown()
         } catch (_: Exception) {
@@ -1931,8 +1984,10 @@ class EmbeddedTermuxBridge(
             reuseAddress = true
             bind(InetSocketAddress(InetAddress.getByName("127.0.0.1"), port), 16)
         }
+        // Long-running /run-stream and package installs must not monopolize
+        // the only core worker; health, stdin, backup and /stop need independent workers.
         val localExecutor = ThreadPoolExecutor(
-            1, 8, 60L, TimeUnit.SECONDS, ArrayBlockingQueue<Runnable>(16)
+            4, 8, 60L, TimeUnit.SECONDS, ArrayBlockingQueue<Runnable>(16)
         )
         serverSocket = localServer
         executor = localExecutor
@@ -1973,6 +2028,8 @@ class EmbeddedTermuxBridge(
         }
     }
 
+    fun isRunning(): Boolean = running
+
     fun stop() {
         running = false
         appendNativeLog("Bridge", "EmbeddedTermuxBridge stopping")
@@ -1981,13 +2038,11 @@ class EmbeddedTermuxBridge(
         val oldServer = serverSocket
         serverSocket = null
         try { oldServer?.close() } catch (_: Exception) {}
-        activeClientSockets.toList().forEach { client ->
-            try { client.close() } catch (_: Exception) {}
-        }
-        activeClientSockets.clear()
+        // Let accepted requests finish naturally. shutdownNow() interrupted the
+        // process-output reader and made a live Python job look like a bridge crash.
         val oldExecutor = executor
         executor = null
-        try { oldExecutor?.shutdownNow() } catch (_: Exception) {}
+        try { oldExecutor?.shutdown() } catch (_: Exception) {}
     }
 
     private fun ensurePrefixWrappers(): File {
@@ -3931,6 +3986,8 @@ def clipboard_set(text):
                 }
 
                 method == "POST" && path == "/sdcard/write" -> {
+                    val backupStartedAt = System.currentTimeMillis()
+                    appendNativeLog("Storage", "SD-card write request received")
                     if (!hasStorageAccess()) {
                         writeJson(out, 403, JSONObject().put("error", "尚未授予內部儲存空間權限"))
                     } else {
@@ -4044,6 +4101,7 @@ def clipboard_set(text):
                                 }
                             }
                             val entry = File(bodyJson.optString("entry", "main.py")).name.ifBlank { "main.py" }
+                            appendNativeLog("Exec", "Run script requested: $entry")
                             val safeEntrySh = entry.replace("'", "'\\\\''")
                             val pyPath = File(usrDir, "bin/python").absolutePath
                             val py3Path = File(usrDir, "bin/python3").absolutePath
@@ -4609,6 +4667,8 @@ def clipboard_set(text):
                 activeProcess = proc
                 activeProcessPaused = false
                 activeProcessStartedAt.set(System.currentTimeMillis())
+                appendNativeLog("Exec", "Process started pid=${proc.pid()} command=${normalizedCommand.take(120)}")
+                var clientDisconnected = false
                 val charBuf = CharArray(1024)
                 val inpReader = InputStreamReader(proc.inputStream, Charsets.UTF_8)
                 while (true) {
@@ -4617,11 +4677,13 @@ def clipboard_set(text):
                     if (n > 0) {
                         val s = String(charBuf, 0, n)
                         recordTail(s)
-                        try {
-                            sendStdout(s)
-                        } catch (_: Exception) {
-                            proc.destroyForcibly()
-                            break
+                        if (!clientDisconnected) {
+                            try {
+                                sendStdout(s)
+                            } catch (e: Exception) {
+                                clientDisconnected = true
+                                appendNativeLog("Exec", "Stream client disconnected; continuing process pid=${proc.pid()} (${e.javaClass.simpleName}: ${e.message})")
+                            }
                         }
                     }
                 }
