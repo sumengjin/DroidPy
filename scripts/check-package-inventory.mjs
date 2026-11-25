@@ -1,16 +1,26 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [source, bridgeSource, catalogSource, exportSource, panelSource] = await Promise.all([
+const [source, bridgeSource, catalogSource, exportSource, panelSource, frostworkSource, frostworkMetadata] = await Promise.all([
   readFile(new URL('../src/services/androidApkBuilder.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/services/termuxBridge.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/data/packageCatalog.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/ToolsAndPackages.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/TermuxIntegrationPanel.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../android/app/src/main/assets/python/frostwork/__init__.py', import.meta.url), 'utf8'),
+  readFile(new URL('../android/app/src/main/assets/python/frostwork-0.2.2.dist-info/METADATA', import.meta.url), 'utf8'),
 ]);
 
 const catalogItems = catalogSource.split(/\n  \{\n    id: '/).slice(1);
 assert.ok(catalogItems.length >= 60, 'package catalog should retain its complete inventory');
+assert.match(frostworkSource, /def navigation\(/, 'pure-Python Frostwork navigation fallback must be bundled');
+assert.match(frostworkSource, /class Page:/, 'pure-Python multi-field extraction API must be bundled');
+assert.match(frostworkSource, /def _css_nodes\(/, 'CSS selector fallback must be bundled');
+assert.match(frostworkSource, /def _xpath_nodes\(/, 'XPath selector fallback must be bundled');
+assert.match(frostworkMetadata, /Name: frostwork[\\s\\S]*Version: 0\\.2\\.2/);
+assert.match(source, /Pure-Python Frostwork fallback seed warning/);
+assert.match(source, /python\\/frostwork\\/__init__\\.py/);
+
 for (const item of catalogItems) {
   const packageId = item.match(/^([^']+)/)?.[1] || 'unknown';
   assert.match(
