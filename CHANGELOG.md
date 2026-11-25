@@ -3,6 +3,7 @@
 All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
+- **修正正式版與 Beta 並存時的本機 Bridge 連接埠衝突**：正式版維持 `127.0.0.1:8765`，Beta 改用 `127.0.0.1:8766`；Android 原生端點會同步提供給前端，避免 Beta 啟動時因正式版仍佔用 8765 而閃退或連錯服務。
 - **修正 Android 11 以上儲存授權與實際 target SDK 不一致**：只有 App 本身 targetSdk ≥ 30 時才開啟「所有檔案存取權」設定；目前 DroidPy targetSdk 28，在 Android 11+ 仍使用相容的 READ/WRITE 執行期授權。Native Bridge、Termux Bridge、儲存狀態 API 與共享資料夾初始化也統一依 target SDK 判斷，避免授權已成功卻被錯誤回報為未授權。
 - **擴大 Android 測試版啟動診斷範圍**：從 Activity 建立、主／爬蟲 WebView 初始化、工作區準備到 Bridge 啟動逐階段輸出 Logcat；未捕獲例外同步輸出完整堆疊至 `DroidPy` 標籤，避免只留下無法定位的閃退現象。
 - **讓 Android 啟動診斷可從 Logcat 讀取**：原有啟動階段紀錄只寫入 App 私有檔案，啟動早期閃退時無法直接從 Termux 的 Logcat 觀察；現在同步輸出到 `DroidPy` 日誌標籤，並明確記錄內嵌 Bridge 啟動前後及失敗堆疊，方便定位 Beta 閃退階段。
