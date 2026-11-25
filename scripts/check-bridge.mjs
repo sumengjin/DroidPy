@@ -139,7 +139,7 @@ const imported = parseRawCrawlerInput(JSON.stringify({
 assert.equal(imported.cookies[0].domain, '.example.com');
 assert.equal(imported.cookies[0].secure, true);
 const netscapeImported = parseRawCrawlerInput(
-  '# Netscape HTTP Cookie File\\n#HttpOnly_.example.com\\tTRUE\\t/account\\tTRUE\\t2000000000\\tsid\\tsecret'
+  '# Netscape HTTP Cookie File\n#HttpOnly_.example.com\tTRUE\t/account\tTRUE\t2000000000\tsid\tsecret'
 );
 assert.equal(netscapeImported.cookies.length, 1);
 assert.equal(netscapeImported.cookies[0].httpOnly, true);
