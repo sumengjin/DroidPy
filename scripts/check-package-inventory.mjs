@@ -21,6 +21,10 @@ for (const item of catalogItems) {
 }
 assert.match(bridgeSource, /matplotlib:\s*'matplotlib'/);
 assert.match(catalogSource, /避開不相容的 Frostwork Rust 建置/);
+assert.match(catalogSource, /Termux User Repository（TUR）預編譯套件提供/);
+assert.match(catalogSource, /Meson\/Cython 無隔離建置/);
+assert.match(source, /"polars" to "python-polars"/);
+assert.match(source, /"python-polars" in missingPkgsOnly/);
 assert.match(panelSource, /python-lxml libxml2 libxslt clang/);
 assert.doesNotMatch(panelSource, /pip install requests beautifulsoup4 lxml httpx/);
 assert.match(exportSource, /matplotlib:\s*'matplotlib'/);
