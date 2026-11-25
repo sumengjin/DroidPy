@@ -844,6 +844,17 @@ def _compatibility_install_command(package_name, trusted_host=False):
     if package == "parsel":
         pip_cmd = shlex.join(_build_pip_cmd(["w3lib<2.6", "parsel"], trusted_host=trusted_host))
         return "pkg install -y python-lxml && " + pip_cmd
+    native_packages = {
+        "numpy": "python-numpy",
+        "pandas": "python-pandas",
+        "pillow": "python-pillow",
+        "pil": "python-pillow",
+        "lxml": "python-lxml",
+        "cryptography": "python-cryptography",
+        "matplotlib": "matplotlib",
+    }
+    if package in native_packages:
+        return "pkg install -y " + shlex.quote(native_packages[package])
     if package == "scipy":
         return "pkg install -y python-scipy"
     if package == "polars":
