@@ -4587,8 +4587,9 @@ def clipboard_set(text):
 1. 在 GitHub 建立一個新的公開或私人倉庫（Repository）。
 2. 將本壓縮檔解壓縮後的所有檔案（包含 \`.github/\` 與 \`android/\`）上傳／Push 到該倉庫的 \`main\` 分支。
    - 若倉庫同時包含前端原始碼（\`package.json\`），Workflow 會自動執行 \`npm ci && npm run build\` 並複製進 \`android/app/src/main/assets/www/\` 打包為完全離線 APK。
-3. 在 GitHub Repository → Settings → Secrets and variables → Actions，至少設定唯一必要的簽名 Secret：\`DROIDPY_KEYSTORE_BASE64\`（原有 keystore 的 Base64）。原始 DroidPy keystore 沿用舊版預設值（store password：\`android\`、alias：\`androiddebugkey\`、key password：\`android\`）；若你的 keystore 曾自訂密碼，可另外設定 \`DROIDPY_STORE_PASSWORD\`、\`DROIDPY_KEY_ALIAS\` 與 \`DROIDPY_KEY_PASSWORD\`。專案不再附帶私鑰，也不會退回臨時簽名。缺少原始 keystore 時所有 APK 建置都會安全失敗。
-4. 一般分支的 Debug APK、PR Artifact 與正式 Release 全部使用同一把受保護簽名金鑰；CI 會核對原始憑證 SHA-256 指紋，不一致或缺少 Secrets 就停止建置，絕不退回臨時簽名。推送至 main/master 會自動建置並發布 GitHub Release；推送版本 Tag 或手動輸入 Release 標籤亦可發布。必須持續使用與手機目前安裝版本相同的原有簽名 keystore，請勿更換。
+3. 在 GitHub Repository → Settings → Secrets and variables → Actions，為正式發布設定新的簽名 Secrets：\`DROIDPY_KEYSTORE_BASE64\`、\`DROIDPY_STORE_PASSWORD\`、\`DROIDPY_KEY_ALIAS\`、\`DROIDPY_KEY_PASSWORD\`。請使用自己新建立的 keystore；不要把 keystore、Base64 或密碼提交到 Git。妥善離線備份 keystore 與密碼，遺失後將無法再以同一憑證發布更新。
+4. PR／Debug 建置使用臨時 Debug 簽名，不需要 Release Secrets；合併至 main/master 後，push workflow 會自動使用新的受保護 keystore 建置 Release APK、比對 APK 與 keystore 的 SHA-256 憑證指紋，成功後才發布 GitHub Release。缺少 Secrets、解碼失敗或簽名不一致時會停止，不會發布。
+5. **簽名金鑰已更換**：舊版已安裝 App 的簽名與新金鑰不同，不能直接覆蓋更新。請先使用 App 內備份功能匯出工作區／狀態資料，再解除安裝舊版並安裝新 Release；重新安裝後再匯入備份。
 
 ## 首次開啟 App 初始化說明
 
@@ -4655,7 +4656,7 @@ def clipboard_set(text):
   - 新增應用程式全生命週期日誌記錄器與 Android 原生 \`/logs\`（含 \`droidpy_native.log\` 與 \`logcat\`）檢視匯出面板。
 
 ## [1.2.7] - 2026-11-21
-- **確保以後每次打包的 APK 簽名永久一致**：於倉庫與匯出專案加入固定的 30 年效期簽名金鑰 \`droidpy-debug.p12\`（SHA-256 指紋固定），\`build.gradle.kts\` 明確綁定統一 \`signingConfigs\` 並依版本號自動遞增 \`versionCode\`，同時支援選填 GitHub Secrets 自訂憑證（\`DROIDPY_KEYSTORE_BASE64\` 等）；後續每次 GitHub Actions 產出的新版本 APK 皆可直接覆蓋升級安裝，無須移除舊版、完整保留程式碼與環境。
+- 歷史版本曾使用固定簽名金鑰；目前正式發布改用使用者自行保管的 GitHub Actions keystore Secrets。直接更換憑證會使舊版 APK 無法原地覆蓋更新，需先備份 App 資料再重新安裝。
 
 ## [1.2.6] - 2026-11-21
 - 修復「授權資料夾」、「授權本機資料夾」與「更新容量」三個按鈕點擊無響應問題：移除裝置目錄按鈕的 \`disabled\` 鎖死，在 APK 環境直接串接 Android 內部儲存權限設定與 \`StatFs\` 真實裝置容量並即時跳出更新提示；在一般瀏覽器／iframe 環境自動退回原生資料夾檔案選擇器 (\`webkitdirectory\`)。
