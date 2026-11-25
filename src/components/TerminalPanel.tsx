@@ -477,16 +477,6 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           >
             {t('term_send')}
           </button>
-          {onStopTermux && (
-            <button
-              type="button"
-              onClick={() => void onStopTermux()}
-              className="min-h-[40px] px-3 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold inline-flex items-center gap-1 whitespace-nowrap shrink-0"
-            >
-              <Square className="w-3.5 h-3.5 fill-current" />
-              <span>{t('cta_stop_short')}</span>
-            </button>
-          )}
         </form>
       ) : (
         /* Persistent Interactive Python REPL Input */
