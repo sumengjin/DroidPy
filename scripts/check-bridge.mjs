@@ -162,6 +162,7 @@ assert.ok(androidBuilder.includes('ProcessBuilder(shFile.absolutePath, "-c", nor
 assert.ok(androidBuilder.includes('"pandas" to "python-pandas"'));
 assert.ok(androidBuilder.includes('"numpy" to "python-numpy"'));
 assert.ok(androidBuilder.includes('"scipy" to "python-scipy"'));
+assert.ok(androidBuilder.includes('index-url = https://pypi.org/simple'));
 assert.ok(androidBuilder.includes('private fun resolvePackageCompatibilityCommand(target: String, trustedHost: Boolean = false): String?'));
 assert.ok(androidBuilder.includes('"parsel" ->'));
 assert.ok(androidBuilder.includes("w3lib>=2.6' parsel"));
