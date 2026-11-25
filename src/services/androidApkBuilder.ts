@@ -3538,7 +3538,7 @@ def clipboard_set(text):
             }
         } catch (e: Exception) {
             try {
-                appendNativeLog("Package", "Package backup manifest update failed: ${e.javaClass.simpleName}")
+                appendNativeLog("Package", "Package backup manifest update failed: \${e.javaClass.simpleName}")
             } catch (_: Exception) {
             }
         }
