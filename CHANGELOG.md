@@ -4,6 +4,13 @@ All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
 
+### Fixed — Native Termux package routing and Python archive installs
+- **避免 Android 上對原生擴充套件進行漫長的 pip 原始碼編譯**：NumPy、pandas、Pillow/PIL、lxml 與 cryptography 優先使用內嵌 Termux 預編譯套件，並同步擴充至匯出的 Termux 執行包，避免 App 與匯出腳本採用不同安裝策略。
+- **正確辨識 Python 套件檔案格式**：`.whl`、`.tar.gz`、`.tgz`、`.tar.bz2`、`.tar.xz`、`.zip`、`.egg`、requirements 輸入與 Git editable 安裝交由 pip；若誤選 pkg，會自動切換至 pip，避免把 Python 壓縮套件交給 apt/pkg。系統 `.deb` 套件仍保留 pkg 路徑。
+- **優先選擇預編譯 wheel**：pip 安裝加入 `--prefer-binary`，有相容 wheel 時優先使用，只有沒有可用 wheel 時才退回原始碼建置；明確指定的 `.tar.gz` 原始碼包仍依套件本身需求建置。
+- **保留使用者指定條件**：版本限制、extras、URL 與多套件字串不擅自改寫；安裝日誌顯示實際執行的安裝方式。
+
+
 ### Fixed — Termux package restore & mobile run controls
 - **修正手機套件安裝與腳本執行的 Python 環境一致性**：Termux 套件還原及一般 pip 安裝改用內嵌 `python3 -m pip`，確保安裝位置對應執行腳本的直譯器；NumPy 改由 Termux 預編譯套件 `python-numpy` 安裝，並以同一個 Python 執行 `import numpy` 驗證，安裝或驗證失敗會明確回報失敗，不再靜默略過或讓 pip 長時間編譯 NumPy。
 - **整合手機版執行／停止操作**：將執行與停止狀態切換集中到右上角頂欄，從終端機輸入列移除重複的停止按鈕，避免操作入口分散。

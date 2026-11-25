@@ -489,7 +489,8 @@ def _resolve_certifi_env(base_env=None):
     return env
 
 def _build_pip_cmd(pkgs, trusted_host=False):
-    cmd = [sys.executable, "-m", "pip", "install"]
+    # Prefer a compatible wheel; build from source only when no wheel is available.
+    cmd = [sys.executable, "-m", "pip", "install", "--prefer-binary"]
     if trusted_host:
         cmd.extend(["--trusted-host", "pypi.org", "--trusted-host", "files.pythonhosted.org"])
     cmd.extend(pkgs)
@@ -1790,6 +1791,58 @@ export const CORE_TERMUX_PKG_PACKAGES = new Set([
 
 export function normalizeTermuxPkgName(name: string): string {
   return name.trim().toLowerCase().replace(/[-_.]+/g, '-');
+}
+
+export interface ResolvedTermuxInstallTarget {
+  mode: 'pip' | 'pkg';
+  target: string;
+  routedFromPip: boolean;
+  reason?: string;
+}
+
+// Curated native Termux builds avoid expensive or unsupported Android source builds.
+export const TERMUX_NATIVE_PYTHON_PACKAGES: Record<string, string> = {
+  numpy: 'python-numpy',
+  pandas: 'python-pandas',
+  pillow: 'python-pillow',
+  pil: 'python-pillow',
+  lxml: 'python-lxml',
+  cryptography: 'python-cryptography',
+};
+
+const PYTHON_ARCHIVE_PATTERN = /\.(?:whl|tar\.gz|tgz|tar\.bz2|tbz2|tar\.xz|txz|tar|zip|egg)(?:$|[?#])/i;
+const REQUIREMENTS_INPUT_PATTERN = /(?:^|\s)(?:-r|--requirement)(?:\s+|=)/i;
+const DEBIAN_PACKAGE_PATTERN = /\.deb(?:$|[?#])/i;
+const PIP_SPECIFIER_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*(?:\[[^\]]+\])?(?:===?|~=|!=|<=|>=).+$/;
+
+export function resolveTermuxInstallTarget(
+  mode: 'pip' | 'pkg',
+  target: string
+): ResolvedTermuxInstallTarget {
+  const clean = target.trim();
+  if (!clean) return { mode, target, routedFromPip: false };
+
+  // Debian archives are system packages; Python archives and requirements belong to pip.
+  if (DEBIAN_PACKAGE_PATTERN.test(clean)) {
+    return { mode: 'pkg', target: clean, routedFromPip: mode === 'pip', reason: 'Debian system package' };
+  }
+  if (PYTHON_ARCHIVE_PATTERN.test(clean) || REQUIREMENTS_INPUT_PATTERN.test(clean) || /^-e(?:\s|=)|^--editable(?:\s|=)|^git\+/i.test(clean) || /^https?:\/\//i.test(clean) || (mode === 'pkg' && (PIP_SPECIFIER_PATTERN.test(clean) || /^[a-zA-Z0-9_.-]+\[[^\]]+\]$/.test(clean)))) {
+    return mode === 'pkg'
+      ? { mode: 'pip', target: clean, routedFromPip: true, reason: 'Python archive/requirements input' }
+      : { mode, target: clean, routedFromPip: false };
+  }
+  // Do not rewrite version pins, extras, URLs, markers, or multi-package commands.
+  if (!/^[a-zA-Z0-9_.-]+$/.test(clean)) {
+    return { mode, target, routedFromPip: false };
+  }
+
+  const normalized = clean.toLowerCase().replace(/[-_.]+/g, '-');
+  const nativePackage = TERMUX_NATIVE_PYTHON_PACKAGES[normalized]
+    ?? TERMUX_NATIVE_PYTHON_PACKAGES[clean.toLowerCase()];
+  if (nativePackage) {
+    return { mode: 'pkg', target: nativePackage, routedFromPip: mode === 'pip', reason: 'prebuilt native Termux Python package' };
+  }
+  return { mode, target, routedFromPip: false };
 }
 
 export interface TermuxOutdatedPipItem {

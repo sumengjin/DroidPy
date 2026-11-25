@@ -444,7 +444,9 @@ warn_on_root = 1
 
     const termuxPrebuiltMap: Record<string, string> = {
       numpy: 'python-numpy',
+      pandas: 'python-pandas',
       pillow: 'python-pillow',
+      pil: 'python-pillow',
       cryptography: 'python-cryptography',
       lxml: 'python-lxml',
     };
