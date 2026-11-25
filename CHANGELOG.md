@@ -4,6 +4,11 @@ All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
 
+### Fixed — Atomic Termux package backup manifests
+- **避免套件備份清單在 App 中斷時被截斷或損壞**：主儲存與外部備份現在先寫入同目錄暫存檔、同步落盤後再以原子 rename 取代舊檔；寫入失敗時保留既有清單並記錄診斷結果。
+- 新增回歸檢查，確保兩份套件清單都不再使用直接覆寫。
+
+
 ### Fixed — Termux process survival after client disconnect
 - **避免 Termux 原生 Python 工作因網頁串流斷線被誤殺**：用戶端中斷後，Bridge 改為停止傳送輸出但持續讀取／排空 PTY，讓使用者腳本可以自然執行完畢；只有明確呼叫授權的 /stop 才會終止程序。
 - 新增回歸檢查，確保斷線路徑不再對程序群組發送 SIGKILL，且明確停止路由仍保留。
