@@ -868,13 +868,11 @@ class MainActivity : AppCompatActivity() {
                 if (hasStoragePermission()) {
                     try {
                         // The shared-storage recovery copy must not contain the per-install bridge credential.
-                        val backupJson = try {
-                            JSONObject(json).apply {
-                                optJSONObject("termuxConfig")?.put("token", "")
-                            }.toString()
-                        } catch (_: Exception) {
-                            json
-                        }
+                        // Fail closed: never copy an unparseable state (which may still contain a bridge token)
+                        // into shared storage. The previous valid recovery snapshot remains untouched.
+                        val backupJson = JSONObject(json).apply {
+                            optJSONObject("termuxConfig")?.put("token", "")
+                        }.toString()
                         val backupDir = File(Environment.getExternalStorageDirectory(), "DroidPy/.droidpy_backup").apply { mkdirs() }
                         val backup = File(backupDir, "droidpy_ide_state.json")
                         val backupTmp = File(backupDir, "droidpy_ide_state.json.tmp")
