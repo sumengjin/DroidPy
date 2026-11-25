@@ -838,6 +838,12 @@ def _build_probe_headers(data):
 
 
 def _normalize_shell_command(command):
+    # Mirror the package-manager Parsel workaround for direct terminal installs.
+    # Only rewrite a single, unambiguous package command; leave custom shell syntax untouched.
+    if re.fullmatch(r"\\s*(?:(?:python|python3)\\s+-m\\s+)?pip3?\\s+install\\s+parsel\\s*", command, re.IGNORECASE):
+        return "pkg install -y python-lxml && " + shlex.join(_build_pip_cmd(["w3lib<2.6", "parsel"]))
+    if re.fullmatch(r"\\s*(?:(?:python|python3)\\s+-m\\s+)?pip3?\\s+install\\s+scipy\\s*", command, re.IGNORECASE):
+        return "pkg install -y python-scipy"
     if not re.match(r"^\\s*pkg\\s+install\\b", command, re.IGNORECASE):
         return command
     if re.search(r"(?:^|\\s)(?:-y|--assume-yes)(?:\\s|$)", command, re.IGNORECASE):
@@ -1221,11 +1227,12 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
             cmd_str = str(data.get("command", "")).strip()
             if not cmd_str:
                 return self._send_json(400, {"error": "Empty command"})
+            normalized_cmd = _normalize_shell_command(cmd_str)
             if self.path == "/shell-stream":
-                return self._stream_pty_command(_normalize_shell_command(cmd_str), shell=True)
+                return self._stream_pty_command(normalized_cmd, shell=True)
 
             t0 = time.perf_counter()
-            proc = subprocess.run(cmd_str, shell=True, cwd=WORKSPACE, capture_output=True, text=True, timeout=180)
+            proc = subprocess.run(normalized_cmd, shell=True, cwd=WORKSPACE, capture_output=True, text=True, timeout=180)
             return self._send_json(200, {
                 "exitCode": proc.returncode,
                 "stdout": proc.stdout,
