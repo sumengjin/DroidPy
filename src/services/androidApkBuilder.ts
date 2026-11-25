@@ -511,6 +511,17 @@ class MainActivity : AppCompatActivity() {
     private val pendingInstallKey = "pending_verified_apk_path"
     private val bridgeToken: String by lazy { loadOrCreateBridgeToken() }
 
+    private fun appendActivityLog(tag: String, message: String) {
+        try {
+            val stamp = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
+            val target = File(filesDir, "droidpy_native.log")
+            target.parentFile?.mkdirs()
+            target.appendText("[$stamp] [$tag] $message\\n", Charsets.UTF_8)
+            android.util.Log.i("DroidPy", "[$tag] $message")
+        } catch (_: Exception) {
+        }
+    }
+
     private fun installCrashDiagnostics() {
         synchronized(MainActivity::class.java) {
             if (crashDiagnosticsInstalled) return
@@ -537,7 +548,7 @@ class MainActivity : AppCompatActivity() {
         synchronized(MainActivity::class.java) {
             val existing = retainedBridge
             if (existing != null && existing.isRunning()) {
-                appendStartupLog("Bridge", "Reusing process-retained EmbeddedTermuxBridge")
+                appendActivityLog("Bridge", "Reusing process-retained EmbeddedTermuxBridge")
                 return existing
             }
             val created = EmbeddedTermuxBridge(
@@ -1798,17 +1809,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        appendStartupLog("MainActivity", "onDestroy finishing=$isFinishing changingConfig=$isChangingConfigurations")
+        appendActivityLog("MainActivity", "onDestroy finishing=$isFinishing changingConfig=$isChangingConfigurations")
         if (isFinishing && !isChangingConfigurations) {
             synchronized(MainActivity::class.java) {
                 if (retainedBridge === localBridge) {
-                    appendStartupLog("Bridge", "Stopping retained bridge because the Activity is finishing")
+                    appendActivityLog("Bridge", "Stopping retained bridge because the Activity is finishing")
                     retainedBridge?.stop()
                     retainedBridge = null
                 }
             }
         } else if (isChangingConfigurations) {
-            appendStartupLog("Bridge", "Keeping embedded bridge alive across Activity configuration recreation")
+            appendActivityLog("Bridge", "Keeping embedded bridge alive across Activity configuration recreation")
         }
         try {
             stateIoExecutor.shutdown()
