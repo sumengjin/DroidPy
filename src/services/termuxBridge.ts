@@ -88,7 +88,7 @@ WORKSPACE = os.path.expanduser("~/droidpy_workspace")
 os.makedirs(WORKSPACE, exist_ok=True)
 
 PROC_LOCK = threading.Lock()
-ACTIVE_PROC = {"pid": None, "pgid": None, "master_fd": None, "started_at": 0.0}
+ACTIVE_PROC = {"pid": None, "pgid": None, "master_fd": None, "started_at": 0.0, "paused": False}
 _LEGACY_CERTS_SUPPORTED = None
 
 def _set_active(pid, pgid, master_fd):
@@ -97,6 +97,7 @@ def _set_active(pid, pgid, master_fd):
         ACTIVE_PROC["pgid"] = pgid
         ACTIVE_PROC["master_fd"] = master_fd
         ACTIVE_PROC["started_at"] = time.time()
+        ACTIVE_PROC["paused"] = False
 
 def _clear_active():
     with PROC_LOCK:
@@ -104,6 +105,7 @@ def _clear_active():
         ACTIVE_PROC["pgid"] = None
         ACTIVE_PROC["master_fd"] = None
         ACTIVE_PROC["started_at"] = 0.0
+        ACTIVE_PROC["paused"] = False
 
 def _find_certifi_source():
     for getter in (
@@ -1107,6 +1109,22 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
                 return self._send_json(200, {"ok": True})
             except OSError as exc:
                 return self._send_json(500, {"error": str(exc)})
+
+        if self.path in ("/pause", "/resume"):
+            with PROC_LOCK:
+                pgid = ACTIVE_PROC.get("pgid")
+                paused = ACTIVE_PROC.get("paused", False)
+            if pgid is None:
+                return self._send_json(409, {"ok": False, "error": "目前沒有正在執行的程序"})
+            should_pause = self.path == "/pause"
+            try:
+                os.killpg(pgid, signal.SIGSTOP if should_pause else signal.SIGCONT)
+                with PROC_LOCK:
+                    if ACTIVE_PROC.get("pgid") == pgid:
+                        ACTIVE_PROC["paused"] = should_pause
+                return self._send_json(200, {"ok": True, "paused": should_pause})
+            except OSError as exc:
+                return self._send_json(500, {"ok": False, "paused": paused, "error": str(exc)})
 
         if self.path == "/stop":
             with PROC_LOCK:
