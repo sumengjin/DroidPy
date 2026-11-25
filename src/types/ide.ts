@@ -188,6 +188,7 @@ export interface DroidPyNativeBridge {
   isNativeApp?: () => boolean;
   getAppVersionName?: () => string;
   getBridgeToken?: () => string;
+  getBridgeEndpoint?: () => string;
   downloadAndInstallApk?: (apkUrl: string, fileName: string) => void;
   readPersistedState?: () => string;
   writePersistedState?: (json: string) => void;
