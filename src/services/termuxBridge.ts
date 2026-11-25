@@ -1921,6 +1921,18 @@ export const TERMUX_NATIVE_PYTHON_PACKAGES: Record<string, string> = {
   lxml: 'python-lxml',
   cryptography: 'python-cryptography',
   matplotlib: 'matplotlib',
+  'apsw': 'python-apsw',
+  'bcrypt': 'python-bcrypt',
+  'brotli': 'python-brotli',
+  'grpcio': 'python-grpcio',
+  'msgpack': 'python-msgpack',
+  'psutil': 'python-psutil',
+  'pycryptodomex': 'python-pycryptodomex',
+  'tflite-runtime': 'python-tflite-runtime',
+  'torch': 'python-torch',
+  'torchaudio': 'python-torchaudio',
+  'torchvision': 'python-torchvision',
+  'yt-dlp': 'python-yt-dlp',
 };
 
 const PYTHON_ARCHIVE_PATTERN = /\.(?:whl|tar\.gz|tgz|tar\.bz2|tbz2|tar\.xz|txz|tar|zip|egg)(?:$|[?#])/i;
