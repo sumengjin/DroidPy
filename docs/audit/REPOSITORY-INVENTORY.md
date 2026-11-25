@@ -110,7 +110,7 @@ The main branch snapshot contains **69 tracked files** across 82 tree entries (6
 ## Verified observations
 
 1. The current main tree no longer contains `signing/droidpy-debug.p12` or `src/services/androidSigningAsset.ts`. The historical public-key exposure remains a Git-history compromise; this inventory does not claim the old key was erased from history.
-2. Formal Releases v1.2.31 and v1.2.32 were built with the protected Actions signer. The APK signer SHA-256 remained `353F581792A659420EAF1E8EC278E7F5F78C8B13F767EA0A9E3DDEA682AEB818`. Device upgrade compatibility still requires installation testing.
+2. Formal Releases v1.2.31, v1.2.32 and v1.2.33 were built with the protected Actions signer. The APK signer SHA-256 remained `353F581792A659420EAF1E8EC278E7F5F78C8B13F767EA0A9E3DDEA682AEB818`. Device upgrade compatibility still requires installation testing.
 3. README now distinguishes Pyodide's Python 3.12 runtime from the Python version supplied by the embedded Termux Bootstrap.
 4. Package metadata now uses `droidpy` and a release-aligned version. `bun.lock` exists, but CI still installs with npm rather than a frozen lockfile; dependency reproducibility remains open.
 5. Native Kotlin and the exported GitHub workflow are generated from `src/services/androidApkBuilder.ts`; tests must validate both the source template and generated project.
