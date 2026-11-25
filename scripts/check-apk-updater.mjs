@@ -16,6 +16,10 @@ assert.ok(source.includes('updatePrefs.edit().putString(pendingInstallKey, apkFi
 assert.ok(source.includes('override fun onResume()'));
 assert.ok(source.includes('packageManager.canRequestPackageInstalls()'));
 assert.ok(source.includes('installVerifiedApkOrRequestPermission(File(pendingPath))'));
+const onCreateStart = source.indexOf('override fun onCreate(savedInstanceState: Bundle?)');
+const onCreateEnd = source.indexOf('override fun onResume()', onCreateStart);
+assert.ok(onCreateStart >= 0 && onCreateEnd > onCreateStart);
+assert.ok(!source.slice(onCreateStart, onCreateEnd).includes('requestExternalStoragePermissionIfNeeded()'), 'storage Settings must not interrupt first-run startup');
 // Android 11+ must use one all-files-access settings flow, never launch
 // legacy READ/WRITE runtime dialogs concurrently with the Settings activity.
 assert.ok(source.includes('if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {'))
