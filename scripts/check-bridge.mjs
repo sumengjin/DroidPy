@@ -64,6 +64,7 @@ assert.ok(generated.includes('if package == "scipy":'));
 assert.ok(generated.includes('if package == "polars":'));
 assert.ok(generated.includes('if package in ("scikit-learn", "sklearn"):'));
 assert.ok(generated.includes('no verified Termux ARM64 / Python 3.14 prebuilt scikit-learn package is available'));
+assert.ok(generated.includes('shlex.quote("DroidPy: no verified Termux ARM64 / Python 3.14 prebuilt scikit-learn package is available; on-device source builds are disabled.")'));
 assert.ok(generated.includes('_compatibility_install_command(pkgs[0], trusted_host=trusted_host)'));
 
 
