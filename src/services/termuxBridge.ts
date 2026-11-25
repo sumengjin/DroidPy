@@ -1189,7 +1189,15 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
             pkgs = shlex.split(target)
             if not pkgs:
                 return self._send_json(400, {"error": "Missing package target"})
-            cmd = (["pkg", "install", "-y"] + pkgs) if mode == "pkg" else _build_pip_cmd(pkgs, trusted_host=trusted_host)
+            if mode == "pkg":
+                cmd = ["pkg", "install", "-y"] + pkgs
+            elif target.lower() == "parsel":
+                # w3lib 2.6.0 adds Frostwork, whose Rust extension cannot currently build for Android/Bionic.
+                # Install Termux's prebuilt lxml first, then keep this Parsel install on w3lib < 2.6.
+                pip_cmd = shlex.join(_build_pip_cmd(["w3lib<2.6", "parsel"], trusted_host=trusted_host))
+                cmd = ["sh", "-c", "pkg install -y python-lxml && " + pip_cmd]
+            else:
+                cmd = _build_pip_cmd(pkgs, trusted_host=trusted_host)
             if self.path == "/install-stream":
                 return self._stream_pty_command(cmd, shell=False)
 
