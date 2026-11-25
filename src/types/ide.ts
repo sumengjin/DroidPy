@@ -178,6 +178,11 @@ export interface AppStorageUsageInfo {
   reclaimableBytes: number;
 }
 
+export interface PythonPackageDiagnostics {
+  ok: boolean;
+  [key: string]: unknown;
+}
+
 export interface AppStorageCleanupResult {
   ok: boolean;
   freedBytes: number;
