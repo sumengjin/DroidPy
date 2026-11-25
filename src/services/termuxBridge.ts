@@ -1015,6 +1015,20 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
         _set_active(proc.pid, proc.pid, master_fd)
 
         decoder = codecs.getincrementaldecoder("utf-8")("replace")
+        client_disconnected = False
+
+        def emit_stream_event(event):
+            nonlocal client_disconnected
+            if client_disconnected:
+                return
+            try:
+                self._write_ndjson(event)
+            except OSError:
+                # The HTTP client does not own the child process. Keep draining
+                # the PTY so a full output buffer cannot block the user's script.
+                # The authenticated /stop endpoint remains the only stop control.
+                client_disconnected = True
+
         try:
             while True:
                 rlist, _, _ = select.select([master_fd], [], [], 0.1)
@@ -1027,7 +1041,7 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
                         break
                     text = decoder.decode(chunk, False)
                     if text:
-                        self._write_ndjson({"type": "stdout", "data": text})
+                        emit_stream_event({"type": "stdout", "data": text})
                 if proc.poll() is not None:
                     while True:
                         r2, _, _ = select.select([master_fd], [], [], 0.02)
@@ -1041,18 +1055,12 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
                             break
                         text = decoder.decode(chunk, False)
                         if text:
-                            self._write_ndjson({"type": "stdout", "data": text})
+                            emit_stream_event({"type": "stdout", "data": text})
                     break
             tail = decoder.decode(b"", True)
             if tail:
-                self._write_ndjson({"type": "stdout", "data": tail})
+                emit_stream_event({"type": "stdout", "data": tail})
             code = proc.wait()
-        except BrokenPipeError:
-            try:
-                os.killpg(proc.pid, signal.SIGKILL)
-            except OSError:
-                pass
-            code = -1
         finally:
             _clear_active()
             try:
@@ -1061,10 +1069,7 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
                 pass
 
         duration_ms = int((time.perf_counter() - t0) * 1000)
-        try:
-            self._write_ndjson({"type": "done", "exitCode": code, "durationMs": duration_ms})
-        except OSError:
-            pass
+        emit_stream_event({"type": "done", "exitCode": code, "durationMs": duration_ms})
 
     def _read_json_body(self):
         if self.headers.get_all("Transfer-Encoding"):
