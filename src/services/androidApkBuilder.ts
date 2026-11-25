@@ -1590,10 +1590,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun requestExternalStoragePermissionIfNeeded(force: Boolean = false) {
-        // Android 11+ uses the dedicated all-files-access settings flow.
-        // Do not launch a legacy runtime permission dialog at the same time:
-        // concurrent permission UI can race Activity transitions on Android 11.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        // Use the all-files settings flow only when this app actually targets Android 11+.
+        // DroidPy currently targets API 28 for embedded Termux compatibility; on Android 11+
+        // a legacy-target app must continue using the legacy runtime storage permissions.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+            applicationInfo.targetSdkVersion >= Build.VERSION_CODES.R) {
             if (Environment.isExternalStorageManager()) {
                 appendActivityLog("StoragePermission", "All-files access already granted")
                 return
@@ -1616,7 +1617,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        // Android 10 and earlier retain the legacy runtime storage permissions.
+        // Android 10 and legacy-target apps on Android 11+ retain runtime READ/WRITE permissions.
         val permsToAsk = listOf(
             Manifest.permission.READ_EXTERNAL_STORAGE,
             Manifest.permission.WRITE_EXTERNAL_STORAGE
