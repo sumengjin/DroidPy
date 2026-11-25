@@ -4,6 +4,11 @@ All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
 
+### Security — Shared-storage state backup credential protection
+- 修正 Android 狀態備份的失敗回退：若狀態 JSON 無法解析或無法完成憑證清除，現在會跳過本次共用儲存空間備份，保留上一份有效快照；不再把未清理的原始 JSON 寫入共用目錄，避免意外暴露每次安裝專屬的 Bridge token。
+- 新增 Bridge 回歸檢查，確保備份清理採 fail-closed 行為，且不會在解析失敗時回退寫入原始狀態。
+
+
 ### Fixed — Exported Android project signing instructions
 - Corrected the generated Android project README: production Releases require the protected GitHub Actions keystore Secrets, Debug artifacts use an ephemeral signer, and upgrade compatibility requires the original signing keystore. Removed the obsolete claim that the exported project automatically uses a bundled fixed signing key.
 
