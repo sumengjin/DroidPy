@@ -2492,9 +2492,12 @@ class EmbeddedTermuxBridge(
             val isOurFallback = fallbackInit.isFile &&
                 fallbackInit.readText(Charsets.UTF_8).contains("DroidPy's pure-Python Frostwork compatibility layer")
             val fallbackMetadata = File(droidLibDir, "frostwork-0.2.2.dist-info")
+            val metadataFile = File(fallbackMetadata, "METADATA")
+            val isOurFallbackMetadata = metadataFile.isFile &&
+                metadataFile.readText(Charsets.UTF_8).contains("DroidPy pure-Python Android compatibility implementation")
             if (hasNativeFrostwork) {
                 if (isOurFallback) fallbackDir.deleteRecursively()
-                fallbackMetadata.deleteRecursively()
+                if (isOurFallbackMetadata) fallbackMetadata.deleteRecursively()
             } else if (!fallbackInit.exists() || isOurFallback) {
                 fallbackDir.mkdirs()
                 appContext.assets.open("python/frostwork/__init__.py").use { input ->
