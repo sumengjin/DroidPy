@@ -1610,6 +1610,24 @@ export async function stopTermuxProcess(config: TermuxConfig): Promise<void> {
   );
 }
 
+export async function pauseTermuxProcess(config: TermuxConfig): Promise<void> {
+  await termuxFetch<{ ok: boolean; paused: boolean }>(
+    config,
+    '/pause',
+    { method: 'POST', body: JSON.stringify({}) },
+    4000
+  );
+}
+
+export async function resumeTermuxProcess(config: TermuxConfig): Promise<void> {
+  await termuxFetch<{ ok: boolean; paused: boolean }>(
+    config,
+    '/resume',
+    { method: 'POST', body: JSON.stringify({}) },
+    4000
+  );
+}
+
 export async function probeUrlViaTermux(
   config: TermuxConfig,
   payload: {
