@@ -3,6 +3,7 @@
 All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
+- **新增 Android 純 Python Frostwork 相容替代層**：APK 啟動時將本地相容模組與套件中繼資料種入 DroidPy 使用者匯入路徑，支援 w3lib 2.6 所需的 `navigation()`、常用 CSS／XPath 選擇器、多欄位文字／屬性擷取；無法支援的選擇器會明確報錯，不要求 Rust／Maturin 編譯，也不覆蓋已安裝的上游 Frostwork。此版本以相容性與功能覆蓋為優先，並非 Rust 版本的效能或完整 API 等價物。
 - **修正正式版與 Beta 並存時的本機 Bridge 連接埠衝突**：正式版維持 `127.0.0.1:8765`，Beta 改用 `127.0.0.1:8766`；Android 原生端點會同步提供給前端，避免 Beta 啟動時因正式版仍佔用 8765 而閃退或連錯服務。
 - **修正 Android 11 以上儲存授權與實際 target SDK 不一致**：只有 App 本身 targetSdk ≥ 30 時才開啟「所有檔案存取權」設定；目前 DroidPy targetSdk 28，在 Android 11+ 仍使用相容的 READ/WRITE 執行期授權。Native Bridge、Termux Bridge、儲存狀態 API 與共享資料夾初始化也統一依 target SDK 判斷，避免授權已成功卻被錯誤回報為未授權。
 - **擴大 Android 測試版啟動診斷範圍**：從 Activity 建立、主／爬蟲 WebView 初始化、工作區準備到 Bridge 啟動逐階段輸出 Logcat；未捕獲例外同步輸出完整堆疊至 `DroidPy` 標籤，避免只留下無法定位的閃退現象。
