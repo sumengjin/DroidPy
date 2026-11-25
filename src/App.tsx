@@ -97,6 +97,7 @@ import {
   getBackupStatus,
   getSdcardStatus,
   normalizeTermuxPkgName,
+  resolveTermuxInstallTarget,
   parseOutdatedPipJson,
   sendTermuxStdin,
   stopTermuxProcess,
@@ -1311,7 +1312,12 @@ export default function App() {
         showToast(t('cta_running'));
         return;
       }
-      const label = mode === 'pkg' ? `pkg install -y ${target}` : `pip install ${target}`;
+      const resolvedInstall = resolveTermuxInstallTarget(mode, target);
+      const installMode = resolvedInstall.mode;
+      const installTarget = resolvedInstall.target;
+      const label = installMode === 'pkg'
+        ? `pkg install -y ${installTarget}${resolvedInstall.routedFromPip ? ` (native Termux package for ${target})` : ''}`
+        : `pip install ${installTarget}`;
       focusOutputPane('terminal');
       setTermuxRunning(true);
       setRunStartedAt(Date.now());
@@ -1324,8 +1330,8 @@ export default function App() {
       try {
         const res = await streamInstallInTermux(
           termuxConfig,
-          mode,
-          target,
+          installMode,
+          installTarget,
           {
             onChunk: (chunk) => {
               appendStreamChunk(streamId, chunk);
