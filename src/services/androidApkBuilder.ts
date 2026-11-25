@@ -1419,7 +1419,8 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
-        requestExternalStoragePermissionIfNeeded()
+        // Defer storage authorization until the user invokes a storage feature.
+        // Launching Settings during onCreate interrupts first-run WebView/Bridge startup.
 
         val localWeb = File(filesDir, "www/index.html")
         val hasBundledWww = try {
