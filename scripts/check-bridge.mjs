@@ -38,6 +38,8 @@ assert.ok(generated.includes('request_queue_size = 16'));
 assert.ok(generated.includes('threading.BoundedSemaphore(8)'));
 assert.ok(generated.includes('self.send_header("Connection", "close")'));
 assert.ok(generated.includes('self.close_connection = True'));
+assert.ok(generated.includes('if self.path in ("/pause", "/resume"):'));
+assert.ok(generated.includes('os.killpg(pgid, signal.SIGSTOP if should_pause else signal.SIGCONT)'));
 assert.ok(generated.includes('BoundedThreadingHTTPServer(("127.0.0.1", 8765), DroidPyBridgeHandler)'));
 
 // Native Bridge limits are checked against the actual generated Android source.
@@ -55,6 +57,14 @@ assert.ok(androidBuilder.includes('len > 8 * 1024 * 1024'));
 assert.ok(androidBuilder.includes('duplicateContentLength'));
 assert.ok(androidBuilder.includes('headers.containsKey("transfer-encoding")'));
 assert.ok(androidBuilder.includes('Only the explicit /stop action may terminate that process.'));
+assert.ok(androidBuilder.includes('"/pause"'));
+assert.ok(androidBuilder.includes('"/resume"'));
+assert.ok(androidBuilder.includes('android.os.Process.sendSignal(pid, signal)'));
+const terminalUi = await readFile('src/components/TerminalPanel.tsx', 'utf8');
+assert.ok(terminalUi.includes('paused ? \'繼續\' : \'暫停\''));
+const appSource = await readFile('src/App.tsx', 'utf8');
+assert.ok(appSource.includes('pauseTermuxProcess(termuxConfig)'));
+assert.ok(appSource.includes('resumeTermuxProcess(termuxConfig)'));
 assert.ok(!androidBuilder.includes('private val executor = Executors.newCachedThreadPool()'));
 
 // Native buffered shell commands must wait with a timeout before reading output,
