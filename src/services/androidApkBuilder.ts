@@ -147,7 +147,7 @@ jobs:
           fi
           SEMVER_PART=$(printf '%s' "$VNAME" | grep -oE '^[0-9]+[.][0-9]+[.][0-9]+' || echo '1.2.31')
           IFS='.' read -r CMAJ CMIN CPAT <<< "$SEMVER_PART"
-          VCODE=$(( \${CMAJ:-1} * 10000 + \${CMIN:-0} * 100 + \${CPAT:-0} ))
+          VCODE=$(( \${CMAJ:-1} * 1000000 + \${CMIN:-0} * 1000 + \${CPAT:-0} ))
           echo "DROIDPY_VERSION_CODE=$VCODE" >> "$GITHUB_ENV"
           echo "DROIDPY_VERSION_NAME=$VNAME" >> "$GITHUB_ENV"
           echo "DROIDPY_RESOLVED_TAG=$REL_TAG" >> "$GITHUB_ENV"
@@ -313,7 +313,7 @@ android {
         minSdk = 24
         // targetSdk = 28 讓內嵌 Termux bootstrap 能在 App 私有目錄自由執行 pkg / python / clang（GitHub 發佈專用）
         targetSdk = 28
-        versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 10231
+        versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 1002031
         versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.31"
 
         ndk {
