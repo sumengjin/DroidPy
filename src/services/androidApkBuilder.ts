@@ -4243,7 +4243,10 @@ def clipboard_set(text):
                                 installerScript.parentFile?.mkdirs()
                                 installerScript.writeText("""
 import json
+import os
 import pathlib
+import shlex
+import site
 import stat
 import subprocess
 import sys
@@ -4268,6 +4271,19 @@ with tempfile.TemporaryDirectory(prefix="droidpy-sklearn-") as tmp:
     version_script.parent.mkdir(parents=True, exist_ok=True)
     version_script.write_text("#!" + sys.executable + "\\nprint(" + repr(metadata["info"]["version"]) + ")\\n", encoding="utf-8")
     version_script.chmod(version_script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    # Meson-python embeds this console-script path into build.ninja. On Android,
+    # the pip-generated launcher can fail with exit 127; use the active Python
+    # interpreter explicitly so Ninja can execute Meson's internal copy command.
+    meson_launcher = pathlib.Path(site.getuserbase()) / "bin" / "meson"
+    if not meson_launcher.is_file():
+        raise RuntimeError("Meson user launcher is missing: " + str(meson_launcher))
+    meson_launcher.write_text(
+        '#!/system/bin/sh' + chr(10) + 'exec ' + shlex.quote(sys.executable) +
+        ' -m mesonbuild.mesonmain "$@"' + chr(10),
+        encoding="utf-8",
+    )
+    meson_launcher.chmod(0o755)
+    subprocess.check_call([str(meson_launcher), "--version"])
     subprocess.check_call([
         sys.executable, "-m", "pip", "install", "--no-cache-dir",
         "--no-build-isolation", "--no-deps", str(source)
