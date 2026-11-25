@@ -219,7 +219,7 @@ assert.ok(termuxBridgeSource.includes('pkg install -y python-lxml && '));
 assert.ok(termuxBridgeSource.includes('shlex.join(_build_pip_cmd(["w3lib<2.6", "parsel"]'));
 assert.ok(termuxBridgeSource.includes('pkg install -y python-scipy'));
 assert.ok(termuxBridgeSource.includes('normalized_cmd = _normalize_shell_command(cmd_str)'));
-assert.ok(termuxBridgeSource.includes('Also recognize the absolute Termux Python path'));
+assert.ok(termuxBridgeSource.includes('Rewrite only a single, unambiguous pip install'));
 assert.ok(termuxBridgeSource.includes('_scikit_learn_source_install_command'));
 assert.ok(termuxBridgeSource.includes('version_script.write_text'));
 assert.ok(termuxBridgeSource.includes('version_script.chmod'));
