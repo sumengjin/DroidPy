@@ -2,44 +2,54 @@
 
 > 本文件搭配 [COMPREHENSIVE-REPAIR-PLAN.md](./COMPREHENSIVE-REPAIR-PLAN.md) 使用。
 > 最後更新：2026-11-25
-> 計畫分支：`project/comprehensive-hardening-plan`
-> 最新主分支：`6266f67016dd173dd422b545d7565e5c9954ba24`（PR #9 已合併）；續作時仍須重新查詢。
+> 審核基準主分支：`e6e035776707d4bfb99ab9a1837ad2d477ca9c2d`（PR #39 合併後）
+> 本次審核更新分支：`audit/release-pipeline-and-doc-refresh`
+> 已確認最新正式版：v1.2.32；v1.2.33 的主分支 Release run #347 當時仍在建置。
 
 ## 目前狀態
 
-**總體：規劃已寫入 GitHub，全面審核與修復尚未完成。**
+**總體：持續進行的定向全面審核；尚未宣稱 69 個檔案全部完成逐行審查，也尚未完成 Android 10+ 真機驗收。**
 
-### 已完成的檢查（初步，非全庫驗收）
-- [x] 讀取 main 分支核心 Android APK builder、Termux bridge、updater、App 啟動流程及相關設定。
-- [x] 初步檢查公開簽名素材與 Release 簽名路徑。
-- [x] 初步檢查 Bridge Token、CORS、Private Network Access、Shell/Run API。
-- [x] 初步檢查 watchdog 程序清理條件。
-- [x] 初步檢查 pip 套件清單盤點及備份快照更新。
-- [x] 盤點 PR #3–#7 的目標與已知 CI 情況。
+### 已完成的檢查與修復
 
-### 尚未完成
-- [ ] 逐檔審核整個 repository，建立檔案/模組清單。
-- [ ] 驗證簽名私鑰是否與現行 Release signer 完全相同，並形成安全處置/升級相容性報告。
-- [ ] Bridge 威脅模型與跨來源攻擊測試。
-- [ ] watchdog 修復與長任務測試。
-- [ ] pip/site path、套件清單、manifest、bootstrap 復原完整測試。
-- [ ] 儲存空間與所有刪除/清理路徑審查。
-- [ ] updater、CI/CD、供應鏈、WebView、Crawler、Pyodide、Editor、備份與 UI 全面審核。
-- [ ] Android 10+ 實機驗收。
-- [ ] 舊版 APK 升級與簽名相容性實機驗收。
-- [ ] 正式 Release 驗收。
+- [x] 重新取得 GitHub recursive tree，確認 69 個追蹤檔案、82 個 tree entries，結果未截斷；更新完整檔案清單。
+- [x] 確認目前 main 已無公開的 `signing/droidpy-debug.p12` 與 `src/services/androidSigningAsset.ts`；歷史 Git 記錄仍保留曾經公開的金鑰風險。
+- [x] 驗證 v1.2.31、v1.2.32 Release APK 均由既有受保護簽名設定簽署，SHA-256 指紋保持 `353F581792A659420EAF1E8EC278E7F5F78C8B13F767EA0A9E3DDEA682AEB818`。
+- [x] PR #37 合併：修正 App／APK／匯出專案／離線更新版本資料，發布 v1.2.31。
+- [x] PR #38 合併：修正外部 Termux Bridge 在串流客戶端斷線時誤殺 Python 程序，發布 v1.2.32。
+- [x] PR #39 合併：套件備份 manifest 使用暫存檔、fsync、原子 rename；版本資料同步至 v1.2.33；PR CI run `45608532103` 通過。
+- [x] 靜態檢查儲存清理與刪除邊界：一般清理限於暫存／快取／APT archive；Bootstrap 重建有 usr 資料保護條件；SD 卡目標經 canonical path 檢查，UI 刪除需二次確認。
+- [x] 檢查 Crawler Cookie 捕獲路徑：特權 Java Bridge 不注入第三方爬蟲 WebView；原生日誌不輸出 Cookie 值；Cookie 仍會存入工作區 `cookies.json`。
+- [x] 修正 README 對 Pyodide Python 3.12 與 Termux Python 版本的描述，避免混為同一執行環境。
+
+### 尚未完成／需真機驗收
+
+- [ ] 逐檔完成 69 個檔案的完整逐行審查；目前已優先檢查安全、程序、備份、更新、Bridge 與儲存關鍵路徑。
+- [ ] Android 10+ 實機測試：長時間 Python、WebView 斷線後續跑、明確 Stop、方向變更、背景／前景切換。
+- [ ] 用使用者現有 APK 安裝升級 v1.2.31／v1.2.32／v1.2.33，確認既有簽名、Termux usr、py_user、工作區與套件完整保留。
+- [ ] 測試套件清單在安裝、卸載、掃描不完整及 App 中斷寫入時的恢復行為。
+- [ ] Cookie 工作區檔案在 ZIP／工作區備份中的敏感資料提示與保護策略。
+- [ ] 大型 usr 目錄的儲存空間遞迴統計效能與 Bridge worker 佔用。
+- [ ] npm/Bun lockfile 策略、Termux Bootstrap 固定版本與 SHA-256 驗證。
+- [ ] 全部 React 元件、timer、listener、async unmount/cancel 路徑的生命週期審核。
+- [ ] 審核仍開啟的 PR #7 診斷功能；目前保持 draft，未直接合併。
 
 ## PR / CI 追蹤
 
-每次續作都要即時刷新 GitHub 狀態，不可沿用過期狀態。
-
-| 工作 | 狀態 | 備註 |
+| PR | 狀態 | CI／Release |
 |---|---|---|
-| PR #3 | 開啟/待重新確認 | 更新 APK 簽名驗證 |
-| PR #4 | 開啟/待重新確認 | pip SSL 與 user site 路徑；曾有 Android Debug build 成功紀錄 |
-| PR #5 | 開啟/待重新確認 | 部分損壞 usr 資料保護 |
-| PR #6 | 開啟/待重新確認 | pip 套件清單交叉盤點 |
-| PR #7 | 開啟/待重新確認 | Python 路徑與儲存只讀診斷 |
+| #7 | 開啟、draft，舊分支診斷功能 | 未合併；待重新審核與 rebase |
+| #37 | 已合併 | PR CI 通過；正式 Release v1.2.31 |
+| #38 | 已合併 | PR CI run `45607384138` 通過；正式 Release v1.2.32 |
+| #39 | 已合併 | PR CI run `45608532103` 通過；正式 Release v1.2.33 當時由 main run #347 建置中 |
+| #40 | 審核更新中 | `audit/release-pipeline-and-doc-refresh`；待 CI 驗證 |
+
+## 本輪重點
+
+- 版本：v1.2.33，versionCode 1002033；正式 Release 完成後再核對資產與簽名。
+- 簽名：不旋轉、不重建、不更換既有金鑰；每次正式 Release 都比對相同 SHA-256 指紋。
+- 發布：每次合併 main 都會觸發正式 ARM64 APK 建置與 GitHub Release；未完成簽名驗證不交付 APK。
+- 稽核：CI 成功只代表自動測試／建置通過，不代表已完成 Android 10+ 實機驗收。
 
 ## 續作紀錄
 
