@@ -863,7 +863,7 @@ def _scikit_learn_source_install_command(trusted_host=False):
         "    source = next(item for item in source_root.iterdir() if item.is_dir())",
         "    version_script = source / 'sklearn' / '_build_utils' / 'version.py'",
         "    version_script.parent.mkdir(parents=True, exist_ok=True)",
-        "    version_script.write_text('#!' + __import__('sys').executable + '\\\\nprint(' + repr(metadata['info']['version']) + ')\\\\n', encoding='utf-8')",
+        "    version_script.write_text('#!' + __import__('sys').executable + '\\nprint(' + repr(metadata['info']['version']) + ')\\n', encoding='utf-8')",
         "    version_script.chmod(version_script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)",
         "    subprocess.check_call([__import__('sys').executable, '-m', 'pip', 'install', '--no-cache-dir', '--no-build-isolation', '--no-deps', str(source)])",
     ])
