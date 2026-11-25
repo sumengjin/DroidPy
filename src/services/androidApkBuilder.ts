@@ -534,7 +534,9 @@ class MainActivity : AppCompatActivity() {
                     val stamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
                     val target = File(filesDir, "droidpy_native.log")
                     target.parentFile?.mkdirs()
-                    target.appendText("\\n[$stamp] [FATAL] Uncaught exception on \${thread.name}:\\n\${android.util.Log.getStackTraceString(error)}\\n", Charsets.UTF_8)
+                    val stack = android.util.Log.getStackTraceString(error)
+                    target.appendText("\\n[$stamp] [FATAL] Uncaught exception on \${thread.name}:\\n$stack\\n", Charsets.UTF_8)
+                    android.util.Log.e("DroidPy", "[FATAL] Uncaught exception on \${thread.name}: $stack")
                 } catch (_: Exception) {
                 }
                 if (previous != null) previous.uncaughtException(thread, error)
@@ -1283,15 +1285,21 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         installCrashDiagnostics()
+        appendActivityLog("Startup", "MainActivity.onCreate entered")
 
+        appendActivityLog("Startup", "Creating root container")
         rootContainer = FrameLayout(this)
+        appendActivityLog("Startup", "Creating primary WebView")
         webView = WebView(this)
+        appendActivityLog("Startup", "Building crawler overlay and secondary WebView")
         crawlerOverlay = buildCrawlerOverlay()
 
+        appendActivityLog("Startup", "Attaching views and setting content view")
         rootContainer.addView(webView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         rootContainer.addView(crawlerOverlay, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         setContentView(rootContainer)
 
+        appendActivityLog("Startup", "Configuring primary WebView settings")
         val settings: WebSettings = webView.settings
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
@@ -1307,6 +1315,7 @@ class MainActivity : AppCompatActivity() {
         webView.isHapticFeedbackEnabled = true
         webView.setOnLongClickListener { false }
 
+        appendActivityLog("Startup", "Installing native JavaScript bridge and WebView clients")
         webView.addJavascriptInterface(NativeDownloadBridge(), "DroidPyNative")
         webView.webChromeClient = WebChromeClient()
         webView.webViewClient = object : WebViewClient() {
@@ -1366,6 +1375,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        appendActivityLog("Startup", "Registering back navigation callback")
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (crawlerOverlay.visibility == View.VISIBLE) {
@@ -1435,11 +1445,15 @@ class MainActivity : AppCompatActivity() {
             else -> normalizedOrigin(Uri.parse(remoteUrl)) ?: "null"
         }
 
-        thread {
+        appendActivityLog("Startup", "Starting background environment initialization")
+        thread(name = "DroidPy-Startup") {
+            appendActivityLog("Startup", "Background initialization entered")
             val usrDir = File(filesDir, "usr")
             val workspaceDir = File(filesDir, "droidpy_workspace").apply { mkdirs() }
             val homeDir = workspaceDir.parentFile!!
+            appendActivityLog("Startup", "Workspace directory prepared")
             seedDefaultWorkspaceFiles(workspaceDir)
+            appendActivityLog("Startup", "Default workspace seeding completed")
 
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()) {
                 try {
@@ -1478,7 +1492,9 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
+            appendStartupLog("Startup", "Cleaning orphaned temporary files")
             cleanupOrphanedFilesOnStartup()
+            appendStartupLog("Startup", "Temporary-file cleanup completed")
 
             val bootstrapMarker = File(usrDir, ".droidpy_bootstrap_ok")
             val hasExistingInstall = bootstrapMarker.exists() ||
@@ -1539,6 +1555,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
+            appendStartupLog("Startup", "Bootstrap/runtime preparation completed")
             appendStartupLog("Bridge", "Starting embedded bridge")
             try {
                 localBridge = getOrStartRetainedBridge(usrDir, workspaceDir, bridgeAllowedOrigin)
@@ -1548,6 +1565,7 @@ class MainActivity : AppCompatActivity() {
                 throw error
             }
 
+            appendStartupLog("Startup", "Background initialization completed; dispatching WebView load")
             runOnUiThread {
                 appendStartupLog("WebView", "Dispatching initial page load")
                 if (hasBundledWww) {
