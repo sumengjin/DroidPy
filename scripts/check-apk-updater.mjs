@@ -75,7 +75,7 @@ assert.ok(workflow.includes('actions/setup-python@v6'));
 assert.ok(!workflow.includes('actions/checkout@v4'));
 assert.ok(source.includes('applicationIdSuffix = ".beta"'), 'Debug APK must use a separate application ID');
 assert.ok(source.includes('android:authorities="\\${applicationId}.fileprovider"'), 'FileProvider authority must follow the variant application ID');
-assert.ok(workflow.includes('VNAME="${VER}-Beta"'), 'unpublished APK versionName must end in -Beta');
+assert.ok(workflow.includes('VNAME="${REL_TAG#v}-Beta"'), 'unpublished APK versionName must use the next release version and end in -Beta');
 assert.ok(workflow.includes('DroidPy-arm64-${DROIDPY_VERSION_NAME}.apk'), 'unpublished APK filename must include its Beta version');
 assert.ok(!workflow.includes('actions/setup-node@v4'));
 assert.ok(!workflow.includes('actions/setup-python@v5'));
