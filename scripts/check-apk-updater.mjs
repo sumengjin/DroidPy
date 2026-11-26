@@ -88,6 +88,14 @@ assert.ok(workflow.includes('Release APK 與本次受保護的新 keystore 憑�
 assert.ok(workflow.includes("if: (github.event_name == 'push'"));
 const releaseHeadingParser = "VER=$(sed -nE 's/^## \\[([0-9]+\\.[0-9]+\\.[0-9]+)\\].*/\\1/p' CHANGELOG.md 2>/dev/null | head -n1 || true)";
 assert.ok(workflow.includes(releaseHeadingParser));
+assert.ok(workflow.includes('CHANGELOG_SECTION=$(awk'), 'Release notes must be extracted from a single numbered version section');
+assert.ok(workflow.includes('此版本尚未提供專屬更新日誌。'), 'Release notes must not fall back to the entire changelog');
+assert.ok(!workflow.includes('cat CHANGELOG.md'), 'Release workflow must not publish the full changelog');
+const modalSource = await readFile('src/components/AppUpdateModal.tsx', 'utf8');
+assert.ok(!modalSource.includes('BUILTIN_LOCAL_RELEASES[0]'), 'Installed-version notes must never fall back to a different version');
+assert.ok(modalSource.includes("releases.find((r) => normalizeVersionStr(r.version) === currentNorm)"));
+assert.ok(modalSource.includes("{currentRelease?.body || t('upd_no_notes')}"), 'Missing exact-version notes must show an explicit empty state');
+assert.ok(source.includes('CHANGELOG_SECTION=$(awk'), 'Exported Android projects must publish only the newest numbered release section');
 assert.ok(workflow.includes('actions/checkout@v5'));
 assert.ok(workflow.includes('actions/setup-node@v5'));
 assert.ok(workflow.includes('actions/setup-python@v6'));
