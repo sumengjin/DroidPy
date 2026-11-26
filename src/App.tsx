@@ -1387,23 +1387,24 @@ export default function App() {
         return;
       }
       termuxOperationLockRef.current = true;
-      const resolvedInstall = resolveTermuxInstallTarget(mode, target);
-      const installMode = resolvedInstall.mode;
-      const installTarget = resolvedInstall.target;
-      const label = installMode === 'pkg'
-        ? `pkg install -y ${installTarget}${resolvedInstall.routedFromPip ? ` (native Termux package for ${target})` : ''}`
-        : `pip install ${installTarget}`;
+      let label = `${mode} install ${target}`;
       focusOutputPane('terminal');
       setTermuxRunning(true);
       setTermuxActiveTask(`install:${target.trim()}`);
       setRunStartedAt(Date.now());
       setTermuxError(null);
-      appendEntry('system', t('log_termux_install', { cmd: label }));
-      appLog('package', `Termux install start: ${label}`);
       const streamId = makeId();
       let tailBuf = '';
       const tailAnsiBuf = createAnsiStreamBuffer();
       try {
+        const resolvedInstall = resolveTermuxInstallTarget(mode, target);
+        const installMode = resolvedInstall.mode;
+        const installTarget = resolvedInstall.target;
+        label = installMode === 'pkg'
+          ? `pkg install -y ${installTarget}${resolvedInstall.routedFromPip ? ` (native Termux package for ${target})` : ''}`
+          : `pip install ${installTarget}`;
+        appendEntry('system', t('log_termux_install', { cmd: label }));
+        appLog('package', `Termux install start: ${label}`);
         const pythonReady = await ensureEmbeddedPythonEnvironment();
         if (!pythonReady) return;
         const res = await streamInstallInTermux(
