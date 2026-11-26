@@ -4,6 +4,7 @@ All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
 - **套件中心來源與手機操作優化**：Termux 套件卡片明確標示 Termux APT、預設 PyPI（保留使用者自訂 pip.conf）或第三方 TUR；保留套件相容提示，將安裝／移除及分類篩選觸控區提高至至少 44px，並移除套件清單內層固定高度捲動，統一由頁面捲動。
+- **修正 TUR Polars 安裝狀態與移除路由**：Polars 由 TUR 安裝為原生 `python-polars` 套件；套件中心改為讀取 APT 安裝清單判斷狀態，移除時改用 `pkg uninstall`，避免錯誤呼叫 `pip uninstall polars`。
 - **補齊檔案與終端機細部觸控尺寸**：檔名編輯、刪除確認、備份同步、範本分類及終端機圖表工具列也統一採用較大的觸控區。
 - **終端機觸控優化**：將執行環境切換、暫停／繼續、複製、清空、初始化及互動輸入控制提高至至少 44px，改善手機操作手感。
 - **檔案管理觸控優化**：提高 Android 儲存快捷列、檔案重新命名／刪除、備份還原等常用操作的觸控高度，降低手機上的誤觸。
