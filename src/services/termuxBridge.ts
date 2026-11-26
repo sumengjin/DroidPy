@@ -455,13 +455,18 @@ if not any(isinstance(f, _DroidPySslImportHook) for f in sys.meta_path):
         pass
     pip_conf_path = os.path.expanduser("~/.config/pip/pip.conf")
     try:
-        os.makedirs(os.path.dirname(pip_conf_path), exist_ok=True)
-        lines = ["[global]", "index-url = https://pypi.org/simple", "no-cache-dir = true", "break-system-packages = true", "disable-pip-version-check = true"]
-        if ca_path:
-            lines.append(f"cert = {ca_path}")
-        with open(pip_conf_path, "w", encoding="utf-8") as fp:
-            fp.write("\\n".join(lines) + "\\n")
-        os.chmod(pip_conf_path, 0o644)
+        # Preserve an existing user pip configuration or private package index.
+        # Fresh Termux profiles use official PyPI by pip's own default.
+        if not os.path.isfile(pip_conf_path):
+            os.makedirs(os.path.dirname(pip_conf_path), exist_ok=True)
+            lines = ["[global]", "index-url = https://pypi.org/simple", "no-cache-dir = true", "break-system-packages = true", "disable-pip-version-check = true"]
+            if ca_path:
+                lines.append(f"cert = {ca_path}")
+            with open(pip_conf_path, "x", encoding="utf-8") as fp:
+                fp.write("\\n".join(lines) + "\\n")
+            os.chmod(pip_conf_path, 0o644)
+    except FileExistsError:
+        pass
     except Exception:
         pass
     return droid_lib, pip_conf_path
