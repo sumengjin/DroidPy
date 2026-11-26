@@ -1398,7 +1398,6 @@ async function termuxFetch<T>(
     }
     return data;
   } catch (err) {
-    settleReady();
     if (err instanceof Error && err.name === 'AbortError') {
       const operation = path === '/run-stream' || path === '/shell-stream' || path === '/install-stream'
         ? '執行工作'
@@ -1549,6 +1548,7 @@ async function termuxStreamRequest(
 
     return { exitCode: sawDone ? exitCode : 1, durationMs };
   } catch (err) {
+    settleReady();
     if (err instanceof Error && err.name === 'AbortError') {
       return { exitCode: -1, durationMs: 0 };
     }
