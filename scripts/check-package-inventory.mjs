@@ -126,6 +126,12 @@ assert.ok(mobileNavStart >= 0 && mobileNavEnd > mobileNavStart, 'mobile workspac
 const mobileNavSource = appSource.slice(mobileNavStart, mobileNavEnd);
 assert.match(mobileNavSource, /setNegativeOpen\(false\);\s*setMobileTab\(id\)/, 'switching away from the package destination must close its drawer before showing the selected workspace tab');
 assert.match(mobileNavSource, /if \(id === 'packages'\)[\s\S]*?openNegativeDrawer\('packages'\)/, 'the package destination must open the package drawer');
+const backHandlerStart = appSource.indexOf('window.__droidpyHandleBack = () => {');
+const backHandlerEnd = appSource.indexOf('return () => {', backHandlerStart);
+assert.ok(backHandlerStart >= 0 && backHandlerEnd > backHandlerStart, 'native back handler must exist');
+const backHandlerSource = appSource.slice(backHandlerStart, backHandlerEnd);
+assert.match(appSource, /const mobileTabRef = useRef<MobileTab>\(mobileTab\);\s*mobileTabRef\.current = mobileTab;/, 'native back handling must read the latest mobile destination without a stale effect closure');
+assert.match(backHandlerSource, /if \(ov\.negativeOpen\) \{\s*setNegativeOpen\(false\);\s*if \(mobileTabRef\.current === 'packages'\) setMobileTab\('editor'\);\s*return true;/, 'Android back must return from the package drawer to the editor instead of leaving a blank packages destination');
 
 assert.match(appSource, /const handleToggleTermuxPause = useCallback\(async \(\) => \{\s*if \(!termuxScriptRunning\) return;/, 'pause and resume controls must only affect an active Python script');
 assert.match(appSource, /cleaningProcesses \|\|\s*termuxRunning \|\|\s*termuxOperationLockRef\.current \|\|\s*termuxScriptStartLockRef\.current[\s\S]*?termuxOperationLockRef\.current = true;\s*setCleaningProcesses\(true\)/, 'the process watchdog must not kill an active Termux operation');
