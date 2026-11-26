@@ -12,6 +12,7 @@ import {
   Download,
   FileText,
   Flower2,
+  Folder,
   FolderSync,
   HardDrive,
   Languages,
@@ -253,6 +254,7 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
   const [activeWindow, setActiveWindow] = useState<ToolWindowId | null>(() =>
     activeSubView === 'packages' ? 'pkg_native' : null
   );
+  const [settingsFolder, setSettingsFolder] = useState<'appearance' | 'editor' | 'app' | null>(null);
   const [pkgQuery, setPkgQuery] = useState('');
   const [installingPkg, setInstallingPkg] = useState<string | null>(null);
   const [uninstallingPkg, setUninstallingPkg] = useState<string | null>(null);
@@ -279,6 +281,7 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
   // The runtime selector below keeps the sandbox manager one tap away.
   useEffect(() => {
     setActiveWindow(activeSubView === 'packages' ? 'pkg_native' : null);
+    setSettingsFolder(null);
   }, [activeSubView]);
 
   const pyodideCatalog = useMemo(
@@ -696,9 +699,9 @@ python ${entryFile}
     : null;
 
   const renderHubOptionList = (items: HubOptionItem[], groupLabel?: string) => (
-    <div className="space-y-2.5">
+    <div className="divide-y divide-[var(--ide-border)]">
       {groupLabel && (
-        <div className="px-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--ide-text-muted)]">
+        <div className="px-1 pb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--ide-text-muted)]">
           {groupLabel}
         </div>
       )}
@@ -707,22 +710,18 @@ python ${entryFile}
           key={id}
           type="button"
           onClick={() => setActiveWindow(id)}
-          className="w-full min-h-[88px] px-4 py-4 rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] active:scale-[0.99] flex items-center justify-between gap-3 text-left transition-all min-w-0"
+          className="w-full min-h-[72px] px-2.5 py-3 flex items-center gap-3 text-left transition-colors hover:bg-[var(--ide-surface)] active:bg-[var(--ide-surface-alt)] min-w-0"
         >
-          <div className="w-10 h-10 rounded-xl bg-[var(--ide-accent-soft)] text-[var(--ide-accent)] flex items-center justify-center shrink-0">
+          <span className="w-10 h-10 rounded-xl bg-[var(--ide-accent-soft)] text-[var(--ide-accent)] flex items-center justify-center shrink-0">
             <Icon className="w-5 h-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center justify-between gap-2 min-w-0">
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center justify-between gap-2 min-w-0">
               <span className="text-sm font-semibold text-[var(--ide-text)] truncate">{title}</span>
-              {badge && (
-                <span className="text-[11px] font-medium text-[var(--ide-accent-text)] truncate max-w-[44%] shrink-0">
-                  {badge}
-                </span>
-              )}
-            </div>
-            <div className="text-xs text-[var(--ide-text-muted)] line-clamp-2 mt-1 leading-relaxed">{desc}</div>
-          </div>
+              {badge && <span className="text-[11px] text-[var(--ide-accent-text)] truncate max-w-[42%] shrink-0">{badge}</span>}
+            </span>
+            <span className="block text-xs text-[var(--ide-text-muted)] truncate mt-1">{desc}</span>
+          </span>
           <ChevronRight className="w-4 h-4 text-[var(--ide-text-muted)] shrink-0" />
         </button>
       ))}
@@ -2134,7 +2133,42 @@ python ${entryFile}
       return renderHubOptionList(storageHubOptions);
     }
     if (activeSubView === 'settings') {
-      return renderHubOptionList(settingsHubOptions);
+      if (!settingsFolder) {
+        const folders = [
+          { id: 'appearance' as const, title: t('set_theme_title'), desc: t('set_theme_desc'), count: 3 },
+          { id: 'editor' as const, title: t('hub_set_editor'), desc: t('hub_set_editor_desc'), count: 1 },
+          { id: 'app' as const, title: t('hub_set_app'), desc: t('hub_set_app_desc'), count: 2 },
+        ];
+        return (
+          <div className="divide-y divide-[var(--ide-border)]">
+            {folders.map((folder) => (
+              <button key={folder.id} type="button" onClick={() => setSettingsFolder(folder.id)}
+                className="w-full min-h-[76px] px-2.5 py-3 flex items-center gap-3 text-left hover:bg-[var(--ide-surface)] active:bg-[var(--ide-surface-alt)]">
+                <span className="w-10 h-10 rounded-xl bg-[var(--ide-accent-soft)] text-[var(--ide-accent)] flex items-center justify-center shrink-0"><Folder className="w-5 h-5" /></span>
+                <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-[var(--ide-text)]">{folder.title}</span><span className="block text-xs text-[var(--ide-text-muted)] mt-1">{folder.desc}</span></span>
+                <ChevronRight className="w-4 h-4 text-[var(--ide-text-muted)] shrink-0" />
+              </button>
+            ))}
+          </div>
+        );
+      }
+      const folderItems = settingsFolder === 'appearance'
+        ? settingsHubOptions.filter((item) => ['set_theme', 'set_bg3d', 'set_lang'].includes(item.id))
+        : settingsFolder === 'editor'
+          ? settingsHubOptions.filter((item) => item.id === 'set_editor')
+          : settingsHubOptions.filter((item) => ['set_app', 'set_apk'].includes(item.id));
+      return (
+        <div>
+          <button type="button" onClick={() => setSettingsFolder(null)} className="mb-2 min-h-[44px] px-2 inline-flex items-center gap-2 text-sm font-semibold text-[var(--ide-accent-text)]">
+            <ArrowLeft className="w-4 h-4" />{t('win_back')}
+          </button>
+          <div className="flex items-center gap-2 px-2 pb-2 text-sm font-semibold text-[var(--ide-text)]">
+            <Folder className="w-4 h-4 text-[var(--ide-accent)]" />
+            {settingsFolder === 'appearance' ? t('set_theme_title') : settingsFolder === 'editor' ? t('hub_set_editor') : t('hub_set_app')}
+          </div>
+          {renderHubOptionList(folderItems)}
+        </div>
+      );
     }
     return (
       <div className="space-y-6">
