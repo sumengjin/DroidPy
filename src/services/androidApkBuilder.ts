@@ -503,6 +503,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var crawlerUrlInput: EditText
     private lateinit var crawlerUaBtn: Button
     private var crawlerDesktopUa: Boolean = false
+    private var crawlerNavigationStartedAt: Long = 0L
     private var localBridge: EmbeddedTermuxBridge? = null
     private var trustedAppOrigin: String? = null
     private var trustedLocalWebPath: String? = null
@@ -1236,13 +1237,43 @@ class MainActivity : AppCompatActivity() {
                     handler: android.webkit.SslErrorHandler?,
                     error: android.net.http.SslError?
                 ) {
+                    appendActivityLog("Crawler", "SSL error; navigation cancelled")
                     handler?.cancel()
+                }
+
+                override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                    super.onPageStarted(view, url, favicon)
+                    crawlerNavigationStartedAt = SystemClock.elapsedRealtime()
+                    appendActivityLog("Crawler", "Page started url=" + (url ?: "unknown"))
                 }
 
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
+                    val elapsed = if (crawlerNavigationStartedAt > 0L) {
+                        SystemClock.elapsedRealtime() - crawlerNavigationStartedAt
+                    } else {
+                        -1L
+                    }
+                    appendActivityLog("Crawler", "Page finished durationMs=" + elapsed + " url=" + (url ?: "unknown"))
+                    crawlerNavigationStartedAt = 0L
                     if (!url.isNullOrBlank()) {
                         crawlerUrlInput.setText(url)
+                    }
+                }
+
+                override fun onReceivedError(
+                    view: WebView?,
+                    request: WebResourceRequest?,
+                    error: android.webkit.WebResourceError?
+                ) {
+                    super.onReceivedError(view, request, error)
+                    if (request?.isForMainFrame == true) {
+                        appendActivityLog(
+                            "Crawler",
+                            "Main-frame load error code=" + (error?.errorCode ?: -1) +
+                                " description=" + (error?.description ?: "unknown") +
+                                " url=" + request.url
+                        )
                     }
                 }
             }
