@@ -263,7 +263,7 @@ jobs:
           if [ -n "$CHANGELOG_SECTION" ]; then
             printf '%s\n' "$CHANGELOG_SECTION" > "$RELEASE_NOTES_FILE"
           else
-            printf '# DroidPy %s\n此版本尚未提供專屬更新日誌。\\n' "$RELEASE_TAG" > "$RELEASE_NOTES_FILE"
+            printf '%s\n' "# DroidPy $RELEASE_TAG" "此版本尚未提供專屬更新日誌。" > "$RELEASE_NOTES_FILE"
           fi
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" "$APK_FILE" --clobber
