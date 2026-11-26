@@ -53,7 +53,9 @@ assert.match(source, /w3lib>=2\.6/, 'embedded terminal routing must use the fall
 assert.match(bridgeSource, /w3lib<2\.6/, 'standalone Termux bridge must retain its independent compatibility pin');
 
 assert.match(catalogSource, /外部 Termux 固定 w3lib<2\.6；APK 內建環境使用 Frostwork 純 Python 相容層支援 w3lib 2\.6\+/);
-assert.match(bridgeSource, /return 'pkg uninstall -y python-polars'/, 'TUR Polars uninstall must use the native package manager');
+assert.match(bridgeSource, /getTermuxNativePackageName\(cleaned\[0\]\)/, 'pip inventory uninstall must resolve native APT package names');
+assert.match(bridgeSource, /polars: 'python-polars'/, 'TUR Polars must retain its native package mapping');
+assert.match(bridgeSource, /scipy: 'python-scipy'/, 'SciPy must use the official Termux native package mapping');
 assert.match(panelSource, /item\.id === 'polars' \? 'python-polars' : tmx\.targetName/, 'TUR Polars installed state must read the APT inventory');
 assert.match(catalogSource, /Termux User Repository（TUR）預編譯套件提供/);
 assert.match(source, /"polars" to "python-polars"/);
