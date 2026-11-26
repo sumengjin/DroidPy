@@ -14,7 +14,6 @@ interface TerminalPanelProps {
   onChangeEngine: (engine: ExecutionEngine) => void;
   termuxConnected: boolean;
   embeddedMissingPython?: boolean;
-  onQuickInitEmbedded?: () => void;
   lastDurationMs: number | null;
   runStartedAt?: number | null;
   pendingInputPrompt: string | null;
@@ -169,7 +168,6 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   onChangeEngine,
   termuxConnected,
   embeddedMissingPython,
-  onQuickInitEmbedded,
   lastDurationMs,
   runStartedAt,
   pendingInputPrompt,
@@ -404,21 +402,12 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         </div>
       </div>
 
-      {/* Actionable banner when Embedded Termux Python hasn't been initialized yet */}
+      {/* Python is installed automatically when the user first runs code or installs a package. */}
       {engine === 'termux' && embeddedMissingPython && status !== 'running' && (
-        <div className="px-3 py-2.5 border-b border-amber-300/60 dark:border-amber-800/60 bg-amber-50/90 dark:bg-amber-950/40 flex flex-wrap items-center justify-between gap-2 shrink-0">
-          <div className="text-xs text-amber-800 dark:text-amber-200 leading-snug min-w-0 flex-1">
-            {t('tmx_need_init_hint')}
+        <div className="px-3 py-2.5 border-b border-amber-300/60 dark:border-amber-800/60 bg-amber-50/90 dark:bg-amber-950/40 shrink-0">
+          <div className="text-xs text-amber-800 dark:text-amber-200 leading-snug">
+            {t('tmx_py_missing')}
           </div>
-          {onQuickInitEmbedded && (
-            <button
-              type="button"
-              onClick={onQuickInitEmbedded}
-              className="min-h-[44px] px-3 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shrink-0 transition-colors"
-            >
-              {t('tmx_init_btn_full')}
-            </button>
-          )}
         </div>
       )}
 
