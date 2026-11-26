@@ -378,7 +378,7 @@ const abortHelperEnd = termuxBridgeSource.indexOf('\n}', abortHelperStart);
 assert.ok(abortHelperStart >= 0 && abortHelperEnd > abortHelperStart);
 assert.ok(!termuxBridgeSource.slice(abortHelperStart, abortHelperEnd).includes('activeStreamController = null'));
 assert.ok(termuxBridgeSource.includes('return { exitCode: -1, durationMs: 0 };'));
-assert.ok(termuxBridgeSource.includes('return { exitCode: -1, durationMs };'));
+assert.ok(termuxBridgeSource.includes('settleCompletion();'), 'stream completion must release waiters on every exit path');
 assert.ok(termuxBridgeSource.includes('橋接請求（${path}）'));
 assert.ok(termuxBridgeSource.includes('    30000\n  );\n}\n\nexport async function createSdcardFolder'));
 
