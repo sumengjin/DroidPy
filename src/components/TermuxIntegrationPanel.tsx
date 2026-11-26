@@ -1063,7 +1063,10 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                 <div>
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-mono text-xs font-semibold text-[var(--ide-text)] truncate">
-                      {tmx.mode} {tmx.targetName}
+                      {tmx.targetName}
+                    </span>
+                    <span className="text-[10px] font-semibold tracking-wide rounded-md px-2 py-1 bg-[var(--ide-surface-alt)] text-[var(--ide-accent-text)] shrink-0">
+                      {tmx.mode === 'pkg' ? 'Termux APT' : item.id === 'polars' ? 'TUR' : 'PyPI'}
                     </span>
                     {alreadyInstalled && (
                       <Check className="w-3.5 h-3.5 text-[var(--ide-accent)] shrink-0" />
