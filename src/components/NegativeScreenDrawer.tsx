@@ -229,9 +229,9 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
             <div className="divide-y divide-[var(--ide-border)] rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] overflow-hidden">
               {[
                 { id: 'termux' as const, label: t('neg_category_termux'), Icon: Terminal, desc: t('neg_category_termux_desc') },
-                { id: 'packages' as const, label: '套件管理', Icon: Package, desc: 'Termux 與沙盒套件管理' },
-                { id: 'android' as const, label: 'Android 管理', Icon: HardDrive, desc: '裝置儲存空間與工作目錄' },
-                { id: 'settings' as const, label: '個人化與設定', Icon: Sliders, desc: '外觀、編輯器、語言與應用程式' },
+                { id: 'packages' as const, label: t('neg_category_packages'), Icon: Package, desc: t('neg_category_packages_desc') },
+                { id: 'android' as const, label: t('neg_category_android'), Icon: HardDrive, desc: t('neg_category_android_desc') },
+                { id: 'settings' as const, label: t('neg_category_personalization'), Icon: Sliders, desc: t('neg_category_personalization_desc') },
               ].map(({ id, label, Icon, desc }) => (
                 <button
                   key={id}
