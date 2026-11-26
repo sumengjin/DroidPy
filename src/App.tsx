@@ -2518,6 +2518,7 @@ export default function App() {
     let upgradedCount = 0;
 
     if (pyodideStatus === 'ready') {
+      pyodidePackageOperationLockRef.current = true;
       setCheckingOutdatedPkgs(true);
       try {
         const currentList = await listPyPackages(callbacksRef.current);
@@ -2541,6 +2542,7 @@ export default function App() {
       } finally {
         setCheckingOutdatedPkgs(false);
         setUpgradingPyPackages(false);
+        pyodidePackageOperationLockRef.current = false;
       }
     }
 
