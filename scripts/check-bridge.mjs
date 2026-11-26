@@ -227,7 +227,7 @@ assert.ok(!nativeStreamShell.includes('proc.destroyForcibly()'), 'a dropped outp
 const runLoggingSource = await readFile('src/App.tsx', 'utf8');
 assert.ok(runLoggingSource.includes('${entryFile.name} exited with code ${res.exitCode}'));
 assert.ok(runLoggingSource.includes('Finished ${entryFile.name}'));
-assert.ok(androidBuilder.includes('Explicit Stop request: force stopping process tree'));
+assert.ok(androidBuilder.includes('Stop request: force stopping process tree pid='));
 assert.ok(androidBuilder.includes('headerBuf.size() > 16 * 1024'));
 assert.ok(androidBuilder.includes('len > 8 * 1024 * 1024'));
 assert.ok(androidBuilder.includes('duplicateContentLength'));
