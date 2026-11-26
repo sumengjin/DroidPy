@@ -93,7 +93,9 @@ assert.match(exportSource, /disabled=\{!!installingPkg \|\| !!activePyodidePacka
 assert.match(panelSource, /activeTermuxTask === \`install:\$\{tmx\.targetName\}\`/);
 assert.match(panelSource, /disabled=\{!!busyAction \|\| termuxRunning/);
 assert.doesNotMatch(panelSource, /handleInitEmbedded/);
-assert.doesNotMatch(drawerSource, /onTouchEnd/);
+assert.match(drawerSource, /backdropTouchRef/);
+assert.match(drawerSource, /Math\.abs\(touch\.clientX - start\.x\) > 12/);
+assert.match(drawerSource, /touch\?\.moved \|\| e\.target !== e\.currentTarget/, 'drag gestures and clicks inside the drawer must not dismiss the backdrop');
 assert.doesNotMatch(drawerSource, /Swipe left on drawer to dismiss/);
 assert.match(drawerSource, /termuxActiveTask/);
 assert.match(i18nSource, /首次執行 Python 或安裝套件時，自動安裝 Python 3 與 pip/);
