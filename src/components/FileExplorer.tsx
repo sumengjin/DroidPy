@@ -52,6 +52,7 @@ interface FileExplorerProps {
   onRestoreFiles?: (files: PythonFile[], label: string) => void;
   onSyncBackupSdcard?: (snapshot: ScriptBackupSnapshot) => Promise<void>;
   onNotify: (msg: string) => void;
+  showHeaderTitle?: boolean;
 }
 
 const MAX_IMPORT_BYTES = 512 * 1024;
@@ -81,6 +82,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   onRestoreFiles,
   onSyncBackupSdcard,
   onNotify,
+  showHeaderTitle = true,
 }) => {
   const { t } = useI18n();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -276,8 +278,10 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     <div className="relative flex flex-col h-full bg-[var(--ide-surface-alt)] text-[var(--ide-text)]">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--ide-border)] bg-[var(--ide-surface)] shrink-0">
-        <div>
-          <h2 className="text-sm font-semibold text-[var(--ide-text)]">{t('files_title')}</h2>
+        <div className="min-w-0">
+          {showHeaderTitle && (
+            <h2 className="text-sm font-semibold text-[var(--ide-text)]">{t('files_title')}</h2>
+          )}
           <p className="text-xs text-[var(--ide-text-muted)] tabular-nums">
             {t('files_count', { count: files.length })}
           </p>
