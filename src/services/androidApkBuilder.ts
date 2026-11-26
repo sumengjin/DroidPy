@@ -3869,12 +3869,18 @@ def clipboard_set(text):
                         val currentPips = pipInventory.names.toSet()
                         val currentPkgs = pkgInventory.names.toSet()
                         val needPkgs = mutableListOf("python", "python-pip")
+                        val safePkgName = Regex("""^[A-Za-z0-9][A-Za-z0-9+.-]*$""")
+                        var invalidPkgEntries = 0
                         val arrK = manifest.optJSONArray("pkgPackages")
                         if (pkgInventory.complete && arrK != null) {
                             for (i in 0 until arrK.length()) {
                                 val v = arrK.optString(i, "").trim()
-                                if (v.isNotEmpty() && v !in currentPkgs && v !in needPkgs) {
-                                    needPkgs.add(v)
+                                if (v.isNotEmpty()) {
+                                    if (!safePkgName.matches(v)) {
+                                        invalidPkgEntries++
+                                    } else if (v !in currentPkgs && v !in needPkgs) {
+                                        needPkgs.add(v)
+                                    }
                                 }
                             }
                         }
@@ -3889,6 +3895,9 @@ def clipboard_set(text):
                             }
                         }
                         val steps = mutableListOf<String>()
+                        if (invalidPkgEntries > 0) {
+                            steps.add("echo '[DroidPy] Skipped invalid APT package names in backup manifest.' >&2")
+                        }
                         val nativeRestoreTargets = linkedSetOf<String>()
                         val remainingPips = mutableListOf<String>()
                         val safePipName = Regex("""^[A-Za-z0-9][A-Za-z0-9._+-]*$""")
