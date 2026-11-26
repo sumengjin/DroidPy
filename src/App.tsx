@@ -2246,7 +2246,7 @@ export default function App() {
     setCheckingTermuxOutdated(true);
     try {
       const res = await execTermuxShell(termuxConfigRef.current, 'pip list --outdated --format=json');
-      const outdated = parseOutdatedPipJson(res.stdout || '');
+      const outdated = parseOutdatedPipJson(res.stdout || '', termuxHealth?.installedPkgPackages);
       setOutdatedTermuxPips(outdated);
       appLog('package', `Checked Termux pip outdated packages: ${outdated.length}`);
       if (outdated.length === 0) {
@@ -2257,7 +2257,7 @@ export default function App() {
     } finally {
       setCheckingTermuxOutdated(false);
     }
-  }, [termuxConnectionState, termuxHealth?.hasPython, checkingTermuxOutdated, showToast, t]);
+  }, [termuxConnectionState, termuxHealth?.hasPython, termuxHealth?.installedPkgPackages, checkingTermuxOutdated, showToast, t]);
 
   const handleUninstallInTermux = useCallback(
     async (mode: 'pip' | 'pkg', target: string) => {
@@ -2265,7 +2265,7 @@ export default function App() {
         showToast(t('cta_running'));
         return;
       }
-      const cmd = buildTermuxUninstallCommand(mode, target);
+      const cmd = buildTermuxUninstallCommand(mode, target, termuxHealth?.installedPkgPackages);
       if (!cmd) {
         showToast(t('pkg_uninstall_core_err'));
         return;
@@ -2357,7 +2357,7 @@ export default function App() {
               termuxConfigRef.current,
               'pip list --outdated --format=json'
             );
-            const outdated = parseOutdatedPipJson(outRes.stdout || '');
+            const outdated = parseOutdatedPipJson(outRes.stdout || '', termuxHealth?.installedPkgPackages);
             setOutdatedTermuxPips(outdated);
             outdatedTargets = outdated
               .map((item) => item.name)
@@ -2374,7 +2374,8 @@ export default function App() {
           const ok = await handleRunShellInTermux(
             buildTermuxPipUpgradeCommand(
               outdatedTargets,
-              Boolean(settingsRef.current.pipTrustedHostEmergency)
+              Boolean(settingsRef.current.pipTrustedHostEmergency),
+              termuxHealth?.installedPkgPackages
             )
           );
           if (ok) {
@@ -2388,7 +2389,7 @@ export default function App() {
         setUpgradingTermux(false);
       }
     },
-    [termuxRunning, upgradingTermux, handleRunShellInTermux, showToast, t]
+    [termuxRunning, upgradingTermux, termuxHealth?.installedPkgPackages, handleRunShellInTermux, showToast, t]
   );
 
   const handleUpgradeSingleTermuxPip = useCallback(
@@ -2509,6 +2510,7 @@ export default function App() {
     pyodideStatus,
     termuxConnectionState,
     termuxHealth?.hasPython,
+    termuxHealth?.installedPkgPackages,
     handleRunShellInTermux,
     appendEntry,
     showToast,
