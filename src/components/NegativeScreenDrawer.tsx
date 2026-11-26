@@ -47,6 +47,9 @@ interface NegativeScreenDrawerProps {
   onCheckTermuxOutdated?: () => Promise<void>;
   onUninstallInTermux?: (mode: 'pip' | 'pkg', target: string) => Promise<void>;
   upgradingTermux?: boolean;
+  termuxRunning?: boolean;
+  termuxActiveTask?: string | null;
+  activePyodidePackage?: string | null;
   appUpdateResult?: AppUpdateCheckResult | null;
   checkingAppUpdate?: boolean;
   onOpenUpdateModal?: () => void;
@@ -65,7 +68,6 @@ interface NegativeScreenDrawerProps {
   onInstallInTermux: (mode: 'pip' | 'pkg', target: string) => Promise<void>;
   onRunInTermux: () => Promise<void>;
   onRunShellInTermux: (cmd: string) => Promise<boolean | void>;
-  onInitializeEmbeddedEnv: (includeBaseSystem: boolean) => Promise<void>;
   onGenerateRequirements: () => void;
   onInstallRequirements: () => Promise<void>;
   onSaveWorkspaceFile: (filename: string, content: string, openInEditor?: boolean) => void;
@@ -109,6 +111,9 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
   onCheckTermuxOutdated,
   onUninstallInTermux,
   upgradingTermux,
+  termuxRunning = false,
+  termuxActiveTask = null,
+  activePyodidePackage = null,
   appUpdateResult,
   checkingAppUpdate,
   onOpenUpdateModal,
@@ -127,7 +132,6 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
   onInstallInTermux,
   onRunInTermux,
   onRunShellInTermux,
-  onInitializeEmbeddedEnv,
   onGenerateRequirements,
   onInstallRequirements,
   onSaveWorkspaceFile,
@@ -143,9 +147,7 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
   onNotify,
 }) => {
   const { t } = useI18n();
-  const touchStartX = React.useRef<number | null>(null);
-  const touchStartY = React.useRef<number | null>(null);
-
+  const backdropTouchRef = React.useRef<{ x: number; y: number; moved: boolean } | null>(null);
   if (!open) return null;
 
   const tabs: { id: NegativeScreenSection; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
@@ -158,44 +160,45 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
   return (
     <div
       className="fixed inset-0 z-50 flex bg-black/55"
-      onClick={onClose}
+      onTouchStart={(e) => {
+        const touch = e.touches[0];
+        if (!touch) return;
+        backdropTouchRef.current = { x: touch.clientX, y: touch.clientY, moved: false };
+      }}
+      onTouchMove={(e) => {
+        const start = backdropTouchRef.current;
+        const touch = e.touches[0];
+        if (!start || !touch) return;
+        if (Math.abs(touch.clientX - start.x) > 12 || Math.abs(touch.clientY - start.y) > 12) {
+          start.moved = true;
+        }
+      }}
+      onClick={(e) => {
+        const touch = backdropTouchRef.current;
+        backdropTouchRef.current = null;
+        if (touch?.moved || e.target !== e.currentTarget) return;
+        onClose();
+      }}
       role="dialog"
       aria-modal="true"
       aria-label={t('neg_title')}
     >
       <aside
         onClick={(e) => e.stopPropagation()}
-        onTouchStart={(e) => {
-          const touch = e.touches[0];
-          touchStartX.current = touch.clientX;
-          touchStartY.current = touch.clientY;
-        }}
-        onTouchEnd={(e) => {
-          if (touchStartX.current === null || touchStartY.current === null) return;
-          const touch = e.changedTouches[0];
-          const dx = touch.clientX - touchStartX.current;
-          const dy = Math.abs(touch.clientY - touchStartY.current);
-          touchStartX.current = null;
-          touchStartY.current = null;
-          // Swipe left on drawer to dismiss
-          if (dx < -64 && dy < 60) {
-            onClose();
-          }
-        }}
-        className="w-[90vw] max-w-[460px] h-full rounded-r-[28px] bg-[var(--ide-bg)] text-[var(--ide-text)] border-r border-[var(--ide-border)] shadow-2xl flex flex-col overflow-hidden"
+        className="w-full sm:w-[90vw] sm:max-w-[460px] h-full rounded-none sm:rounded-r-[28px] bg-[var(--ide-bg)] text-[var(--ide-text)] border-r border-[var(--ide-border)] shadow-2xl flex flex-col overflow-hidden"
       >
         {/* Drawer Header */}
-        <div className="px-4 py-3 pt-safe border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] flex items-center justify-between gap-3 shrink-0">
+        <div className="px-4 py-3.5 pt-safe border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
             <img
               src="/icon.svg"
               alt="DroidPy"
-              className="w-7 h-7 rounded-lg shrink-0"
+              className="w-9 h-9 rounded-xl shrink-0"
               referrerPolicy="no-referrer"
             />
             <div className="min-w-0">
-              <h2 className="text-sm font-bold truncate">{t('neg_title')}</h2>
-              <p className="text-[11px] text-[var(--ide-text-muted)] truncate">{t('neg_subtitle')}</p>
+              <h2 className="text-base font-bold truncate">{t('neg_title')}</h2>
+              <p className="text-xs text-[var(--ide-text-muted)] truncate mt-0.5">{t('neg_subtitle')}</p>
             </div>
           </div>
           <button
@@ -250,6 +253,7 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
             onResetWorkspace={onResetWorkspace}
             pyodideStatus={pyodideStatus}
             installedPackages={installedPackages}
+            activePyodidePackage={activePyodidePackage}
             onInstallPackage={onInstallPackage}
             onRefreshPackages={onRefreshPackages}
             outdatedPackages={outdatedPackages}
@@ -266,6 +270,8 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
             onCheckTermuxOutdated={onCheckTermuxOutdated}
             onUninstallInTermux={onUninstallInTermux}
             upgradingTermux={upgradingTermux}
+            termuxRunning={termuxRunning}
+            termuxActiveTask={termuxActiveTask}
             appUpdateResult={appUpdateResult}
             checkingAppUpdate={checkingAppUpdate}
             onOpenUpdateModal={
@@ -296,10 +302,6 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
             onRunShellInTermux={async (cmd) => {
               onClose();
               await onRunShellInTermux(cmd);
-            }}
-            onInitializeEmbeddedEnv={async (includeBase) => {
-              onClose();
-              await onInitializeEmbeddedEnv(includeBase);
             }}
             onGenerateRequirements={onGenerateRequirements}
             onInstallRequirements={async () => {

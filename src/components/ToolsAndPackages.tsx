@@ -51,6 +51,7 @@ import { TermuxIntegrationPanel, TermuxVisibleSection } from './TermuxIntegratio
 import { InternalStoragePanel } from './InternalStoragePanel';
 import { getActiveAtmosphereState } from './DynamicAtmosphere3D';
 import { IDE_THEMES } from '../services/themes';
+import type { ThemeId } from '../services/themes';
 import { LOCALE_OPTIONS, TranslationKey, getLocalizedThemeText, useI18n } from '../services/i18n';
 import { generateGitHubApkProjectZip } from '../services/androidApkBuilder';
 import { downloadBlob } from '../utils/downloadBlob';
@@ -81,6 +82,23 @@ import {
   normalizePyPkgName,
 } from '../services/pyodideRuntime';
 import { AppUpdateCheckResult, getInstalledAppVersion } from '../services/appUpdater';
+
+const THEME_CARD_NAMES: Record<ThemeId, { 'zh-TW': string; 'zh-CN': string }> = {
+  rose: { 'zh-TW': '櫻花蜜桃', 'zh-CN': '樱花蜜桃' },
+  lavender: { 'zh-TW': '薰衣草紫', 'zh-CN': '薰衣草紫' },
+  milktea: { 'zh-TW': '焦糖奶茶', 'zh-CN': '焦糖奶茶' },
+  matcha: { 'zh-TW': '抹茶生乳', 'zh-CN': '抹茶生乳' },
+  sky: { 'zh-TW': '海鹽蘇打', 'zh-CN': '海盐苏打' },
+  berry: { 'zh-TW': '絲絨莓果', 'zh-CN': '丝绒莓果' },
+  rosegold: { 'zh-TW': '黑曜玫金', 'zh-CN': '黑曜玫金' },
+  starry: { 'zh-TW': '星夜紫夢', 'zh-CN': '星夜紫梦' },
+  dark: { 'zh-TW': '極夜深灰', 'zh-CN': '极夜深灰' },
+  light: { 'zh-TW': '晨光純白', 'zh-CN': '晨光纯白' },
+  peony: { 'zh-TW': '胭脂牡丹', 'zh-CN': '胭脂牡丹' },
+  champagne: { 'zh-TW': '香檳珍珠', 'zh-CN': '香槟珍珠' },
+  moonrose: { 'zh-TW': '月影薔薇', 'zh-CN': '月影蔷薇' },
+  aurorapink: { 'zh-TW': '極光粉霧', 'zh-CN': '极光粉雾' },
+};
 
 type ToolWindowId =
   | 'py_conn'
@@ -134,6 +152,9 @@ interface ToolsAndPackagesProps {
   onCheckTermuxOutdated?: () => Promise<void>;
   onUninstallInTermux?: (mode: 'pip' | 'pkg', target: string) => Promise<void>;
   upgradingTermux?: boolean;
+  termuxRunning?: boolean;
+  termuxActiveTask?: string | null;
+  activePyodidePackage?: string | null;
   appUpdateResult?: AppUpdateCheckResult | null;
   checkingAppUpdate?: boolean;
   onOpenUpdateModal?: () => void;
@@ -152,7 +173,6 @@ interface ToolsAndPackagesProps {
   onInstallInTermux: (mode: 'pip' | 'pkg', target: string) => Promise<void>;
   onRunInTermux: () => Promise<void>;
   onRunShellInTermux: (cmd: string) => Promise<boolean | void>;
-  onInitializeEmbeddedEnv: (includeBaseSystem: boolean) => Promise<void>;
   onGenerateRequirements: () => void;
   onInstallRequirements: () => Promise<void>;
   onSaveWorkspaceFile: (filename: string, content: string, openInEditor?: boolean) => void;
@@ -194,6 +214,9 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
   onCheckTermuxOutdated,
   onUninstallInTermux,
   upgradingTermux = false,
+  termuxRunning = false,
+  termuxActiveTask = null,
+  activePyodidePackage = null,
   appUpdateResult,
   checkingAppUpdate = false,
   onOpenUpdateModal,
@@ -212,7 +235,6 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
   onInstallInTermux,
   onRunInTermux,
   onRunShellInTermux,
-  onInitializeEmbeddedEnv,
   onGenerateRequirements,
   onInstallRequirements,
   onSaveWorkspaceFile,
@@ -251,9 +273,10 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
     Boolean(window.DroidPyNative?.hasStoragePermission?.())
   );
 
-  // Reset active sub-window when switching primary drawer tab
+  // Open the native package manager immediately when the user enters Packages.
+  // The runtime selector below keeps the sandbox manager one tap away.
   useEffect(() => {
-    setActiveWindow(null);
+    setActiveWindow(activeSubView === 'packages' ? 'pkg_native' : null);
   }, [activeSubView]);
 
   const pyodideCatalog = useMemo(
@@ -347,7 +370,7 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
 
   const handleInstall = async (target: string) => {
     const clean = target.trim();
-    if (!clean || installingPkg || uninstallingPkg) return;
+    if (!clean || installingPkg || activePyodidePackage || uninstallingPkg) return;
     setInstallingPkg(clean);
     try {
       await onInstallPackage(clean);
@@ -359,7 +382,7 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
 
   const handleUninstall = async (target: string) => {
     const clean = target.trim();
-    if (!clean || !onUninstallPackage || installingPkg || uninstallingPkg) return;
+    if (!clean || !onUninstallPackage || installingPkg || activePyodidePackage || uninstallingPkg) return;
     setUninstallingPkg(clean);
     try {
       await onUninstallPackage(clean);
@@ -682,7 +705,7 @@ python ${entryFile}
           key={id}
           type="button"
           onClick={() => setActiveWindow(id)}
-          className="w-full min-h-[76px] px-3.5 py-3.5 rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] active:scale-[0.99] flex items-center justify-between gap-3 text-left transition-all min-w-0"
+          className="w-full min-h-[88px] px-4 py-4 rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] active:scale-[0.99] flex items-center justify-between gap-3 text-left transition-all min-w-0"
         >
           <div className="w-10 h-10 rounded-xl bg-[var(--ide-accent-soft)] text-[var(--ide-accent)] flex items-center justify-center shrink-0">
             <Icon className="w-5 h-5" />
@@ -758,7 +781,6 @@ python ${entryFile}
       onInstallInTermux={onInstallInTermux}
       onRunInTermux={onRunInTermux}
       onRunShellInTermux={onRunShellInTermux}
-      onInitializeEmbeddedEnv={onInitializeEmbeddedEnv}
       onUpgradeAllTermux={onUpgradeAllTermux}
       onUpgradeSinglePip={onUpgradeSingleTermuxPip}
       onUpgradeAllPackages={onUpgradeAllPackages}
@@ -767,6 +789,8 @@ python ${entryFile}
       onCheckTermuxOutdated={onCheckTermuxOutdated}
       onUninstallInTermux={onUninstallInTermux}
       upgradingTermux={upgradingTermux}
+      termuxRunning={termuxRunning}
+      activeTermuxTask={termuxActiveTask}
       enableSandboxAddon={Boolean(settings.enableSandboxAddon)}
       backupStatus={backupStatus}
       onRestoreBackedUpPackages={onRestoreBackedUpPackages}
@@ -989,22 +1013,9 @@ python ${entryFile}
             </div>
 
             {!settings.enableSandboxAddon && engine !== 'pyodide' ? (
-              <section className="md-card p-4 space-y-3 min-w-0">
-                <h2 className="text-base font-semibold flex items-center gap-2">
-                  <Package className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
-                  <span>{t('pkg_sandbox_disabled_title')}</span>
-                </h2>
-                <p className="text-xs text-[var(--ide-text-muted)] leading-relaxed">
-                  {t('pkg_sandbox_disabled_desc')}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => onUpdateSettings({ enableSandboxAddon: true })}
-                  className="min-h-[40px] px-4 py-2 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-semibold max-w-full transition-colors"
-                >
-                  {t('pkg_sandbox_enable_btn')}
-                </button>
-              </section>
+              <p className="px-1 text-xs text-[var(--ide-text-muted)]">
+                {t('pkg_sandbox_disabled_desc')}
+              </p>
             ) : (
               <section className="space-y-4">
                 <div className="flex flex-wrap items-center gap-2">
@@ -1039,7 +1050,7 @@ python ${entryFile}
                   <button
                     type="button"
                     onClick={() => void onInstallRequirements()}
-                    disabled={!!installingPkg || !!uninstallingPkg}
+                    disabled={!!installingPkg || !!activePyodidePackage || !!uninstallingPkg}
                     className="min-h-[40px] px-3.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium flex items-center gap-2 hover:border-[var(--ide-accent)] disabled:opacity-40 transition-colors whitespace-nowrap"
                   >
                     <Download className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
@@ -1077,15 +1088,15 @@ python ${entryFile}
                     </div>
                     <button
                       type="submit"
-                      disabled={!pkgQuery.trim() || !!installingPkg}
-                      className="min-h-[44px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-sm font-medium disabled:opacity-40 flex items-center gap-2 whitespace-nowrap shrink-0 transition-colors"
+                      disabled={!pkgQuery.trim() || !!installingPkg || !!activePyodidePackage}
+                      className="min-h-[50px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-sm font-semibold disabled:opacity-40 flex items-center gap-2 whitespace-nowrap shrink-0 transition-colors"
                     >
-                      {installingPkg ? (
+                      {installingPkg || activePyodidePackage ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
                       ) : (
                         <Download className="w-4 h-4" />
                       )}
-                      <span>{installingPkg ? t('pkg_installing') : t('pkg_install')}</span>
+                      <span>{installingPkg || activePyodidePackage ? t('pkg_installing') : t('pkg_install')}</span>
                     </button>
                   </form>
 
@@ -1101,7 +1112,7 @@ python ${entryFile}
                           (p) => normalizePyPkgName(p.name) === normTarget
                         );
                         const isCoreSystem = PYODIDE_CORE_PACKAGES.has(normTarget);
-                        const isBusyInstall = installingPkg === targetPkg;
+                        const isBusyInstall = installingPkg === targetPkg || activePyodidePackage === targetPkg;
                         const isBusyUninstall = uninstallingPkg === targetPkg;
                         return (
                           <div
@@ -1128,7 +1139,7 @@ python ${entryFile}
                             {isInstalled && !isCoreSystem && onUninstallPackage ? (
                               <button
                                 type="button"
-                                disabled={!!installingPkg || !!uninstallingPkg}
+                                disabled={!!installingPkg || !!activePyodidePackage || !!uninstallingPkg}
                                 onClick={() => void handleUninstall(targetPkg)}
                                 className="min-h-[34px] px-3 rounded-lg border border-red-300 dark:border-red-900/60 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 text-xs font-medium whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 disabled:opacity-40"
                               >
@@ -1142,7 +1153,7 @@ python ${entryFile}
                             ) : (
                               <button
                                 type="button"
-                                disabled={isInstalled || !!installingPkg || !!uninstallingPkg}
+                                disabled={isInstalled || !!installingPkg || !!activePyodidePackage || !!uninstallingPkg}
                                 onClick={() => void handleInstall(targetPkg)}
                                 className={`min-h-[34px] px-3 rounded-lg text-xs font-medium whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 ${
                                   isInstalled
@@ -1227,7 +1238,7 @@ python ${entryFile}
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                  <div className="flex items-center gap-1.5 overflow-x-auto overscroll-x-contain touch-pan-x no-scrollbar pb-0.5">
                     {PACKAGE_CATEGORIES.map((cat) => {
                       const active = catFilter === cat.id;
                       return (
@@ -1247,7 +1258,7 @@ python ${entryFile}
                     })}
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[420px] overflow-y-auto ide-scroll pr-0.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pr-0.5">
                     {filteredPyCatalog.map((item) => {
                       const targetName = item.pyodide?.packageName ?? item.name;
                       const normTarget = normalizePyPkgName(targetName);
@@ -1255,7 +1266,7 @@ python ${entryFile}
                         (p) => normalizePyPkgName(p.name) === normTarget
                       );
                       const isCoreSystem = PYODIDE_CORE_PACKAGES.has(normTarget);
-                      const isBusyInstall = installingPkg === targetName;
+                      const isBusyInstall = installingPkg === targetName || activePyodidePackage === targetName;
                       const isBusyUninstall = uninstallingPkg === targetName;
                       return (
                         <div
@@ -1282,7 +1293,7 @@ python ${entryFile}
                           {isInstalled && !isCoreSystem && onUninstallPackage ? (
                             <button
                               type="button"
-                              disabled={!!installingPkg || !!uninstallingPkg}
+                              disabled={!!installingPkg || !!activePyodidePackage || !!uninstallingPkg}
                               onClick={() => void handleUninstall(targetName)}
                               className="min-h-[38px] px-3 rounded-xl border border-red-300 dark:border-red-900/60 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 text-xs font-medium whitespace-nowrap shrink-0 flex items-center gap-1.5 transition-colors disabled:opacity-40"
                             >
@@ -1296,7 +1307,7 @@ python ${entryFile}
                           ) : (
                             <button
                               type="button"
-                              disabled={isInstalled || !!installingPkg || !!uninstallingPkg}
+                              disabled={isInstalled || !!installingPkg || !!activePyodidePackage || !!uninstallingPkg}
                               onClick={() => void handleInstall(targetName)}
                               className={`min-h-[40px] px-3 rounded-xl text-xs font-medium whitespace-nowrap shrink-0 flex items-center gap-1.5 transition-colors ${
                                 isInstalled
@@ -1590,10 +1601,15 @@ python ${entryFile}
         return (
           <div className="space-y-3">
             <p className="text-xs text-[var(--ide-text-muted)] px-0.5">{t('set_theme_desc')}</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2.5">
               {IDE_THEMES.map((themeItem) => {
                 const isSelected = settings.theme === themeItem.id;
                 const localized = getLocalizedThemeText(themeItem.id, locale);
+                const cardName = locale === 'zh-CN'
+                  ? THEME_CARD_NAMES[themeItem.id]['zh-CN']
+                  : locale === 'zh-TW'
+                  ? THEME_CARD_NAMES[themeItem.id]['zh-TW']
+                  : localized.name;
                 return (
                   <button
                     key={themeItem.id}
@@ -1602,39 +1618,32 @@ python ${entryFile}
                       onUpdateSettings({ theme: themeItem.id });
                       onNotify(t('toast_theme_applied', { name: localized.name }));
                     }}
-                    className={`min-h-[72px] p-3.5 rounded-2xl border text-left flex items-center justify-between gap-3 transition-all ${
+                    aria-pressed={isSelected}
+                    className={`min-h-[88px] p-3 rounded-xl border text-left flex flex-col gap-2 transition-all ${
                       isSelected
                         ? 'border-[var(--ide-accent)] bg-[var(--ide-accent-soft)]'
                         : 'border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)]'
                     }`}
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div
-                        className="w-10 h-10 rounded-xl border border-black/10 dark:border-white/10 shrink-0 overflow-hidden grid grid-cols-2"
-                        style={{ backgroundColor: themeItem.swatchBg }}
-                        aria-hidden="true"
-                      >
-                        <div style={{ backgroundColor: themeItem.swatchSurface }} />
-                        <div style={{ backgroundColor: themeItem.swatchAccent }} />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold text-[var(--ide-text)] truncate">
-                          {localized.name}
-                        </div>
-                        <div className="text-xs text-[var(--ide-text-muted)] truncate mt-0.5">
-                          {themeItem.category === 'feminine'
-                            ? t('theme_cat_feminine')
-                            : t('theme_cat_classic')}{' '}
-                          · {localized.subtitle}
-                        </div>
-                      </div>
+                    <div className="flex items-center justify-between gap-2 min-w-0">
+                      <span className="text-sm font-semibold text-[var(--ide-text)] truncate" title={localized.name}>
+                        {cardName}
+                      </span>
+                      {isSelected && (
+                        <span className="w-5 h-5 rounded-full bg-[var(--ide-accent)] text-white flex items-center justify-center shrink-0">
+                          <Check className="w-3 h-3" />
+                        </span>
+                      )}
                     </div>
-
-                    {isSelected && (
-                      <div className="w-6 h-6 rounded-full bg-[var(--ide-accent)] text-white flex items-center justify-center shrink-0">
-                        <Check className="w-3.5 h-3.5" />
-                      </div>
-                    )}
+                    <div
+                      className="h-8 w-full rounded-lg border border-black/10 dark:border-white/10 overflow-hidden grid grid-cols-3"
+                      style={{ backgroundColor: themeItem.swatchBg }}
+                      aria-hidden="true"
+                    >
+                      <span style={{ backgroundColor: themeItem.swatchBg }} />
+                      <span style={{ backgroundColor: themeItem.swatchSurface }} />
+                      <span style={{ backgroundColor: themeItem.swatchAccent }} />
+                    </div>
                   </button>
                 );
               })}
@@ -1854,35 +1863,6 @@ python ${entryFile}
                 onClick={() => onUpdateSettings({ showSymbolBar: !settings.showSymbolBar })}
                 className={`min-h-[36px] w-14 rounded-full p-1 transition-colors flex items-center shrink-0 ${
                   settings.showSymbolBar
-                    ? 'bg-[var(--ide-accent)] justify-end'
-                    : 'bg-slate-300 dark:bg-slate-700 justify-start'
-                }`}
-              >
-                <span className="w-6 h-6 rounded-full bg-white shadow-sm" />
-              </button>
-            </div>
-
-            {/* Optional Pyodide Browser Sandbox Add-on */}
-            <div className="flex items-center justify-between gap-4 p-4">
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium">{t('addon_sandbox_title')}</div>
-                <div className="text-xs text-[var(--ide-text-muted)]">
-                  {t('addon_sandbox_desc')}
-                </div>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={Boolean(settings.enableSandboxAddon)}
-                onClick={() => {
-                  const nextVal = !settings.enableSandboxAddon;
-                  onUpdateSettings({ enableSandboxAddon: nextVal });
-                  if (!nextVal && engine === 'pyodide') {
-                    onChangeEngine('termux');
-                  }
-                }}
-                className={`min-h-[36px] w-14 rounded-full p-1 transition-colors flex items-center shrink-0 ${
-                  settings.enableSandboxAddon
                     ? 'bg-[var(--ide-accent)] justify-end'
                     : 'bg-slate-300 dark:bg-slate-700 justify-start'
                 }`}
@@ -2169,21 +2149,60 @@ python ${entryFile}
     <div className="h-full overflow-y-auto ide-scroll bg-[var(--ide-bg)] text-[var(--ide-text)]">
       {activeWindow && activeOptionMeta ? (
         <>
-          <div className="sticky top-0 z-10 bg-[var(--ide-bg)]/95 border-b border-[var(--ide-border)] px-3.5 py-2.5 flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => setActiveWindow(null)}
-              className="min-h-[38px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] text-xs font-semibold inline-flex items-center gap-1.5 shrink-0 transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4 text-[var(--ide-accent)]" />
-              <span>{t('win_back')}</span>
-            </button>
-            <div className="flex items-center gap-2 min-w-0 flex-1">
-              <activeOptionMeta.Icon className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
-              <span className="text-sm font-semibold text-[var(--ide-text)] truncate">
-                {activeOptionMeta.title}
-              </span>
-            </div>
+          <div className="sticky top-0 z-10 bg-[var(--ide-bg)]/95 border-b border-[var(--ide-border)] px-3.5 py-2.5 space-y-2.5">
+            {activeSubView === 'packages' ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <Package className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
+                  <span className="text-sm font-semibold text-[var(--ide-text)]">{t('neg_tab_packages')}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-[var(--ide-surface-alt)] border border-[var(--ide-border)]">
+                  <button
+                    type="button"
+                    onClick={() => setActiveWindow('pkg_native')}
+                    aria-pressed={activeWindow === 'pkg_native'}
+                    className={`min-h-[44px] rounded-lg px-2 text-xs font-semibold inline-flex items-center justify-center gap-2 transition-colors ${
+                      activeWindow === 'pkg_native'
+                        ? 'bg-[var(--ide-accent)] text-white shadow-sm'
+                        : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
+                    }`}
+                  >
+                    <Package className="w-4 h-4" />
+                    <span className="truncate">{t('hub_pkg_native')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveWindow('pkg_sandbox')}
+                    aria-pressed={activeWindow === 'pkg_sandbox'}
+                    className={`min-h-[44px] rounded-lg px-2 text-xs font-semibold inline-flex items-center justify-center gap-2 transition-colors ${
+                      activeWindow === 'pkg_sandbox'
+                        ? 'bg-[var(--ide-accent)] text-white shadow-sm'
+                        : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
+                    }`}
+                  >
+                    <Cpu className="w-4 h-4" />
+                    <span className="truncate">{t('hub_pkg_sandbox')}</span>
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setActiveWindow(null)}
+                  className="min-h-[44px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] text-xs font-semibold inline-flex items-center gap-1.5 shrink-0 transition-colors"
+                >
+                  <ArrowLeft className="w-4 h-4 text-[var(--ide-accent)]" />
+                  <span>{t('win_back')}</span>
+                </button>
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <activeOptionMeta.Icon className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
+                  <span className="text-sm font-semibold text-[var(--ide-text)] truncate">
+                    {activeOptionMeta.title}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
           <div
             className={`${

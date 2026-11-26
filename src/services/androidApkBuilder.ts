@@ -3629,14 +3629,18 @@ def clipboard_set(text):
             candidates.add(File(Environment.getExternalStorageDirectory(), "DroidPy/.droidpy_backup/packages_manifest.json"))
         }
         var best: JSONObject? = null
+        var bestUpdatedAt = Long.MIN_VALUE
         var bestScore = -1
         for (f in candidates) {
             try {
                 if (f.isFile && f.length() > 2L) {
                     val obj = JSONObject(f.readText(Charsets.UTF_8))
+                    val updatedAt = obj.optLong("updatedAt", 0L)
                     val score = (obj.optJSONArray("pipPackages")?.length() ?: 0) + (obj.optJSONArray("pkgPackages")?.length() ?: 0)
-                    if (score > bestScore) {
+                    // Prefer the newest successful snapshot; package count is only a tie-breaker.
+                    if (updatedAt > bestUpdatedAt || (updatedAt == bestUpdatedAt && score > bestScore)) {
                         best = obj
+                        bestUpdatedAt = updatedAt
                         bestScore = score
                     }
                 }
@@ -3869,12 +3873,18 @@ def clipboard_set(text):
                         val currentPips = pipInventory.names.toSet()
                         val currentPkgs = pkgInventory.names.toSet()
                         val needPkgs = mutableListOf("python", "python-pip")
+                        val safePkgName = Regex("""^[A-Za-z0-9][A-Za-z0-9+.-]*$""")
+                        var invalidPkgEntries = 0
                         val arrK = manifest.optJSONArray("pkgPackages")
                         if (pkgInventory.complete && arrK != null) {
                             for (i in 0 until arrK.length()) {
                                 val v = arrK.optString(i, "").trim()
-                                if (v.isNotEmpty() && v !in currentPkgs && v !in needPkgs) {
-                                    needPkgs.add(v)
+                                if (v.isNotEmpty()) {
+                                    if (!safePkgName.matches(v)) {
+                                        invalidPkgEntries++
+                                    } else if (v !in currentPkgs && v !in needPkgs) {
+                                        needPkgs.add(v)
+                                    }
                                 }
                             }
                         }
@@ -3889,6 +3899,9 @@ def clipboard_set(text):
                             }
                         }
                         val steps = mutableListOf<String>()
+                        if (invalidPkgEntries > 0) {
+                            steps.add("echo '[DroidPy] Skipped invalid APT package names in backup manifest.' >&2")
+                        }
                         val nativeRestoreTargets = linkedSetOf<String>()
                         val remainingPips = mutableListOf<String>()
                         val safePipName = Regex("""^[A-Za-z0-9][A-Za-z0-9._+-]*$""")

@@ -82,7 +82,7 @@ const TerminalEntryRow = React.memo<TerminalEntryRowProps>(
               <button
                 type="button"
                 onClick={() => onExpandPlot(entry.imageDataUrl!)}
-                className="min-h-[32px] px-2 flex items-center gap-1 rounded-md text-xs text-[var(--ide-text-muted)] hover:bg-[var(--ide-accent-soft)]"
+                className="min-h-[44px] px-2 flex items-center gap-1 rounded-md text-xs text-[var(--ide-text-muted)] hover:bg-[var(--ide-accent-soft)]"
               >
                 <Maximize2 className="w-3.5 h-3.5" />
                 <span>{plotZoomLabel}</span>
@@ -96,7 +96,7 @@ const TerminalEntryRow = React.memo<TerminalEntryRowProps>(
                     'image/png'
                   )
                 }
-                className="min-h-[32px] px-2 flex items-center gap-1 rounded-md text-xs text-[var(--ide-accent-text)] hover:bg-[var(--ide-accent-soft)]"
+                className="min-h-[44px] px-2 flex items-center gap-1 rounded-md text-xs text-[var(--ide-accent-text)] hover:bg-[var(--ide-accent-soft)]"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>PNG</span>
@@ -311,7 +311,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
               <button
                 type="button"
                 onClick={() => onChangeEngine('pyodide')}
-                className={`min-h-[28px] px-2 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap ${
+                className={`min-h-[44px] px-2 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap ${
                   engine === 'pyodide'
                     ? 'bg-[var(--ide-surface)] text-[var(--ide-text)] shadow-sm'
                     : 'text-[var(--ide-text-muted)]'
@@ -323,7 +323,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             <button
               type="button"
               onClick={() => onChangeEngine('termux')}
-              className={`min-h-[28px] px-2 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap ${
+              className={`min-h-[44px] px-2 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap ${
                 engine === 'termux'
                   ? 'bg-[var(--ide-accent)] text-white shadow-sm'
                   : 'text-[var(--ide-text-muted)]'
@@ -357,7 +357,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
               onClick={onTogglePause}
               aria-label={paused ? '繼續腳本' : '暫停腳本'}
               title={paused ? '繼續腳本' : '暫停腳本'}
-              className="min-h-[38px] px-2.5 flex items-center gap-1 rounded-xl bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] text-xs font-semibold transition-colors whitespace-nowrap"
+              className="min-h-[44px] px-2.5 flex items-center gap-1 rounded-xl bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] text-xs font-semibold transition-colors whitespace-nowrap"
             >
               {paused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
               <span>{paused ? '繼續' : '暫停'}</span>
@@ -367,7 +367,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             <button
               type="button"
               onClick={handleCopySelection}
-              className="min-h-[38px] px-2.5 flex items-center gap-1 rounded-xl bg-[var(--ide-accent)] text-white text-xs font-semibold transition-colors whitespace-nowrap"
+              className="min-h-[44px] px-2.5 flex items-center gap-1 rounded-xl bg-[var(--ide-accent)] text-white text-xs font-semibold transition-colors whitespace-nowrap"
             >
               {copiedSel ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
               <span>{copiedSel ? t('term_copied_selection') : t('term_copy_selection')}</span>
@@ -377,7 +377,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             <button
               type="button"
               onClick={onOpenLogs}
-              className="min-h-[38px] px-2.5 flex items-center gap-1 rounded-xl text-xs font-medium text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-accent-soft)] transition-colors whitespace-nowrap"
+              className="min-h-[44px] px-2.5 flex items-center gap-1 rounded-xl text-xs font-medium text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-accent-soft)] transition-colors whitespace-nowrap"
             >
               <FileText className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
               <span>{t('logs_btn')}</span>
@@ -387,7 +387,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             type="button"
             onClick={handleCopyAll}
             disabled={entries.length === 0}
-            className="min-h-[38px] px-2.5 flex items-center gap-1 rounded-xl text-xs font-medium text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-accent-soft)] disabled:opacity-40 transition-colors whitespace-nowrap"
+            className="min-h-[44px] px-2.5 flex items-center gap-1 rounded-xl text-xs font-medium text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-accent-soft)] disabled:opacity-40 transition-colors whitespace-nowrap"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-[var(--ide-accent)]" /> : <Copy className="w-3.5 h-3.5" />}
             <span>{copied ? t('term_copied') : t('term_copy')}</span>
@@ -396,7 +396,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             type="button"
             onClick={onClear}
             disabled={entries.length === 0}
-            className="min-h-[38px] px-2.5 flex items-center gap-1 rounded-xl text-xs font-medium text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-accent-soft)] disabled:opacity-40 transition-colors whitespace-nowrap"
+            className="min-h-[44px] px-2.5 flex items-center gap-1 rounded-xl text-xs font-medium text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-accent-soft)] disabled:opacity-40 transition-colors whitespace-nowrap"
           >
             <Trash2 className="w-3.5 h-3.5" />
             <span>{t('term_clear')}</span>
@@ -414,7 +414,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             <button
               type="button"
               onClick={onQuickInitEmbedded}
-              className="min-h-[34px] px-3 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shrink-0 transition-colors"
+              className="min-h-[44px] px-3 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shrink-0 transition-colors"
             >
               {t('tmx_init_btn_full')}
             </button>
@@ -462,11 +462,11 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             value={stdinValue}
             onChange={(e) => setStdinValue(e.target.value)}
             placeholder={pendingInputPrompt || t('term_input_placeholder')}
-            className="flex-1 min-w-0 min-h-[40px] px-3 rounded-lg bg-[var(--ide-surface)] border border-amber-300 dark:border-amber-700 text-sm font-mono text-[var(--ide-text)] focus:outline-none focus:ring-2 focus:ring-amber-500"
+            className="flex-1 min-w-0 min-h-[44px] px-3 rounded-lg bg-[var(--ide-surface)] border border-amber-300 dark:border-amber-700 text-sm font-mono text-[var(--ide-text)] focus:outline-none focus:ring-2 focus:ring-amber-500"
           />
           <button
             type="submit"
-            className="min-h-[40px] px-4 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-colors"
+            className="min-h-[44px] px-4 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-colors"
           >
             <span>{t('term_send')}</span>
             <CornerDownLeft className="w-3.5 h-3.5" />
@@ -485,11 +485,11 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             value={stdinValue}
             onChange={(e) => setStdinValue(e.target.value)}
             placeholder={t('term_stdin_placeholder')}
-            className="flex-1 min-w-0 min-h-[40px] px-3 rounded-lg bg-[var(--ide-bg)] border border-[var(--ide-border)] text-sm font-mono text-[var(--ide-text)] focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
+            className="flex-1 min-w-0 min-h-[44px] px-3 rounded-lg bg-[var(--ide-bg)] border border-[var(--ide-border)] text-sm font-mono text-[var(--ide-text)] focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
           />
           <button
             type="submit"
-            className="min-h-[40px] px-3.5 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium whitespace-nowrap shrink-0"
+            className="min-h-[44px] px-3.5 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium whitespace-nowrap shrink-0"
           >
             {t('term_send')}
           </button>
@@ -516,7 +516,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
                 : t('term_repl_py_placeholder')
             }
             aria-label="REPL"
-            className="flex-1 min-w-0 min-h-[40px] px-2 bg-transparent font-mono text-sm text-[var(--ide-text)] placeholder:text-[var(--ide-text-muted)] focus:outline-none"
+            className="flex-1 min-w-0 min-h-[44px] px-2 bg-transparent font-mono text-sm text-[var(--ide-text)] placeholder:text-[var(--ide-text-muted)] focus:outline-none"
           />
           <button
             type="submit"
@@ -525,7 +525,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
               status === 'running' ||
               (engine === 'pyodide' && status === 'loading')
             }
-            className="min-h-[40px] px-3.5 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium disabled:opacity-40 transition-colors whitespace-nowrap shrink-0"
+            className="min-h-[44px] px-3.5 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium disabled:opacity-40 transition-colors whitespace-nowrap shrink-0"
           >
             {t('term_exec_btn')}
           </button>

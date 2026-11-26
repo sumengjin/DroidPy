@@ -16,7 +16,14 @@ const bundle = await build({
   write: false,
 });
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`;
-const { buildTermuxBridgeScript, resolveTermuxInstallTarget } = await import(moduleUrl);
+const {
+  buildTermuxBridgeScript,
+  resolveTermuxInstallTarget,
+  buildTermuxUninstallCommand,
+  buildTermuxPipUpgradeCommand,
+  parseOutdatedPipJson,
+  filterTermuxPipPackages,
+} = await import(moduleUrl);
 
 const token = 'a'.repeat(64);
 const origin = 'https://droidpy-ci.example';
@@ -56,6 +63,57 @@ assert.ok(generated.slice(explicitStopStart, explicitStopEnd).includes('os.killp
 assert.ok(generated.includes('os.killpg(pgid, signal.SIGSTOP if should_pause else signal.SIGCONT)'));
 assert.ok(generated.includes('def _normalize_shell_command(command):'));
 assert.ok(generated.includes('python-polars'));
+const nativeInstalledPackages = ['python-numpy', 'python-polars', 'python-scipy'];
+assert.equal(
+  buildTermuxUninstallCommand('pip', 'polars', nativeInstalledPackages),
+  'pkg uninstall -y python-polars',
+  'TUR Polars must be removed through APT, not pip'
+);
+assert.equal(
+  buildTermuxUninstallCommand('pip', 'numpy', nativeInstalledPackages),
+  'pkg uninstall -y python-numpy',
+  'APT-backed Python distributions must be removed through APT'
+);
+assert.equal(
+  buildTermuxUninstallCommand('pip', 'polars', []),
+  'pip uninstall -y polars',
+  'a genuine PyPI Polars install must remain removable through pip'
+);
+assert.equal(
+  buildTermuxUninstallCommand('pip', 'requests', nativeInstalledPackages),
+  'pip uninstall -y requests',
+  'ordinary PyPI packages must continue to uninstall through pip'
+);
+assert.deepEqual(
+  filterTermuxPipPackages(['numpy', 'polars', 'requests'], nativeInstalledPackages),
+  ['requests'],
+  'native APT distributions must not be duplicated in the pip inventory'
+);
+assert.deepEqual(
+  filterTermuxPipPackages(['numpy', 'requests']),
+  ['requests'],
+  'when APT inventory is unavailable, known native packages must be excluded conservatively'
+);
+const outdatedJson = JSON.stringify([
+  { name: 'numpy', version: '1.0', latest_version: '2.0' },
+  { name: 'polars', version: '1.0', latest_version: '2.0' },
+  { name: 'requests', version: '1.0', latest_version: '2.0' },
+]);
+assert.deepEqual(
+  parseOutdatedPipJson(outdatedJson, nativeInstalledPackages).map((item) => item.name),
+  ['requests'],
+  'APT-backed distributions must not be offered as pip upgrades'
+);
+assert.deepEqual(
+  parseOutdatedPipJson(outdatedJson).map((item) => item.name),
+  ['requests'],
+  'unknown APT inventory must conservatively suppress native package pip upgrades'
+);
+assert.equal(
+  buildTermuxPipUpgradeCommand(['numpy', 'polars', 'requests'], false, nativeInstalledPackages),
+  'pip install --upgrade requests',
+  'bulk pip upgrades must not overwrite native APT distributions'
+);
 
 
 assert.ok(generated.includes('index-url = https://pypi.org/simple'));
@@ -403,6 +461,7 @@ try {
 // Package installation routing: Python archives must use pip, native extensions should use Termux binaries.
 const cases = [
   ['pip', 'numpy', 'pkg', 'python-numpy'],
+  ['pip', 'scipy', 'pkg', 'python-scipy'],
   ['pip', 'pandas', 'pkg', 'python-pandas'],
   ['pip', 'Pillow', 'pkg', 'python-pillow'],
   ['pip', 'PIL', 'pkg', 'python-pillow'],

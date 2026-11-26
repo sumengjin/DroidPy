@@ -51,7 +51,7 @@ export interface EditorSettings {
   atmosphere3dMode?: Atmosphere3dMode;
 }
 
-export type MobileTab = 'editor' | 'console' | 'browser' | 'files';
+export type MobileTab = 'editor' | 'console' | 'browser' | 'files' | 'packages';
 export type NegativeScreenSection = 'termux' | 'packages' | 'android' | 'settings';
 export type DeviceClass = 'phone' | 'tablet';
 export type TabletPaneTab = 'terminal' | 'browser' | 'files';

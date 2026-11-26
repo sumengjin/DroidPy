@@ -1532,6 +1532,12 @@ async function termuxStreamRequest(
 
 export async function checkTermuxHealth(config: TermuxConfig): Promise<TermuxHealthInfo> {
   const res = await termuxFetch<TermuxHealthInfo & { ok: boolean }>(config, '/health', { method: 'GET' }, 4500);
+  const installedPkgPackages = Array.isArray(res.installedPkgPackages) && res.installedPkgPackages.length > 0
+    ? res.installedPkgPackages
+    : undefined;
+  const installedPipPackages = Array.isArray(res.installedPipPackages)
+    ? filterTermuxPipPackages(res.installedPipPackages, installedPkgPackages)
+    : undefined;
   return {
     pythonVersion: res.pythonVersion,
     arch: res.arch,
@@ -1540,8 +1546,8 @@ export async function checkTermuxHealth(config: TermuxConfig): Promise<TermuxHea
     workspaceDir: res.workspaceDir,
     embedded: Boolean(res.embedded),
     hasPython: res.hasPython ?? true,
-    installedPipPackages: Array.isArray(res.installedPipPackages) ? res.installedPipPackages : undefined,
-    installedPkgPackages: Array.isArray(res.installedPkgPackages) ? res.installedPkgPackages : undefined,
+    installedPipPackages,
+    installedPkgPackages,
   };
 }
 
@@ -1920,6 +1926,7 @@ export interface ResolvedTermuxInstallTarget {
 // Curated native Termux builds avoid expensive or unsupported Android source builds.
 export const TERMUX_NATIVE_PYTHON_PACKAGES: Record<string, string> = {
   numpy: 'python-numpy',
+  scipy: 'python-scipy',
   pandas: 'python-pandas',
   pillow: 'python-pillow',
   pil: 'python-pillow',
@@ -1939,6 +1946,31 @@ export const TERMUX_NATIVE_PYTHON_PACKAGES: Record<string, string> = {
   'torchvision': 'python-torchvision',
   'yt-dlp': 'python-yt-dlp',
 };
+
+// TUR Polars is native APT too, but its install route must first enable TUR.
+const TERMUX_TUR_NATIVE_PYTHON_PACKAGES: Record<string, string> = {
+  polars: 'python-polars',
+};
+
+export function getTermuxNativePackageName(packageName: string): string | undefined {
+  const normalized = normalizeTermuxPkgName(packageName);
+  return TERMUX_NATIVE_PYTHON_PACKAGES[normalized] ?? TERMUX_TUR_NATIVE_PYTHON_PACKAGES[normalized];
+}
+
+export function isTermuxNativePackageInstalled(packageName: string, installedPkgPackages: string[]): boolean {
+  const nativeName = getTermuxNativePackageName(packageName);
+  if (!nativeName) return false;
+  const installed = new Set(installedPkgPackages.map(normalizeTermuxPkgName));
+  return installed.has(normalizeTermuxPkgName(nativeName));
+}
+
+export function filterTermuxPipPackages(installedPipPackages: string[], installedPkgPackages?: string[]): string[] {
+  return installedPipPackages.filter((name) =>
+    installedPkgPackages === undefined
+      ? !getTermuxNativePackageName(name)
+      : !isTermuxNativePackageInstalled(name, installedPkgPackages)
+  );
+}
 
 const PYTHON_ARCHIVE_PATTERN = /\.(?:whl|tar\.gz|tgz|tar\.bz2|tbz2|tar\.xz|txz|tar|zip|egg)(?:$|[?#])/i;
 const REQUIREMENTS_INPUT_PATTERN = /(?:^|\s)(?:-r|--requirement)(?:\s+|=)/i;
@@ -1981,7 +2013,7 @@ export interface TermuxOutdatedPipItem {
   latestVersion: string;
 }
 
-export function parseOutdatedPipJson(rawOutput: string): TermuxOutdatedPipItem[] {
+export function parseOutdatedPipJson(rawOutput: string, installedPkgPackages?: string[]): TermuxOutdatedPipItem[] {
   const cleaned = stripAnsi(rawOutput).trim();
   const startIdx = cleaned.indexOf('[');
   const endIdx = cleaned.lastIndexOf(']');
@@ -1994,7 +2026,10 @@ export function parseOutdatedPipJson(rawOutput: string): TermuxOutdatedPipItem[]
     }>;
     if (!Array.isArray(parsed)) return [];
     return parsed
-      .filter((item) => item.name && item.version && item.latest_version && item.version !== item.latest_version)
+      .filter((item) => item.name && item.version && item.latest_version && item.version !== item.latest_version &&
+        (installedPkgPackages === undefined
+          ? !getTermuxNativePackageName(String(item.name))
+          : !isTermuxNativePackageInstalled(String(item.name), installedPkgPackages)))
       .map((item) => ({
         name: String(item.name),
         currentVersion: String(item.version),
@@ -2005,31 +2040,46 @@ export function parseOutdatedPipJson(rawOutput: string): TermuxOutdatedPipItem[]
   }
 }
 
-export function buildTermuxUninstallCommand(mode: 'pip' | 'pkg', target: string): string {
+export function buildTermuxUninstallCommand(mode: 'pip' | 'pkg', target: string, installedPkgPackages?: string[]): string {
   const cleaned = target
     .split(/\s+/)
     .map((p) => p.replace(/[^a-zA-Z0-9_.+-]/g, '').trim())
-    .filter((p) => {
-      if (!p) return false;
-      const lower = p.toLowerCase();
-      return mode === 'pkg' ? !CORE_TERMUX_PKG_PACKAGES.has(lower) : !CORE_TERMUX_PIP_PACKAGES.has(lower);
-    });
+    .filter(Boolean);
   if (cleaned.length === 0) return '';
+
+  // APT-provided Python distributions can appear in pip inventory. Remove them via dpkg
+  // only when the native package is confirmed installed.
+  if (mode === 'pip' && cleaned.length === 1 && installedPkgPackages !== undefined) {
+    const nativeName = getTermuxNativePackageName(cleaned[0]);
+    if (nativeName && isTermuxNativePackageInstalled(cleaned[0], installedPkgPackages)) {
+      return 'pkg uninstall -y ' + nativeName;
+    }
+  }
+
+  const safeTargets = cleaned.filter((p) => {
+    const lower = p.toLowerCase();
+    return mode === 'pkg' ? !CORE_TERMUX_PKG_PACKAGES.has(lower) : !CORE_TERMUX_PIP_PACKAGES.has(lower);
+  });
+  if (safeTargets.length === 0) return '';
   return mode === 'pkg'
-    ? `pkg uninstall -y ${cleaned.join(' ')}`
-    : `pip uninstall -y ${cleaned.join(' ')}`;
+    ? `pkg uninstall -y ${safeTargets.join(' ')}`
+    : `pip uninstall -y ${safeTargets.join(' ')}`;
 }
 
 export function buildTermuxPipUpgradeCommand(
   installedPipPackages: string[],
-  trustedHost = false
+  trustedHost = false,
+  installedPkgPackages?: string[]
 ): string {
   const hostFlags = trustedHost
     ? ' --trusted-host pypi.org --trusted-host files.pythonhosted.org'
     : '';
   const safeTargets = installedPipPackages
     .map((p) => p.replace(/[^a-zA-Z0-9_.-]/g, '').trim())
-    .filter((p) => p && !CORE_TERMUX_PIP_PACKAGES.has(p.toLowerCase()));
+    .filter((p) => p && !CORE_TERMUX_PIP_PACKAGES.has(p.toLowerCase()) &&
+      (installedPkgPackages === undefined
+        ? !getTermuxNativePackageName(p)
+        : !isTermuxNativePackageInstalled(p, installedPkgPackages)));
   if (safeTargets.length === 0) {
     return `pip install --upgrade${hostFlags} pip`;
   }

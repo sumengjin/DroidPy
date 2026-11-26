@@ -22,6 +22,7 @@ import {
   Menu,
   Sparkles,
   Download,
+  Package,
 } from 'lucide-react';
 import { registerSW } from 'virtual:pwa-register';
 import { DEFAULT_FILES } from './data/defaultFiles';
@@ -150,7 +151,7 @@ const DEFAULT_SETTINGS: EditorSettings = {
   tabSize: 4,
   wordWrap: true,
   showSymbolBar: true,
-  theme: 'rose',
+  theme: 'dark',
   locale: 'zh-TW',
   androidStoragePermission: true,
   autoUpdatePackages: getAutoUpdatePackagesPref(),
@@ -355,6 +356,9 @@ export default function App() {
   const [lastDurationMs, setLastDurationMs] = useState<number | null>(null);
   const [entries, setEntries] = useState<TerminalEntry[]>([]);
   const [installedPackages, setInstalledPackages] = useState<InstalledPackage[]>([]);
+  const [activePyodidePackage, setActivePyodidePackage] = useState<string | null>(null);
+  // Synchronous guard serializes all Pyodide package mutations across rapid taps and drawer remounts.
+  const pyodidePackageOperationLockRef = useRef(false);
   const [cursorPos, setCursorPos] = useState<{ line: number; col: number }>({ line: 1, col: 1 });
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [pendingInputPrompt, setPendingInputPrompt] = useState<string | null>(null);
@@ -429,7 +433,10 @@ export default function App() {
   const [termuxError, setTermuxError] = useState<string | null>(null);
   const [termuxHealth, setTermuxHealth] = useState<TermuxHealthInfo | null>(null);
   const [termuxRunning, setTermuxRunning] = useState(false);
+  const [termuxActiveTask, setTermuxActiveTask] = useState<string | null>(null);
   const termuxScriptStartLockRef = useRef(false);
+  // Synchronous guard prevents overlapping native Termux operations across drawer remounts.
+  const termuxOperationLockRef = useRef(false);
   const [termuxPaused, setTermuxPaused] = useState(false);
   const [termuxScriptRunning, setTermuxScriptRunning] = useState(false);
   const [backupStatus, setBackupStatus] = useState<PackageBackupStatus | null>(null);
@@ -909,6 +916,7 @@ export default function App() {
 
         const savedPkgs = sandboxPackagesRef.current;
         if (savedPkgs.length > 0) {
+          pyodidePackageOperationLockRef.current = true;
           try {
             const currentList = await listPyPackages(callbacksRef.current);
             if (cancelled) return;
@@ -930,6 +938,8 @@ export default function App() {
             }
           } catch {
             // ignore restore list failures
+          } finally {
+            pyodidePackageOperationLockRef.current = false;
           }
         }
       } catch (err) {
@@ -1214,8 +1224,66 @@ export default function App() {
     []
   );
 
+  // Install only the Python runtime essentials on first actual use.
+  // Optional libraries and native build toolchains remain opt-in.
+  const ensureEmbeddedPythonEnvironment = useCallback(async (): Promise<boolean> => {
+    let health = termuxHealth;
+    if (!health || (health.embedded && health.hasPython === false)) {
+      try {
+        health = await checkTermuxHealth(termuxConfig);
+        setTermuxHealth(health);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        setTermuxError(message);
+        appLog('termux', `Unable to verify Python before first use: ${message}`, { level: 'error' });
+        appendEntry('stderr', message);
+        showToast(t('toast_termux_disconnected'));
+        return false;
+      }
+    }
+    if (!health?.embedded || health.hasPython !== false) return true;
+
+    const command = 'pkg update -y && pkg install -y python python-pip';
+    const streamId = makeId();
+    appLog('termux', 'First-use Python bootstrap started (python, python-pip only)');
+    appendEntry('system', t('log_termux_init', { cmd: command }));
+    try {
+      const result = await streamShellInTermux(termuxConfig, command, {
+        onChunk: (chunk) => appendStreamChunk(streamId, chunk),
+      });
+      flushStreamChunk(streamId);
+      setTermuxConnectionState('connected');
+      setLastDurationMs(result.durationMs);
+      if (result.exitCode !== 0) {
+        appendEntry('stderr', t('log_termux_exit', { code: result.exitCode }));
+        appLog('termux', `First-use Python bootstrap failed (exit=${result.exitCode})`, { level: 'error' });
+        showToast(t('toast_termux_init_err', { code: result.exitCode }));
+        return false;
+      }
+      const verified = await checkTermuxHealth(termuxConfig);
+      setTermuxHealth(verified);
+      if (verified.embedded && verified.hasPython === false) {
+        appendEntry('stderr', t('tmx_need_init_hint'));
+        appLog('termux', 'First-use Python bootstrap completed but Python is still unavailable', { level: 'error' });
+        showToast(t('tmx_need_init_hint'));
+        return false;
+      }
+      appLog('termux', 'First-use Python bootstrap completed');
+      showToast(t('toast_termux_init_ok'));
+      return true;
+    } catch (err) {
+      flushStreamChunk(streamId);
+      const message = err instanceof Error ? err.message : String(err);
+      setTermuxError(message);
+      appendEntry('stderr', message);
+      appLog('termux', `First-use Python bootstrap exception: ${message}`, { level: 'error' });
+      showToast(t('toast_termux_install_fail'));
+      return false;
+    }
+  }, [termuxHealth, termuxConfig, appendEntry, appendStreamChunk, flushStreamChunk, showToast, t]);
+
   const handleRunInTermux = useCallback(async () => {
-    if (termuxRunning || termuxScriptStartLockRef.current) {
+    if (termuxRunning || termuxOperationLockRef.current || termuxScriptStartLockRef.current) {
       showToast(t('cta_running'));
       return;
     }
@@ -1227,26 +1295,15 @@ export default function App() {
     setTermuxPaused(false);
     setTermuxScriptRunning(true);
     setTermuxRunning(true);
+    setTermuxActiveTask(`run:${entryFile.name}`);
     setRunStartedAt(Date.now());
     setTermuxError(null);
 
     const streamId = makeId();
 
     try {
-      let currentHealth = termuxHealth;
-      if (currentHealth?.embedded && currentHealth.hasPython === false) {
-        try {
-          currentHealth = await checkTermuxHealth(termuxConfig);
-          setTermuxHealth(currentHealth);
-        } catch {
-          // proceed to run so server error message or connection check catches it
-        }
-      }
-      if (currentHealth?.embedded && currentHealth.hasPython === false) {
-        appendEntry('stderr', t('tmx_need_init_hint'));
-        showToast(t('tmx_need_init_hint'));
-        return;
-      }
+      const pythonReady = await ensureEmbeddedPythonEnvironment();
+      if (!pythonReady) return;
 
       appendEntry('system', t('log_termux_run', { name: entryFile.name }));
       appLog('termux', `Run script in Termux: ${entryFile.name}`);
@@ -1309,6 +1366,7 @@ export default function App() {
       setTermuxScriptRunning(false);
       setTermuxPaused(false);
       setRunStartedAt(null);
+      setTermuxActiveTask(null);
       setTermuxRunning(false);
     }
   }, [
@@ -1318,6 +1376,7 @@ export default function App() {
     termuxConfig,
     termuxHealth,
     termuxRunning,
+    ensureEmbeddedPythonEnvironment,
     appendEntry,
     appendStreamChunk,
     flushStreamChunk,
@@ -1328,26 +1387,31 @@ export default function App() {
 
   const handleInstallInTermux = useCallback(
     async (mode: 'pip' | 'pkg', target: string) => {
-      if (termuxRunning) {
+      if (termuxRunning || termuxOperationLockRef.current || termuxScriptStartLockRef.current) {
         showToast(t('cta_running'));
         return;
       }
-      const resolvedInstall = resolveTermuxInstallTarget(mode, target);
-      const installMode = resolvedInstall.mode;
-      const installTarget = resolvedInstall.target;
-      const label = installMode === 'pkg'
-        ? `pkg install -y ${installTarget}${resolvedInstall.routedFromPip ? ` (native Termux package for ${target})` : ''}`
-        : `pip install ${installTarget}`;
+      termuxOperationLockRef.current = true;
+      let label = `${mode} install ${target}`;
       focusOutputPane('terminal');
       setTermuxRunning(true);
+      setTermuxActiveTask(`install:${target.trim()}`);
       setRunStartedAt(Date.now());
       setTermuxError(null);
-      appendEntry('system', t('log_termux_install', { cmd: label }));
-      appLog('package', `Termux install start: ${label}`);
       const streamId = makeId();
       let tailBuf = '';
       const tailAnsiBuf = createAnsiStreamBuffer();
       try {
+        const resolvedInstall = resolveTermuxInstallTarget(mode, target);
+        const installMode = resolvedInstall.mode;
+        const installTarget = resolvedInstall.target;
+        label = installMode === 'pkg'
+          ? `pkg install -y ${installTarget}${resolvedInstall.routedFromPip ? ` (native Termux package for ${target})` : ''}`
+          : `pip install ${installTarget}`;
+        appendEntry('system', t('log_termux_install', { cmd: label }));
+        appLog('package', `Termux install start: ${label}`);
+        const pythonReady = await ensureEmbeddedPythonEnvironment();
+        if (!pythonReady) return;
         const res = await streamInstallInTermux(
           termuxConfig,
           installMode,
@@ -1412,18 +1476,24 @@ export default function App() {
           // ignore health refresh failure
         }
         setRunStartedAt(null);
+        setTermuxActiveTask(null);
         setTermuxRunning(false);
+        termuxOperationLockRef.current = false;
       }
     },
-    [termuxConfig, termuxRunning, focusOutputPane, appendEntry, appendStreamChunk, flushStreamChunk, refreshBackupStatus, showToast, t]
+    [termuxConfig, termuxRunning, ensureEmbeddedPythonEnvironment, focusOutputPane, appendEntry, appendStreamChunk, flushStreamChunk, refreshBackupStatus, showToast, t]
   );
 
   const handleRunShellInTermux = useCallback(
-    async (command: string): Promise<boolean> => {
-      if (termuxRunning) {
+    async (command: string, operationLockAlreadyHeld = false): Promise<boolean> => {
+      if (
+        (operationLockAlreadyHeld && !termuxOperationLockRef.current) ||
+        (!operationLockAlreadyHeld && (termuxRunning || termuxOperationLockRef.current || termuxScriptStartLockRef.current))
+      ) {
         showToast(t('cta_running'));
         return false;
       }
+      if (!operationLockAlreadyHeld) termuxOperationLockRef.current = true;
       focusOutputPane('terminal');
       setTermuxRunning(true);
       setRunStartedAt(Date.now());
@@ -1483,91 +1553,19 @@ export default function App() {
         }
         setRunStartedAt(null);
         setTermuxRunning(false);
+        if (!operationLockAlreadyHeld) termuxOperationLockRef.current = false;
       }
       return succeeded;
     },
     [termuxConfig, termuxRunning, focusOutputPane, appendEntry, appendStreamChunk, flushStreamChunk, refreshBackupStatus, showToast, t]
   );
 
-  const handleInitializeEmbeddedEnv = useCallback(
-    async (includeBaseSystem: boolean) => {
-      if (termuxRunning) {
-        showToast(t('cta_running'));
-        return;
-      }
-      const cmd = includeBaseSystem
-        ? '(pkg update -y || true) && pkg install -y python python-pip python-lxml libxml2 libxslt clang && pip install --no-cache-dir requests beautifulsoup4 httpx'
-        : 'pip install --no-cache-dir requests beautifulsoup4 httpx';
-      setExecutionEngine('termux');
-      focusOutputPane('terminal');
-      setTermuxRunning(true);
-      setRunStartedAt(Date.now());
-      setTermuxError(null);
-      appendEntry('system', t('log_termux_init', { cmd }));
-      appLog('termux', `One-tap env initialization started (includeBaseSystem=${includeBaseSystem})`);
-      const streamId = makeId();
-      let tailBuf = '';
-      const tailAnsiBuf = createAnsiStreamBuffer();
-      try {
-        const res = await streamShellInTermux(termuxConfig, cmd, {
-          onChunk: (chunk) => {
-            appendStreamChunk(streamId, chunk);
-            const cleanChunk = stripAnsi(tailAnsiBuf.push(chunk));
-            if (cleanChunk) {
-              tailBuf = (tailBuf + cleanChunk).slice(-1200);
-            }
-          },
-        });
-        const remTail = stripAnsi(tailAnsiBuf.flush());
-        if (remTail) {
-          tailBuf = (tailBuf + remTail).slice(-1200);
-        }
-        flushStreamChunk(streamId);
-        setTermuxConnectionState('connected');
-        setLastDurationMs(res.durationMs);
-        if (res.exitCode === 0) {
-          appLog('termux', `One-tap env initialization completed (${formatDurationHMS(res.durationMs)})`);
-          showToast(t('toast_termux_init_ok'));
-        } else {
-          appendEntry('stderr', t('log_termux_exit', { code: res.exitCode }));
-          appLog('termux', `One-tap env initialization exited ${res.exitCode}`, {
-            level: 'error',
-            detail: tailBuf.trim() || undefined,
-          });
-          showToast(t('toast_termux_init_err', { code: res.exitCode }));
-        }
-      } catch (err) {
-        flushStreamChunk(streamId);
-        const msg = err instanceof Error ? err.message : String(err);
-        setTermuxConnectionState('error');
-        setTermuxError(msg);
-        appendEntry('stderr', msg);
-        appLog('termux', `One-tap env initialization error: ${msg}`, {
-          level: 'error',
-          detail: tailBuf.trim() || undefined,
-        });
-        showToast(t('toast_termux_install_fail'));
-      } finally {
-        try {
-          const health = await checkTermuxHealth(termuxConfig);
-          setTermuxHealth(health);
-          void refreshBackupStatus(termuxConfig);
-        } catch {
-          // ignore background health refresh error
-        }
-        flushNativeStateNow();
-        setRunStartedAt(null);
-        setTermuxRunning(false);
-      }
-    },
-    [termuxConfig, termuxRunning, focusOutputPane, appendEntry, appendStreamChunk, flushStreamChunk, refreshBackupStatus, flushNativeStateNow, showToast, t]
-  );
-
   const handleRestoreBackedUpPackages = useCallback(async () => {
-    if (termuxRunning || restoringBackup) {
+    if (termuxRunning || termuxOperationLockRef.current || termuxScriptStartLockRef.current || restoringBackup) {
       showToast(t('cta_running'));
       return;
     }
+    termuxOperationLockRef.current = true;
     setExecutionEngine('termux');
     focusOutputPane('terminal');
     setRestoringBackup(true);
@@ -1625,6 +1623,7 @@ export default function App() {
       setRestoringBackup(false);
       setRunStartedAt(null);
       setTermuxRunning(false);
+      termuxOperationLockRef.current = false;
     }
   }, [
     termuxRunning,
@@ -1652,6 +1651,7 @@ export default function App() {
   );
 
   const handleToggleTermuxPause = useCallback(async () => {
+    if (!termuxScriptRunning) return;
     try {
       if (termuxPaused) {
         await resumeTermuxProcess(termuxConfig);
@@ -1667,7 +1667,7 @@ export default function App() {
       appendEntry('stderr', message);
       showToast(message);
     }
-  }, [termuxConfig, termuxPaused, appendEntry, showToast]);
+  }, [termuxConfig, termuxPaused, termuxScriptRunning, appendEntry, showToast]);
 
   const handleStopTermux = useCallback(async () => {
     abortActiveTermuxStream();
@@ -1701,7 +1701,13 @@ export default function App() {
 
   const handleCleanupStuckProcesses = useCallback(
     async (manual = false) => {
-      if (cleaningProcesses) return;
+      if (
+        cleaningProcesses ||
+        termuxRunning ||
+        termuxOperationLockRef.current ||
+        termuxScriptStartLockRef.current
+      ) return;
+      termuxOperationLockRef.current = true;
       setCleaningProcesses(true);
       try {
         const res = await cleanupTermuxProcesses(termuxConfigRef.current, manual);
@@ -1731,9 +1737,10 @@ export default function App() {
         }
       } finally {
         setCleaningProcesses(false);
+        termuxOperationLockRef.current = false;
       }
     },
-    [cleaningProcesses, appendEntry, showToast, t]
+    [cleaningProcesses, termuxRunning, appendEntry, showToast, t]
   );
 
   const handleRebuildPipCertifi = useCallback(async () => {
@@ -1765,12 +1772,54 @@ export default function App() {
       '    shutil.copyfile(src, dst)',
       '    os.chmod(dst, 0o644)',
       '    print("SSL_CERT_FILE=" + dst)',
+      '    import stat',
+      '    def update_pip_config_preserving_existing_settings(cfg_path):',
+      '        try:',
+      '            with open(cfg_path, "r", encoding="utf-8") as fp: lines = fp.readlines()',
+      '        except FileNotFoundError:',
+      '            lines = []',
+      '        except Exception:',
+      '            return',
+      '        out = []',
+      '        in_global = False',
+      '        global_seen = False',
+      '        cert_written = False',
+      '        for line in lines:',
+      '            stripped = line.strip()',
+      '            if stripped.startswith("[") and stripped.endswith("]"):',
+      '                if in_global and not cert_written:',
+      '                    out.append("cert = " + dst + "\\n")',
+      '                    cert_written = True',
+      '                in_global = stripped[1:-1].strip().lower() == "global"',
+      '                global_seen = global_seen or in_global',
+      '                out.append(line)',
+      '                continue',
+      '            if in_global and "=" in stripped and stripped.split("=", 1)[0].strip().lower() == "cert":',
+      '                if not cert_written:',
+      '                    out.append("cert = " + dst + "\\n")',
+      '                    cert_written = True',
+      '                continue',
+      '            out.append(line)',
+      '        if in_global and not cert_written:',
+      '            out.append("cert = " + dst + "\\n")',
+      '            cert_written = True',
+      '        if not global_seen:',
+      '            if out and not out[-1].endswith("\\n"): out[-1] += "\\n"',
+      '            if out and out[-1].strip(): out.append("\\n")',
+      '            out.extend(["[global]\\n", "cert = " + dst + "\\n"])',
+      '        try:',
+      '            mode = stat.S_IMODE(os.stat(cfg_path).st_mode) if os.path.exists(cfg_path) else 0o600',
+      '            tmp_path = cfg_path + ".droidpy.tmp"',
+      '            with open(tmp_path, "w", encoding="utf-8") as fp: fp.writelines(out)',
+      '            os.chmod(tmp_path, mode)',
+      '            os.replace(tmp_path, cfg_path)',
+      '        except Exception:',
+      '            try: os.unlink(tmp_path)',
+      '            except Exception: pass',
       '    for cfg_path in (os.path.join(base, "etc/pip.conf"), os.path.join(home, ".config/pip/pip.conf")):',
       '        try:',
       '            os.makedirs(os.path.dirname(cfg_path), exist_ok=True)',
-      '            with open(cfg_path, "w", encoding="utf-8") as fp:',
-      '                fp.write(f"[global]\\nno-cache-dir = true\\nbreak-system-packages = true\\ndisable-pip-version-check = true\\ncert = {dst}\\n")',
-      '            os.chmod(cfg_path, 0o644)',
+      '            update_pip_config_preserving_existing_settings(cfg_path)',
       '        except Exception:',
       '            pass',
       'else:',
@@ -2119,6 +2168,12 @@ export default function App() {
 
   const handleInstallPackage = useCallback(
     async (pkgName: string) => {
+      if (pyodidePackageOperationLockRef.current) {
+        showToast(t('cta_running'));
+        return;
+      }
+      pyodidePackageOperationLockRef.current = true;
+      setActivePyodidePackage(pkgName);
       appLog('package', `Installing Pyodide package: ${pkgName}`);
       try {
         const list = await installPyPackage(pkgName, callbacksRef.current);
@@ -2138,6 +2193,9 @@ export default function App() {
         appendEntry('stderr', `${t('toast_pkg_fail', { pkg: pkgName })}: ${msg}`);
         appLog('package', `Failed installing Pyodide package ${pkgName}: ${msg}`, { level: 'error' });
         showToast(t('toast_pkg_fail', { pkg: pkgName }));
+      } finally {
+        setActivePyodidePackage(null);
+        pyodidePackageOperationLockRef.current = false;
       }
     },
     [appendEntry, showToast, t]
@@ -2150,6 +2208,11 @@ export default function App() {
         showToast(t('pkg_uninstall_core_err'));
         return;
       }
+      if (pyodidePackageOperationLockRef.current) {
+        showToast(t('cta_running'));
+        return;
+      }
+      pyodidePackageOperationLockRef.current = true;
       appLog('package', `Uninstalling Pyodide package: ${pkgName}`);
       try {
         const list = await uninstallPyPackage(pkgName, callbacksRef.current);
@@ -2163,22 +2226,33 @@ export default function App() {
         appendEntry('stderr', msg);
         appLog('package', `Failed uninstalling Pyodide package ${pkgName}: ${msg}`, { level: 'error' });
         showToast(msg);
+      } finally {
+        pyodidePackageOperationLockRef.current = false;
       }
     },
     [appendEntry, showToast, t]
   );
 
   const handleRefreshPackages = useCallback(async () => {
+    if (pyodidePackageOperationLockRef.current) return;
+    pyodidePackageOperationLockRef.current = true;
     try {
       const list = await listPyPackages(callbacksRef.current);
       setInstalledPackages(list);
     } catch (err) {
       showToast(err instanceof Error ? err.message : t('pkg_loaded_empty'));
+    } finally {
+      pyodidePackageOperationLockRef.current = false;
     }
   }, [showToast, t]);
 
   const handleUpgradePyPackage = useCallback(
     async (pkgName: string) => {
+      if (pyodidePackageOperationLockRef.current) {
+        showToast(t('cta_running'));
+        return;
+      }
+      pyodidePackageOperationLockRef.current = true;
       setUpgradingPyPackages(true);
       appLog('package', `Upgrading Pyodide package: ${pkgName}`);
       try {
@@ -2200,13 +2274,15 @@ export default function App() {
         showToast(t('toast_pkg_fail', { pkg: pkgName }));
       } finally {
         setUpgradingPyPackages(false);
+        pyodidePackageOperationLockRef.current = false;
       }
     },
     [outdatedPyPackages, appendEntry, showToast, t]
   );
 
   const handleCheckAndUpgradeAllPy = useCallback(async () => {
-    if (checkingOutdatedPkgs || upgradingPyPackages) return;
+    if (checkingOutdatedPkgs || upgradingPyPackages || pyodidePackageOperationLockRef.current) return;
+    pyodidePackageOperationLockRef.current = true;
     setCheckingOutdatedPkgs(true);
     try {
       const currentList = await listPyPackages(callbacksRef.current);
@@ -2231,6 +2307,7 @@ export default function App() {
     } finally {
       setCheckingOutdatedPkgs(false);
       setUpgradingPyPackages(false);
+      pyodidePackageOperationLockRef.current = false;
     }
   }, [checkingOutdatedPkgs, upgradingPyPackages, appendEntry, showToast, t]);
 
@@ -2238,14 +2315,18 @@ export default function App() {
     if (
       termuxConnectionState !== 'connected' ||
       termuxHealth?.hasPython === false ||
-      checkingTermuxOutdated
+      checkingTermuxOutdated ||
+      termuxRunning ||
+      termuxOperationLockRef.current ||
+      termuxScriptStartLockRef.current
     ) {
       return;
     }
+    termuxOperationLockRef.current = true;
     setCheckingTermuxOutdated(true);
     try {
       const res = await execTermuxShell(termuxConfigRef.current, 'pip list --outdated --format=json');
-      const outdated = parseOutdatedPipJson(res.stdout || '');
+      const outdated = parseOutdatedPipJson(res.stdout || '', termuxHealth?.installedPkgPackages);
       setOutdatedTermuxPips(outdated);
       appLog('package', `Checked Termux pip outdated packages: ${outdated.length}`);
       if (outdated.length === 0) {
@@ -2255,20 +2336,22 @@ export default function App() {
       // ignore check error
     } finally {
       setCheckingTermuxOutdated(false);
+      termuxOperationLockRef.current = false;
     }
-  }, [termuxConnectionState, termuxHealth?.hasPython, checkingTermuxOutdated, showToast, t]);
+  }, [termuxConnectionState, termuxHealth?.hasPython, termuxHealth?.installedPkgPackages, checkingTermuxOutdated, termuxRunning, showToast, t]);
 
   const handleUninstallInTermux = useCallback(
     async (mode: 'pip' | 'pkg', target: string) => {
-      if (termuxRunning) {
+      if (termuxRunning || termuxOperationLockRef.current || termuxScriptStartLockRef.current) {
         showToast(t('cta_running'));
         return;
       }
-      const cmd = buildTermuxUninstallCommand(mode, target);
+      const cmd = buildTermuxUninstallCommand(mode, target, termuxHealth?.installedPkgPackages);
       if (!cmd) {
         showToast(t('pkg_uninstall_core_err'));
         return;
       }
+      termuxOperationLockRef.current = true;
       focusOutputPane('terminal');
       setTermuxRunning(true);
       setRunStartedAt(Date.now());
@@ -2335,6 +2418,7 @@ export default function App() {
         }
         setRunStartedAt(null);
         setTermuxRunning(false);
+        termuxOperationLockRef.current = false;
       }
     },
     [termuxRunning, termuxConfig, focusOutputPane, appendEntry, appendStreamChunk, flushStreamChunk, refreshBackupStatus, showToast, t]
@@ -2342,10 +2426,11 @@ export default function App() {
 
   const handleUpgradeAllTermux = useCallback(
     async (kind: 'pip' | 'pkg') => {
-      if (termuxRunning || upgradingTermux) {
+      if (termuxRunning || termuxOperationLockRef.current || termuxScriptStartLockRef.current || upgradingTermux) {
         showToast(t('cta_running'));
         return;
       }
+      termuxOperationLockRef.current = true;
       setUpgradingTermux(true);
       try {
         if (kind === 'pip') {
@@ -2356,7 +2441,7 @@ export default function App() {
               termuxConfigRef.current,
               'pip list --outdated --format=json'
             );
-            const outdated = parseOutdatedPipJson(outRes.stdout || '');
+            const outdated = parseOutdatedPipJson(outRes.stdout || '', termuxHealth?.installedPkgPackages);
             setOutdatedTermuxPips(outdated);
             outdatedTargets = outdated
               .map((item) => item.name)
@@ -2373,8 +2458,10 @@ export default function App() {
           const ok = await handleRunShellInTermux(
             buildTermuxPipUpgradeCommand(
               outdatedTargets,
-              Boolean(settingsRef.current.pipTrustedHostEmergency)
-            )
+              Boolean(settingsRef.current.pipTrustedHostEmergency),
+              termuxHealth?.installedPkgPackages
+            ),
+            true
           );
           if (ok) {
             setOutdatedTermuxPips([]);
@@ -2382,17 +2469,18 @@ export default function App() {
           }
           return;
         }
-        await handleRunShellInTermux(buildTermuxAptUpgradeCommand());
+        await handleRunShellInTermux(buildTermuxAptUpgradeCommand(), true);
       } finally {
         setUpgradingTermux(false);
+        termuxOperationLockRef.current = false;
       }
     },
-    [termuxRunning, upgradingTermux, handleRunShellInTermux, showToast, t]
+    [termuxRunning, upgradingTermux, termuxHealth?.installedPkgPackages, handleRunShellInTermux, showToast, t]
   );
 
   const handleUpgradeSingleTermuxPip = useCallback(
     async (pkg: string) => {
-      if (termuxRunning || upgradingTermux) {
+      if (termuxRunning || termuxOperationLockRef.current || termuxScriptStartLockRef.current || upgradingTermux) {
         showToast(t('cta_running'));
         return;
       }
@@ -2418,13 +2506,22 @@ export default function App() {
   );
 
   const handleUpgradeAllPackages = useCallback(async () => {
-    if (checkingOutdatedPkgs || upgradingPyPackages || upgradingTermux || termuxRunning) {
+    if (
+      checkingOutdatedPkgs ||
+      upgradingPyPackages ||
+      pyodidePackageOperationLockRef.current ||
+      upgradingTermux ||
+      termuxRunning ||
+      termuxOperationLockRef.current ||
+      termuxScriptStartLockRef.current
+    ) {
       showToast(t('cta_running'));
       return;
     }
     let upgradedCount = 0;
 
     if (pyodideStatus === 'ready') {
+      pyodidePackageOperationLockRef.current = true;
       setCheckingOutdatedPkgs(true);
       try {
         const currentList = await listPyPackages(callbacksRef.current);
@@ -2448,10 +2545,16 @@ export default function App() {
       } finally {
         setCheckingOutdatedPkgs(false);
         setUpgradingPyPackages(false);
+        pyodidePackageOperationLockRef.current = false;
       }
     }
 
     if (termuxConnectionState === 'connected') {
+      if (termuxRunning || termuxOperationLockRef.current || termuxScriptStartLockRef.current) {
+        showToast(t('cta_running'));
+        return;
+      }
+      termuxOperationLockRef.current = true;
       setUpgradingTermux(true);
       try {
         let pipTargets: string[] = [];
@@ -2462,7 +2565,7 @@ export default function App() {
               termuxConfigRef.current,
               'pip list --outdated --format=json'
             );
-            const outdatedPips = parseOutdatedPipJson(outRes.stdout || '');
+            const outdatedPips = parseOutdatedPipJson(outRes.stdout || '', termuxHealth?.installedPkgPackages);
             setOutdatedTermuxPips(outdatedPips);
             pipTargets = outdatedPips
               .map((item) => item.name)
@@ -2478,12 +2581,13 @@ export default function App() {
           cmds.push(
             buildTermuxPipUpgradeCommand(
               pipTargets,
-              Boolean(settingsRef.current.pipTrustedHostEmergency)
+              Boolean(settingsRef.current.pipTrustedHostEmergency),
+              termuxHealth?.installedPkgPackages
             )
           );
         }
         cmds.push(buildTermuxAptUpgradeCommand());
-        const ok = await handleRunShellInTermux(cmds.join(' && '));
+        const ok = await handleRunShellInTermux(cmds.join(' && '), true);
         if (ok) {
           if (pipTargets.length > 0) {
             upgradedCount += pipTargets.length;
@@ -2492,6 +2596,7 @@ export default function App() {
         }
       } finally {
         setUpgradingTermux(false);
+        termuxOperationLockRef.current = false;
       }
     }
 
@@ -2508,6 +2613,7 @@ export default function App() {
     pyodideStatus,
     termuxConnectionState,
     termuxHealth?.hasPython,
+    termuxHealth?.installedPkgPackages,
     handleRunShellInTermux,
     appendEntry,
     showToast,
@@ -2605,7 +2711,8 @@ export default function App() {
     if (userPips.length === 0) return;
     autoUpdateTermuxRanRef.current = true;
     const timer = window.setTimeout(async () => {
-      if (termuxRunning) return;
+      if (termuxRunning || termuxOperationLockRef.current || termuxScriptStartLockRef.current) return;
+      termuxOperationLockRef.current = true;
       setUpgradingTermux(true);
       const streamId = makeId();
       try {
@@ -2613,7 +2720,7 @@ export default function App() {
           termuxConfigRef.current,
           'pip list --outdated --format=json'
         );
-        const outdated = parseOutdatedPipJson(outRes.stdout || '');
+        const outdated = parseOutdatedPipJson(outRes.stdout || '', termuxHealth?.installedPkgPackages);
         setOutdatedTermuxPips(outdated);
         const targetNames = outdated
           .map((item) => item.name)
@@ -2624,7 +2731,8 @@ export default function App() {
         }
         const cmd = buildTermuxPipUpgradeCommand(
           targetNames,
-          Boolean(settingsRef.current.pipTrustedHostEmergency)
+          Boolean(settingsRef.current.pipTrustedHostEmergency),
+          termuxHealth?.installedPkgPackages
         );
         appLog('package', `Startup auto-updating Termux pip packages: ${targetNames.join(', ')}`);
         const res = await streamShellInTermux(termuxConfigRef.current, cmd, {
@@ -2643,6 +2751,7 @@ export default function App() {
         // silent background failure
       } finally {
         setUpgradingTermux(false);
+        termuxOperationLockRef.current = false;
       }
     }, 3200);
     return () => window.clearTimeout(timer);
@@ -3381,35 +3490,37 @@ export default function App() {
         )}
       </main>
 
-      {/* Phone MD3 Bottom Navigation: keep primary workspace and tools visible */}
+      {/* Mobile workspace navigation: direct access to the five everyday destinations */}
       {deviceClass === 'phone' && (
       <nav
         aria-label={t('nav_workspace')}
-        className="relative z-10 shrink-0 h-[66px] pb-safe bg-[var(--md-surface-container-low)] border-t border-[var(--ide-border)] grid grid-cols-5"
+        className="relative z-10 shrink-0 h-[70px] pb-safe bg-[var(--md-surface-container-low)] border-t border-[var(--ide-border)] grid grid-cols-5"
       >
         {(
           [
             { id: 'editor', label: t('mob_editor'), Icon: Code2 },
+            { id: 'packages', label: t('neg_tab_packages'), Icon: Package },
             { id: 'console', label: t('mob_console'), Icon: TerminalIcon },
             { id: 'files', label: t('mob_files'), Icon: FolderOpen },
             { id: 'browser', label: t('mob_browser'), Icon: Globe },
-            { id: 'tools', label: t('neg_title'), Icon: Menu },
           ] as const
         ).map(({ id, label, Icon }) => {
-          const active = id === 'tools' ? negativeOpen : mobileTab === id;
+          const active = mobileTab === id;
           return (
             <button
               key={id}
               type="button"
               onClick={() => {
-                if (id === 'tools') {
-                  openNegativeDrawer('termux');
+                if (id === 'packages') {
+                  setMobileTab('packages');
+                  openNegativeDrawer('packages');
                 } else {
                   setMobileTab(id);
                 }
               }}
               aria-label={label}
-              className={`min-h-[48px] min-w-0 flex flex-col items-center justify-center gap-0.5 transition-colors ${
+              aria-current={active ? 'page' : undefined}
+              className={`min-h-[52px] min-w-0 flex flex-col items-center justify-center gap-1 transition-colors active:scale-[0.97] ${
                 active ? 'text-[var(--ide-accent-text)]' : 'text-[var(--ide-text-muted)]'
               }`}
             >
@@ -3420,7 +3531,7 @@ export default function App() {
               >
                 <Icon className="w-5 h-5" />
               </span>
-              <span className="text-[10px] font-medium tracking-tight truncate max-w-full px-0.5">{label}</span>
+              <span className="text-[10px] font-semibold tracking-tight truncate max-w-full px-0.5">{label}</span>
             </button>
           );
         })}
@@ -3432,7 +3543,10 @@ export default function App() {
         open={negativeOpen}
         section={negativeSection}
         onChangeSection={setNegativeSection}
-        onClose={() => setNegativeOpen(false)}
+        onClose={() => {
+          setNegativeOpen(false);
+          if (mobileTab === 'packages') setMobileTab('editor');
+        }}
         files={files}
         activeFile={activeFile}
         settings={settings}
@@ -3440,6 +3554,7 @@ export default function App() {
         onResetWorkspace={handleResetWorkspace}
         pyodideStatus={pyodideStatus}
         installedPackages={installedPackages}
+        activePyodidePackage={activePyodidePackage}
         onInstallPackage={handleInstallPackage}
         onRefreshPackages={handleRefreshPackages}
         outdatedPackages={outdatedPyPackages}
@@ -3456,6 +3571,8 @@ export default function App() {
         onCheckTermuxOutdated={handleCheckTermuxOutdated}
         onUninstallInTermux={handleUninstallInTermux}
         upgradingTermux={upgradingTermux}
+        termuxRunning={termuxRunning}
+        termuxActiveTask={termuxActiveTask}
         appUpdateResult={appUpdateResult}
         checkingAppUpdate={checkingAppUpdate}
         onOpenUpdateModal={() => {
@@ -3479,7 +3596,6 @@ export default function App() {
         onInstallInTermux={handleInstallInTermux}
         onRunInTermux={handleRunInTermux}
         onRunShellInTermux={handleRunShellInTermux}
-        onInitializeEmbeddedEnv={handleInitializeEmbeddedEnv}
         onGenerateRequirements={handleGenerateRequirements}
         onInstallRequirements={handleInstallRequirements}
         onSaveWorkspaceFile={handleSaveWorkspaceFile}
