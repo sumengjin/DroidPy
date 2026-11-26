@@ -1534,7 +1534,7 @@ export async function checkTermuxHealth(config: TermuxConfig): Promise<TermuxHea
   const res = await termuxFetch<TermuxHealthInfo & { ok: boolean }>(config, '/health', { method: 'GET' }, 4500);
   const installedPkgPackages = Array.isArray(res.installedPkgPackages) ? res.installedPkgPackages : undefined;
   const installedPipPackages = Array.isArray(res.installedPipPackages)
-    ? filterTermuxPipPackages(res.installedPipPackages, installedPkgPackages ?? [])
+    ? filterTermuxPipPackages(res.installedPipPackages, installedPkgPackages)
     : undefined;
   return {
     pythonVersion: res.pythonVersion,
@@ -1962,8 +1962,12 @@ export function isTermuxNativePackageInstalled(packageName: string, installedPkg
   return installed.has(normalizeTermuxPkgName(nativeName));
 }
 
-export function filterTermuxPipPackages(installedPipPackages: string[], installedPkgPackages: string[] = []): string[] {
-  return installedPipPackages.filter((name) => !isTermuxNativePackageInstalled(name, installedPkgPackages));
+export function filterTermuxPipPackages(installedPipPackages: string[], installedPkgPackages?: string[]): string[] {
+  return installedPipPackages.filter((name) =>
+    installedPkgPackages === undefined
+      ? !getTermuxNativePackageName(name)
+      : !isTermuxNativePackageInstalled(name, installedPkgPackages)
+  );
 }
 
 const PYTHON_ARCHIVE_PATTERN = /\.(?:whl|tar\.gz|tgz|tar\.bz2|tbz2|tar\.xz|txz|tar|zip|egg)(?:$|[?#])/i;
