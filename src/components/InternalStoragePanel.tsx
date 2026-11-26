@@ -38,8 +38,10 @@ interface InternalStoragePanelProps {
   termuxConfig: TermuxConfig;
   files: PythonFile[];
   activeFile: PythonFile;
-  onOpenSdcardFile: (filename: string, content: string) => void;
+  onOpenSdcardFile: (filename: string, content: string, path: string) => void;
   onNotify: (msg: string) => void;
+  fullScreen?: boolean;
+  onlyPythonFiles?: boolean;
 }
 
 function formatSize(bytes: number): string {
@@ -56,6 +58,8 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
   activeFile,
   onOpenSdcardFile,
   onNotify,
+  fullScreen = false,
+  onlyPythonFiles = false,
 }) => {
   const { t } = useI18n();
   const [status, setStatus] = useState<SdcardStatusInfo | null>(null);
@@ -138,7 +142,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
     setBusyAction(`open:${entry.relPath}`);
     try {
       const res = await readSdcardFile(termuxConfig, entry.relPath);
-      onOpenSdcardFile(res.name || entry.name, res.content);
+      onOpenSdcardFile(res.name || entry.name, res.content, res.relPath || entry.relPath);
       onNotify(t('sd_toast_loaded', { name: res.name || entry.name }));
     } catch (err) {
       onNotify(err instanceof Error ? err.message : String(err));
@@ -226,6 +230,10 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
     }
   };
 
+  const visibleEntries = onlyPythonFiles
+    ? entries.filter((entry) => entry.isDir || entry.name.toLowerCase().endsWith('.py'))
+    : entries;
+
   const rootDisplay = status?.rootPath || window.DroidPyNative?.getInternalStoragePath?.() || '/storage/emulated/0';
   const fullDisplayPath = currentPath ? `${rootDisplay}/${currentPath}` : rootDisplay;
 
@@ -233,7 +241,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
   const showCache = mode === 'all' || mode === 'cache';
 
   return (
-    <div className="md-card p-3.5 sm:p-5 space-y-4 min-w-0">
+    <div className={fullScreen ? "md-card p-3.5 sm:p-5 space-y-4 min-w-0 h-full flex flex-col overflow-hidden" : "md-card p-3.5 sm:p-5 space-y-4 min-w-0"}>
       {/* Header & Permission Status */}
       {showSdcard && (
         <>
@@ -406,18 +414,18 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
       )}
 
       {/* Directory Listing */}
-      <div className="rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] divide-y divide-[var(--ide-border)] max-h-72 overflow-y-auto ide-scroll">
+      <div className={fullScreen ? "rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] divide-y divide-[var(--ide-border)] overflow-y-auto ide-scroll flex-1 min-h-0" : "rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] divide-y divide-[var(--ide-border)] max-h-72 overflow-y-auto ide-scroll"}>
         {loading && entries.length === 0 ? (
           <div className="p-6 flex items-center justify-center gap-2 text-xs text-[var(--ide-text-muted)]">
             <Loader2 className="w-4 h-4 animate-spin" />
             <span>Loading...</span>
           </div>
-        ) : entries.length === 0 ? (
+        ) : visibleEntries.length === 0 ? (
           <div className="p-5 text-center text-xs text-[var(--ide-text-muted)]">
             {t('sd_empty_dir')}
           </div>
         ) : (
-          entries.map((entry) => (
+          visibleEntries.map((entry) => (
             <div
               key={entry.relPath}
               className="flex items-center justify-between gap-2 px-3 py-2 hover:bg-[var(--ide-surface)] transition-colors"
