@@ -1752,17 +1752,21 @@ export default function App() {
     }
   }, [termuxConfig, termuxPaused, termuxScriptRunning, appendEntry, showToast]);
 
-  const handleStopTermux = useCallback(async () => {
+  const handleStopTermux = useCallback(async (source: 'tablet-header' | 'phone-header' = 'unknown') => {
     if (termuxStopLockRef.current || (!termuxRunning && !termuxScriptStartLockRef.current)) return;
+    // Package restore is a long-running maintenance task; require a second confirmation
+    // so an accidental touch cannot silently terminate the APT operation.
+    if (restoringBackup && !window.confirm('套件還原正在進行，確定要中止還原嗎？')) return;
     termuxStopLockRef.current = true;
     const scriptCompletion = termuxScriptCompletionRef.current;
     if (scriptCompletion) termuxStopRequestedRef.current = true;
+    const operation = restoringBackup ? 'package-restore' : termuxScriptRunning ? 'python-script' : 'termux-operation';
     setTermuxStopping(true);
-    appLog('termux', 'User requested Stop for the active Termux process', { level: 'warn' });
+    appLog('termux', `Stop control activated (source=${source}, operation=${operation})`, { level: 'warn' });
     try {
       const streamReady = await waitForActiveTermuxStreamReady();
       if (!streamReady) throw new Error('原生執行請求尚未確認啟動，停止狀態未確認；請稍後重試。');
-      await stopTermuxProcess(termuxConfig);
+      await stopTermuxProcess(termuxConfig, { source, operation });
       await waitForActiveTermuxStream();
       if (scriptCompletion) await scriptCompletion;
       setTermuxPaused(false);
@@ -1776,7 +1780,7 @@ export default function App() {
       termuxStopLockRef.current = false;
       setTermuxStopping(false);
     }
-  }, [termuxConfig, termuxRunning, appendEntry, showToast, t]);
+  }, [termuxConfig, termuxRunning, termuxScriptRunning, restoringBackup, appendEntry, showToast, t]);
 
   const handleBackupToSdcard = useCallback(async () => {
     try {
@@ -3133,7 +3137,7 @@ export default function App() {
                   <span>{termuxPaused ? '繼續' : '暫停'}</span>
                 </button>
               )}
-              <button type="button" onClick={() => void handleStopTermux()} className="min-h-[40px] px-3 rounded-xl bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
+              <button type="button" onClick={() => void handleStopTermux('tablet-header')} className="min-h-[40px] px-3 rounded-xl bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
                 <Square className="w-3.5 h-3.5 fill-current" />
                 <span>{t('cta_stop_run')}</span>
               </button>
@@ -3205,7 +3209,7 @@ export default function App() {
                   <span>{termuxPaused ? '繼續' : '暫停'}</span>
                 </button>
               )}
-              <button type="button" onClick={() => void handleStopTermux()} className="min-h-[44px] px-3 rounded-full bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
+              <button type="button" onClick={() => void handleStopTermux('phone-header')} className="min-h-[44px] px-3 rounded-full bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
                 <Square className="w-3.5 h-3.5 fill-current" />
                 <span>{t('cta_stop_short')}</span>
               </button>
