@@ -317,6 +317,7 @@ export default function App() {
   const [mobileTab, setMobileTab] = useState<MobileTab>('editor');
   const mobileTabRef = useRef<MobileTab>(mobileTab);
   mobileTabRef.current = mobileTab;
+  const packageReturnTabRef = useRef<MobileTab>('editor');
   const [negativeOpen, setNegativeOpen] = useState(false);
   const [negativeSection, setNegativeSection] = useState<NegativeScreenSection>('termux');
   const [tabletSplit, setTabletSplit] = useState(true);
@@ -687,7 +688,7 @@ export default function App() {
       }
       if (ov.negativeOpen) {
         setNegativeOpen(false);
-        if (mobileTabRef.current === 'packages') setMobileTab('editor');
+        if (mobileTabRef.current === 'packages') setMobileTab(packageReturnTabRef.current);
         return true;
       }
       if (ov.mobileNewFileOpen) {
@@ -3525,6 +3526,7 @@ export default function App() {
               type="button"
               onClick={() => {
                 if (id === 'packages') {
+                  if (mobileTabRef.current !== 'packages') packageReturnTabRef.current = mobileTabRef.current;
                   setMobileTab('packages');
                   openNegativeDrawer('packages');
                 } else {
@@ -3561,7 +3563,7 @@ export default function App() {
         onChangeSection={setNegativeSection}
         onClose={() => {
           setNegativeOpen(false);
-          if (mobileTab === 'packages') setMobileTab('editor');
+          if (mobileTabRef.current === 'packages') setMobileTab(packageReturnTabRef.current);
         }}
         files={files}
         activeFile={activeFile}
