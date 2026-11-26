@@ -346,9 +346,9 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
             onRebuildPipCertifi={onRebuildPipCertifi}
             onNotify={onNotify}
           />
-             </div>
+            </div>
+          </div>
         )}
-     </div>
       </aside>
     </div>
   );
