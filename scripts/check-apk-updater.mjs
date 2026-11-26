@@ -96,6 +96,7 @@ assert.ok(!modalSource.includes('BUILTIN_LOCAL_RELEASES[0]'), 'Installed-version
 assert.ok(modalSource.includes("releases.find((r) => normalizeVersionStr(r.version) === currentNorm)"));
 assert.ok(modalSource.includes("{currentRelease?.body || t('upd_no_notes')}"), 'Missing exact-version notes must show an explicit empty state');
 assert.ok(source.includes('CHANGELOG_SECTION=$(awk'), 'Exported Android projects must publish only the newest numbered release section');
+assert.ok(source.includes(String.raw`printf '%s\n' "# DroidPy $RELEASE_TAG" "此版本尚未提供專屬更新日誌。" > "$RELEASE_NOTES_FILE"`), 'Generated Release notes must use a valid empty-state message');
 assert.ok(workflow.includes('actions/checkout@v5'));
 assert.ok(workflow.includes('actions/setup-node@v5'));
 assert.ok(workflow.includes('actions/setup-python@v6'));
