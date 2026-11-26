@@ -1418,10 +1418,22 @@ class MainActivity : AppCompatActivity() {
         appendActivityLog("Startup", "Installing native JavaScript bridge and WebView clients")
         webView.addJavascriptInterface(NativeDownloadBridge(), "DroidPyNative")
         webView.webChromeClient = WebChromeClient()
+        var firstStoragePermissionPromptHandled = false
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 ViewCompat.requestApplyInsets(rootContainer)
+                if (!firstStoragePermissionPromptHandled) {
+                    firstStoragePermissionPromptHandled = true
+                    val permissionPrefs = getSharedPreferences("droidpy_permissions", Context.MODE_PRIVATE)
+                    if (!permissionPrefs.getBoolean("initial_storage_permission_prompted", false)) {
+                        permissionPrefs.edit().putBoolean("initial_storage_permission_prompted", true).apply()
+                        window.decorView.post {
+                            appendActivityLog("StoragePermission", "Requesting shared-storage permission on first launch")
+                            requestExternalStoragePermissionIfNeeded()
+                        }
+                    }
+                }
             }
 
             override fun onRenderProcessGone(
