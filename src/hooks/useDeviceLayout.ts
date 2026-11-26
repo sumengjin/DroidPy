@@ -15,14 +15,9 @@ function computeLayout(): DeviceLayoutInfo {
   const width = window.innerWidth;
   const height = window.innerHeight;
   const isLandscape = width > height;
-  const isCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
-  const minSide = Math.min(width, height);
-
-  // Landscape phones often have width 700-920px but short height < 520px
-  if (width < 768 || (isCoarsePointer && minSide < 520 && width < 980)) {
-    return { deviceClass: 'phone', isLandscape, width, height };
-  }
-  return { deviceClass: 'tablet', isLandscape, width, height };
+  // DroidPy is intentionally phone-first on every Android form factor.
+  // Large screens use the same single-workspace navigation instead of desktop split panes.
+  return { deviceClass: 'phone', isLandscape, width, height };
 }
 
 export function useDeviceLayout(): DeviceLayoutInfo {
