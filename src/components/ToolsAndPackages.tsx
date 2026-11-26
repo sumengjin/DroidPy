@@ -50,7 +50,7 @@ import { PWAInstallButton } from './PWAInstallButton';
 import { TermuxIntegrationPanel, TermuxVisibleSection } from './TermuxIntegrationPanel';
 import { InternalStoragePanel } from './InternalStoragePanel';
 import { getActiveAtmosphereState } from './DynamicAtmosphere3D';
-import { IDE_THEMES } from '../services/themes';
+import { IDE_THEMES, ThemeId } from '../services/themes';
 import { LOCALE_OPTIONS, TranslationKey, getLocalizedThemeText, useI18n } from '../services/i18n';
 import { generateGitHubApkProjectZip } from '../services/androidApkBuilder';
 import { downloadBlob } from '../utils/downloadBlob';
@@ -81,6 +81,23 @@ import {
   normalizePyPkgName,
 } from '../services/pyodideRuntime';
 import { AppUpdateCheckResult, getInstalledAppVersion } from '../services/appUpdater';
+
+const THEME_CARD_NAMES: Record<ThemeId, { 'zh-TW': string; 'zh-CN': string }> = {
+  rose: { 'zh-TW': '櫻花蜜桃', 'zh-CN': '樱花蜜桃' },
+  lavender: { 'zh-TW': '薰衣草紫', 'zh-CN': '薰衣草紫' },
+  milktea: { 'zh-TW': '焦糖奶茶', 'zh-CN': '焦糖奶茶' },
+  matcha: { 'zh-TW': '抹茶生乳', 'zh-CN': '抹茶生乳' },
+  sky: { 'zh-TW': '海鹽蘇打', 'zh-CN': '海盐苏打' },
+  berry: { 'zh-TW': '絲絨莓果', 'zh-CN': '丝绒莓果' },
+  rosegold: { 'zh-TW': '黑曜玫金', 'zh-CN': '黑曜玫金' },
+  starry: { 'zh-TW': '星夜紫夢', 'zh-CN': '星夜紫梦' },
+  dark: { 'zh-TW': '極夜深灰', 'zh-CN': '极夜深灰' },
+  light: { 'zh-TW': '晨光純白', 'zh-CN': '晨光纯白' },
+  peony: { 'zh-TW': '胭脂牡丹', 'zh-CN': '胭脂牡丹' },
+  champagne: { 'zh-TW': '香檳珍珠', 'zh-CN': '香槟珍珠' },
+  moonrose: { 'zh-TW': '月影薔薇', 'zh-CN': '月影蔷薇' },
+  aurorapink: { 'zh-TW': '極光粉霧', 'zh-CN': '极光粉雾' },
+};
 
 type ToolWindowId =
   | 'py_conn'
@@ -1582,6 +1599,11 @@ python ${entryFile}
               {IDE_THEMES.map((themeItem) => {
                 const isSelected = settings.theme === themeItem.id;
                 const localized = getLocalizedThemeText(themeItem.id, locale);
+                const cardName = locale === 'zh-CN'
+                  ? THEME_CARD_NAMES[themeItem.id]['zh-CN']
+                  : locale === 'zh-TW'
+                  ? THEME_CARD_NAMES[themeItem.id]['zh-TW']
+                  : localized.name;
                 return (
                   <button
                     key={themeItem.id}
@@ -1598,8 +1620,8 @@ python ${entryFile}
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2 min-w-0">
-                      <span className="text-sm font-semibold text-[var(--ide-text)] truncate">
-                        {localized.name}
+                      <span className="text-sm font-semibold text-[var(--ide-text)] truncate" title={localized.name}>
+                        {cardName}
                       </span>
                       {isSelected && (
                         <span className="w-5 h-5 rounded-full bg-[var(--ide-accent)] text-white flex items-center justify-center shrink-0">
