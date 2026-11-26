@@ -18,7 +18,7 @@ import {
   X,
   Globe,
   Maximize2,
-  PanelLeft,
+  Settings,
   Columns2,
   Sparkles,
   Download,
@@ -721,6 +721,7 @@ export default function App() {
         return true;
       }
       if (ov.negativeOpen) {
+        if (window.__droidpySettingsBack?.()) return true;
         setNegativeOpen(false);
         if (mobileTabRef.current === 'packages') setMobileTab(packageReturnTabRef.current);
         return true;
@@ -3066,7 +3067,7 @@ export default function App() {
             aria-label={t('neg_open_aria')}
             className="min-h-[40px] px-2.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-[var(--ide-text)] hover:border-[var(--ide-accent)] inline-flex items-center gap-1.5 text-xs font-medium whitespace-nowrap shrink-0"
           >
-            <PanelLeft className="w-4 h-4 text-[var(--ide-accent)]" />
+            <Settings className="w-4 h-4 text-[var(--ide-accent)]" />
             <span>{t('neg_title')}</span>
           </button>
           <img
@@ -3163,7 +3164,7 @@ export default function App() {
             title={t('neg_title')}
             className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full border border-[var(--ide-border)] bg-[var(--ide-bg)] text-[var(--ide-text)] active:scale-95 transition-transform shrink-0"
           >
-            <PanelLeft className="w-5 h-5" />
+            <Settings className="w-5 h-5" />
           </button>
           <img
             src="/icon.svg"
