@@ -990,22 +990,9 @@ python ${entryFile}
             </div>
 
             {!settings.enableSandboxAddon && engine !== 'pyodide' ? (
-              <section className="md-card p-4 space-y-3 min-w-0">
-                <h2 className="text-base font-semibold flex items-center gap-2">
-                  <Package className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
-                  <span>{t('pkg_sandbox_disabled_title')}</span>
-                </h2>
-                <p className="text-xs text-[var(--ide-text-muted)] leading-relaxed">
-                  {t('pkg_sandbox_disabled_desc')}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => onUpdateSettings({ enableSandboxAddon: true })}
-                  className="min-h-[40px] px-4 py-2 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-semibold max-w-full transition-colors"
-                >
-                  {t('pkg_sandbox_enable_btn')}
-                </button>
-              </section>
+              <p className="px-1 text-xs text-[var(--ide-text-muted)]">
+                {t('pkg_sandbox_disabled_desc')}
+              </p>
             ) : (
               <section className="space-y-4">
                 <div className="flex flex-wrap items-center gap-2">
@@ -1855,35 +1842,6 @@ python ${entryFile}
                 onClick={() => onUpdateSettings({ showSymbolBar: !settings.showSymbolBar })}
                 className={`min-h-[36px] w-14 rounded-full p-1 transition-colors flex items-center shrink-0 ${
                   settings.showSymbolBar
-                    ? 'bg-[var(--ide-accent)] justify-end'
-                    : 'bg-slate-300 dark:bg-slate-700 justify-start'
-                }`}
-              >
-                <span className="w-6 h-6 rounded-full bg-white shadow-sm" />
-              </button>
-            </div>
-
-            {/* Optional Pyodide Browser Sandbox Add-on */}
-            <div className="flex items-center justify-between gap-4 p-4">
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium">{t('addon_sandbox_title')}</div>
-                <div className="text-xs text-[var(--ide-text-muted)]">
-                  {t('addon_sandbox_desc')}
-                </div>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={Boolean(settings.enableSandboxAddon)}
-                onClick={() => {
-                  const nextVal = !settings.enableSandboxAddon;
-                  onUpdateSettings({ enableSandboxAddon: nextVal });
-                  if (!nextVal && engine === 'pyodide') {
-                    onChangeEngine('termux');
-                  }
-                }}
-                className={`min-h-[36px] w-14 rounded-full p-1 transition-colors flex items-center shrink-0 ${
-                  settings.enableSandboxAddon
                     ? 'bg-[var(--ide-accent)] justify-end'
                     : 'bg-slate-300 dark:bg-slate-700 justify-start'
                 }`}
