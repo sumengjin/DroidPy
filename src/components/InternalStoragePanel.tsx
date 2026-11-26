@@ -213,7 +213,14 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
       return;
     }
     const targetRel = currentPath ? `${currentPath}/${filename}` : filename;
-    const starter = `# ${filename}\n\ndef main():\n    print("Hello from ${filename}")\n\nif __name__ == "__main__":\n    main()\n`;
+    const starter = `# ${filename}
+
+def main():
+    print("Hello from ${filename}")
+
+if __name__ == "__main__":
+    main()
+`;
     setBusyAction('create-file');
     try {
       await writeSdcardFile(termuxConfig, targetRel, starter);
