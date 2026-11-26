@@ -433,6 +433,8 @@ export default function App() {
   const [termuxRunning, setTermuxRunning] = useState(false);
   const [termuxActiveTask, setTermuxActiveTask] = useState<string | null>(null);
   const termuxScriptStartLockRef = useRef(false);
+  // Synchronous guard survives drawer remounts and prevents duplicate native package jobs.
+  const termuxPackageInstallLockRef = useRef(false);
   const [termuxPaused, setTermuxPaused] = useState(false);
   const [termuxScriptRunning, setTermuxScriptRunning] = useState(false);
   const [backupStatus, setBackupStatus] = useState<PackageBackupStatus | null>(null);
@@ -1225,8 +1227,13 @@ export default function App() {
       try {
         health = await checkTermuxHealth(termuxConfig);
         setTermuxHealth(health);
-      } catch {
-        return true;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        setTermuxError(message);
+        appLog('termux', `Unable to verify Python before first use: ${message}`, { level: 'error' });
+        appendEntry('stderr', message);
+        showToast(t('toast_termux_disconnected'));
+        return false;
       }
     }
     if (!health?.embedded || health.hasPython !== false) return true;
@@ -1375,10 +1382,11 @@ export default function App() {
 
   const handleInstallInTermux = useCallback(
     async (mode: 'pip' | 'pkg', target: string) => {
-      if (termuxRunning) {
+      if (termuxRunning || termuxPackageInstallLockRef.current) {
         showToast(t('cta_running'));
         return;
       }
+      termuxPackageInstallLockRef.current = true;
       const resolvedInstall = resolveTermuxInstallTarget(mode, target);
       const installMode = resolvedInstall.mode;
       const installTarget = resolvedInstall.target;
@@ -1464,6 +1472,7 @@ export default function App() {
         setRunStartedAt(null);
         setTermuxActiveTask(null);
         setTermuxRunning(false);
+        termuxPackageInstallLockRef.current = false;
       }
     },
     [termuxConfig, termuxRunning, ensureEmbeddedPythonEnvironment, focusOutputPane, appendEntry, appendStreamChunk, flushStreamChunk, refreshBackupStatus, showToast, t]
