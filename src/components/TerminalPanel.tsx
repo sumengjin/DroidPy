@@ -277,12 +277,28 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     replInputRef.current?.focus();
   };
 
-  const handleTermuxStdinSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const sendTermuxStdinValue = async () => {
     if (!onSendTermuxStdin) return;
     const val = stdinValue;
     setStdinValue('');
+    // Keep the same input focused between consecutive interactive prompts.
+    inputRef.current?.focus();
     await onSendTermuxStdin(val);
+    window.requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
+  const handleTermuxStdinSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    void sendTermuxStdinValue();
+  };
+
+  const handleTermuxStdinKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+      // Prevent Android WebView's default form/IME action from treating each
+      // answer as a completed editing session and dismissing the soft keyboard.
+      e.preventDefault();
+      void sendTermuxStdinValue();
+    }
   };
 
   const handleReplKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -495,9 +511,12 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             {t('term_stdin_label')}
           </span>
           <input
+            ref={inputRef}
             type="text"
+            enterKeyHint="send"
             value={stdinValue}
             onChange={(e) => setStdinValue(e.target.value)}
+            onKeyDown={handleTermuxStdinKeyDown}
             placeholder={t('term_stdin_placeholder')}
             className="flex-1 min-w-0 min-h-[44px] px-3 rounded-lg bg-[var(--ide-bg)] border border-[var(--ide-border)] text-sm font-mono text-[var(--ide-text)] focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
           />
