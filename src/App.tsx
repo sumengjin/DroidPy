@@ -1278,7 +1278,7 @@ export default function App() {
   }, [termuxHealth, termuxConfig, appendEntry, appendStreamChunk, flushStreamChunk, showToast, t]);
 
   const handleRunInTermux = useCallback(async () => {
-    if (termuxRunning || termuxScriptStartLockRef.current) {
+    if (termuxRunning || termuxPackageInstallLockRef.current || termuxScriptStartLockRef.current) {
       showToast(t('cta_running'));
       return;
     }
