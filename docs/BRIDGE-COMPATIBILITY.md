@@ -24,6 +24,8 @@
 |---|---|---|---|
 | GET | `/health` | Python 版本、架構、工具與 pip／APT 套件盤點 | JSON |
 | GET | `/files` | 讀取工作區允許副檔名的小型檔案 | JSON |
+| POST | `/shell` | 同步執行 shell 命令（與外部 Python 端同名路由） | JSON |
+| GET | `/files` | 讀取工作區允許副檔名的小型檔案 | JSON |
 | POST | `/run` | 同步執行 Python 檔案 | JSON |
 | POST | `/run-stream` | PTY Python 執行與輸出 | NDJSON |
 | POST | `/shell` | 同步執行 shell 命令 | JSON |
@@ -58,7 +60,7 @@ Kotlin 路由集合除健康檢查、工作區檔案、執行／shell／安裝�
 | POST | `/droid-action` | Android 原生裝置動作 |
 | POST | `/maintenance/cleanup-processes` | 內嵌環境程序維護 |
 
-內嵌 Kotlin Bridge 還能提供打包的 Web 靜態資產；該行為不是外部 Termux Python Bridge 的通用 Runtime 能力。
+內嵌 Kotlin Bridge 還能提供打包的 Web 靜態資產；該行為不是外部 Termux Python Bridge 的通用 Runtime 能力。Kotlin 端另有同步 `POST /shell`，但沒有同步 `POST /run` 或 `POST /install`；這三個路由不能一概視為 Kotlin 端缺失。
 
 ## 4. 共用客戶端目前送出的資料形狀
 
@@ -84,7 +86,7 @@ Kotlin 路由集合除健康檢查、工作區檔案、執行／shell／安裝�
 2. **健康資料來源不相同。** Python 端透過目前 Python／dpkg 環境盤點；Kotlin 端直接檢查內嵌 `usr/`、套件清單與 App 私有資料。相同欄位名稱不代表資料收集語義完全一致。
 3. **Python 版本回報不對稱。** 外部 Bridge 回報真實 `platform.python_version()`；目前內嵌 Kotlin 健康資料以 `Termux Embedded` 等標籤回報，應在新能力模型中分開提供 runtime label 與實際版本。
 4. **串流事件資訊不足。** 目前以 `type/data` 和 `done` 為主，缺少統一 request ID、事件序號、progress／process-state／cancelled 等標準事件。
-5. **執行語義不同。** Python 端具有非串流 `/run`、`/install` 與 `/shell`；內嵌 Kotlin 目前主要透過串流路由執行。不能假設所有 Provider 都支援相同同步模式。
+5. **執行語義不同。** Python 端具有非串流 `/run`、`/install` 與 `/shell`；內嵌 Kotlin 具有非串流 `/shell`，但 `/run` 與 `/install` 目前主要透過串流路由執行。需逐路由比較成功回應、錯誤狀態與程序控制語義。
 6. **程序控制需要逐項驗證。** 兩邊均有明確停止與 PTY 控制，但程序保留、客戶端斷線、重啟後控制能力與輸出尾端處理必須用同一組測試驗證，不能僅以路由存在判定相容。
 
 ## 6. 安全基線（新契約必須保留）
