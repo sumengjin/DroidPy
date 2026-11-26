@@ -2464,7 +2464,7 @@ export default function App() {
               termuxConfigRef.current,
               'pip list --outdated --format=json'
             );
-            const outdatedPips = parseOutdatedPipJson(outRes.stdout || '');
+            const outdatedPips = parseOutdatedPipJson(outRes.stdout || '', termuxHealth?.installedPkgPackages);
             setOutdatedTermuxPips(outdatedPips);
             pipTargets = outdatedPips
               .map((item) => item.name)
@@ -2480,7 +2480,8 @@ export default function App() {
           cmds.push(
             buildTermuxPipUpgradeCommand(
               pipTargets,
-              Boolean(settingsRef.current.pipTrustedHostEmergency)
+              Boolean(settingsRef.current.pipTrustedHostEmergency),
+              termuxHealth?.installedPkgPackages
             )
           );
         }
@@ -2616,7 +2617,7 @@ export default function App() {
           termuxConfigRef.current,
           'pip list --outdated --format=json'
         );
-        const outdated = parseOutdatedPipJson(outRes.stdout || '');
+        const outdated = parseOutdatedPipJson(outRes.stdout || '', termuxHealth?.installedPkgPackages);
         setOutdatedTermuxPips(outdated);
         const targetNames = outdated
           .map((item) => item.name)
@@ -2627,7 +2628,8 @@ export default function App() {
         }
         const cmd = buildTermuxPipUpgradeCommand(
           targetNames,
-          Boolean(settingsRef.current.pipTrustedHostEmergency)
+          Boolean(settingsRef.current.pipTrustedHostEmergency),
+          termuxHealth?.installedPkgPackages
         );
         appLog('package', `Startup auto-updating Termux pip packages: ${targetNames.join(', ')}`);
         const res = await streamShellInTermux(termuxConfigRef.current, cmd, {
