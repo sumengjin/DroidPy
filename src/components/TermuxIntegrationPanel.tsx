@@ -426,7 +426,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                   <div className="flex flex-wrap items-center gap-1.5">
                     <button
                       type="button"
-                      disabled={isChecking || !!busyAction || upgradingTermux}
+                      disabled={isChecking || !!busyAction || termuxRunning || upgradingTermux}
                       onClick={() => void onTestConnection()}
                       className="min-h-[44px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] text-[11px] font-medium inline-flex items-center gap-1 disabled:opacity-50"
                     >
@@ -436,7 +436,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                     {onCheckTermuxOutdated && (
                       <button
                         type="button"
-                        disabled={!!busyAction || upgradingTermux || checkingTermuxOutdated}
+                        disabled={!!busyAction || termuxRunning || upgradingTermux || checkingTermuxOutdated}
                         onClick={() => void onCheckTermuxOutdated()}
                         className="min-h-[44px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] text-[11px] font-medium inline-flex items-center gap-1 disabled:opacity-50"
                       >
@@ -447,7 +447,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                     {onUpgradeAllTermux && (
                       <button
                         type="button"
-                        disabled={!!busyAction || upgradingTermux}
+                        disabled={!!busyAction || termuxRunning || upgradingTermux}
                         onClick={() => void onUpgradeAllTermux('pip')}
                         className="min-h-[44px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] text-[11px] font-medium inline-flex items-center gap-1 disabled:opacity-50"
                       >
@@ -478,7 +478,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                           {outdatedItem && onUpgradeSinglePip && (
                             <button
                               type="button"
-                              disabled={!!busyAction || upgradingTermux}
+                              disabled={!!busyAction || termuxRunning || upgradingTermux}
                               onClick={() => void onUpgradeSinglePip(pipPkg)}
                               title={`${pipPkg} ${outdatedItem.currentVersion} → ${outdatedItem.latestVersion}`}
                               className="text-[var(--ide-accent-text)] hover:underline font-sans font-semibold disabled:opacity-40 shrink-0"
@@ -489,7 +489,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                           {!isCorePip && onUninstallInTermux && (
                             <button
                               type="button"
-                              disabled={!!busyAction || upgradingTermux}
+                              disabled={!!busyAction || termuxRunning || upgradingTermux}
                               onClick={() => void handleUninstallTarget('pip', pipPkg)}
                               title={`${t('tmx_uninstall_btn')} ${pipPkg}`}
                               aria-label={`${t('tmx_uninstall_btn')} ${pipPkg}`}
@@ -526,7 +526,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                             {!isCoreSys && onUninstallInTermux && (
                               <button
                                 type="button"
-                                disabled={!!busyAction || upgradingTermux}
+                                disabled={!!busyAction || termuxRunning || upgradingTermux}
                                 onClick={() => void handleUninstallTarget('pkg', sysPkg)}
                                 title={`${t('tmx_uninstall_btn')} ${sysPkg}`}
                                 aria-label={`${t('tmx_uninstall_btn')} ${sysPkg}`}
@@ -558,7 +558,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
             <button
               type="button"
               onClick={onRunInTermux}
-              disabled={!!busyAction || upgradingTermux}
+              disabled={!!busyAction || termuxRunning || upgradingTermux}
               className="min-h-[44px] min-w-0 max-w-full overflow-hidden px-4 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium inline-flex items-center gap-2 hover:border-[var(--ide-accent)] transition-colors"
             >
               <Play className="w-3.5 h-3.5 text-[var(--ide-accent)] shrink-0" />
@@ -657,7 +657,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
 
           <button
             type="button"
-            disabled={isChecking || !isConnected || Boolean(cleaningProcesses)}
+            disabled={isChecking || !isConnected || termuxRunning || Boolean(cleaningProcesses)}
             onClick={() => void onCleanupProcesses?.(true)}
             className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-2 transition-colors"
           >
@@ -683,7 +683,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
 
           <button
             type="button"
-            disabled={!isConnected || !!busyAction || upgradingTermux}
+            disabled={!isConnected || !!busyAction || termuxRunning || upgradingTermux}
             onClick={async () => {
               if (!onRebuildPipCertifi || busyAction) return;
               setBusyAction('pip-ssl');
@@ -752,7 +752,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
             {onUpgradeAllPackages && (
               <button
                 type="button"
-                disabled={!!busyAction || upgradingTermux}
+                disabled={!!busyAction || termuxRunning || upgradingTermux}
                 onClick={() => void onUpgradeAllPackages()}
                 className="min-h-[44px] px-3 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-50 transition-colors"
               >
@@ -768,7 +768,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
               <div className="flex flex-wrap items-center gap-1.5">
                 <button
                   type="button"
-                  disabled={!!busyAction || upgradingTermux}
+                  disabled={!!busyAction || termuxRunning || upgradingTermux}
                   onClick={() => void onUpgradeAllTermux('pip')}
                   className="min-h-[44px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] text-xs font-medium inline-flex items-center gap-1.5 disabled:opacity-50 transition-colors"
                 >
@@ -781,7 +781,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                 </button>
                 <button
                   type="button"
-                  disabled={!!busyAction || upgradingTermux}
+                  disabled={!!busyAction || termuxRunning || upgradingTermux}
                   onClick={() => void onUpgradeAllTermux('pkg')}
                   className="min-h-[44px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] text-xs font-medium inline-flex items-center gap-1.5 disabled:opacity-50 transition-colors"
                 >
@@ -837,7 +837,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
             <div className="flex flex-wrap items-center gap-2 shrink-0">
               <button
                 type="submit"
-                disabled={!pkgTarget.trim() || !!busyAction || upgradingTermux}
+                disabled={!pkgTarget.trim() || !!busyAction || termuxRunning || upgradingTermux}
                 className="min-h-[44px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-sm font-medium disabled:opacity-40 flex items-center gap-2 whitespace-nowrap shrink-0 transition-colors"
               >
                 {(busyAction?.startsWith('install:') || activeTermuxTask?.startsWith('install:')) ? (
@@ -850,7 +850,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
               {onUninstallInTermux && (
                 <button
                   type="button"
-                  disabled={!pkgTarget.trim() || !!busyAction || upgradingTermux}
+                  disabled={!pkgTarget.trim() || !!busyAction || termuxRunning || upgradingTermux}
                   onClick={() => void handleUninstallTarget(installMode, pkgTarget)}
                   className="min-h-[44px] px-3.5 rounded-xl border border-red-300 dark:border-red-900/60 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 text-sm font-medium disabled:opacity-40 flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-colors"
                 >
@@ -874,7 +874,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
               </div>
               <button
                 type="button"
-                disabled={!!busyAction || upgradingTermux}
+                disabled={!!busyAction || termuxRunning || upgradingTermux}
                 onClick={() => void handleQuickInstall(termuxNameHint.suggestedMode, termuxNameHint.suggestedTarget)}
                 className="min-h-[44px] px-3 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-semibold shrink-0 max-w-full text-center transition-colors"
               >
@@ -922,7 +922,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                     </button>
                     <button
                       type="button"
-                      disabled={!!busyAction || upgradingTermux}
+                      disabled={!!busyAction || termuxRunning || upgradingTermux}
                       onClick={() => void handleQuickInstall(tmx.mode, tmx.targetName)}
                       className="min-h-[44px] px-3 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-40 text-white text-xs font-medium whitespace-nowrap shrink-0 inline-flex items-center gap-1.5"
                     >
@@ -1046,7 +1046,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                     {alreadyInstalled && !isCorePkg && onUninstallInTermux && (
                       <button
                         type="button"
-                        disabled={!!busyAction || upgradingTermux}
+                        disabled={!!busyAction || termuxRunning || upgradingTermux}
                         onClick={() => void handleUninstallTarget(tmx.mode, tmx.targetName)}
                         className="min-h-[44px] px-3 rounded-lg border border-red-300 dark:border-red-900/60 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 text-[11px] font-medium whitespace-nowrap inline-flex items-center gap-1 disabled:opacity-40"
                       >
@@ -1061,7 +1061,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                     {!alreadyInstalled && (
                       <button
                         type="button"
-                        disabled={!!busyAction || upgradingTermux}
+                        disabled={!!busyAction || termuxRunning || upgradingTermux}
                         onClick={() => void handleQuickInstall(tmx.mode, tmx.targetName)}
                         className="min-h-[44px] px-3 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-[11px] font-medium whitespace-nowrap inline-flex items-center gap-1 disabled:opacity-40"
                       >
@@ -1098,7 +1098,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
               />
               <button
                 type="submit"
-                disabled={!shellCmd.trim() || !!busyAction || upgradingTermux}
+                disabled={!shellCmd.trim() || !!busyAction || termuxRunning || upgradingTermux}
                 className="min-h-[44px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium whitespace-nowrap shrink-0 disabled:opacity-40 transition-colors"
               >
                 {busyAction === 'shell' ? t('tmx_shell_running') : t('tmx_shell_btn')}
@@ -1111,7 +1111,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                   <button
                     key={preset}
                     type="button"
-                    disabled={!!busyAction || upgradingTermux}
+                    disabled={!!busyAction || termuxRunning || upgradingTermux}
                     onClick={() => {
                       setBusyAction('shell');
                       void onRunShellInTermux(preset).finally(() => setBusyAction(null));
