@@ -478,6 +478,9 @@ export default function App() {
   const [termuxPauseBusy, setTermuxPauseBusy] = useState(false);
   const termuxStopLockRef = useRef(false);
   const termuxPauseToggleLockRef = useRef(false);
+  const termuxStopRequestedRef = useRef(false);
+  const termuxScriptCompletionRef = useRef<Promise<void> | null>(null);
+  const termuxScriptCompletionResolveRef = useRef<(() => void) | null>(null);
   const [termuxActiveTask, setTermuxActiveTask] = useState<string | null>(null);
   const termuxScriptStartLockRef = useRef(false);
   // Synchronous guard prevents overlapping native Termux operations across drawer remounts.
@@ -1291,6 +1294,7 @@ export default function App() {
     }
     if (!health?.embedded || health.hasPython !== false) return true;
 
+    if (termuxStopRequestedRef.current) return false;
     const command = 'pkg update -y && pkg install -y python python-pip';
     const streamId = makeId();
     let bootstrapOutputTail = '';
@@ -1349,6 +1353,11 @@ export default function App() {
     if (!entryFile) return;
     // React state updates are asynchronous; lock synchronously to ignore rapid double taps.
     termuxScriptStartLockRef.current = true;
+    termuxStopRequestedRef.current = false;
+    const scriptCompletion = new Promise<void>((resolve) => {
+      termuxScriptCompletionResolveRef.current = resolve;
+    });
+    termuxScriptCompletionRef.current = scriptCompletion;
     focusOutputPane('terminal');
     setTermuxPaused(false);
     setTermuxScriptRunning(true);
@@ -1360,8 +1369,9 @@ export default function App() {
     const streamId = makeId();
 
     try {
+      if (termuxStopRequestedRef.current) return;
       const pythonReady = await ensureEmbeddedPythonEnvironment();
-      if (!pythonReady) return;
+      if (!pythonReady || termuxStopRequestedRef.current) return;
 
       appendEntry('system', t('log_termux_run', { name: entryFile.name }));
       appLog('termux', `Run script in Termux: ${entryFile.name}`);
@@ -1373,6 +1383,7 @@ export default function App() {
         await writeSdcardFile(termuxConfig, entryFile.externalPath, entryFile.content);
         appendEntry('system', `已將 ${entryFile.name} 儲存回原資料夾`);
       }
+      if (termuxStopRequestedRef.current) return;
 
       const res = await streamRunInTermux(termuxConfig, entryFile, files, {
         onChunk: (chunk) => {
@@ -1411,7 +1422,7 @@ export default function App() {
           detail: outputTail.trim() || undefined,
         });
       }
-      await syncFilesFromTermux(false);
+      if (!termuxStopRequestedRef.current) await syncFilesFromTermux(false);
     } catch (err) {
       flushStreamChunk(streamId);
       const msg = err instanceof Error ? err.message : String(err);
@@ -1426,6 +1437,10 @@ export default function App() {
       }
     } finally {
       termuxScriptStartLockRef.current = false;
+      termuxStopRequestedRef.current = false;
+      termuxScriptCompletionResolveRef.current?.();
+      termuxScriptCompletionResolveRef.current = null;
+      termuxScriptCompletionRef.current = null;
       setTermuxScriptRunning(false);
       setTermuxPaused(false);
       setRunStartedAt(null);
@@ -1737,11 +1752,14 @@ export default function App() {
   const handleStopTermux = useCallback(async () => {
     if (termuxStopLockRef.current || (!termuxRunning && !termuxScriptStartLockRef.current)) return;
     termuxStopLockRef.current = true;
+    termuxStopRequestedRef.current = true;
+    const scriptCompletion = termuxScriptCompletionRef.current;
     setTermuxStopping(true);
     appLog('termux', 'User requested Stop for the active Termux process', { level: 'warn' });
     try {
       await stopTermuxProcess(termuxConfig);
       await waitForActiveTermuxStream();
+      if (scriptCompletion) await scriptCompletion;
       setTermuxPaused(false);
       appendEntry('system', t('log_termux_stop'));
       showToast(t('toast_termux_stopped'));
