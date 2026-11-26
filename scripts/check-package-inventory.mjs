@@ -91,6 +91,8 @@ assert.match(certifiHandler, /os\.replace\(tmp_path, cfg_path\)/, 'SSL repair mu
 assert.doesNotMatch(certifiHandler, /with open\(cfg_path, "w"/, 'SSL repair must not truncate user pip.conf directly');
 assert.match(appSource, /termuxOperationLockRef\.current = true/);
 assert.match(appSource, /const pyodidePackageOperationLockRef = useRef\(false\)/, 'Pyodide package operations must have a synchronous shared lock');
+const pyAutoRestore = appSource.slice(appSource.indexOf('const savedPkgs = sandboxPackagesRef.current'), appSource.indexOf('const handleLinkDirectory'));
+assert.match(pyAutoRestore, /pyodidePackageOperationLockRef\.current = true[\s\S]*?await installPyPackage\(pkg, callbacksRef\.current\)[\s\S]*?finally\s*\{\s*pyodidePackageOperationLockRef\.current = false/, 'automatic Pyodide package restoration must share the package operation lock');
 const pyInstallHandler = appSource.slice(appSource.indexOf('const handleInstallPackage'), appSource.indexOf('const handleUninstallPyPackage'));
 assert.match(pyInstallHandler, /pyodidePackageOperationLockRef\.current\)\s*\{[\s\S]*?pyodidePackageOperationLockRef\.current = true/, 'rapid Pyodide install taps must be serialized synchronously');
 const pyUninstallHandler = appSource.slice(appSource.indexOf('const handleUninstallPyPackage'), appSource.indexOf('const handleRefreshPackages'));
