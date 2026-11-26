@@ -17,6 +17,7 @@ interface TerminalPanelProps {
   lastDurationMs: number | null;
   runStartedAt?: number | null;
   pendingInputPrompt: string | null;
+  inputSessionActive?: boolean;
   onSubmitInput: (value: string) => void;
   onRunRepl: (statement: string) => Promise<void>;
   onSendTermuxStdin?: (text: string) => Promise<void>;
@@ -171,6 +172,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   lastDurationMs,
   runStartedAt,
   pendingInputPrompt,
+  inputSessionActive = false,
   onSubmitInput,
   onRunRepl,
   onSendTermuxStdin,
@@ -260,10 +262,26 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     }
   };
 
+  const submitPromptInput = () => {
+    if (pendingInputPrompt === null) return;
+    const value = stdinValue;
+    setStdinValue('');
+    onSubmitInput(value);
+    // Keep the same DOM input focused while Python advances to its next input().
+    window.requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
+  };
+
   const handleStdinSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmitInput(stdinValue);
-    setStdinValue('');
+    submitPromptInput();
+  };
+
+  const handleStdinKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+      // Avoid Android WebView treating each answer as the end of the input session.
+      e.preventDefault();
+      submitPromptInput();
+    }
   };
 
   const handleReplSubmit = async (e: React.FormEvent) => {
@@ -478,7 +496,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       </div>
 
       {/* Inline input() prompt bar when script requests stdin */}
-      {pendingInputPrompt !== null ? (
+      {(inputSessionActive || pendingInputPrompt !== null) ? (
         <form
           onSubmit={handleStdinSubmit}
           className="p-2.5 border-t border-amber-300 dark:border-amber-700/70 bg-amber-50 dark:bg-amber-950/30 flex items-center gap-2 shrink-0"
@@ -491,12 +509,16 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             type="text"
             value={stdinValue}
             onChange={(e) => setStdinValue(e.target.value)}
+            onKeyDown={handleStdinKeyDown}
+            enterKeyHint="send"
             placeholder={pendingInputPrompt || t('term_input_placeholder')}
             className="flex-1 min-w-0 min-h-[44px] px-3 rounded-lg bg-[var(--ide-surface)] border border-amber-300 dark:border-amber-700 text-sm font-mono text-[var(--ide-text)] focus:outline-none focus:ring-2 focus:ring-amber-500"
           />
           <button
             type="submit"
-            className="min-h-[44px] px-4 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-colors"
+            disabled={pendingInputPrompt === null}
+            onMouseDown={(e) => e.preventDefault()}
+            className="min-h-[44px] px-4 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-colors"
           >
             <span>{t('term_send')}</span>
             <CornerDownLeft className="w-3.5 h-3.5" />
@@ -522,6 +544,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           />
           <button
             type="submit"
+            onMouseDown={(e) => e.preventDefault()}
             className="min-h-[44px] px-3.5 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium whitespace-nowrap shrink-0"
           >
             {t('term_send')}
