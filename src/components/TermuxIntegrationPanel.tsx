@@ -281,7 +281,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
               <button
                 type="button"
                 onClick={() => onChangeEngine('pyodide')}
-                className={`min-h-[36px] px-3 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+                className={`min-h-[44px] px-3 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
                   engine === 'pyodide'
                     ? 'bg-[var(--ide-surface)] text-[var(--ide-text)] shadow-sm'
                     : 'text-[var(--ide-text-muted)]'
@@ -292,7 +292,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
               <button
                 type="button"
                 onClick={() => onChangeEngine('termux')}
-                className={`min-h-[36px] px-3 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+                className={`min-h-[44px] px-3 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
                   engine === 'termux'
                     ? 'bg-[var(--ide-accent)] text-white shadow-sm'
                     : 'text-[var(--ide-text-muted)]'
@@ -338,7 +338,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
               type="button"
               disabled={restoringBackup || !!busyAction || upgradingTermux}
               onClick={() => void onRestoreBackedUpPackages()}
-              className="min-h-[42px] px-4 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center justify-center gap-2 text-center shrink-0 transition-colors max-w-full"
+              className="min-h-[44px] px-4 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center justify-center gap-2 text-center shrink-0 transition-colors max-w-full"
             >
               {restoringBackup ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -390,7 +390,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                 type="url"
                 value={config.endpointUrl}
                 onChange={(e) => onUpdateConfig({ endpointUrl: e.target.value })}
-                className="w-full min-w-0 min-h-[40px] px-3 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] text-xs font-mono"
+                className="w-full min-w-0 min-h-[44px] px-3 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] text-xs font-mono"
               />
             </div>
             <div className="min-w-0">
@@ -401,7 +401,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                 type="text"
                 value={config.token}
                 onChange={(e) => onUpdateConfig({ token: e.target.value })}
-                className="w-full min-w-0 min-h-[40px] px-3 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] text-xs font-mono"
+                className="w-full min-w-0 min-h-[44px] px-3 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] text-xs font-mono"
               />
             </div>
           </div>
@@ -436,7 +436,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                       type="button"
                       disabled={isChecking || !!busyAction || upgradingTermux}
                       onClick={() => void onTestConnection()}
-                      className="min-h-[30px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] text-[11px] font-medium inline-flex items-center gap-1 disabled:opacity-50"
+                      className="min-h-[44px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] text-[11px] font-medium inline-flex items-center gap-1 disabled:opacity-50"
                     >
                       <RefreshCw className={`w-3 h-3 text-[var(--ide-accent)] ${isChecking ? 'animate-spin' : ''}`} />
                       <span>{t('pkg_refresh')}</span>
@@ -446,7 +446,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                         type="button"
                         disabled={!!busyAction || upgradingTermux || checkingTermuxOutdated}
                         onClick={() => void onCheckTermuxOutdated()}
-                        className="min-h-[30px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] text-[11px] font-medium inline-flex items-center gap-1 disabled:opacity-50"
+                        className="min-h-[44px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] text-[11px] font-medium inline-flex items-center gap-1 disabled:opacity-50"
                       >
                         <RefreshCw className={`w-3 h-3 text-[var(--ide-accent)] ${checkingTermuxOutdated ? 'animate-spin' : ''}`} />
                         <span>{t('tmx_check_outdated_btn')}</span>
@@ -457,7 +457,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                         type="button"
                         disabled={!!busyAction || upgradingTermux}
                         onClick={() => void onUpgradeAllTermux('pip')}
-                        className="min-h-[30px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] text-[11px] font-medium inline-flex items-center gap-1 disabled:opacity-50"
+                        className="min-h-[44px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] text-[11px] font-medium inline-flex items-center gap-1 disabled:opacity-50"
                       >
                         {upgradingTermux ? (
                           <Loader2 className="w-3 h-3 animate-spin" />
@@ -558,7 +558,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
               type="button"
               onClick={onTestConnection}
               disabled={isChecking}
-              className="min-h-[42px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white text-xs font-medium inline-flex items-center gap-2 transition-colors"
+              className="min-h-[44px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white text-xs font-medium inline-flex items-center gap-2 transition-colors"
             >
               <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${isChecking ? 'animate-spin' : ''}`} />
               <span>{t('tmx_test_btn')}</span>
@@ -567,7 +567,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
               type="button"
               onClick={onRunInTermux}
               disabled={!!busyAction || upgradingTermux}
-              className="min-h-[42px] min-w-0 max-w-full overflow-hidden px-4 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium inline-flex items-center gap-2 hover:border-[var(--ide-accent)] transition-colors"
+              className="min-h-[44px] min-w-0 max-w-full overflow-hidden px-4 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium inline-flex items-center gap-2 hover:border-[var(--ide-accent)] transition-colors"
             >
               <Play className="w-3.5 h-3.5 text-[var(--ide-accent)] shrink-0" />
               <span className="truncate">{t('tmx_run_file_btn', { name: activeFile.name })}</span>
@@ -604,7 +604,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
             <button
               type="button"
               onClick={handleCopyBootstrap}
-              className="min-h-[42px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium inline-flex items-center gap-2 transition-colors"
+              className="min-h-[44px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium inline-flex items-center gap-2 transition-colors"
             >
               {copiedCmd ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
               <span>{copiedCmd ? t('tmx_copied_cmd') : t('tmx_copy_cmd')}</span>
@@ -612,7 +612,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
             <button
               type="button"
               onClick={handleDownloadBridgePy}
-              className="min-h-[42px] px-4 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium inline-flex items-center gap-2 hover:border-[var(--ide-accent)] transition-colors"
+              className="min-h-[44px] px-4 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium inline-flex items-center gap-2 hover:border-[var(--ide-accent)] transition-colors"
             >
               <Download className="w-4 h-4" />
               <span>{t('tmx_dl_bridge')}</span>
@@ -761,7 +761,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                 role="switch"
                 aria-checked={Boolean(pipTrustedHostEmergency)}
                 onClick={() => onToggleTrustedHost(!pipTrustedHostEmergency)}
-                className={`min-h-[36px] w-14 rounded-full p-1 transition-colors flex items-center shrink-0 ${
+                className={`min-h-[44px] w-14 rounded-full p-1 transition-colors flex items-center shrink-0 ${
                   pipTrustedHostEmergency
                     ? 'bg-amber-600 justify-end'
                     : 'bg-slate-300 dark:bg-slate-700 justify-start'
@@ -797,7 +797,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                 type="button"
                 disabled={!!busyAction || upgradingTermux}
                 onClick={() => void onUpgradeAllPackages()}
-                className="min-h-[36px] px-3 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-50 transition-colors"
+                className="min-h-[44px] px-3 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-50 transition-colors"
               >
                 {upgradingTermux ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
@@ -813,7 +813,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                   type="button"
                   disabled={!!busyAction || upgradingTermux}
                   onClick={() => void onUpgradeAllTermux('pip')}
-                  className="min-h-[36px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] text-xs font-medium inline-flex items-center gap-1.5 disabled:opacity-50 transition-colors"
+                  className="min-h-[44px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] text-xs font-medium inline-flex items-center gap-1.5 disabled:opacity-50 transition-colors"
                 >
                   {upgradingTermux ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--ide-accent)] shrink-0" />
@@ -826,7 +826,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                   type="button"
                   disabled={!!busyAction || upgradingTermux}
                   onClick={() => void onUpgradeAllTermux('pkg')}
-                  className="min-h-[36px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] text-xs font-medium inline-flex items-center gap-1.5 disabled:opacity-50 transition-colors"
+                  className="min-h-[44px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] text-xs font-medium inline-flex items-center gap-1.5 disabled:opacity-50 transition-colors"
                 >
                   <RefreshCw className="w-3.5 h-3.5 text-[var(--ide-accent)] shrink-0" />
                   <span>{t('tmx_upgrade_pkg_btn')}</span>
@@ -838,7 +838,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
               <button
                 type="button"
                 onClick={() => setInstallMode('pip')}
-                className={`min-h-[34px] px-3 rounded-lg text-xs font-mono font-medium transition-colors ${
+                className={`min-h-[44px] px-3 rounded-lg text-xs font-mono font-medium transition-colors ${
                   installMode === 'pip'
                     ? 'bg-[var(--ide-surface)] text-[var(--ide-text)] shadow-sm'
                     : 'text-[var(--ide-text-muted)]'
@@ -849,7 +849,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
               <button
                 type="button"
                 onClick={() => setInstallMode('pkg')}
-                className={`min-h-[34px] px-3 rounded-lg text-xs font-mono font-medium transition-colors ${
+                className={`min-h-[44px] px-3 rounded-lg text-xs font-mono font-medium transition-colors ${
                   installMode === 'pkg'
                     ? 'bg-[var(--ide-surface)] text-[var(--ide-text)] shadow-sm'
                     : 'text-[var(--ide-text-muted)]'
@@ -919,7 +919,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                 type="button"
                 disabled={!!busyAction || upgradingTermux}
                 onClick={() => void handleQuickInstall(termuxNameHint.suggestedMode, termuxNameHint.suggestedTarget)}
-                className="min-h-[34px] px-3 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-semibold shrink-0 max-w-full text-center transition-colors"
+                className="min-h-[44px] px-3 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-semibold shrink-0 max-w-full text-center transition-colors"
               >
                 {t('pkg_termux_hint_btn', { target: termuxNameHint.suggestedTarget })}
               </button>
@@ -1133,12 +1133,12 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                 value={shellCmd}
                 onChange={(e) => setShellCmd(e.target.value)}
                 placeholder={t('tmx_shell_placeholder')}
-                className="flex-1 min-w-0 min-h-[42px] px-3 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
+                className="flex-1 min-w-0 min-h-[44px] px-3 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
               />
               <button
                 type="submit"
                 disabled={!shellCmd.trim() || !!busyAction || upgradingTermux}
-                className="min-h-[42px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium whitespace-nowrap shrink-0 disabled:opacity-40 transition-colors"
+                className="min-h-[44px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium whitespace-nowrap shrink-0 disabled:opacity-40 transition-colors"
               >
                 {busyAction === 'shell' ? t('tmx_shell_running') : t('tmx_shell_btn')}
               </button>
@@ -1155,7 +1155,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                       setBusyAction('shell');
                       void onRunShellInTermux(preset).finally(() => setBusyAction(null));
                     }}
-                    className="min-h-[32px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] font-mono text-[11px] text-[var(--ide-text)] disabled:opacity-40 transition-colors"
+                    className="min-h-[44px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] font-mono text-[11px] text-[var(--ide-text)] disabled:opacity-40 transition-colors"
                   >
                     {preset}
                   </button>
