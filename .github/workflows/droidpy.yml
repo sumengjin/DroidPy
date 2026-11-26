@@ -7,17 +7,17 @@ on:
       - "v*"
   # Run validation for stacked PRs as well as PRs targeting the default branch.
   pull_request:
-
-# Keep only the newest PR validation active; never cancel main/tag release runs.
-concurrency:
-  group: droidpy-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
   workflow_dispatch:
     inputs:
       release_tag:
         description: "選填：手動發布 GitHub Release 標籤（例如 v1.2.1，留空則僅產出 APK Artifact）"
         required: false
         default: ""
+
+# Keep only the newest PR validation active; never cancel main/tag release runs.
+concurrency:
+  group: droidpy-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Default to read-only. Grant write access only to the trusted Release job.
 permissions:
