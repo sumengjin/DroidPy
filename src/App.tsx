@@ -3043,7 +3043,7 @@ export default function App() {
     >
       <div
         style={{ height: 'var(--droidpy-viewport-height, 100dvh)' }}
-        className={`h-dvh flex flex-col ${
+        className={`h-dvh droidpy-edge-safe flex flex-col ${
           is3dBgActive ? 'bg-transparent' : 'bg-[var(--ide-bg)]'
         } text-[var(--ide-text)] overflow-hidden relative`}
       >
