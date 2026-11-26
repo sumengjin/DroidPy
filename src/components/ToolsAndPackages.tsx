@@ -682,7 +682,7 @@ python ${entryFile}
           key={id}
           type="button"
           onClick={() => setActiveWindow(id)}
-          className="w-full min-h-[76px] px-3.5 py-3.5 rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] active:scale-[0.99] flex items-center justify-between gap-3 text-left transition-all min-w-0"
+          className="w-full min-h-[88px] px-4 py-4 rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] active:scale-[0.99] flex items-center justify-between gap-3 text-left transition-all min-w-0"
         >
           <div className="w-10 h-10 rounded-xl bg-[var(--ide-accent-soft)] text-[var(--ide-accent)] flex items-center justify-center shrink-0">
             <Icon className="w-5 h-5" />
@@ -1078,7 +1078,7 @@ python ${entryFile}
                     <button
                       type="submit"
                       disabled={!pkgQuery.trim() || !!installingPkg}
-                      className="min-h-[44px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-sm font-medium disabled:opacity-40 flex items-center gap-2 whitespace-nowrap shrink-0 transition-colors"
+                      className="min-h-[50px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-sm font-semibold disabled:opacity-40 flex items-center gap-2 whitespace-nowrap shrink-0 transition-colors"
                     >
                       {installingPkg ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -1247,7 +1247,7 @@ python ${entryFile}
                     })}
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[420px] overflow-y-auto ide-scroll pr-0.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pr-0.5">
                     {filteredPyCatalog.map((item) => {
                       const targetName = item.pyodide?.packageName ?? item.name;
                       const normTarget = normalizePyPkgName(targetName);
