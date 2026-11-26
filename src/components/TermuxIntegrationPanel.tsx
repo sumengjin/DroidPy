@@ -230,7 +230,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
   const handleShellSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const clean = shellCmd.trim();
-    if (!clean || busyAction || upgradingTermux) return;
+    if (!clean || busyAction || termuxRunning || upgradingTermux) return;
     setBusyAction('shell');
     try {
       await onRunShellInTermux(clean);
@@ -627,9 +627,6 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
           </p>
         </div>
 
-        <div className="rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] px-3.5 py-3 text-xs text-[var(--ide-text-muted)] leading-relaxed">
-          {t('tmx_init_desc')}
-        </div>
       </div>
       )}
 
