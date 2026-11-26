@@ -1384,9 +1384,15 @@ class MainActivity : AppCompatActivity() {
             val density = resources.displayMetrics.density.coerceAtLeast(1f)
             val statusTopDp = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top / density
             val navigationBottomDp = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom / density
+            crawlerOverlay.setPadding(
+                crawlerOverlay.paddingLeft,
+                insets.getInsets(WindowInsetsCompat.Type.statusBars()).top,
+                crawlerOverlay.paddingRight,
+                insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            )
             webView.evaluateJavascript(
-                "document.documentElement.style.setProperty('--droidpy-statusbar-inset', '${statusTopDp}px');" +
-                    "document.documentElement.style.setProperty('--droidpy-navigationbar-inset', '${navigationBottomDp}px');",
+                "document.documentElement.style.setProperty('--droidpy-statusbar-inset', '\${statusTopDp}px');" +
+                    "document.documentElement.style.setProperty('--droidpy-navigationbar-inset', '\${navigationBottomDp}px');",
                 null
             )
             insets
@@ -1413,6 +1419,11 @@ class MainActivity : AppCompatActivity() {
         webView.addJavascriptInterface(NativeDownloadBridge(), "DroidPyNative")
         webView.webChromeClient = WebChromeClient()
         webView.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                ViewCompat.requestApplyInsets(rootContainer)
+            }
+
             override fun onRenderProcessGone(
                 view: WebView?,
                 detail: android.webkit.RenderProcessGoneDetail?
