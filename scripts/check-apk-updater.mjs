@@ -123,6 +123,9 @@ assert.ok(source.includes('                "1.2.34"\n            }'));
 assert.ok(source.includes('VCODE=$(( \\${CMAJ:-1} * 1000000 + \\${CMIN:-0} * 1000 + \\${CPAT:-0} ))'));
 
 const updaterSource = await readFile('src/services/appUpdater.ts', 'utf8');
+assert.ok(updaterSource.includes('export function extractLatestReleaseNotes'), 'Existing full-history Release bodies must be reduced to one version section');
+assert.ok(updaterSource.includes("lines.findIndex((line) => /^## \\[\\d+\\.\\d+\\.\\d+\\](?:\\s|$)/.test(line))"));
+assert.ok(updaterSource.includes("body: extractLatestReleaseNotes(String(r.body || ''))"));
 assert.ok(updaterSource.includes("tagName: 'v1.2.34'"));
 assert.ok(updaterSource.includes("tagName: 'v1.2.33'"));
 assert.ok(updaterSource.indexOf("tagName: 'v1.2.34'") < updaterSource.indexOf("tagName: 'v1.2.16'"));
