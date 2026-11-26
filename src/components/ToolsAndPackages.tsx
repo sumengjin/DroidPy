@@ -251,9 +251,10 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
     Boolean(window.DroidPyNative?.hasStoragePermission?.())
   );
 
-  // Reset active sub-window when switching primary drawer tab
+  // Open the native package manager immediately when the user enters Packages.
+  // The runtime selector below keeps the sandbox manager one tap away.
   useEffect(() => {
-    setActiveWindow(null);
+    setActiveWindow(activeSubView === 'packages' ? 'pkg_native' : null);
   }, [activeSubView]);
 
   const pyodideCatalog = useMemo(
@@ -2169,21 +2170,60 @@ python ${entryFile}
     <div className="h-full overflow-y-auto ide-scroll bg-[var(--ide-bg)] text-[var(--ide-text)]">
       {activeWindow && activeOptionMeta ? (
         <>
-          <div className="sticky top-0 z-10 bg-[var(--ide-bg)]/95 border-b border-[var(--ide-border)] px-3.5 py-2.5 flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => setActiveWindow(null)}
-              className="min-h-[38px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] text-xs font-semibold inline-flex items-center gap-1.5 shrink-0 transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4 text-[var(--ide-accent)]" />
-              <span>{t('win_back')}</span>
-            </button>
-            <div className="flex items-center gap-2 min-w-0 flex-1">
-              <activeOptionMeta.Icon className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
-              <span className="text-sm font-semibold text-[var(--ide-text)] truncate">
-                {activeOptionMeta.title}
-              </span>
-            </div>
+          <div className="sticky top-0 z-10 bg-[var(--ide-bg)]/95 border-b border-[var(--ide-border)] px-3.5 py-2.5 space-y-2.5">
+            {activeSubView === 'packages' ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <Package className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
+                  <span className="text-sm font-semibold text-[var(--ide-text)]">{t('neg_tab_packages')}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-[var(--ide-surface-alt)] border border-[var(--ide-border)]">
+                  <button
+                    type="button"
+                    onClick={() => setActiveWindow('pkg_native')}
+                    aria-pressed={activeWindow === 'pkg_native'}
+                    className={`min-h-[44px] rounded-lg px-2 text-xs font-semibold inline-flex items-center justify-center gap-2 transition-colors ${
+                      activeWindow === 'pkg_native'
+                        ? 'bg-[var(--ide-accent)] text-white shadow-sm'
+                        : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
+                    }`}
+                  >
+                    <Package className="w-4 h-4" />
+                    <span className="truncate">{t('hub_pkg_native')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveWindow('pkg_sandbox')}
+                    aria-pressed={activeWindow === 'pkg_sandbox'}
+                    className={`min-h-[44px] rounded-lg px-2 text-xs font-semibold inline-flex items-center justify-center gap-2 transition-colors ${
+                      activeWindow === 'pkg_sandbox'
+                        ? 'bg-[var(--ide-accent)] text-white shadow-sm'
+                        : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
+                    }`}
+                  >
+                    <Cpu className="w-4 h-4" />
+                    <span className="truncate">{t('hub_pkg_sandbox')}</span>
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setActiveWindow(null)}
+                  className="min-h-[44px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] text-xs font-semibold inline-flex items-center gap-1.5 shrink-0 transition-colors"
+                >
+                  <ArrowLeft className="w-4 h-4 text-[var(--ide-accent)]" />
+                  <span>{t('win_back')}</span>
+                </button>
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <activeOptionMeta.Icon className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
+                  <span className="text-sm font-semibold text-[var(--ide-text)] truncate">
+                    {activeOptionMeta.title}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
           <div
             className={`${
