@@ -5,8 +5,8 @@ on:
     branches: ["main", "master"]
     tags:
       - "v*"
+  # Run CI for PRs targeting any branch, including stacked PRs.
   pull_request:
-    branches: ["main", "master"]
   workflow_dispatch:
     inputs:
       release_tag:
