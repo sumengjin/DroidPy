@@ -2009,15 +2009,23 @@ export function buildTermuxUninstallCommand(mode: 'pip' | 'pkg', target: string)
   const cleaned = target
     .split(/\s+/)
     .map((p) => p.replace(/[^a-zA-Z0-9_.+-]/g, '').trim())
-    .filter((p) => {
-      if (!p) return false;
-      const lower = p.toLowerCase();
-      return mode === 'pkg' ? !CORE_TERMUX_PKG_PACKAGES.has(lower) : !CORE_TERMUX_PIP_PACKAGES.has(lower);
-    });
+    .filter(Boolean);
   if (cleaned.length === 0) return '';
+
+  // Polars is installed from the third-party TUR repository as a native APT package.
+  // Its catalog entry remains pip-routed so the install API can bootstrap TUR first.
+  if (mode === 'pip' && cleaned.length === 1 && normalizeTermuxPkgName(cleaned[0]) === 'polars') {
+    return 'pkg uninstall -y python-polars';
+  }
+
+  const safeTargets = cleaned.filter((p) => {
+    const lower = p.toLowerCase();
+    return mode === 'pkg' ? !CORE_TERMUX_PKG_PACKAGES.has(lower) : !CORE_TERMUX_PIP_PACKAGES.has(lower);
+  });
+  if (safeTargets.length === 0) return '';
   return mode === 'pkg'
-    ? `pkg uninstall -y ${cleaned.join(' ')}`
-    : `pip uninstall -y ${cleaned.join(' ')}`;
+    ? `pkg uninstall -y ${safeTargets.join(' ')}`
+    : `pip uninstall -y ${safeTargets.join(' ')}`;
 }
 
 export function buildTermuxPipUpgradeCommand(
