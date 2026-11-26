@@ -148,14 +148,11 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
 }) => {
   const { t } = useI18n();
   const backdropTouchRef = React.useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const [showCategories, setShowCategories] = React.useState(true);
+  React.useEffect(() => {
+    if (open) setShowCategories(true);
+  }, [open]);
   if (!open) return null;
-
-  const tabs: { id: NegativeScreenSection; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
-    { id: 'termux', label: t('neg_tab_termux'), Icon: Terminal },
-    { id: 'packages', label: t('neg_tab_packages'), Icon: Package },
-    { id: 'android', label: t('neg_tab_storage'), Icon: HardDrive },
-    { id: 'settings', label: t('neg_tab_system'), Icon: Sliders },
-  ];
 
   return (
     <div
@@ -197,7 +194,7 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
               referrerPolicy="no-referrer"
             />
             <div className="min-w-0">
-              <h2 className="text-base font-bold truncate">{t('neg_title')}</h2>
+              <h2 className="text-base font-bold truncate">設定</h2>
               <p className="text-xs text-[var(--ide-text-muted)] truncate mt-0.5">{t('neg_subtitle')}</p>
             </div>
           </div>
@@ -211,37 +208,53 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
           </button>
         </div>
 
-        {/* Workspace section navigation */}
-        <div className="px-2.5 sm:px-3 py-2 border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] shrink-0">
-          <div className="grid grid-cols-4 gap-1.5 p-1.5 rounded-2xl bg-[var(--ide-bg)] border border-[var(--ide-border)]">
-            {tabs.map(({ id, label, Icon }) => {
-              const active = section === id;
-              const showDot = id === 'settings' && Boolean(appUpdateResult?.hasUpdate);
-              return (
+        {showCategories ? (
+          <div className="flex-1 min-h-0 overflow-y-auto ide-scroll px-3 py-3 pb-safe">
+            <div className="mb-3 px-1">
+              <h3 className="text-base font-semibold text-[var(--ide-text)]">設定與工具</h3>
+              <p className="mt-1 text-xs text-[var(--ide-text-muted)]">選擇分類以進入下一層</p>
+            </div>
+            <div className="divide-y divide-[var(--ide-border)] rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] overflow-hidden">
+              {[
+                { id: 'termux' as const, label: t('neg_tab_termux'), Icon: Terminal, desc: 'Python 執行環境、連線與維護' },
+                { id: 'packages' as const, label: t('neg_tab_packages'), Icon: Package, desc: 'Termux 與沙盒套件管理' },
+                { id: 'android' as const, label: t('neg_tab_storage'), Icon: HardDrive, desc: '裝置儲存空間與工作目錄' },
+                { id: 'settings' as const, label: '個人化與設定', Icon: Sliders, desc: '外觀、編輯器、語言與應用程式' },
+              ].map(({ id, label, Icon, desc }) => (
                 <button
                   key={id}
                   type="button"
-                  onClick={() => onChangeSection(id)}
-                  className={`relative min-h-[54px] min-w-0 px-1 py-1.5 rounded-xl text-xs font-medium flex flex-col items-center justify-center gap-1 transition-colors ${
-                    active
-                      ? 'bg-[var(--ide-accent)] text-white font-semibold shadow-xs'
-                      : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
-                  }`}
+                  onClick={() => { onChangeSection(id); setShowCategories(false); }}
+                  className="w-full min-h-[76px] px-3.5 py-3 flex items-center gap-3 text-left active:bg-[var(--ide-surface-alt)]"
                 >
-                  <span className="relative">
-                    <Icon className="w-4 h-4 shrink-0" />
-                    {showDot && (
-                      <span className="absolute -right-1 -top-1 w-1.5 h-1.5 rounded-full bg-[var(--ide-accent)]" />
-                    )}
+                  <span className="w-11 h-11 rounded-2xl bg-[var(--ide-accent-soft)] text-[var(--ide-accent)] flex items-center justify-center shrink-0">
+                    <Icon className="w-5 h-5" />
                   </span>
-                  <span className="truncate max-w-full text-[11px] leading-tight">{label}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold text-[var(--ide-text)]">{label}</span>
+                    <span className="block text-xs text-[var(--ide-text-muted)] mt-1">{desc}</span>
+                  </span>
+                  <span className="relative shrink-0">
+                    <span className="text-[var(--ide-text-muted)] text-lg">›</span>
+                    {id === 'settings' && appUpdateResult?.hasUpdate && <span className="absolute -right-1 -top-1 w-2 h-2 rounded-full bg-[var(--ide-accent)]" />}
+                  </span>
                 </button>
-              );
-            })}
+              ))}
+            </div>
           </div>
-        </div>
-
-        {/* Drawer Content */}
+        ) : (
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+            <div className="px-3 py-2 border-b border-[var(--ide-border)] shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowCategories(true)}
+                className="min-h-[44px] px-2 inline-flex items-center gap-2 text-sm font-semibold text-[var(--ide-accent-text)]"
+              >
+                <span aria-hidden="true">‹</span>
+                <span>返回設定</span>
+              </button>
+            </div>
+        {/* Selected settings category */}
         <div className="flex-1 min-h-0 overflow-hidden">
           <ToolsAndPackages
             activeSubView={section}
@@ -333,7 +346,9 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
             onRebuildPipCertifi={onRebuildPipCertifi}
             onNotify={onNotify}
           />
-        </div>
+             </div>
+        )}
+     </div>
       </aside>
     </div>
   );
