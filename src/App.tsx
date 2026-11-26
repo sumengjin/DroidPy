@@ -3120,7 +3120,7 @@ export default function App() {
       </header>
       )}
 
-      {/* Phone Compact MD3 Top App Bar (Negative Screen drawer trigger + Title/File + Conditional CTA outside editor/console) */}
+      {/* Phone workspace header: contextual title and only relevant primary actions */}
       {deviceClass === 'phone' && (
       <header className="relative z-10 flex items-center justify-between gap-2 h-13 px-2.5 pt-safe border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] shrink-0">
         <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -3128,6 +3128,7 @@ export default function App() {
             type="button"
             onClick={() => setNegativeOpen(true)}
             aria-label={t('neg_open_aria')}
+            title={t('neg_title')}
             className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full border border-[var(--ide-border)] bg-[var(--ide-bg)] text-[var(--ide-text)] active:scale-95 transition-transform shrink-0"
           >
             <SettingsIcon className="w-5 h-5" />
@@ -3138,52 +3139,61 @@ export default function App() {
             className="w-6 h-6 rounded-md shrink-0"
             referrerPolicy="no-referrer"
           />
-          <span className="text-sm font-bold whitespace-nowrap shrink-0">DroidPy</span>
-          <span className="text-[var(--ide-border)] shrink-0" aria-hidden="true">/</span>
-          <span className="font-mono text-xs text-[var(--ide-text-muted)] truncate min-w-0">
-            {activeFile?.name}
-          </span>
-        </div>
-
-        {(
-          <div className="flex items-center gap-1.5 shrink-0">
-            {pendingInputPrompt !== null ? (
-              <button
-                type="button"
-                onClick={handleCancelInput}
-                className="min-h-[44px] px-4 rounded-full bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
-              >
-                <Square className="w-3.5 h-3.5 fill-current" />
-                <span>{t('cta_abort_short')}</span>
-              </button>
-            ) : termuxRunning ? (
-              <button
-                type="button"
-                onClick={() => void handleStopTermux()}
-                className="min-h-[44px] px-4 rounded-full bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
-              >
-                <Square className="w-3.5 h-3.5 fill-current" />
-                <span>{t('cta_stop_short')}</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleRunCode}
-                disabled={isRunning || isCoreLoading}
-                className="min-h-[44px] px-4 rounded-full bg-[var(--ide-accent)] active:scale-[0.98] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-transform"
-              >
-                {isRunning || isCoreLoading ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Play className="w-3.5 h-3.5 fill-current" />
-                )}
-                <span>
-                  {isCoreLoading ? t('cta_loading_short') : isRunning ? t('cta_running') : t('cta_run_short')}
-                </span>
-              </button>
+          <div className="flex flex-col min-w-0">
+            <span className="text-sm font-semibold leading-tight truncate">
+              {mobileTab === 'editor'
+                ? t('mob_editor')
+                : mobileTab === 'console'
+                  ? t('mob_console')
+                  : mobileTab === 'files'
+                    ? t('mob_files')
+                    : t('mob_browser')}
+            </span>
+            {mobileTab === 'editor' && (
+              <span className="font-mono text-[11px] text-[var(--ide-text-muted)] truncate leading-tight">
+                {activeFile?.name}
+              </span>
             )}
           </div>
-        )}
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          {pendingInputPrompt !== null ? (
+            <button
+              type="button"
+              onClick={handleCancelInput}
+              className="min-h-[44px] px-4 rounded-full bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
+            >
+              <Square className="w-3.5 h-3.5 fill-current" />
+              <span>{t('cta_abort_short')}</span>
+            </button>
+          ) : termuxRunning ? (
+            <button
+              type="button"
+              onClick={() => void handleStopTermux()}
+              className="min-h-[44px] px-4 rounded-full bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
+            >
+              <Square className="w-3.5 h-3.5 fill-current" />
+              <span>{t('cta_stop_short')}</span>
+            </button>
+          ) : mobileTab === 'editor' ? (
+            <button
+              type="button"
+              onClick={handleRunCode}
+              disabled={isRunning || isCoreLoading}
+              className="min-h-[44px] px-4 rounded-full bg-[var(--ide-accent)] active:scale-[0.98] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-transform"
+            >
+              {isRunning || isCoreLoading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Play className="w-3.5 h-3.5 fill-current" />
+              )}
+              <span>
+                {isCoreLoading ? t('cta_loading_short') : isRunning ? t('cta_running') : t('cta_run_short')}
+              </span>
+            </button>
+          ) : null}
+        </div>
       </header>
       )}
 
