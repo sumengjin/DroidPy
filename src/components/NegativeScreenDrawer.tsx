@@ -206,7 +206,7 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
               referrerPolicy="no-referrer"
             />
             <div className="min-w-0">
-              <h2 className="text-base font-bold truncate">設定</h2>
+              <h2 className="text-base font-bold truncate">{t('neg_title')}</h2>
               <p className="text-xs text-[var(--ide-text-muted)] truncate mt-0.5">{t('neg_subtitle')}</p>
             </div>
           </div>
@@ -223,12 +223,12 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
         {showCategories ? (
           <div className="flex-1 min-h-0 overflow-y-auto ide-scroll px-3 py-3 pb-safe">
             <div className="mb-3 px-1">
-              <h3 className="text-base font-semibold text-[var(--ide-text)]">設定與工具</h3>
-              <p className="mt-1 text-xs text-[var(--ide-text-muted)]">選擇分類以進入下一層</p>
+              <h3 className="text-base font-semibold text-[var(--ide-text)]">{t('neg_category_heading')}</h3>
+              <p className="mt-1 text-xs text-[var(--ide-text-muted)]">{t('neg_category_hint')}</p>
             </div>
             <div className="divide-y divide-[var(--ide-border)] rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] overflow-hidden">
               {[
-                { id: 'termux' as const, label: 'Termux', Icon: Terminal, desc: 'Python 執行環境、連線與維護' },
+                { id: 'termux' as const, label: t('neg_category_termux'), Icon: Terminal, desc: t('neg_category_termux_desc') },
                 { id: 'packages' as const, label: '套件管理', Icon: Package, desc: 'Termux 與沙盒套件管理' },
                 { id: 'android' as const, label: 'Android 管理', Icon: HardDrive, desc: '裝置儲存空間與工作目錄' },
                 { id: 'settings' as const, label: '個人化與設定', Icon: Sliders, desc: '外觀、編輯器、語言與應用程式' },
