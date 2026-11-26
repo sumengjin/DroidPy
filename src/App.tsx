@@ -402,6 +402,8 @@ export default function App() {
   const [cursorPos, setCursorPos] = useState<{ line: number; col: number }>({ line: 1, col: 1 });
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [pendingInputPrompt, setPendingInputPrompt] = useState<string | null>(null);
+  // Keep stdin mounted for the full interactive input() session.
+  const [inputSessionActive, setInputSessionActive] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showLogsModal, setShowLogsModal] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
@@ -923,6 +925,7 @@ export default function App() {
     onToast: (msg) => showToast(msg),
     onInputRequest: (promptText) =>
       new Promise<string>((resolve, reject) => {
+        setInputSessionActive(true);
         setPendingInputPrompt(promptText);
         inputResolverRef.current = { resolve, reject };
       }),
@@ -936,6 +939,7 @@ export default function App() {
     onToast: (msg) => showToast(msg),
     onInputRequest: (promptText) =>
       new Promise<string>((resolve, reject) => {
+        setInputSessionActive(true);
         setPendingInputPrompt(promptText);
         setMobileTab('console');
         inputResolverRef.current = { resolve, reject };
@@ -2005,6 +2009,7 @@ export default function App() {
       inputResolverRef.current.reject(new Error('KeyboardInterrupt'));
       inputResolverRef.current = null;
       setPendingInputPrompt(null);
+      setInputSessionActive(false);
     }
   }, []);
 
@@ -2083,6 +2088,7 @@ export default function App() {
         setRunStartedAt(null);
         setPyodideStatus('ready');
         setPendingInputPrompt(null);
+        setInputSessionActive(false);
         inputResolverRef.current = null;
       }
     },
@@ -3314,6 +3320,7 @@ export default function App() {
                       runStartedAt={runStartedAt}
                       lastDurationMs={lastDurationMs}
                       pendingInputPrompt={pendingInputPrompt}
+                  inputSessionActive={inputSessionActive}
                       onSubmitInput={handleSubmitInput}
                       onRunRepl={handleRunRepl}
                       onSendTermuxStdin={handleSendTermuxStdin}
@@ -3478,6 +3485,7 @@ export default function App() {
                   runStartedAt={runStartedAt}
                   lastDurationMs={lastDurationMs}
                   pendingInputPrompt={pendingInputPrompt}
+                  inputSessionActive={inputSessionActive}
                   onSubmitInput={handleSubmitInput}
                   onRunRepl={handleRunRepl}
                   onSendTermuxStdin={handleSendTermuxStdin}
