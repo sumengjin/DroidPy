@@ -184,6 +184,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
 }) => {
   const { t } = useI18n();
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const outputWasAtBottomRef = useRef(true);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const replInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -216,6 +217,25 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       inputRef.current?.focus();
     }
   }, [pendingInputPrompt]);
+
+  // Keep the newest output visible when Android's soft keyboard changes the
+  // visual viewport, without pulling users away from older output they are reading.
+  useEffect(() => {
+    const keepLatestOutputVisible = () => {
+      if (!outputWasAtBottomRef.current) return;
+      window.requestAnimationFrame(() => {
+        const output = scrollRef.current;
+        if (output) output.scrollTop = output.scrollHeight;
+      });
+    };
+    const viewport = window.visualViewport;
+    viewport?.addEventListener('resize', keepLatestOutputVisible);
+    window.addEventListener('resize', keepLatestOutputVisible);
+    return () => {
+      viewport?.removeEventListener('resize', keepLatestOutputVisible);
+      window.removeEventListener('resize', keepLatestOutputVisible);
+    };
+  }, []);
 
   const handleCopyAll = async () => {
     const text = entries
@@ -414,7 +434,12 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       {/* Output Scroll Area */}
       <div
         ref={scrollRef}
-        className="terminal-selectable flex-1 overflow-y-auto ide-scroll p-3 sm:p-4 font-mono text-[13px] leading-relaxed space-y-2"
+        onScroll={(event) => {
+          const output = event.currentTarget;
+          outputWasAtBottomRef.current =
+            output.scrollHeight - output.scrollTop - output.clientHeight <= 48;
+        }}
+        className="terminal-selectable flex-1 min-h-0 overflow-y-auto overscroll-contain ide-scroll p-3 sm:p-4 font-mono text-[13px] leading-relaxed space-y-2"
       >
         {entries.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center py-8 text-[var(--ide-text-muted)] font-sans">
