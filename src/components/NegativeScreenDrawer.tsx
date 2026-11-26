@@ -210,7 +210,7 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
 
         {/* Segmented Drawer Tabs */}
         <div className="px-2.5 sm:px-3 py-2 border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] shrink-0">
-          <div className="grid grid-cols-4 gap-1 p-1 rounded-2xl bg-[var(--ide-bg)] border border-[var(--ide-border)]">
+          <div className="grid grid-cols-4 gap-1.5 p-1.5 rounded-2xl bg-[var(--ide-bg)] border border-[var(--ide-border)]">
             {tabs.map(({ id, label, Icon }) => {
               const active = section === id;
               const showDot = id === 'settings' && Boolean(appUpdateResult?.hasUpdate);
@@ -219,21 +219,19 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
                   key={id}
                   type="button"
                   onClick={() => onChangeSection(id)}
-                  className={`relative min-h-[44px] min-w-0 px-1.5 rounded-xl text-[11px] font-medium flex items-center justify-center gap-1 transition-colors ${
+                  className={`relative min-h-[54px] min-w-0 px-1 py-1.5 rounded-xl text-xs font-medium flex flex-col items-center justify-center gap-1 transition-colors ${
                     active
                       ? 'bg-[var(--ide-accent)] text-white font-semibold shadow-xs'
                       : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
                   }`}
                 >
-                  <Icon className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">{label}</span>
-                  {showDot && (
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                        active ? 'bg-white' : 'bg-[var(--ide-accent)]'
-                      }`}
-                    />
-                  )}
+                  <span className="relative">
+                    <Icon className="w-4 h-4 shrink-0" />
+                    {showDot && (
+                      <span className="absolute -right-1 -top-1 w-1.5 h-1.5 rounded-full bg-[var(--ide-accent)]" />
+                    )}
+                  </span>
+                  <span className="truncate max-w-full text-[11px] leading-tight">{label}</span>
                 </button>
               );
             })}
