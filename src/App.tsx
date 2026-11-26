@@ -3422,33 +3422,25 @@ export default function App() {
                   : 'hidden'
               }
             >
-                {/* Mobile Quick File Switcher + Quick Actions */}
-                <div className="flex items-center justify-between gap-1.5 px-2 py-1.5 border-b border-[var(--ide-border)] bg-[var(--ide-surface-alt)] shrink-0">
-                  <div className="flex items-center gap-1 overflow-x-auto no-scrollbar min-w-0">
-                    {files.map((file) => {
-                      const isActive = file.id === activeFile.id;
-                      return (
-                        <button
-                          key={file.id}
-                          type="button"
-                          onClick={() => setActiveFileId(file.id)}
-                          className={`min-h-[36px] px-3 rounded-lg font-mono text-xs whitespace-nowrap shrink-0 transition-colors ${
-                            isActive
-                              ? 'bg-[var(--ide-surface)] text-[var(--ide-accent-text)] font-semibold border border-[var(--ide-border)]'
-                              : 'text-[var(--ide-text-muted)]'
-                          }`}
-                        >
-                          {file.name}
-                        </button>
-                      );
-                    })}
-                  </div>
+                {/* Mobile editor controls: one compact file picker and reachable 44px actions */}
+                <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-[var(--ide-border)] bg-[var(--ide-surface-alt)] shrink-0">
+                  <select
+                    aria-label={t('files_title')}
+                    value={activeFile.id}
+                    onChange={(event) => setActiveFileId(event.target.value)}
+                    className="flex-1 min-w-0 min-h-[44px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] text-[var(--ide-text)] text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
+                  >
+                    {files.map((file) => (
+                      <option key={file.id} value={file.id}>{file.name}</option>
+                    ))}
+                  </select>
                   <div className="flex items-center gap-0.5 shrink-0">
                     <button
                       type="button"
                       onClick={() => setMobileNewFileOpen((v) => !v)}
                       aria-label={t('files_new_btn')}
-                      className={`min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg ${
+                      title={t('files_new_btn')}
+                      className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl ${
                         mobileNewFileOpen
                           ? 'text-[var(--ide-accent-text)] bg-[var(--ide-accent-soft)]'
                           : 'text-[var(--ide-text-muted)]'
@@ -3460,7 +3452,8 @@ export default function App() {
                       type="button"
                       onClick={handleFormatActiveFile}
                       aria-label={t('toolbar_format_title')}
-                      className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)]"
+                      title={t('toolbar_format_title')}
+                      className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-[var(--ide-text-muted)]"
                     >
                       <AlignLeft className="w-4 h-4" />
                     </button>
@@ -3468,7 +3461,8 @@ export default function App() {
                       type="button"
                       onClick={() => editorRef.current?.openSearch()}
                       aria-label={t('toolbar_search_title')}
-                      className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)]"
+                      title={t('toolbar_search_title')}
+                      className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-[var(--ide-text-muted)]"
                     >
                       <Search className="w-4 h-4" />
                     </button>
@@ -3476,7 +3470,8 @@ export default function App() {
                       type="button"
                       onClick={() => handleUpdateSettings({ showSymbolBar: !settings.showSymbolBar })}
                       aria-label={t('toolbar_symbol_bar_title')}
-                      className={`min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg ${
+                      title={t('toolbar_symbol_bar_title')}
+                      className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl ${
                         settings.showSymbolBar
                           ? 'text-[var(--ide-accent-text)] bg-[var(--ide-accent-soft)]'
                           : 'text-[var(--ide-text-muted)]'
