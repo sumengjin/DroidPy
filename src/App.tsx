@@ -1970,6 +1970,12 @@ export default function App() {
     };
 
     try {
+      // External Android files must be saved to their original shared-storage path
+      // before either runtime executes the edited buffer.
+      if (entryFile.externalPath) {
+        await writeSdcardFile(termuxConfig, entryFile.externalPath, entryFile.content);
+        appendEntry('system', `已將 ${entryFile.name} 儲存回原資料夾`);
+      }
       const result = await executePythonFile(entryFile, files, trackedCallbacks);
       setLastDurationMs(result.durationMs);
       setPyodideStatus('ready');
@@ -2003,6 +2009,7 @@ export default function App() {
     termuxRunning,
     executionEngine,
     handleRunInTermux,
+    termuxConfig,
     appendEntry,
     showToast,
     t,
