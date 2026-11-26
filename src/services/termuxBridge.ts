@@ -1398,6 +1398,7 @@ async function termuxFetch<T>(
     }
     return data;
   } catch (err) {
+    settleReady();
     if (err instanceof Error && err.name === 'AbortError') {
       const operation = path === '/run-stream' || path === '/shell-stream' || path === '/install-stream'
         ? '執行工作'
@@ -1415,6 +1416,21 @@ async function termuxFetch<T>(
 
 let activeStreamController: AbortController | null = null;
 let activeStreamCompletion: Promise<void> | null = null;
+let activeStreamReady: Promise<void> | null = null;
+
+export async function waitForActiveTermuxStreamReady(timeoutMs = 5000): Promise<boolean> {
+  const ready = activeStreamReady;
+  if (!ready) return true;
+  let timer: number | undefined;
+  const arrived = await Promise.race([
+    ready.then(() => true),
+    new Promise<boolean>((resolve) => {
+      timer = window.setTimeout(() => resolve(false), timeoutMs);
+    }),
+  ]);
+  if (timer !== undefined) window.clearTimeout(timer);
+  return arrived;
+}
 
 export async function abortActiveTermuxStream(): Promise<void> {
   // Keep the single-job slot occupied until the aborted reader has completed cleanup.
@@ -1461,6 +1477,11 @@ async function termuxStreamRequest(
   });
   activeStreamController = controller;
   activeStreamCompletion = completion;
+  let settleReady!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    settleReady = resolve;
+  });
+  activeStreamReady = ready;
 
   try {
     const res = await fetch(`${base}${path}`, {
@@ -1472,6 +1493,7 @@ async function termuxStreamRequest(
       },
       body: JSON.stringify(payload),
     });
+    settleReady();
 
     if (!res.ok) {
       let msg = `Termux 橋接回應錯誤 (${res.status})`;
@@ -1541,6 +1563,10 @@ async function termuxStreamRequest(
     if (activeStreamCompletion === completion) {
       activeStreamCompletion = null;
     }
+    if (activeStreamReady === ready) {
+      activeStreamReady = null;
+    }
+    settleReady();
     settleCompletion();
   }
 }
