@@ -86,7 +86,7 @@ assert.match(appSource, /Unable to verify Python before first use/);
 assert.match(appSource, /termuxOperationLockRef\.current = true/);
 assert.match(appSource, /termuxOperationLockRef\.current = false/);
 assert.match(appSource, /async \(command: string, operationLockAlreadyHeld = false\)/, 'nested upgrade commands must reuse the already-held operation lock without deadlocking');
-assert.match(appSource, /operationLockAlreadyHeld \? !termuxOperationLockRef\.current/, 'nested shell commands must reject an invalid inherited-lock call');
+assert.match(appSource, /operationLockAlreadyHeld && !termuxOperationLockRef\.current/, 'nested shell commands must reject an invalid inherited-lock call');
 assert.match(appSource, /if \(!operationLockAlreadyHeld\) termuxOperationLockRef\.current = true/, 'shell commands must acquire the shared lock only when they own it');
 assert.match(appSource, /if \(!operationLockAlreadyHeld\) termuxOperationLockRef\.current = false/, 'nested shell commands must leave inherited lock release to their owner');
 assert.match(appSource, /checkingTermuxOutdated \|\|\s*termuxRunning \|\|\s*termuxOperationLockRef\.current \|\|\s*termuxScriptStartLockRef\.current/, 'manual outdated checks must not overlap active Termux operations');
