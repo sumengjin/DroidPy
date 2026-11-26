@@ -1532,7 +1532,9 @@ async function termuxStreamRequest(
 
 export async function checkTermuxHealth(config: TermuxConfig): Promise<TermuxHealthInfo> {
   const res = await termuxFetch<TermuxHealthInfo & { ok: boolean }>(config, '/health', { method: 'GET' }, 4500);
-  const installedPkgPackages = Array.isArray(res.installedPkgPackages) ? res.installedPkgPackages : undefined;
+  const installedPkgPackages = Array.isArray(res.installedPkgPackages) && res.installedPkgPackages.length > 0
+    ? res.installedPkgPackages
+    : undefined;
   const installedPipPackages = Array.isArray(res.installedPipPackages)
     ? filterTermuxPipPackages(res.installedPipPackages, installedPkgPackages)
     : undefined;
