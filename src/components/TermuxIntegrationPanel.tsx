@@ -949,7 +949,10 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                       className="flex-1 min-w-0 text-left"
                     >
                       <div className="flex items-center gap-2 text-xs font-mono font-semibold text-[var(--ide-text)]">
-                        <span>{tmx.mode} {tmx.targetName}</span>
+                        <span>{tmx.targetName}</span>
+                        <span className="text-[10px] font-semibold tracking-wide rounded-md px-2 py-1 bg-[var(--ide-surface-alt)] text-[var(--ide-accent-text)] shrink-0">
+                          {tmx.mode === 'pkg' ? 'Termux APT' : item.id === 'polars' ? 'TUR' : 'PyPI'}
+                        </span>
                         {matchedAlias && (
                           <span className="font-sans font-normal text-[11px] text-[var(--ide-accent-text)]">
                             · {t('pkg_fuzzy_alias', { alias: matchedAlias })}
@@ -964,7 +967,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                       type="button"
                       disabled={!!busyAction || upgradingTermux}
                       onClick={() => void handleQuickInstall(tmx.mode, tmx.targetName)}
-                      className="min-h-[34px] px-3 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-40 text-white text-xs font-medium whitespace-nowrap shrink-0 inline-flex items-center gap-1.5"
+                      className="min-h-[44px] px-3 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-40 text-white text-xs font-medium whitespace-nowrap shrink-0 inline-flex items-center gap-1.5"
                     >
                       {isBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                       <span>{t('pkg_install_short')}</span>
@@ -985,7 +988,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                   key={tier}
                   type="button"
                   onClick={() => setTierFilter(tier)}
-                  className={`min-h-[32px] px-3 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+                  className={`min-h-[44px] px-3 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
                     tierFilter === tier
                       ? 'bg-[var(--ide-surface)] text-[var(--ide-accent-text)] font-semibold shadow-xs'
                       : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
@@ -1008,7 +1011,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                   key={cat.id}
                   type="button"
                   onClick={() => setCatFilter(cat.id)}
-                  className={`min-h-[34px] px-3 rounded-xl border text-xs font-medium whitespace-nowrap shrink-0 transition-colors ${
+                  className={`min-h-[44px] px-3 rounded-xl border text-xs font-medium whitespace-nowrap shrink-0 transition-colors ${
                     active
                       ? 'border-[var(--ide-accent)] bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] font-semibold'
                       : 'border-[var(--ide-border)] bg-[var(--ide-bg)] text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
@@ -1021,7 +1024,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-[380px] overflow-y-auto ide-scroll pr-0.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pr-0.5">
           {filteredCatalog.map((item) => {
             const tmx = item.termux!;
             const isBusyInstall = busyAction === `install:${tmx.targetName}`;
@@ -1069,11 +1072,14 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                   <div className="text-[11px] text-[var(--ide-text-muted)] mt-1 line-clamp-2 leading-relaxed">
                     {item.desc}
                   </div>
+                  <div className="text-[10px] text-[var(--ide-text-muted)] mt-1 line-clamp-2 leading-relaxed">
+                    {item.runtimeHint}
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between gap-2 pt-1">
                   <span className="text-[10px] text-[var(--ide-text-muted)] truncate">
-                    {item.tier === 'popular' ? t('pkg_tier_popular') : t('pkg_tier_niche')} · {item.runtimeHint}
+                    {item.tier === 'popular' ? t('pkg_tier_popular') : t('pkg_tier_niche')}
                   </span>
                   <div className="flex items-center gap-1.5 shrink-0">
                     {alreadyInstalled && !isCorePkg && onUninstallInTermux && (
@@ -1081,7 +1087,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                         type="button"
                         disabled={!!busyAction || upgradingTermux}
                         onClick={() => void handleUninstallTarget(tmx.mode, tmx.targetName)}
-                        className="min-h-[28px] px-2 rounded-lg border border-red-300 dark:border-red-900/60 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 text-[11px] font-medium whitespace-nowrap inline-flex items-center gap-1 disabled:opacity-40"
+                        className="min-h-[44px] px-3 rounded-lg border border-red-300 dark:border-red-900/60 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 text-[11px] font-medium whitespace-nowrap inline-flex items-center gap-1 disabled:opacity-40"
                       >
                         {isBusyUninstall ? (
                           <Loader2 className="w-3 h-3 animate-spin" />
@@ -1096,7 +1102,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                         type="button"
                         disabled={!!busyAction || upgradingTermux}
                         onClick={() => void handleQuickInstall(tmx.mode, tmx.targetName)}
-                        className="min-h-[28px] px-2.5 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-[11px] font-medium whitespace-nowrap inline-flex items-center gap-1 disabled:opacity-40"
+                        className="min-h-[44px] px-3 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-[11px] font-medium whitespace-nowrap inline-flex items-center gap-1 disabled:opacity-40"
                       >
                         {isBusyInstall ? (
                           <Loader2 className="w-3 h-3 animate-spin" />
