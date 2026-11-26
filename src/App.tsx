@@ -1314,6 +1314,7 @@ export default function App() {
       flushStreamChunk(streamId);
       setTermuxConnectionState('connected');
       setLastDurationMs(result.durationMs);
+      if (result.exitCode === -1 && termuxStopRequestedRef.current) return false;
       if (result.exitCode !== 0) {
         const detail = bootstrapOutputTail.trim() || '首次安裝未提供錯誤輸出';
         appendEntry('stderr', t('log_termux_exit', { code: result.exitCode }));
