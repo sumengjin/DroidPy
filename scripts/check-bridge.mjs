@@ -213,7 +213,8 @@ assert.ok(androidBuilder.includes('Stream client disconnected; continuing proces
 assert.ok(androidBuilder.includes('Process started pid='));
 assert.ok(androidBuilder.includes('Process exited pid='));
 assert.ok(androidBuilder.includes('activeProcessStopRequested'));
-assert.ok(androidBuilder.includes('Explicit Stop request: force stopping process tree'));
+assert.ok(androidBuilder.includes('Stop endpoint invoked source=$stopSource operation=$stopOperation'));
+assert.ok(androidBuilder.includes('Stop request: force stopping process tree pid='));
 assert.ok(androidBuilder.includes('Process output read ended after explicit Stop'));
 assert.ok(androidBuilder.includes('Run script requested: $entry'));
 assert.ok(androidBuilder.includes('SD-card write request received'));
