@@ -4864,7 +4864,7 @@ def clipboard_set(text):
                         val stat = File(entry, "stat").readText(Charsets.US_ASCII)
                         val closeParen = stat.lastIndexOf(')')
                         if (closeParen > 0) {
-                            val fields = stat.substring(closeParen + 2).trim().split(Regex("\\s+"))
+                            val fields = stat.substring(closeParen + 2).trim().split(Regex("""\\s+"""))
                             val parentOfChild = fields.getOrNull(1)?.toIntOrNull()
                             if (parentOfChild == parentPid && childPid !in out) {
                                 collectDescendants(childPid, out)
@@ -4894,7 +4894,7 @@ def clipboard_set(text):
             }
             signaled > 0
         } catch (error: Exception) {
-            appendNativeLog("Exec", "Pause/resume process-tree signal failed: ${error.message}")
+            appendNativeLog("Exec", "Pause/resume process-tree signal failed: \${error.message}")
             false
         }
     }
