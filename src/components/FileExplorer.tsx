@@ -92,7 +92,10 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [showDeviceBrowser, setShowDeviceBrowser] = useState(false);
+  // On Android, Files opens directly into shared storage instead of hiding the real file manager one level deeper.
+  const [showDeviceBrowser, setShowDeviceBrowser] = useState(() =>
+    Boolean(termuxEmbedded || window.DroidPyNative?.isNativeApp?.())
+  );
   const [showTemplates, setShowTemplates] = useState(false);
   const [templateCategory, setTemplateCategory] = useState<SnippetCategoryId>('all');
   const [showBackups, setShowBackups] = useState(false);
