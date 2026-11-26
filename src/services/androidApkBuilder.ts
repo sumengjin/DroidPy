@@ -2060,6 +2060,8 @@ class EmbeddedTermuxBridge(
     )
     @Volatile private var running = false
     @Volatile private var activeProcess: Process? = null
+    @Volatile private var activeProcessStarting: Boolean = false
+    private val activeProcessLock = Any()
     @Volatile private var activeProcessPaused: Boolean = false
     @Volatile private var activeProcessStopRequested: Boolean = false
     private val activeProcessStartedAt = AtomicLong(0L)
@@ -4128,30 +4130,40 @@ def clipboard_set(text):
                 }
 
                 method == "POST" && path == "/stop" -> {
-                    val proc = activeProcess
+                    var proc = activeProcess
+                    val starting = activeProcessStarting
+                    if (proc != null || starting) {
+                        synchronized(activeProcessLock) { activeProcessStopRequested = true }
+                    }
+                    // Stop can arrive before ProcessBuilder publishes the child PID.
+                    if (proc == null && starting) {
+                        val startDeadline = System.currentTimeMillis() + 3500L
+                        while (activeProcessStarting && activeProcess == null && System.currentTimeMillis() < startDeadline) {
+                            try { Thread.sleep(20L) } catch (_: InterruptedException) { break }
+                        }
+                        proc = activeProcess
+                    }
                     var stopped = true
                     if (proc != null) {
-                        activeProcessStopRequested = true
-                        appendNativeLog("Exec", "Explicit Stop request: force stopping process tree pid=\${processPid(proc)}")
+                        appendNativeLog("Exec", "Explicit Stop request: force stopping process tree pid=" + processPid(proc))
                         killProcessTree(proc)
                         try {
                             if (proc.isAlive) proc.waitFor(2, TimeUnit.SECONDS)
                         } catch (_: Exception) {
                         }
-                        // The stream worker owns activeProcess cleanup. Do not acknowledge
-                        // Stop until it has released that process slot as well.
                         val cleanupDeadline = System.currentTimeMillis() + 2500L
-                        while (activeProcess === proc && System.currentTimeMillis() < cleanupDeadline) {
+                        while ((activeProcess === proc || activeProcessStarting) && System.currentTimeMillis() < cleanupDeadline) {
                             try { Thread.sleep(20L) } catch (_: InterruptedException) { break }
                         }
-                        stopped = !proc.isAlive && activeProcess !== proc
+                        stopped = !proc.isAlive && activeProcess !== proc && !activeProcessStarting
                         if (!stopped) {
-                            appendNativeLog("Exec", "Stop did not complete process/stream cleanup before timeout pid=\${processPid(proc)}")
+                            appendNativeLog("Exec", "Stop did not complete process/stream cleanup before timeout pid=" + processPid(proc))
                         }
                     } else {
-                        appendNativeLog("Exec", "Explicit Stop request received; no active process")
+                        stopped = !activeProcessStarting
+                        appendNativeLog("Exec", if (stopped) "Explicit Stop request received; no active process" else "Stop timed out while waiting for process launch")
                     }
-                    activeProcessPaused = false
+                    if (stopped) activeProcessPaused = false
                     writeJson(
                         out,
                         if (stopped) 200 else 409,
@@ -4914,6 +4926,7 @@ def clipboard_set(text):
                 } catch (_: Exception) {
                 }
             }
+            appendNativeLog("Exec", "Pause/resume signal=" + signal + " rootPid=" + rootPid + " descendants=" + descendants.size + " signaled=" + signaled)
             signaled > 0
         } catch (error: Exception) {
             appendNativeLog("Exec", "Pause/resume process-tree signal failed: \${error.message}")
@@ -5017,14 +5030,22 @@ def clipboard_set(text):
             out.flush()
         }
 
+        synchronized(activeProcessLock) {
+            activeProcessStopRequested = false
+            activeProcessStarting = true
+        }
         if (!shFile.exists()) {
             try {
                 sendStdout("[DroidPy] Waiting for Termux bootstrap extraction...\\n")
             } catch (_: Exception) {
+                synchronized(activeProcessLock) {
+                    activeProcessStarting = false
+                    activeProcessStopRequested = false
+                }
                 return
             }
             var waited = 0
-            while (!shFile.exists() && waited < 45000) {
+            while (!shFile.exists() && waited < 45000 && !activeProcessStopRequested) {
                 try { Thread.sleep(250) } catch (_: InterruptedException) { break }
                 waited += 250
             }
@@ -5041,7 +5062,10 @@ def clipboard_set(text):
                 }
             }
         }
-        if (!shFile.exists()) {
+        if (activeProcessStopRequested) {
+            code = -1
+            appendNativeLog("Exec", "Run request canceled before native process launch")
+        } else if (!shFile.exists()) {
             appendNativeLog("Exec", "Bootstrap missing sh at \${shFile.absolutePath}")
             try {
                 sendStdout("[DroidPy] Bootstrap not ready at \${shFile.absolutePath}\\n")
@@ -5059,9 +5083,16 @@ def clipboard_set(text):
                 pb.environment().putAll(buildEnv())
 
                 proc = pb.start()
-                activeProcess = proc
-                activeProcessPaused = false
-                activeProcessStopRequested = false
+                val stopImmediately = synchronized(activeProcessLock) {
+                    activeProcess = proc
+                    activeProcessStarting = false
+                    activeProcessPaused = false
+                    activeProcessStopRequested
+                }
+                if (stopImmediately) {
+                    appendNativeLog("Exec", "Stop arrived during process launch; terminating pid=" + processPid(proc))
+                    killProcessTree(proc)
+                }
                 activeProcessStartedAt.set(System.currentTimeMillis())
                 appendNativeLog("Exec", "Process started pid=\${processPid(proc)} command=\${normalizedCommand.take(120)}")
                 var clientDisconnected = false
@@ -5084,9 +5115,11 @@ def clipboard_set(text):
                     }
                 }
                 code = proc.waitFor()
+                if (activeProcessStopRequested) code = -1
                 appendNativeLog("Exec", "Process exited pid=\${processPid(proc)} exitCode=$code")
             } catch (e: Exception) {
                 if (activeProcessStopRequested) {
+                    code = -1
                     appendNativeLog("Exec", "Process output read ended after explicit Stop pid=\${proc?.let { processPid(it) } ?: -1} (\${e.javaClass.simpleName}: \${e.message})")
                 } else {
                     appendNativeLog("Exec", "Exec exception: \${e.javaClass.simpleName}: \${e.message}")
@@ -5100,9 +5133,12 @@ def clipboard_set(text):
                 try { proc?.inputStream?.close() } catch (_: Exception) {}
                 try { proc?.errorStream?.close() } catch (_: Exception) {}
                 try { proc?.outputStream?.close() } catch (_: Exception) {}
-                activeProcess = null
-                activeProcessPaused = false
-                activeProcessStopRequested = false
+                synchronized(activeProcessLock) {
+                    activeProcess = null
+                    activeProcessStarting = false
+                    activeProcessPaused = false
+                    activeProcessStopRequested = false
+                }
                 activeProcessStartedAt.set(0L)
                 try { activeProcessPidFile.delete() } catch (_: Exception) {}
                 if (isPkgOrPip) {
@@ -5111,6 +5147,13 @@ def clipboard_set(text):
             }
         }
 
+        synchronized(activeProcessLock) {
+            if (activeProcess == null) {
+                activeProcessStarting = false
+                activeProcessPaused = false
+                activeProcessStopRequested = false
+            }
+        }
         val elapsed = System.currentTimeMillis() - t0
         appendNativeLog("Exec", "Stream shell finished: exitCode=$code, durationMs=$elapsed")
         if (code == 0 && isPkgOrPip) {
