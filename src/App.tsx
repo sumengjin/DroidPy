@@ -3543,7 +3543,7 @@ export default function App() {
       {deviceClass === 'phone' && (
       <nav
         aria-label={t('nav_workspace')}
-        className="relative z-10 shrink-0 h-[70px] pb-safe bg-[var(--md-surface-container-low)] border-t border-[var(--ide-border)] grid grid-cols-5"
+        className="relative z-[60] shrink-0 h-[70px] pb-safe bg-[var(--md-surface-container-low)] border-t border-[var(--ide-border)] grid grid-cols-5"
       >
         {(
           [
