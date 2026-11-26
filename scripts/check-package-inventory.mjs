@@ -28,9 +28,9 @@ assert.match(frostworkSource, /class Page:/, 'pure-Python multi-field extraction
 assert.match(frostworkSource, /def _css_nodes\(/, 'CSS selector fallback must be bundled');
 assert.match(frostworkSource, /def _xpath_nodes\(/, 'XPath selector fallback must be bundled');
 assert.ok(frostworkMetadata.includes('Name: frostwork') && frostworkMetadata.includes('Version: 0.2.2'));
-assert.match(crawlerSessionSource, /DEFAULT_CRAWLER_URL = 'https:\/\/www\\.google\\.com\\/'/, 'Google must be the default crawler homepage');
-assert.match(crawlerSessionSource, /!trimmed\\s*\\? DEFAULT_CRAWLER_URL/, 'empty browser address input must resolve to the Google homepage');
-assert.match(appSource, /restored\\.url\\.trim\\(\\) === 'https:\/\/quotes\\.toscrape\\.com\\/'[\\s\\S]*?restored\\.url = DEFAULT_CRAWLER_URL/, 'existing installs must migrate the previous built-in demo homepage while preserving custom URLs');
+assert.ok(crawlerSessionSource.includes("DEFAULT_CRAWLER_URL = 'https://www.google.com/'"), 'Google must be the default crawler homepage');
+assert.ok(crawlerSessionSource.includes('? DEFAULT_CRAWLER_URL'), 'empty browser address input must resolve to the Google homepage');
+assert.ok(appSource.includes("restored.url.trim() === 'https://quotes.toscrape.com/'") && appSource.includes('restored.url = DEFAULT_CRAWLER_URL'), 'existing installs must migrate the previous built-in demo homepage while preserving custom URLs');
 assert.match(source, /crawlerNavigationStartedAt/, 'native crawler must track page navigation timing');
 assert.match(source, /Page started url=/, 'native crawler must log navigation start');
 assert.match(source, /Page finished durationMs=/, 'native crawler must log completed page load duration');
