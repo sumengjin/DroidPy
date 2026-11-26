@@ -250,7 +250,9 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
   onNotify,
 }) => {
   const { locale, t } = useI18n();
-  const [activeWindow, setActiveWindow] = useState<ToolWindowId | null>(null);
+  const [activeWindow, setActiveWindow] = useState<ToolWindowId | null>(() =>
+    activeSubView === 'packages' ? 'pkg_native' : null
+  );
   const [pkgQuery, setPkgQuery] = useState('');
   const [installingPkg, setInstallingPkg] = useState<string | null>(null);
   const [uninstallingPkg, setUninstallingPkg] = useState<string | null>(null);
@@ -2149,7 +2151,7 @@ python ${entryFile}
     <div className="h-full overflow-y-auto ide-scroll bg-[var(--ide-bg)] text-[var(--ide-text)]">
       {activeWindow && activeOptionMeta ? (
         <>
-          <div className="sticky top-0 z-10 bg-[var(--ide-bg)]/95 border-b border-[var(--ide-border)] px-3.5 py-2.5 space-y-2.5">
+          <div className="bg-[var(--ide-bg)] border-b border-[var(--ide-border)] px-3.5 py-2.5 space-y-2.5">
             {activeSubView === 'packages' ? (
               <>
                 <div className="flex items-center gap-2">
