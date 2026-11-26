@@ -3629,14 +3629,18 @@ def clipboard_set(text):
             candidates.add(File(Environment.getExternalStorageDirectory(), "DroidPy/.droidpy_backup/packages_manifest.json"))
         }
         var best: JSONObject? = null
+        var bestUpdatedAt = Long.MIN_VALUE
         var bestScore = -1
         for (f in candidates) {
             try {
                 if (f.isFile && f.length() > 2L) {
                     val obj = JSONObject(f.readText(Charsets.UTF_8))
+                    val updatedAt = obj.optLong("updatedAt", 0L)
                     val score = (obj.optJSONArray("pipPackages")?.length() ?: 0) + (obj.optJSONArray("pkgPackages")?.length() ?: 0)
-                    if (score > bestScore) {
+                    // Prefer the newest successful snapshot; package count is only a tie-breaker.
+                    if (updatedAt > bestUpdatedAt || (updatedAt == bestUpdatedAt && score > bestScore)) {
                         best = obj
+                        bestUpdatedAt = updatedAt
                         bestScore = score
                     }
                 }
