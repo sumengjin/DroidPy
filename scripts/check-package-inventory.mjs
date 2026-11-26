@@ -90,6 +90,7 @@ assert.match(appSource, /operationLockAlreadyHeld && !termuxOperationLockRef\.cu
 assert.match(appSource, /if \(!operationLockAlreadyHeld\) termuxOperationLockRef\.current = true/, 'shell commands must acquire the shared lock only when they own it');
 assert.match(appSource, /if \(!operationLockAlreadyHeld\) termuxOperationLockRef\.current = false/, 'nested shell commands must leave inherited lock release to their owner');
 assert.match(appSource, /checkingTermuxOutdated \|\|\s*termuxRunning \|\|\s*termuxOperationLockRef\.current \|\|\s*termuxScriptStartLockRef\.current/, 'manual outdated checks must not overlap active Termux operations');
+assert.match(appSource, /termuxOperationLockRef\.current = true;\s*setCheckingTermuxOutdated\(true\);[\s\S]*?setCheckingTermuxOutdated\(false\);\s*termuxOperationLockRef\.current = false;/, 'manual package inventory checks must hold and release the shared lock');
 assert.match(appSource, /async \(kind: 'pip' \| 'pkg'\) => \{\s*if \(termuxRunning \|\| termuxOperationLockRef\.current \|\| termuxScriptStartLockRef\.current \|\| upgradingTermux\)/, 'bulk Termux upgrades must claim the lock before their preflight check');
 assert.match(appSource, /handleRunShellInTermux\(buildTermuxAptUpgradeCommand\(\), true\)/, 'bulk APT upgrades must reuse the orchestration lock');
 assert.match(appSource, /const handleUpgradeAllPackages = useCallback\(async \(\) => \{\s*if \([\s\S]*?termuxOperationLockRef\.current[\s\S]*?termuxScriptStartLockRef\.current/, 'combined upgrades must respect existing Termux operations');
