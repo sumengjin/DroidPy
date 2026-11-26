@@ -24,8 +24,6 @@
 |---|---|---|---|
 | GET | `/health` | Python 版本、架構、工具與 pip／APT 套件盤點 | JSON |
 | GET | `/files` | 讀取工作區允許副檔名的小型檔案 | JSON |
-| POST | `/shell` | 同步執行 shell 命令（與外部 Python 端同名路由） | JSON |
-| GET | `/files` | 讀取工作區允許副檔名的小型檔案 | JSON |
 | POST | `/run` | 同步執行 Python 檔案 | JSON |
 | POST | `/run-stream` | PTY Python 執行與輸出 | NDJSON |
 | POST | `/shell` | 同步執行 shell 命令 | JSON |
@@ -71,6 +69,9 @@ Kotlin 路由集合除健康檢查、工作區檔案、執行／shell／安裝�
 | `GET /health` | 無 | `ok`、`embedded`、`hasPython`、`pythonVersion`、`arch`、套件盤點 |
 | `GET /files` | 無 | `files[]: name, content, updatedAt` |
 | `POST /run-stream` | `entry`、`files[]: name, content` | NDJSON `stdout/data`、`done/exitCode/durationMs` |
+| `POST /run`（僅 Python） | `entry`、`files[]: name, content` | JSON `exitCode`、`stdout`、`stderr`、`durationMs` |
+| `POST /install`（僅 Python） | `mode`、`target`、`trustedHost` | JSON `exitCode`、`stdout`、`stderr`、`durationMs` |
+| `POST /shell` | `command` | Python 回 `exitCode/stdout/stderr/durationMs`；Kotlin 回 `runBufferedShellCommand` 結果 |
 | `POST /install-stream` | `mode`（pip/pkg）、`target`、`trustedHost` | NDJSON 輸出與完成事件 |
 | `POST /shell-stream` | `command` | NDJSON 輸出與完成事件 |
 | `POST /stdin` | `data` | `ok` |
@@ -88,6 +89,16 @@ Kotlin 路由集合除健康檢查、工作區檔案、執行／shell／安裝�
 4. **串流事件資訊不足。** 目前以 `type/data` 和 `done` 為主，缺少統一 request ID、事件序號、progress／process-state／cancelled 等標準事件。
 5. **執行語義不同。** Python 端具有非串流 `/run`、`/install` 與 `/shell`；內嵌 Kotlin 具有非串流 `/shell`，但 `/run` 與 `/install` 目前主要透過串流路由執行。需逐路由比較成功回應、錯誤狀態與程序控制語義。
 6. **程序控制需要逐項驗證。** 兩邊均有明確停止與 PTY 控制，但程序保留、客戶端斷線、重啟後控制能力與輸出尾端處理必須用同一組測試驗證，不能僅以路由存在判定相容。
+
+### 5.0 已由處理器程式碼確認的共用路由細節
+
+| 路由 | 外部 Python Bridge | APK 內嵌 Kotlin Bridge | 相容性判定 |
+|---|---|---|---|
+| `GET /files` | 回傳 `files[]`，只讀取工作目錄頂層允許副檔名檔案，排除隱藏檔、`__pycache__`、非一般檔案及大於 180 KiB 的檔案 | 回傳相同主要欄位與 180 KiB 限制；只列頂層一般檔案及允許副檔名 | 回應欄位一致；需用檔名、Unicode、mtime 與邊界大小 fixture 驗證 |
+| `GET /health` | 回報真實 Python 版本及 Python／dpkg 套件盤點 | `pythonVersion` 目前是 `Termux Embedded` 或 `Bootstrap Ready` 標籤，並由內嵌目錄盤點套件 | 同名欄位語義不同；新能力模型應分開 `runtimeId`、`runtimeLabel`、`pythonVersion` |
+| `POST /shell` | body `command`；空命令回 400；同步結果包含 `exitCode/stdout/stderr/durationMs` | body `command`；空命令回 400；結果來自 `runBufferedShellCommand` | 需固定成功與錯誤結果的欄位契約 |
+| `POST /stdin` | body `data`；沒有 PTY 回 409；成功回 `ok:true` | body `data`；沒有作用中程序回 409；成功回 `ok:true` | 狀態碼與成功欄位一致；換行及程序生命週期需實測 |
+| `POST /pause`、`/resume` | 無作用中程序回 409；成功回 `ok:true, paused` | 以程序訊號操作；回傳 `ok`、`paused`、`error` | Kotlin 端即使成功也包含空字串 `error`；錯誤 payload 不完全一致 |
 
 ### 5.1 已由處理器程式碼確認的回應差異
 
