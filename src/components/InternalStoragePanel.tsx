@@ -73,6 +73,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
   const [loading, setLoading] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
+  const [newPythonFileName, setNewPythonFileName] = useState('');
   const [confirmDeletePath, setConfirmDeletePath] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -194,6 +195,30 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
       await createSdcardFolder(termuxConfig, targetRel);
       setNewFolderName('');
       onNotify(t('sd_toast_mkdir', { name: clean }));
+      await loadDirectory(currentPath);
+    } catch (err) {
+      onNotify(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleCreatePythonFile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = newPythonFileName.replace(/[/\\\\]/g, '').trim();
+    if (!clean) return;
+    const filename = clean.toLowerCase().endsWith('.py') ? clean : `${clean}.py`;
+    if (entries.some((entry) => entry.name.toLowerCase() === filename.toLowerCase())) {
+      onNotify(`檔案已存在：${filename}`);
+      return;
+    }
+    const targetRel = currentPath ? `${currentPath}/${filename}` : filename;
+    const starter = `# ${filename}\n\ndef main():\n    print("Hello from ${filename}")\n\nif __name__ == "__main__":\n    main()\n`;
+    setBusyAction('create-file');
+    try {
+      await writeSdcardFile(termuxConfig, targetRel, starter);
+      setNewPythonFileName('');
+      onNotify(`已建立：${filename}`);
       await loadDirectory(currentPath);
     } catch (err) {
       onNotify(err instanceof Error ? err.message : String(err));
@@ -420,6 +445,26 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
             <span>{t('sd_mkdir_btn')}</span>
           </button>
         </form>
+        {onlyPythonFiles && (
+          <form onSubmit={(e) => void handleCreatePythonFile(e)} className="flex items-center gap-1.5 w-full sm:w-auto shrink-0">
+            <input
+              type="text"
+              value={newPythonFileName}
+              onChange={(e) => setNewPythonFileName(e.target.value)}
+              placeholder="新建 Python 檔案"
+              disabled={!isGranted}
+              className="flex-1 sm:flex-initial min-w-0 sm:w-40 min-h-[34px] px-2.5 rounded-lg bg-[var(--ide-surface)] border border-[var(--ide-border)] text-xs focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
+            />
+            <button
+              type="submit"
+              disabled={!newPythonFileName.trim() || !isGranted || !!busyAction}
+              className="min-h-[34px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] disabled:opacity-40 text-xs font-medium inline-flex items-center gap-1 shrink-0"
+            >
+              <FileText className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
+              <span>建立 .py</span>
+            </button>
+          </form>
+        )}
       </div>
 
       {errorMsg && (
