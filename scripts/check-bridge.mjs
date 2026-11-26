@@ -313,12 +313,15 @@ assert.ok(cookieCapture.includes('writeText(sessionJson.toString(2), Charsets.UT
 assert.ok(androidBuilder.includes('Cookie capture button clicked'));
 
 const terminalUi = await readFile('src/components/TerminalPanel.tsx', 'utf8');
-assert.ok(terminalUi.includes('paused ? \'繼續\' : \'暫停\''));
+assert.ok(!terminalUi.includes('onStopScript'), 'TerminalPanel must not render a second Stop control');
+assert.ok(!terminalUi.includes('onTogglePause'), 'pause/resume belongs in the single workspace execution bar');
+assert.ok(terminalUi.includes('disabled={executionBusy}'), 'engine switching must be disabled during an active job');
 const appSource = await readFile('src/App.tsx', 'utf8');
 assert.ok(appSource.includes('pauseTermuxProcess(termuxConfig)'));
 assert.ok(appSource.includes('resumeTermuxProcess(termuxConfig)'));
-assert.ok((appSource.match(/paused={termuxPaused}/g) ?? []).length >= 2, 'phone and tablet terminals must both receive pause state');
-assert.ok((appSource.match(/canPause={termuxScriptRunning}/g) ?? []).length >= 2, 'phone and tablet terminals must both expose pause controls');
+assert.ok((appSource.match(/onClick={() => void handleToggleTermuxPause\(\)}/g) ?? []).length >= 2, 'phone and tablet headers must both expose pause/resume');
+assert.ok(appSource.includes('termuxStopping'), 'Run must remain locked until Stop cleanup completes');
+assert.ok(appSource.includes('termuxPauseBusy'), 'pause/resume requests must be serialized');
 const stopHandlerStart = appSource.indexOf('const handleStopTermux = useCallback');
 const stopHandlerEnd = appSource.indexOf('const handleBackupToSdcard', stopHandlerStart);
 assert.ok(stopHandlerStart >= 0 && stopHandlerEnd > stopHandlerStart);
@@ -333,6 +336,10 @@ assert.ok(termuxBridgeUi.includes('waitForActiveTermuxStream'));
 assert.ok(termuxBridgeUi.includes('await completion'), 'Stop must wait for the old stream slot to be released');
 assert.ok(androidBuilder.includes('activeProcess === proc'));
 assert.ok(androidBuilder.includes('stopped = !proc.isAlive && activeProcess !== proc'));
+assert.ok(androidBuilder.includes('activeProcessStarting'));
+assert.ok(androidBuilder.includes('Stop arrived during process launch'));
+assert.ok(androidBuilder.includes('code = -1'), 'intentional Stop must not be reported as script failure');
+assert.ok(androidBuilder.includes('Requesting shared-storage permission on first launch'));
 assert.ok(!androidBuilder.includes('private val executor = Executors.newCachedThreadPool()'));
 
 // The tool center uses real folder -> document navigation and preserves parent folders on Back.
