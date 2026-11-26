@@ -84,6 +84,9 @@ assert.doesNotMatch(appSource, /pkg install -y python python-pip python-lxml|cla
 assert.match(appSource, /await ensureEmbeddedPythonEnvironment\(\)/);
 assert.match(appSource, /Unable to verify Python before first use/);
 assert.match(appSource, /termuxOperationLockRef\.current = true/);
+assert.match(appSource, /const handleToggleTermuxPause = useCallback\(async \(\) => \{\s*if \(!termuxScriptRunning\) return;/, 'pause and resume controls must only affect an active Python script');
+assert.match(appSource, /cleaningProcesses \|\|\s*termuxRunning \|\|\s*termuxOperationLockRef\.current \|\|\s*termuxScriptStartLockRef\.current[\s\S]*?termuxOperationLockRef\.current = true;\s*setCleaningProcesses\(true\)/, 'the process watchdog must not kill an active Termux operation');
+
 assert.match(appSource, /termuxOperationLockRef\.current = false/);
 assert.match(appSource, /async \(command: string, operationLockAlreadyHeld = false\)/, 'nested upgrade commands must reuse the already-held operation lock without deadlocking');
 assert.match(appSource, /operationLockAlreadyHeld && !termuxOperationLockRef\.current/, 'nested shell commands must reject an invalid inherited-lock call');
