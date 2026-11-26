@@ -251,9 +251,7 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
   onNotify,
 }) => {
   const { locale, t } = useI18n();
-  const [activeWindow, setActiveWindow] = useState<ToolWindowId | null>(() =>
-    activeSubView === 'packages' ? 'pkg_native' : null
-  );
+  const [activeWindow, setActiveWindow] = useState<ToolWindowId | null>(null);
   const [settingsFolder, setSettingsFolder] = useState<'appearance' | 'editor' | 'app' | null>(null);
   const [termuxFolder, setTermuxFolder] = useState<'runtime' | 'maintenance' | null>(null);
   const [packageFolder, setPackageFolder] = useState<'termux' | 'sandbox' | null>(null);
