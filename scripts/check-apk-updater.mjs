@@ -43,6 +43,8 @@ assert.ok(source.includes('applicationInfo.targetSdkVersion <= Build.VERSION_COD
 assert.ok(source.includes('if (Environment.isExternalStorageManager()) {'));
 assert.ok(source.includes('Opening app-specific all-files access settings'));
 assert.ok(source.includes('legacy-target apps on Android 11+ retain runtime READ/WRITE permissions.'));
+assert.ok(source.includes('val stopSource = bodyJson.optString("source", "unknown").take(40)'), 'native stop diagnostics must record the UI source');
+assert.ok(source.includes('val stopOperation = bodyJson.optString("operation", "unknown").take(40)'), 'native stop diagnostics must record the active operation');
 assert.ok(source.includes('ActivityCompat.requestPermissions(this, permsToAsk.toTypedArray(), 1001)'));
 // Redirects must remain HTTPS and on the official GitHub asset delivery hosts.
 assert.ok(updater.includes('fun validateGithubAssetUrl(raw: String): URL'));
