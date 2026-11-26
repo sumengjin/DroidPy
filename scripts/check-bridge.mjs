@@ -313,6 +313,25 @@ assert.ok(appSource.includes('termuxScriptStartLockRef.current = true'));
 assert.ok(appSource.includes('termuxScriptStartLockRef.current = false'));
 assert.ok(!androidBuilder.includes('private val executor = Executors.newCachedThreadPool()'));
 
+// The tool center uses real folder -> document navigation and preserves parent folders on Back.
+const toolsHubSource = await readFile('src/components/ToolsAndPackages.tsx', 'utf8');
+assert.ok(toolsHubSource.includes("const [activeWindow, setActiveWindow] = useState<ToolWindowId | null>(null)"));
+assert.ok(toolsHubSource.includes('const renderFolderList = <T extends string,>'));
+assert.ok(toolsHubSource.includes('const renderFolderContents ='));
+assert.ok(toolsHubSource.includes("setTermuxFolder(null)"));
+assert.ok(toolsHubSource.includes("setPackageFolder(null)"));
+assert.ok(toolsHubSource.includes("setStorageFolder(null)"));
+assert.ok(toolsHubSource.includes("setSettingsFolder(null)"));
+assert.ok(toolsHubSource.includes('activeFolderLabel &&'));
+const toolFolderTranslations = await readFile('src/services/i18n.tsx', 'utf8');
+for (const key of [
+  'hub_py_folder_runtime', 'hub_py_folder_maintenance',
+  'hub_pkg_folder_termux', 'hub_pkg_folder_sandbox',
+  'hub_storage_folder_device', 'hub_storage_folder_workspace',
+]) {
+  assert.ok(toolFolderTranslations.includes(key + ':'), 'missing localized folder key: ' + key);
+}
+
 // A second streamed action must never cancel the currently running Python job.
 // Only the explicit Stop control is allowed to abort its AbortController.
 const termuxBridgeSource = await readFile('src/services/termuxBridge.ts', 'utf8');
