@@ -2260,7 +2260,7 @@ export default function App() {
     } finally {
       setCheckingTermuxOutdated(false);
     }
-  }, [termuxConnectionState, termuxHealth?.hasPython, termuxHealth?.installedPkgPackages, checkingTermuxOutdated, showToast, t]);
+  }, [termuxConnectionState, termuxHealth?.hasPython, termuxHealth?.installedPkgPackages, checkingTermuxOutdated, termuxRunning, showToast, t]);
 
   const handleUninstallInTermux = useCallback(
     async (mode: 'pip' | 'pkg', target: string) => {
