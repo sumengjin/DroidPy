@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Play,
+  Pause,
   Square,
   Loader2,
   Code2,
@@ -473,6 +474,10 @@ export default function App() {
   const [termuxError, setTermuxError] = useState<string | null>(null);
   const [termuxHealth, setTermuxHealth] = useState<TermuxHealthInfo | null>(null);
   const [termuxRunning, setTermuxRunning] = useState(false);
+  const [termuxStopping, setTermuxStopping] = useState(false);
+  const [termuxPauseBusy, setTermuxPauseBusy] = useState(false);
+  const termuxStopLockRef = useRef(false);
+  const termuxPauseToggleLockRef = useRef(false);
   const [termuxActiveTask, setTermuxActiveTask] = useState<string | null>(null);
   const termuxScriptStartLockRef = useRef(false);
   // Synchronous guard prevents overlapping native Termux operations across drawer remounts.
@@ -1699,43 +1704,46 @@ export default function App() {
   );
 
   const handleToggleTermuxPause = useCallback(async () => {
-    if (!termuxScriptRunning) return;
+    if (!termuxScriptRunning || termuxStopLockRef.current || termuxPauseToggleLockRef.current) return;
+    termuxPauseToggleLockRef.current = true;
+    setTermuxPauseBusy(true);
+    const nextPaused = !termuxPaused;
     try {
-      if (termuxPaused) {
-        await resumeTermuxProcess(termuxConfig);
-        setTermuxPaused(false);
-        appendEntry('system', '腳本已繼續執行');
-      } else {
-        await pauseTermuxProcess(termuxConfig);
-        setTermuxPaused(true);
-        appendEntry('system', '腳本已暫停');
-      }
+      if (nextPaused) await pauseTermuxProcess(termuxConfig);
+      else await resumeTermuxProcess(termuxConfig);
+      if (termuxStopLockRef.current) return;
+      setTermuxPaused(nextPaused);
+      appendEntry('system', nextPaused ? '腳本已暫停' : '腳本已繼續執行');
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       appendEntry('stderr', message);
       showToast(message);
+    } finally {
+      termuxPauseToggleLockRef.current = false;
+      setTermuxPauseBusy(false);
     }
   }, [termuxConfig, termuxPaused, termuxScriptRunning, appendEntry, showToast]);
 
   const handleStopTermux = useCallback(async () => {
+    if (termuxStopLockRef.current || (!termuxRunning && !termuxScriptStartLockRef.current)) return;
+    termuxStopLockRef.current = true;
+    setTermuxStopping(true);
     appLog('termux', 'User requested Stop for the active Termux process', { level: 'warn' });
     try {
-      // Stop the native process tree first. A disconnected output stream alone
-      // intentionally does not terminate the Python process.
       await stopTermuxProcess(termuxConfig);
-      // Wait until the old stream releases its single-job slot before another
-      // script can start.
       await waitForActiveTermuxStream();
       setTermuxPaused(false);
       appendEntry('system', t('log_termux_stop'));
       showToast(t('toast_termux_stopped'));
     } catch (err) {
-      // Keep the running state and start lock intact when native Stop is not confirmed.
       const message = err instanceof Error ? err.message : t('toast_termux_disconnected');
       appendEntry('stderr', message);
       showToast(message);
+    } finally {
+      termuxStopLockRef.current = false;
+      setTermuxStopping(false);
     }
-  }, [termuxConfig, appendEntry, showToast, t]);
+  }, [termuxConfig, termuxRunning, appendEntry, showToast, t]);
 
   const handleBackupToSdcard = useCallback(async () => {
     try {
@@ -3073,42 +3081,36 @@ export default function App() {
             <span>{tabletSplit ? t('tab_focus_editor') : t('tab_split_view')}</span>
           </button>
 
-          {pendingInputPrompt !== null ? (
-            <button
-              type="button"
-              onClick={handleCancelInput}
-              className="min-h-[40px] px-4 rounded-xl bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
-            >
+          {pendingInputPrompt !== null && (
+            <button type="button" onClick={handleCancelInput} className="min-h-[40px] px-3 rounded-xl bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
               <Square className="w-3.5 h-3.5 fill-current" />
               <span>{t('cta_abort_input')}</span>
             </button>
-          ) : termuxRunning ? (
-            <button
-              type="button"
-              onClick={() => void handleStopTermux()}
-              className="min-h-[40px] px-4 rounded-xl bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
-            >
-              <Square className="w-3.5 h-3.5 fill-current" />
-              <span>{t('cta_stop_run')}</span>
+          )}
+          {termuxStopping ? (
+            <button type="button" disabled aria-busy="true" className="min-h-[40px] px-3 rounded-xl bg-red-600/80 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span>停止中</span>
             </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleRunCode}
-              disabled={isRunning || isCoreLoading}
-              className="min-h-[40px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-colors"
-            >
-              {isRunning || isCoreLoading ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Play className="w-3.5 h-3.5 fill-current" />
+          ) : termuxRunning ? (
+            <>
+              {termuxScriptRunning && (
+                <button type="button" onClick={() => void handleToggleTermuxPause()} disabled={termuxPauseBusy} aria-label={termuxPaused ? '繼續腳本' : '暫停腳本'} aria-pressed={termuxPaused} className="min-h-[40px] px-3 rounded-xl bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] disabled:opacity-50 text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
+                  {termuxPauseBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : termuxPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
+                  <span>{termuxPaused ? '繼續' : '暫停'}</span>
+                </button>
               )}
-              <span>
-                {isCoreLoading ? t('cta_loading_core') : isRunning ? t('cta_running') : t('cta_run_program')}
-              </span>
+              <button type="button" onClick={() => void handleStopTermux()} className="min-h-[40px] px-3 rounded-xl bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
+                <Square className="w-3.5 h-3.5 fill-current" />
+                <span>{t('cta_stop_run')}</span>
+              </button>
+            </>
+          ) : pendingInputPrompt !== null ? null : (
+            <button type="button" onClick={handleRunCode} disabled={isRunning || isCoreLoading} className="min-h-[40px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-colors">
+              {isRunning || isCoreLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5 fill-current" />}
+              <span>{isCoreLoading ? t('cta_loading_core') : isRunning ? t('cta_running') : t('cta_run_program')}</span>
             </button>
           )}
-        </div>
       </header>
       )}
 
@@ -3150,42 +3152,36 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          {pendingInputPrompt !== null ? (
-            <button
-              type="button"
-              onClick={handleCancelInput}
-              className="min-h-[44px] px-4 rounded-full bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
-            >
+          {pendingInputPrompt !== null && (
+            <button type="button" onClick={handleCancelInput} className="min-h-[44px] px-3 rounded-full bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
               <Square className="w-3.5 h-3.5 fill-current" />
               <span>{t('cta_abort_short')}</span>
             </button>
-          ) : termuxRunning ? (
-            <button
-              type="button"
-              onClick={() => void handleStopTermux()}
-              className="min-h-[44px] px-4 rounded-full bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
-            >
-              <Square className="w-3.5 h-3.5 fill-current" />
-              <span>{t('cta_stop_short')}</span>
+          )}
+          {termuxStopping ? (
+            <button type="button" disabled aria-busy="true" className="min-h-[44px] px-3 rounded-full bg-red-600/80 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span>停止中</span>
             </button>
-          ) : mobileTab === 'editor' ? (
-            <button
-              type="button"
-              onClick={handleRunCode}
-              disabled={isRunning || isCoreLoading}
-              className="min-h-[44px] px-4 rounded-full bg-[var(--ide-accent)] active:scale-[0.98] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-transform"
-            >
-              {isRunning || isCoreLoading ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Play className="w-3.5 h-3.5 fill-current" />
+          ) : termuxRunning ? (
+            <>
+              {termuxScriptRunning && (
+                <button type="button" onClick={() => void handleToggleTermuxPause()} disabled={termuxPauseBusy} aria-label={termuxPaused ? '繼續腳本' : '暫停腳本'} aria-pressed={termuxPaused} className="min-h-[44px] px-3 rounded-full bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] disabled:opacity-50 text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
+                  {termuxPauseBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : termuxPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
+                  <span>{termuxPaused ? '繼續' : '暫停'}</span>
+                </button>
               )}
-              <span>
-                {isCoreLoading ? t('cta_loading_short') : isRunning ? t('cta_running') : t('cta_run_short')}
-              </span>
+              <button type="button" onClick={() => void handleStopTermux()} className="min-h-[44px] px-3 rounded-full bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
+                <Square className="w-3.5 h-3.5 fill-current" />
+                <span>{t('cta_stop_short')}</span>
+              </button>
+            </>
+          ) : pendingInputPrompt !== null ? null : (mobileTab === 'editor' || mobileTab === 'console') ? (
+            <button type="button" onClick={handleRunCode} disabled={isRunning || isCoreLoading} className="min-h-[44px] px-3 rounded-full bg-[var(--ide-accent)] active:scale-[0.98] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-transform">
+              {isRunning || isCoreLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5 fill-current" />}
+              <span>{isCoreLoading ? t('cta_loading_short') : isRunning ? t('cta_running') : t('cta_run_short')}</span>
             </button>
           ) : null}
-        </div>
       </header>
       )}
 
@@ -3359,13 +3355,8 @@ export default function App() {
                   inputSessionActive={inputSessionActive}
                       onSubmitInput={handleSubmitInput}
                       onRunRepl={handleRunRepl}
-                      onRunScript={handleRunCode}
-                      onStopScript={() => void handleStopTermux()}
-                      canRunScript={Boolean(activeFile)}
                       onSendTermuxStdin={handleSendTermuxStdin}
-                      paused={termuxPaused}
-                      canPause={termuxScriptRunning}
-                      onTogglePause={handleToggleTermuxPause}
+                      executionBusy={termuxRunning || termuxStopping}
                       onOpenLogs={() => setShowLogsModal(true)}
                       enableSandboxAddon={Boolean(settings.enableSandboxAddon)}
                       isDark={getThemeMeta(settings.theme).isDark}
@@ -3523,13 +3514,8 @@ export default function App() {
                   inputSessionActive={inputSessionActive}
                   onSubmitInput={handleSubmitInput}
                   onRunRepl={handleRunRepl}
-                  onRunScript={handleRunCode}
-                  onStopScript={() => void handleStopTermux()}
-                  canRunScript={Boolean(activeFile)}
                   onSendTermuxStdin={handleSendTermuxStdin}
-                  paused={termuxPaused}
-                  canPause={termuxScriptRunning}
-                  onTogglePause={handleToggleTermuxPause}
+                  executionBusy={termuxRunning || termuxStopping}
                   onOpenLogs={() => setShowLogsModal(true)}
                   enableSandboxAddon={Boolean(settings.enableSandboxAddon)}
                   isDark={getThemeMeta(settings.theme).isDark}
