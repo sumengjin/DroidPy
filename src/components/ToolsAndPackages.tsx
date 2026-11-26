@@ -730,7 +730,7 @@ python ${entryFile}
     </div>
   );
 
-  const renderFolderList = <T extends string>(
+  const renderFolderList = <T extends string,>(
     folders: Array<{ id: T; title: string; desc: string }>,
     onSelect: (id: T) => void
   ) => (
