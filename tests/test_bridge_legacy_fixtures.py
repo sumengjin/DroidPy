@@ -25,7 +25,7 @@ def test_legacy_stream_fixtures_keep_expected_event_envelopes():
     stdout = json.loads((FIXTURES / "stdout.jsonl").read_text(encoding="utf-8"))
     done = json.loads((FIXTURES / "done.jsonl").read_text(encoding="utf-8"))
 
-    assert stdout == {"type": "stdout", "data": "hello from DroidPy\\n"}
+    assert stdout == {"type": "stdout", "data": "hello from DroidPy\n"}
     assert done["type"] == "done"
     assert isinstance(done["exitCode"], int)
     assert isinstance(done["durationMs"], int)
