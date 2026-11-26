@@ -433,8 +433,8 @@ export default function App() {
   const [termuxRunning, setTermuxRunning] = useState(false);
   const [termuxActiveTask, setTermuxActiveTask] = useState<string | null>(null);
   const termuxScriptStartLockRef = useRef(false);
-  // Synchronous guard survives drawer remounts and prevents duplicate native package jobs.
-  const termuxPackageInstallLockRef = useRef(false);
+  // Synchronous guard prevents overlapping native Termux operations across drawer remounts.
+  const termuxOperationLockRef = useRef(false);
   const [termuxPaused, setTermuxPaused] = useState(false);
   const [termuxScriptRunning, setTermuxScriptRunning] = useState(false);
   const [backupStatus, setBackupStatus] = useState<PackageBackupStatus | null>(null);
@@ -1278,7 +1278,7 @@ export default function App() {
   }, [termuxHealth, termuxConfig, appendEntry, appendStreamChunk, flushStreamChunk, showToast, t]);
 
   const handleRunInTermux = useCallback(async () => {
-    if (termuxRunning || termuxPackageInstallLockRef.current || termuxScriptStartLockRef.current) {
+    if (termuxRunning || termuxOperationLockRef.current || termuxScriptStartLockRef.current) {
       showToast(t('cta_running'));
       return;
     }
@@ -1382,11 +1382,11 @@ export default function App() {
 
   const handleInstallInTermux = useCallback(
     async (mode: 'pip' | 'pkg', target: string) => {
-      if (termuxRunning || termuxPackageInstallLockRef.current) {
+      if (termuxRunning || termuxOperationLockRef.current || termuxScriptStartLockRef.current) {
         showToast(t('cta_running'));
         return;
       }
-      termuxPackageInstallLockRef.current = true;
+      termuxOperationLockRef.current = true;
       const resolvedInstall = resolveTermuxInstallTarget(mode, target);
       const installMode = resolvedInstall.mode;
       const installTarget = resolvedInstall.target;
@@ -1472,7 +1472,7 @@ export default function App() {
         setRunStartedAt(null);
         setTermuxActiveTask(null);
         setTermuxRunning(false);
-        termuxPackageInstallLockRef.current = false;
+        termuxOperationLockRef.current = false;
       }
     },
     [termuxConfig, termuxRunning, ensureEmbeddedPythonEnvironment, focusOutputPane, appendEntry, appendStreamChunk, flushStreamChunk, refreshBackupStatus, showToast, t]
@@ -1480,10 +1480,11 @@ export default function App() {
 
   const handleRunShellInTermux = useCallback(
     async (command: string): Promise<boolean> => {
-      if (termuxRunning) {
+      if (termuxRunning || termuxOperationLockRef.current || termuxScriptStartLockRef.current) {
         showToast(t('cta_running'));
         return false;
       }
+      termuxOperationLockRef.current = true;
       focusOutputPane('terminal');
       setTermuxRunning(true);
       setRunStartedAt(Date.now());
@@ -1543,6 +1544,7 @@ export default function App() {
         }
         setRunStartedAt(null);
         setTermuxRunning(false);
+        termuxOperationLockRef.current = false;
       }
       return succeeded;
     },
@@ -1550,10 +1552,11 @@ export default function App() {
   );
 
   const handleRestoreBackedUpPackages = useCallback(async () => {
-    if (termuxRunning || restoringBackup) {
+    if (termuxRunning || termuxOperationLockRef.current || termuxScriptStartLockRef.current || restoringBackup) {
       showToast(t('cta_running'));
       return;
     }
+    termuxOperationLockRef.current = true;
     setExecutionEngine('termux');
     focusOutputPane('terminal');
     setRestoringBackup(true);
@@ -1611,6 +1614,7 @@ export default function App() {
       setRestoringBackup(false);
       setRunStartedAt(null);
       setTermuxRunning(false);
+      termuxOperationLockRef.current = false;
     }
   }, [
     termuxRunning,
@@ -2253,7 +2257,7 @@ export default function App() {
 
   const handleUninstallInTermux = useCallback(
     async (mode: 'pip' | 'pkg', target: string) => {
-      if (termuxRunning) {
+      if (termuxRunning || termuxOperationLockRef.current || termuxScriptStartLockRef.current) {
         showToast(t('cta_running'));
         return;
       }
@@ -2262,6 +2266,7 @@ export default function App() {
         showToast(t('pkg_uninstall_core_err'));
         return;
       }
+      termuxOperationLockRef.current = true;
       focusOutputPane('terminal');
       setTermuxRunning(true);
       setRunStartedAt(Date.now());
@@ -2328,6 +2333,7 @@ export default function App() {
         }
         setRunStartedAt(null);
         setTermuxRunning(false);
+        termuxOperationLockRef.current = false;
       }
     },
     [termuxRunning, termuxConfig, focusOutputPane, appendEntry, appendStreamChunk, flushStreamChunk, refreshBackupStatus, showToast, t]
