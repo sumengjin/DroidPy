@@ -926,7 +926,7 @@ const zhCN: Record<TranslationKey, string> = {
   sd_quick_manage: '管理 /sdcard',
   sd_quick_backup: '备份至 /sdcard',
   tmx_need_init_hint: '尚未初始化 Python，请点右侧按钮安装。',
-  neg_title: '設定',
+  neg_title: '设置',
   neg_subtitle: '应用程序、运行环境与系统管理',
   neg_open_aria: '打开设置',
   neg_tab_termux: 'Python',
