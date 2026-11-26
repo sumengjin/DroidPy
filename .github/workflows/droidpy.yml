@@ -5,8 +5,13 @@ on:
     branches: ["main", "master"]
     tags:
       - "v*"
+  # Run validation for stacked PRs as well as PRs targeting the default branch.
   pull_request:
-    branches: ["main", "master"]
+
+# Keep only the newest PR validation active; never cancel main/tag release runs.
+concurrency:
+  group: droidpy-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
   workflow_dispatch:
     inputs:
       release_tag:
