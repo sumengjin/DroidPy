@@ -60,6 +60,9 @@ assert.match(panelSource, /item\.id === 'polars' \? 'python-polars' : tmx\.targe
 assert.match(catalogSource, /Termux User Repository（TUR）預編譯套件提供/);
 assert.match(source, /"polars" to "python-polars"/);
 assert.match(source, /"python-polars" in missingPkgsOnly/);
+assert.match(source, /val safePkgName = Regex\("""\^\[A-Za-z0-9\]\[A-Za-z0-9\+\.\-\]\*\$"""\)/, 'APT package names from backup manifests must be validated before shell use');
+assert.match(source, /if \(!safePkgName\.matches\(v\)\)/, 'invalid APT backup entries must be skipped');
+assert.match(source, /Skipped invalid APT package names in backup manifest/);
 assert.match(panelSource, /python-lxml libxml2 libxslt clang/);
 assert.doesNotMatch(panelSource, /pip install requests beautifulsoup4 lxml httpx/);
 assert.match(exportSource, /matplotlib:\s*'matplotlib'/);
