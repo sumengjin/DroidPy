@@ -59,6 +59,9 @@ assert.ok(generated.includes('python-polars'));
 
 
 assert.ok(generated.includes('index-url = https://pypi.org/simple'));
+assert.ok(generated.includes('if not os.path.isfile(pip_conf_path):'));
+assert.ok(generated.includes('with open(pip_conf_path, "x", encoding="utf-8") as fp:'));
+assert.ok(generated.includes('Preserve an existing user pip configuration or private package index.'));
 assert.ok(generated.includes('def _compatibility_install_command(package_name, trusted_host=False):'));
 assert.ok(generated.includes('if package == "parsel":'));
 assert.ok(generated.includes('if package == "scipy":'));
