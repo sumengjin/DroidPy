@@ -1037,13 +1037,14 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                   (p) => normalizeTermuxPkgName(p) === normTarget
                 )
               );
+            const nativePkgTarget = item.id === 'polars' ? 'python-polars' : tmx.targetName;
             const pkgInstalled =
-              tmx.mode === 'pkg' &&
-              ((tmx.targetName === 'clang' && Boolean(healthInfo?.hasClang)) ||
-                (tmx.targetName === 'ffmpeg' && Boolean(healthInfo?.hasFfmpeg)) ||
+              (tmx.mode === 'pkg' || item.id === 'polars') &&
+              ((nativePkgTarget === 'clang' && Boolean(healthInfo?.hasClang)) ||
+                (nativePkgTarget === 'ffmpeg' && Boolean(healthInfo?.hasFfmpeg)) ||
                 Boolean(
                   healthInfo?.installedPkgPackages?.some(
-                    (p) => p.toLowerCase() === tmx.targetName.toLowerCase()
+                    (p) => p.toLowerCase() === nativePkgTarget.toLowerCase()
                   )
                 ));
             const alreadyInstalled = pipInstalled || pkgInstalled;
