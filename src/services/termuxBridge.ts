@@ -1423,6 +1423,26 @@ export async function abortActiveTermuxStream(): Promise<void> {
   if (completion) await completion;
 }
 
+export async function waitForActiveTermuxStream(timeoutMs = 5000): Promise<void> {
+  const completion = activeStreamCompletion;
+  if (!completion) return;
+
+  let timer: number | undefined;
+  const timedOut = await Promise.race([
+    completion.then(() => false),
+    new Promise<boolean>((resolve) => {
+      timer = window.setTimeout(() => resolve(true), timeoutMs);
+    }),
+  ]);
+  if (timer !== undefined) window.clearTimeout(timer);
+
+  // Normally Android closes the stream after its process-tree cleanup. Abort only
+  // as a bounded fallback if a broken bridge leaves the response open.
+  if (timedOut && activeStreamCompletion === completion) {
+    await abortActiveTermuxStream();
+  }
+}
+
 async function termuxStreamRequest(
   config: TermuxConfig,
   path: string,
