@@ -14,6 +14,11 @@ on:
         required: false
         default: ""
 
+# Keep only the newest PR validation active; never cancel main/tag release runs.
+concurrency:
+  group: droidpy-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # Default to read-only. Grant write access only to the trusted Release job.
 permissions:
   contents: read
