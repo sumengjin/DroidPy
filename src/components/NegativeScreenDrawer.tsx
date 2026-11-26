@@ -147,6 +147,7 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
   onNotify,
 }) => {
   const { t } = useI18n();
+  const backdropTouchRef = React.useRef<{ x: number; y: number; moved: boolean } | null>(null);
   if (!open) return null;
 
   const tabs: { id: NegativeScreenSection; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
@@ -159,7 +160,28 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
   return (
     <div
       className="fixed inset-0 z-50 flex bg-black/55"
-      onClick={onClose}
+      onTouchStart={(e) => {
+        const touch = e.touches[0];
+        if (!touch) return;
+        backdropTouchRef.current = { x: touch.clientX, y: touch.clientY, moved: false };
+      }}
+      onTouchMove={(e) => {
+        const start = backdropTouchRef.current;
+        const touch = e.touches[0];
+        if (!start || !touch) return;
+        if (Math.abs(touch.clientX - start.x) > 12 || Math.abs(touch.clientY - start.y) > 12) {
+          start.moved = true;
+        }
+      }}
+      onTouchEnd={() => {
+        // A drag that starts on a category/control must never become a backdrop-dismiss click.
+      }}
+      onClick={(e) => {
+        const touch = backdropTouchRef.current;
+        backdropTouchRef.current = null;
+        if (touch?.moved || e.target !== e.currentTarget) return;
+        onClose();
+      }}
       role="dialog"
       aria-modal="true"
       aria-label={t('neg_title')}
