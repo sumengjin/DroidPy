@@ -263,7 +263,7 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
                 className="min-h-[44px] px-2 inline-flex items-center gap-2 text-sm font-semibold text-[var(--ide-accent-text)]"
               >
                 <span aria-hidden="true">‹</span>
-                <span>返回設定</span>
+                <span>{t('neg_back_categories')}</span>
               </button>
             </div>
         {/* Selected settings category */}
