@@ -4129,15 +4129,37 @@ def clipboard_set(text):
 
                 method == "POST" && path == "/stop" -> {
                     val proc = activeProcess
+                    var stopped = true
                     if (proc != null) {
                         activeProcessStopRequested = true
                         appendNativeLog("Exec", "Explicit Stop request: force stopping process tree pid=\${processPid(proc)}")
                         killProcessTree(proc)
+                        try {
+                            if (proc.isAlive) proc.waitFor(2, TimeUnit.SECONDS)
+                        } catch (_: Exception) {
+                        }
+                        // The stream worker owns activeProcess cleanup. Do not acknowledge
+                        // Stop until it has released that process slot as well.
+                        val cleanupDeadline = System.currentTimeMillis() + 2500L
+                        while (activeProcess === proc && System.currentTimeMillis() < cleanupDeadline) {
+                            try { Thread.sleep(20L) } catch (_: InterruptedException) { break }
+                        }
+                        stopped = !proc.isAlive && activeProcess !== proc
+                        if (!stopped) {
+                            appendNativeLog("Exec", "Stop did not complete process/stream cleanup before timeout pid=\${processPid(proc)}")
+                        }
                     } else {
                         appendNativeLog("Exec", "Explicit Stop request received; no active process")
                     }
                     activeProcessPaused = false
-                    writeJson(out, 200, JSONObject().put("ok", true))
+                    writeJson(
+                        out,
+                        if (stopped) 200 else 409,
+                        JSONObject()
+                            .put("ok", stopped)
+                            .put("stopped", stopped)
+                            .put("error", if (stopped) "" else "停止逾時：原生程序或串流尚未完成清理")
+                    )
                 }
 
                 method == "POST" && path == "/droid-action" -> {
