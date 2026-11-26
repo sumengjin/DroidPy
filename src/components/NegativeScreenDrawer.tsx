@@ -19,7 +19,7 @@ import { OutdatedPackageInfo } from '../services/pyodideRuntime';
 import { TermuxOutdatedPipItem } from '../services/termuxBridge';
 
 declare global {
-  interface Window { __droidpySettingsBack?: () => boolean; }
+  interface Window { __droidpySettingsBack?: () => boolean; __droidpyToolsBack?: () => boolean; }
 }
 import { AppUpdateCheckResult } from '../services/appUpdater';
 
@@ -155,6 +155,7 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
   const [showCategories, setShowCategories] = React.useState(true);
   React.useEffect(() => {
     window.__droidpySettingsBack = () => {
+      if (window.__droidpyToolsBack?.()) return true;
       if (!showCategories) { setShowCategories(true); return true; }
       return false;
     };
