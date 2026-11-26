@@ -89,6 +89,18 @@ Kotlin 路由集合除健康檢查、工作區檔案、執行／shell／安裝�
 5. **執行語義不同。** Python 端具有非串流 `/run`、`/install` 與 `/shell`；內嵌 Kotlin 具有非串流 `/shell`，但 `/run` 與 `/install` 目前主要透過串流路由執行。需逐路由比較成功回應、錯誤狀態與程序控制語義。
 6. **程序控制需要逐項驗證。** 兩邊均有明確停止與 PTY 控制，但程序保留、客戶端斷線、重啟後控制能力與輸出尾端處理必須用同一組測試驗證，不能僅以路由存在判定相容。
 
+### 5.1 已由處理器程式碼確認的回應差異
+
+| 路由 | 外部 Python Bridge | APK 內嵌 Kotlin Bridge | 相容性判定 |
+|---|---|---|---|
+| `POST /stdin` | 無作用中 PTY 時回 409；成功回 `{ok:true}`；寫入錯誤回 500 | 無作用中程序時回 409；成功回 `{ok:true}`；寫入錯誤回 500 | 狀態碼與主要成功欄位一致；輸入換行與程序生命週期仍需 fixture 驗證 |
+| `POST /pause`、`/resume` | 無作用中程序回 409 並包含 `ok:false`、目前 `paused`；成功回 `ok:true, paused` | 以訊號操作作用中程序；失敗回 409，成功回 200；需再確認完整 JSON 欄位 | 不能只比較 HTTP 狀態碼；需核對 paused 狀態與錯誤欄位 |
+| `POST /stop` | 無作用中程序回 `{ok:true, stopped:false}`；成功回 `{ok:true, stopped:true}` | 不論是否存在作用中程序，處理器都回 `{ok:true}`，並清除暫停狀態 | **已確認不等價**；呼叫端不可依賴兩邊相同的 `stopped` 欄位 |
+| `POST /shell` | 同步執行後回 `exitCode`、`stdout`、`stderr`、`durationMs` | 呼叫 `runBufferedShellCommand` 後回傳其結果物件 | 路由存在，但必須比較 Kotlin 結果物件的實際欄位與退出碼語義 |
+| 無效 JSON body | 由 Python body parser 回 400；超過 8 MiB 回 413 | Kotlin JSON 解析失敗回 400；需核對 body 上限與 framing 規則 | **請求解析基線尚未證明一致** |
+
+以上是靜態處理器程式碼觀察，不是整合測試結果。特別是 `/stop` 的回應差異應納入舊 API 相容層；新契約可定義一致結果，但不能靜默改變舊客戶端行為。
+
 ## 6. 安全基線（新契約必須保留）
 
 - 僅綁定／接受預期的 loopback Host，驗證可信任 Origin。
