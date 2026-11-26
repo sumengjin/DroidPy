@@ -41,7 +41,6 @@ interface FileExplorerProps {
   termuxEmbedded?: boolean;
   termuxConfig?: TermuxConfig;
   onOpenExternalFile?: (file: { name: string; content: string; path: string }) => void;
-  onOpenSdcardManager?: () => void;
   onBackupToSdcard?: () => Promise<void>;
   onPullFromTermux?: () => Promise<void>;
   onLinkDirectory: () => Promise<void>;
@@ -71,7 +70,6 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   termuxEmbedded,
   termuxConfig,
   onOpenExternalFile,
-  onOpenSdcardManager,
   onBackupToSdcard,
   onPullFromTermux,
   onLinkDirectory,
@@ -372,15 +370,6 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                 className="flex-1 min-h-[44px] px-2 rounded-lg bg-[var(--ide-accent)] text-white text-xs font-semibold truncate"
               >
                 瀏覽裝置檔案
-              </button>
-            )}
-            {onOpenSdcardManager && (
-              <button
-                type="button"
-                onClick={onOpenSdcardManager}
-                className="flex-1 min-h-[44px] px-2 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium hover:border-[var(--ide-accent)] truncate"
-              >
-                {t('sd_quick_manage')}
               </button>
             )}
             {onBackupToSdcard && (
