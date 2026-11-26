@@ -315,6 +315,8 @@ export default function App() {
   });
 
   const [mobileTab, setMobileTab] = useState<MobileTab>('editor');
+  const mobileTabRef = useRef<MobileTab>(mobileTab);
+  mobileTabRef.current = mobileTab;
   const [negativeOpen, setNegativeOpen] = useState(false);
   const [negativeSection, setNegativeSection] = useState<NegativeScreenSection>('termux');
   const [tabletSplit, setTabletSplit] = useState(true);
@@ -685,6 +687,7 @@ export default function App() {
       }
       if (ov.negativeOpen) {
         setNegativeOpen(false);
+        if (mobileTabRef.current === 'packages') setMobileTab('editor');
         return true;
       }
       if (ov.mobileNewFileOpen) {
