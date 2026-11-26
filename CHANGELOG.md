@@ -5,6 +5,7 @@ All notable changes to **DroidPy** are documented in this file.
 ## [Unreleased]
 - **修正 CI 分支觸發規則**：PR 檢查不再限制目標分支只能是 main/master，堆疊式 PR 也會自動執行測試與建置。
 - **修正手機導覽圖示匯入**：補上套件導覽使用的 Package 圖示匯入，並以 TypeScript CI 防止遺漏圖示造成整個建置中止。
+- **加固套件備份還原**：還原前驗證 APT 套件名稱，跳過備份檔中不合法的項目，避免不可信清單內容進入 shell 命令；多份備份同時存在時優先採用最新成功寫入的清單，套件數量只作為時間相同時的判斷依據。
 - **統一 APT 原生 Python 套件清單與更新路由**：健康檢查會避免將已由 Termux APT／TUR 提供的 Python 發行套件重複列為 pip 套件；pip 更新與移除會辨識實際已安裝的原生套件，避免用 pip 覆蓋或錯誤移除系統套件。SciPy 也補入外部 Termux 的原生預編譯安裝對應。
 - **套件中心來源與手機操作優化**：Termux 套件卡片明確標示 Termux APT、預設 PyPI（保留使用者自訂 pip.conf）或第三方 TUR；保留套件相容提示，將安裝／移除及分類篩選觸控區提高至至少 44px，並移除套件清單內層固定高度捲動，統一由頁面捲動。
 - **修正 TUR Polars 安裝狀態與移除路由**：Polars 由 TUR 安裝為原生 `python-polars` 套件；套件中心改為讀取 APT 安裝清單判斷狀態，移除時改用 `pkg uninstall`，避免錯誤呼叫 `pip uninstall polars`。
