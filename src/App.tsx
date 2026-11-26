@@ -513,7 +513,6 @@ export default function App() {
   const autoUpdateTermuxRanRef = useRef(false);
   const startupAutoUpdateEnabledRef = useRef(Boolean(settings.autoUpdatePackages));
   const appLaunchedAtRef = useRef(Date.now());
-  const edgeSwipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const overlayStateRef = useRef({
     showHelpModal,
     showLogsModal,
@@ -2986,25 +2985,6 @@ export default function App() {
       onChangeLocale={(loc) => handleUpdateSettings({ locale: loc })}
     >
       <div
-        onTouchStart={(e) => {
-          if (e.touches.length !== 1) return;
-          const touch = e.touches[0];
-          if (touch.clientX <= 28) {
-            edgeSwipeStartRef.current = { x: touch.clientX, y: touch.clientY };
-          } else {
-            edgeSwipeStartRef.current = null;
-          }
-        }}
-        onTouchEnd={(e) => {
-          if (!edgeSwipeStartRef.current) return;
-          const touch = e.changedTouches[0];
-          const dx = touch.clientX - edgeSwipeStartRef.current.x;
-          const dy = Math.abs(touch.clientY - edgeSwipeStartRef.current.y);
-          edgeSwipeStartRef.current = null;
-          if (dx > 52 && dy < 50) {
-            setNegativeOpen(true);
-          }
-        }}
         style={{ height: 'var(--droidpy-viewport-height, 100dvh)' }}
         className={`h-dvh flex flex-col ${
           is3dBgActive ? 'bg-transparent' : 'bg-[var(--ide-bg)]'
