@@ -1238,7 +1238,7 @@ python ${entryFile}
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                  <div className="flex items-center gap-1.5 overflow-x-auto overscroll-x-contain touch-pan-x no-scrollbar pb-0.5">
                     {PACKAGE_CATEGORIES.map((cat) => {
                       const active = catFilter === cat.id;
                       return (
