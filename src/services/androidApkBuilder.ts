@@ -4850,17 +4850,54 @@ def clipboard_set(text):
         val proc = activeProcess ?: return false
         return try {
             if (!proc.isAlive) return false
-            val pid = activeProcessPidFile.takeIf { it.isFile }
+            val rootPid = activeProcessPidFile.takeIf { it.isFile }
                 ?.readText(Charsets.US_ASCII)?.trim()?.toIntOrNull() ?: return false
-            if (pid <= 0) return false
-            android.os.Process.sendSignal(pid, signal)
-            true
+            if (rootPid <= 0) return false
+
+            // The PID file points at the shell wrapper. Python and its workers are
+            // descendants, so signal the complete process tree rather than only
+            // suspending the wrapper while Python continues to run.
+            fun collectDescendants(parentPid: Int, out: MutableList<Int>) {
+                File("/proc").listFiles()?.forEach { entry ->
+                    val childPid = entry.name.toIntOrNull() ?: return@forEach
+                    try {
+                        val stat = File(entry, "stat").readText(Charsets.US_ASCII)
+                        val closeParen = stat.lastIndexOf(')')
+                        if (closeParen > 0) {
+                            val fields = stat.substring(closeParen + 2).trim().split(Regex("\\s+"))
+                            val parentOfChild = fields.getOrNull(1)?.toIntOrNull()
+                            if (parentOfChild == parentPid && childPid !in out) {
+                                collectDescendants(childPid, out)
+                                out.add(childPid)
+                            }
+                        }
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+
+            val descendants = mutableListOf<Int>()
+            collectDescendants(rootPid, descendants)
+            // Stop children before their parent; resume the parent before its children.
+            val targets = if (signal == 19) {
+                descendants + rootPid
+            } else {
+                listOf(rootPid) + descendants.asReversed()
+            }
+            var signaled = 0
+            targets.forEach { targetPid ->
+                try {
+                    android.os.Process.sendSignal(targetPid, signal)
+                    signaled++
+                } catch (_: Exception) {
+                }
+            }
+            signaled > 0
         } catch (error: Exception) {
-            appendNativeLog("Exec", "Pause/resume signal failed: \${error.message}")
+            appendNativeLog("Exec", "Pause/resume process-tree signal failed: ${error.message}")
             false
         }
     }
-
     private fun runBufferedShellCommand(command: String): JSONObject {
         val normalizedCommand = normalizeShellCommand(command)
         val t0 = System.currentTimeMillis()
