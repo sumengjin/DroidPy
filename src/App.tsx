@@ -1754,8 +1754,8 @@ export default function App() {
   const handleStopTermux = useCallback(async () => {
     if (termuxStopLockRef.current || (!termuxRunning && !termuxScriptStartLockRef.current)) return;
     termuxStopLockRef.current = true;
-    termuxStopRequestedRef.current = true;
     const scriptCompletion = termuxScriptCompletionRef.current;
+    if (scriptCompletion) termuxStopRequestedRef.current = true;
     setTermuxStopping(true);
     appLog('termux', 'User requested Stop for the active Termux process', { level: 'warn' });
     try {
