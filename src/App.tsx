@@ -357,6 +357,8 @@ export default function App() {
   const [entries, setEntries] = useState<TerminalEntry[]>([]);
   const [installedPackages, setInstalledPackages] = useState<InstalledPackage[]>([]);
   const [activePyodidePackage, setActivePyodidePackage] = useState<string | null>(null);
+  // Synchronous guard serializes all Pyodide package mutations across rapid taps and drawer remounts.
+  const pyodidePackageOperationLockRef = useRef(false);
   const [cursorPos, setCursorPos] = useState<{ line: number; col: number }>({ line: 1, col: 1 });
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [pendingInputPrompt, setPendingInputPrompt] = useState<string | null>(null);
@@ -2163,10 +2165,11 @@ export default function App() {
 
   const handleInstallPackage = useCallback(
     async (pkgName: string) => {
-      if (activePyodidePackage) {
+      if (pyodidePackageOperationLockRef.current) {
         showToast(t('cta_running'));
         return;
       }
+      pyodidePackageOperationLockRef.current = true;
       setActivePyodidePackage(pkgName);
       appLog('package', `Installing Pyodide package: ${pkgName}`);
       try {
@@ -2189,9 +2192,10 @@ export default function App() {
         showToast(t('toast_pkg_fail', { pkg: pkgName }));
       } finally {
         setActivePyodidePackage(null);
+        pyodidePackageOperationLockRef.current = false;
       }
     },
-    [activePyodidePackage, appendEntry, showToast, t]
+    [appendEntry, showToast, t]
   );
 
   const handleUninstallPyPackage = useCallback(
@@ -2201,6 +2205,11 @@ export default function App() {
         showToast(t('pkg_uninstall_core_err'));
         return;
       }
+      if (pyodidePackageOperationLockRef.current) {
+        showToast(t('cta_running'));
+        return;
+      }
+      pyodidePackageOperationLockRef.current = true;
       appLog('package', `Uninstalling Pyodide package: ${pkgName}`);
       try {
         const list = await uninstallPyPackage(pkgName, callbacksRef.current);
@@ -2214,22 +2223,33 @@ export default function App() {
         appendEntry('stderr', msg);
         appLog('package', `Failed uninstalling Pyodide package ${pkgName}: ${msg}`, { level: 'error' });
         showToast(msg);
+      } finally {
+        pyodidePackageOperationLockRef.current = false;
       }
     },
     [appendEntry, showToast, t]
   );
 
   const handleRefreshPackages = useCallback(async () => {
+    if (pyodidePackageOperationLockRef.current) return;
+    pyodidePackageOperationLockRef.current = true;
     try {
       const list = await listPyPackages(callbacksRef.current);
       setInstalledPackages(list);
     } catch (err) {
       showToast(err instanceof Error ? err.message : t('pkg_loaded_empty'));
+    } finally {
+      pyodidePackageOperationLockRef.current = false;
     }
   }, [showToast, t]);
 
   const handleUpgradePyPackage = useCallback(
     async (pkgName: string) => {
+      if (pyodidePackageOperationLockRef.current) {
+        showToast(t('cta_running'));
+        return;
+      }
+      pyodidePackageOperationLockRef.current = true;
       setUpgradingPyPackages(true);
       appLog('package', `Upgrading Pyodide package: ${pkgName}`);
       try {
@@ -2251,13 +2271,15 @@ export default function App() {
         showToast(t('toast_pkg_fail', { pkg: pkgName }));
       } finally {
         setUpgradingPyPackages(false);
+        pyodidePackageOperationLockRef.current = false;
       }
     },
     [outdatedPyPackages, appendEntry, showToast, t]
   );
 
   const handleCheckAndUpgradeAllPy = useCallback(async () => {
-    if (checkingOutdatedPkgs || upgradingPyPackages) return;
+    if (checkingOutdatedPkgs || upgradingPyPackages || pyodidePackageOperationLockRef.current) return;
+    pyodidePackageOperationLockRef.current = true;
     setCheckingOutdatedPkgs(true);
     try {
       const currentList = await listPyPackages(callbacksRef.current);
@@ -2282,6 +2304,7 @@ export default function App() {
     } finally {
       setCheckingOutdatedPkgs(false);
       setUpgradingPyPackages(false);
+      pyodidePackageOperationLockRef.current = false;
     }
   }, [checkingOutdatedPkgs, upgradingPyPackages, appendEntry, showToast, t]);
 
@@ -2483,6 +2506,7 @@ export default function App() {
     if (
       checkingOutdatedPkgs ||
       upgradingPyPackages ||
+      pyodidePackageOperationLockRef.current ||
       upgradingTermux ||
       termuxRunning ||
       termuxOperationLockRef.current ||
