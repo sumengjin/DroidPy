@@ -6,7 +6,6 @@ import {
   Check,
   Download,
   Play,
-  PackagePlus,
   RefreshCw,
   ExternalLink,
   AlertCircle,
@@ -70,7 +69,6 @@ interface TermuxIntegrationPanelProps {
   onInstallInTermux: (mode: 'pip' | 'pkg', target: string) => Promise<void>;
   onRunInTermux: () => Promise<void>;
   onRunShellInTermux: (cmd: string) => Promise<boolean | void>;
-  onInitializeEmbeddedEnv: (includeBaseSystem: boolean) => Promise<void>;
   onUpgradeAllTermux?: (kind: 'pip' | 'pkg') => Promise<void>;
   onUpgradeSinglePip?: (pkg: string) => Promise<void>;
   onUpgradeAllPackages?: () => Promise<void>;
@@ -79,6 +77,8 @@ interface TermuxIntegrationPanelProps {
   onCheckTermuxOutdated?: () => Promise<void>;
   onUninstallInTermux?: (mode: 'pip' | 'pkg', target: string) => Promise<void>;
   upgradingTermux?: boolean;
+  termuxRunning?: boolean;
+  activeTermuxTask?: string | null;
   enableSandboxAddon?: boolean;
   backupStatus?: PackageBackupStatus | null;
   onRestoreBackedUpPackages?: () => Promise<void>;
@@ -106,7 +106,6 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
   onInstallInTermux,
   onRunInTermux,
   onRunShellInTermux,
-  onInitializeEmbeddedEnv,
   onUpgradeAllTermux,
   onUpgradeSinglePip,
   onUpgradeAllPackages,
@@ -115,6 +114,8 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
   onCheckTermuxOutdated,
   onUninstallInTermux,
   upgradingTermux = false,
+  termuxRunning = false,
+  activeTermuxTask = null,
   enableSandboxAddon = false,
   backupStatus = null,
   onRestoreBackedUpPackages,
@@ -193,7 +194,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
   const handleInstallSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const clean = pkgTarget.trim();
-    if (!clean || busyAction || upgradingTermux) return;
+    if (!clean || busyAction || termuxRunning || upgradingTermux) return;
     setBusyAction(`install:${clean}`);
     try {
       await onInstallInTermux(installMode, clean);
@@ -204,7 +205,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
   };
 
   const handleQuickInstall = async (mode: 'pkg' | 'pip', target: string) => {
-    if (busyAction || upgradingTermux) return;
+    if (busyAction || termuxRunning || upgradingTermux) return;
     setBusyAction(`install:${target}`);
     try {
       await onInstallInTermux(mode, target);
@@ -216,7 +217,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
 
   const handleUninstallTarget = async (mode: 'pkg' | 'pip', target: string) => {
     const clean = target.trim();
-    if (!clean || !onUninstallInTermux || busyAction || upgradingTermux) return;
+    if (!clean || !onUninstallInTermux || busyAction || termuxRunning || upgradingTermux) return;
     setBusyAction(`uninstall:${clean}`);
     try {
       await onUninstallInTermux(mode, clean);
@@ -234,16 +235,6 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
     try {
       await onRunShellInTermux(clean);
       setShellCmd('');
-    } finally {
-      setBusyAction(null);
-    }
-  };
-
-  const handleInitEmbedded = async (includeBaseSystem: boolean) => {
-    if (busyAction || upgradingTermux) return;
-    setBusyAction(includeBaseSystem ? 'init:full' : 'init:crawler');
-    try {
-      await onInitializeEmbeddedEnv(includeBaseSystem);
     } finally {
       setBusyAction(null);
     }
@@ -336,7 +327,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
             </div>
             <button
               type="button"
-              disabled={restoringBackup || !!busyAction || upgradingTermux}
+              disabled={restoringBackup || !!busyAction || termuxRunning || upgradingTermux}
               onClick={() => void onRestoreBackedUpPackages()}
               className="min-h-[44px] px-4 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center justify-center gap-2 text-center shrink-0 transition-colors max-w-full"
             >
@@ -636,40 +627,8 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
           </p>
         </div>
 
-        <div className="selectable-text rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] px-3.5 py-2.5 font-mono text-[11px] text-[var(--ide-text-muted)] overflow-x-auto no-scrollbar whitespace-nowrap">
-          pkg update -y && pkg install -y python python-pip python-lxml libxml2 libxslt clang && pip install --no-cache-dir requests beautifulsoup4 httpx
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            type="button"
-            disabled={!!busyAction || upgradingTermux}
-            onClick={() => void handleInitEmbedded(true)}
-            className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-2 text-left max-w-full transition-colors"
-          >
-            {busyAction === 'init:full' ? (
-              <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-            ) : (
-              <Download className="w-4 h-4 shrink-0" />
-            )}
-            <span>
-              {busyAction === 'init:full' ? t('tmx_init_running') : t('tmx_init_btn_full')}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            disabled={!!busyAction || upgradingTermux}
-            onClick={() => void handleInitEmbedded(false)}
-            className="min-h-[44px] px-4 py-2 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] disabled:opacity-50 text-xs font-medium inline-flex items-center gap-2 text-left max-w-full transition-colors"
-          >
-            {busyAction === 'init:crawler' ? (
-              <Loader2 className="w-4 h-4 animate-spin text-[var(--ide-accent)] shrink-0" />
-            ) : (
-              <PackagePlus className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
-            )}
-            <span>{t('tmx_init_btn_crawler')}</span>
-          </button>
+        <div className="rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] px-3.5 py-3 text-xs text-[var(--ide-text-muted)] leading-relaxed">
+          {t('tmx_init_desc')}
         </div>
       </div>
       )}
@@ -883,7 +842,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                 disabled={!pkgTarget.trim() || !!busyAction || upgradingTermux}
                 className="min-h-[44px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-sm font-medium disabled:opacity-40 flex items-center gap-2 whitespace-nowrap shrink-0 transition-colors"
               >
-                {busyAction?.startsWith('install:') ? (
+                {(busyAction?.startsWith('install:') || activeTermuxTask?.startsWith('install:')) ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <Download className="w-4 h-4" />
@@ -1027,8 +986,8 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pr-0.5">
           {filteredCatalog.map((item) => {
             const tmx = item.termux!;
-            const isBusyInstall = busyAction === `install:${tmx.targetName}`;
-            const isBusyUninstall = busyAction === `uninstall:${tmx.targetName}`;
+            const isBusyInstall = busyAction === `install:${tmx.targetName}` || activeTermuxTask === `install:${tmx.targetName}`;
+            const isBusyUninstall = busyAction === `uninstall:${tmx.targetName}` || activeTermuxTask === `uninstall:${tmx.targetName}`;
             const normTarget = normalizeTermuxPkgName(tmx.targetName);
             const pipInstalled =
               tmx.mode === 'pip' &&

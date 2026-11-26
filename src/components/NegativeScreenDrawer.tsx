@@ -47,6 +47,9 @@ interface NegativeScreenDrawerProps {
   onCheckTermuxOutdated?: () => Promise<void>;
   onUninstallInTermux?: (mode: 'pip' | 'pkg', target: string) => Promise<void>;
   upgradingTermux?: boolean;
+  termuxRunning?: boolean;
+  termuxActiveTask?: string | null;
+  activePyodidePackage?: string | null;
   appUpdateResult?: AppUpdateCheckResult | null;
   checkingAppUpdate?: boolean;
   onOpenUpdateModal?: () => void;
@@ -65,7 +68,6 @@ interface NegativeScreenDrawerProps {
   onInstallInTermux: (mode: 'pip' | 'pkg', target: string) => Promise<void>;
   onRunInTermux: () => Promise<void>;
   onRunShellInTermux: (cmd: string) => Promise<boolean | void>;
-  onInitializeEmbeddedEnv: (includeBaseSystem: boolean) => Promise<void>;
   onGenerateRequirements: () => void;
   onInstallRequirements: () => Promise<void>;
   onSaveWorkspaceFile: (filename: string, content: string, openInEditor?: boolean) => void;
@@ -109,6 +111,9 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
   onCheckTermuxOutdated,
   onUninstallInTermux,
   upgradingTermux,
+  termuxRunning = false,
+  termuxActiveTask = null,
+  activePyodidePackage = null,
   appUpdateResult,
   checkingAppUpdate,
   onOpenUpdateModal,
@@ -127,7 +132,6 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
   onInstallInTermux,
   onRunInTermux,
   onRunShellInTermux,
-  onInitializeEmbeddedEnv,
   onGenerateRequirements,
   onInstallRequirements,
   onSaveWorkspaceFile,
@@ -143,9 +147,6 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
   onNotify,
 }) => {
   const { t } = useI18n();
-  const touchStartX = React.useRef<number | null>(null);
-  const touchStartY = React.useRef<number | null>(null);
-
   if (!open) return null;
 
   const tabs: { id: NegativeScreenSection; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
@@ -165,23 +166,6 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
     >
       <aside
         onClick={(e) => e.stopPropagation()}
-        onTouchStart={(e) => {
-          const touch = e.touches[0];
-          touchStartX.current = touch.clientX;
-          touchStartY.current = touch.clientY;
-        }}
-        onTouchEnd={(e) => {
-          if (touchStartX.current === null || touchStartY.current === null) return;
-          const touch = e.changedTouches[0];
-          const dx = touch.clientX - touchStartX.current;
-          const dy = Math.abs(touch.clientY - touchStartY.current);
-          touchStartX.current = null;
-          touchStartY.current = null;
-          // Swipe left on drawer to dismiss
-          if (dx < -64 && dy < 60) {
-            onClose();
-          }
-        }}
         className="w-full sm:w-[90vw] sm:max-w-[460px] h-full rounded-none sm:rounded-r-[28px] bg-[var(--ide-bg)] text-[var(--ide-text)] border-r border-[var(--ide-border)] shadow-2xl flex flex-col overflow-hidden"
       >
         {/* Drawer Header */}
@@ -250,6 +234,7 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
             onResetWorkspace={onResetWorkspace}
             pyodideStatus={pyodideStatus}
             installedPackages={installedPackages}
+            activePyodidePackage={activePyodidePackage}
             onInstallPackage={onInstallPackage}
             onRefreshPackages={onRefreshPackages}
             outdatedPackages={outdatedPackages}
@@ -266,6 +251,8 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
             onCheckTermuxOutdated={onCheckTermuxOutdated}
             onUninstallInTermux={onUninstallInTermux}
             upgradingTermux={upgradingTermux}
+            termuxRunning={termuxRunning}
+            termuxActiveTask={termuxActiveTask}
             appUpdateResult={appUpdateResult}
             checkingAppUpdate={checkingAppUpdate}
             onOpenUpdateModal={
@@ -296,10 +283,6 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
             onRunShellInTermux={async (cmd) => {
               onClose();
               await onRunShellInTermux(cmd);
-            }}
-            onInitializeEmbeddedEnv={async (includeBase) => {
-              onClose();
-              await onInitializeEmbeddedEnv(includeBase);
             }}
             onGenerateRequirements={onGenerateRequirements}
             onInstallRequirements={async () => {

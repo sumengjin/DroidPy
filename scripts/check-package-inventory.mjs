@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [source, bridgeSource, catalogSource, exportSource, panelSource, frostworkSource, frostworkMetadata] = await Promise.all([
+const [source, bridgeSource, catalogSource, exportSource, panelSource, appSource, drawerSource, i18nSource, frostworkSource, frostworkMetadata] = await Promise.all([
   readFile(new URL('../src/services/androidApkBuilder.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/services/termuxBridge.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/data/packageCatalog.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/ToolsAndPackages.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/TermuxIntegrationPanel.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../src/App.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../src/components/NegativeScreenDrawer.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../src/services/i18n.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../android/app/src/main/assets/python/frostwork/__init__.py', import.meta.url), 'utf8'),
   readFile(new URL('../android/app/src/main/assets/python/frostwork-0.2.2.dist-info/METADATA', import.meta.url), 'utf8'),
 ]);
@@ -73,8 +76,21 @@ assert.match(source, /Skipped invalid APT package names in backup manifest/);
 assert.match(source, /var bestUpdatedAt = Long\.MIN_VALUE/);
 assert.match(source, /val updatedAt = obj\.optLong\("updatedAt", 0L\)/);
 assert.match(source, /updatedAt > bestUpdatedAt \|\| \(updatedAt == bestUpdatedAt && score > bestScore\)/, 'newer package snapshots must win over stale larger backups');
-assert.match(panelSource, /python-lxml libxml2 libxslt clang/);
+assert.doesNotMatch(panelSource, /python-lxml libxml2 libxslt clang/);
 assert.doesNotMatch(panelSource, /pip install requests beautifulsoup4 lxml httpx/);
+assert.match(appSource, /const ensureEmbeddedPythonEnvironment = useCallback/);
+assert.match(appSource, /pkg update -y && pkg install -y python python-pip/);
+assert.doesNotMatch(appSource, /pkg install -y python python-pip python-lxml|clang/);
+assert.match(appSource, /await ensureEmbeddedPythonEnvironment\(\)/);
+assert.match(appSource, /setTermuxActiveTask\(\`install:\$\{target\.trim\(\)\}\`\)/);
+assert.match(exportSource, /activePyodidePackage/);
+assert.match(panelSource, /activeTermuxTask === \`install:\$\{tmx\.targetName\}\`/);
+assert.match(panelSource, /disabled=\{!!busyAction \|\| termuxRunning/);
+assert.doesNotMatch(panelSource, /handleInitEmbedded/);
+assert.doesNotMatch(drawerSource, /onTouchEnd/);
+assert.doesNotMatch(drawerSource, /Swipe left on drawer to dismiss/);
+assert.match(drawerSource, /termuxActiveTask/);
+assert.match(i18nSource, /首次執行 Python 或安裝套件時，自動安裝 Python 3 與 pip/);
 assert.match(exportSource, /matplotlib:\s*'matplotlib'/);
 
 const start = source.indexOf('private fun collectInstalledPipInventory()');

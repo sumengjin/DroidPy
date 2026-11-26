@@ -152,6 +152,9 @@ interface ToolsAndPackagesProps {
   onCheckTermuxOutdated?: () => Promise<void>;
   onUninstallInTermux?: (mode: 'pip' | 'pkg', target: string) => Promise<void>;
   upgradingTermux?: boolean;
+  termuxRunning?: boolean;
+  termuxActiveTask?: string | null;
+  activePyodidePackage?: string | null;
   appUpdateResult?: AppUpdateCheckResult | null;
   checkingAppUpdate?: boolean;
   onOpenUpdateModal?: () => void;
@@ -170,7 +173,6 @@ interface ToolsAndPackagesProps {
   onInstallInTermux: (mode: 'pip' | 'pkg', target: string) => Promise<void>;
   onRunInTermux: () => Promise<void>;
   onRunShellInTermux: (cmd: string) => Promise<boolean | void>;
-  onInitializeEmbeddedEnv: (includeBaseSystem: boolean) => Promise<void>;
   onGenerateRequirements: () => void;
   onInstallRequirements: () => Promise<void>;
   onSaveWorkspaceFile: (filename: string, content: string, openInEditor?: boolean) => void;
@@ -212,6 +214,9 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
   onCheckTermuxOutdated,
   onUninstallInTermux,
   upgradingTermux = false,
+  termuxRunning = false,
+  termuxActiveTask = null,
+  activePyodidePackage = null,
   appUpdateResult,
   checkingAppUpdate = false,
   onOpenUpdateModal,
@@ -230,7 +235,6 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
   onInstallInTermux,
   onRunInTermux,
   onRunShellInTermux,
-  onInitializeEmbeddedEnv,
   onGenerateRequirements,
   onInstallRequirements,
   onSaveWorkspaceFile,
@@ -366,7 +370,7 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
 
   const handleInstall = async (target: string) => {
     const clean = target.trim();
-    if (!clean || installingPkg || uninstallingPkg) return;
+    if (!clean || installingPkg || activePyodidePackage || uninstallingPkg) return;
     setInstallingPkg(clean);
     try {
       await onInstallPackage(clean);
@@ -777,7 +781,6 @@ python ${entryFile}
       onInstallInTermux={onInstallInTermux}
       onRunInTermux={onRunInTermux}
       onRunShellInTermux={onRunShellInTermux}
-      onInitializeEmbeddedEnv={onInitializeEmbeddedEnv}
       onUpgradeAllTermux={onUpgradeAllTermux}
       onUpgradeSinglePip={onUpgradeSingleTermuxPip}
       onUpgradeAllPackages={onUpgradeAllPackages}
@@ -786,6 +789,8 @@ python ${entryFile}
       onCheckTermuxOutdated={onCheckTermuxOutdated}
       onUninstallInTermux={onUninstallInTermux}
       upgradingTermux={upgradingTermux}
+      termuxRunning={termuxRunning}
+      activeTermuxTask={termuxActiveTask}
       enableSandboxAddon={Boolean(settings.enableSandboxAddon)}
       backupStatus={backupStatus}
       onRestoreBackedUpPackages={onRestoreBackedUpPackages}
@@ -1045,7 +1050,7 @@ python ${entryFile}
                   <button
                     type="button"
                     onClick={() => void onInstallRequirements()}
-                    disabled={!!installingPkg || !!uninstallingPkg}
+                    disabled={!!installingPkg || !!activePyodidePackage || !!uninstallingPkg}
                     className="min-h-[40px] px-3.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium flex items-center gap-2 hover:border-[var(--ide-accent)] disabled:opacity-40 transition-colors whitespace-nowrap"
                   >
                     <Download className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
@@ -1083,7 +1088,7 @@ python ${entryFile}
                     </div>
                     <button
                       type="submit"
-                      disabled={!pkgQuery.trim() || !!installingPkg}
+                      disabled={!pkgQuery.trim() || !!installingPkg || !!activePyodidePackage}
                       className="min-h-[50px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-sm font-semibold disabled:opacity-40 flex items-center gap-2 whitespace-nowrap shrink-0 transition-colors"
                     >
                       {installingPkg ? (
@@ -1107,7 +1112,7 @@ python ${entryFile}
                           (p) => normalizePyPkgName(p.name) === normTarget
                         );
                         const isCoreSystem = PYODIDE_CORE_PACKAGES.has(normTarget);
-                        const isBusyInstall = installingPkg === targetPkg;
+                        const isBusyInstall = installingPkg === targetPkg || activePyodidePackage === targetPkg;
                         const isBusyUninstall = uninstallingPkg === targetPkg;
                         return (
                           <div
@@ -1261,7 +1266,7 @@ python ${entryFile}
                         (p) => normalizePyPkgName(p.name) === normTarget
                       );
                       const isCoreSystem = PYODIDE_CORE_PACKAGES.has(normTarget);
-                      const isBusyInstall = installingPkg === targetName;
+                      const isBusyInstall = installingPkg === targetName || activePyodidePackage === targetName;
                       const isBusyUninstall = uninstallingPkg === targetName;
                       return (
                         <div

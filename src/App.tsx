@@ -356,6 +356,7 @@ export default function App() {
   const [lastDurationMs, setLastDurationMs] = useState<number | null>(null);
   const [entries, setEntries] = useState<TerminalEntry[]>([]);
   const [installedPackages, setInstalledPackages] = useState<InstalledPackage[]>([]);
+  const [activePyodidePackage, setActivePyodidePackage] = useState<string | null>(null);
   const [cursorPos, setCursorPos] = useState<{ line: number; col: number }>({ line: 1, col: 1 });
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [pendingInputPrompt, setPendingInputPrompt] = useState<string | null>(null);
@@ -430,6 +431,7 @@ export default function App() {
   const [termuxError, setTermuxError] = useState<string | null>(null);
   const [termuxHealth, setTermuxHealth] = useState<TermuxHealthInfo | null>(null);
   const [termuxRunning, setTermuxRunning] = useState(false);
+  const [termuxActiveTask, setTermuxActiveTask] = useState<string | null>(null);
   const termuxScriptStartLockRef = useRef(false);
   const [termuxPaused, setTermuxPaused] = useState(false);
   const [termuxScriptRunning, setTermuxScriptRunning] = useState(false);
@@ -1215,6 +1217,59 @@ export default function App() {
     []
   );
 
+  // Install only the Python runtime essentials on first actual use.
+  // Optional libraries and native build toolchains remain opt-in.
+  const ensureEmbeddedPythonEnvironment = useCallback(async (): Promise<boolean> => {
+    let health = termuxHealth;
+    if (!health || (health.embedded && health.hasPython === false)) {
+      try {
+        health = await checkTermuxHealth(termuxConfig);
+        setTermuxHealth(health);
+      } catch {
+        return true;
+      }
+    }
+    if (!health?.embedded || health.hasPython !== false) return true;
+
+    const command = 'pkg update -y && pkg install -y python python-pip';
+    const streamId = makeId();
+    appLog('termux', 'First-use Python bootstrap started (python, python-pip only)');
+    appendEntry('system', t('log_termux_init', { cmd: command }));
+    try {
+      const result = await streamShellInTermux(termuxConfig, command, {
+        onChunk: (chunk) => appendStreamChunk(streamId, chunk),
+      });
+      flushStreamChunk(streamId);
+      setTermuxConnectionState('connected');
+      setLastDurationMs(result.durationMs);
+      if (result.exitCode !== 0) {
+        appendEntry('stderr', t('log_termux_exit', { code: result.exitCode }));
+        appLog('termux', `First-use Python bootstrap failed (exit=${result.exitCode})`, { level: 'error' });
+        showToast(t('toast_termux_init_err', { code: result.exitCode }));
+        return false;
+      }
+      const verified = await checkTermuxHealth(termuxConfig);
+      setTermuxHealth(verified);
+      if (verified.embedded && verified.hasPython === false) {
+        appendEntry('stderr', t('tmx_need_init_hint'));
+        appLog('termux', 'First-use Python bootstrap completed but Python is still unavailable', { level: 'error' });
+        showToast(t('tmx_need_init_hint'));
+        return false;
+      }
+      appLog('termux', 'First-use Python bootstrap completed');
+      showToast(t('toast_termux_init_ok'));
+      return true;
+    } catch (err) {
+      flushStreamChunk(streamId);
+      const message = err instanceof Error ? err.message : String(err);
+      setTermuxError(message);
+      appendEntry('stderr', message);
+      appLog('termux', `First-use Python bootstrap exception: ${message}`, { level: 'error' });
+      showToast(t('toast_termux_install_fail'));
+      return false;
+    }
+  }, [termuxHealth, termuxConfig, appendEntry, appendStreamChunk, flushStreamChunk, showToast, t]);
+
   const handleRunInTermux = useCallback(async () => {
     if (termuxRunning || termuxScriptStartLockRef.current) {
       showToast(t('cta_running'));
@@ -1228,26 +1283,15 @@ export default function App() {
     setTermuxPaused(false);
     setTermuxScriptRunning(true);
     setTermuxRunning(true);
+    setTermuxActiveTask(`run:${entryFile.name}`);
     setRunStartedAt(Date.now());
     setTermuxError(null);
 
     const streamId = makeId();
 
     try {
-      let currentHealth = termuxHealth;
-      if (currentHealth?.embedded && currentHealth.hasPython === false) {
-        try {
-          currentHealth = await checkTermuxHealth(termuxConfig);
-          setTermuxHealth(currentHealth);
-        } catch {
-          // proceed to run so server error message or connection check catches it
-        }
-      }
-      if (currentHealth?.embedded && currentHealth.hasPython === false) {
-        appendEntry('stderr', t('tmx_need_init_hint'));
-        showToast(t('tmx_need_init_hint'));
-        return;
-      }
+      const pythonReady = await ensureEmbeddedPythonEnvironment();
+      if (!pythonReady) return;
 
       appendEntry('system', t('log_termux_run', { name: entryFile.name }));
       appLog('termux', `Run script in Termux: ${entryFile.name}`);
@@ -1310,6 +1354,7 @@ export default function App() {
       setTermuxScriptRunning(false);
       setTermuxPaused(false);
       setRunStartedAt(null);
+      setTermuxActiveTask(null);
       setTermuxRunning(false);
     }
   }, [
@@ -1319,6 +1364,7 @@ export default function App() {
     termuxConfig,
     termuxHealth,
     termuxRunning,
+    ensureEmbeddedPythonEnvironment,
     appendEntry,
     appendStreamChunk,
     flushStreamChunk,
@@ -1341,6 +1387,7 @@ export default function App() {
         : `pip install ${installTarget}`;
       focusOutputPane('terminal');
       setTermuxRunning(true);
+      setTermuxActiveTask(`install:${target.trim()}`);
       setRunStartedAt(Date.now());
       setTermuxError(null);
       appendEntry('system', t('log_termux_install', { cmd: label }));
@@ -1349,6 +1396,8 @@ export default function App() {
       let tailBuf = '';
       const tailAnsiBuf = createAnsiStreamBuffer();
       try {
+        const pythonReady = await ensureEmbeddedPythonEnvironment();
+        if (!pythonReady) return;
         const res = await streamInstallInTermux(
           termuxConfig,
           installMode,
@@ -1413,10 +1462,11 @@ export default function App() {
           // ignore health refresh failure
         }
         setRunStartedAt(null);
+        setTermuxActiveTask(null);
         setTermuxRunning(false);
       }
     },
-    [termuxConfig, termuxRunning, focusOutputPane, appendEntry, appendStreamChunk, flushStreamChunk, refreshBackupStatus, showToast, t]
+    [termuxConfig, termuxRunning, ensureEmbeddedPythonEnvironment, focusOutputPane, appendEntry, appendStreamChunk, flushStreamChunk, refreshBackupStatus, showToast, t]
   );
 
   const handleRunShellInTermux = useCallback(
@@ -1488,80 +1538,6 @@ export default function App() {
       return succeeded;
     },
     [termuxConfig, termuxRunning, focusOutputPane, appendEntry, appendStreamChunk, flushStreamChunk, refreshBackupStatus, showToast, t]
-  );
-
-  const handleInitializeEmbeddedEnv = useCallback(
-    async (includeBaseSystem: boolean) => {
-      if (termuxRunning) {
-        showToast(t('cta_running'));
-        return;
-      }
-      const cmd = includeBaseSystem
-        ? '(pkg update -y || true) && pkg install -y python python-pip python-lxml libxml2 libxslt clang && pip install --no-cache-dir requests beautifulsoup4 httpx'
-        : 'pip install --no-cache-dir requests beautifulsoup4 httpx';
-      setExecutionEngine('termux');
-      focusOutputPane('terminal');
-      setTermuxRunning(true);
-      setRunStartedAt(Date.now());
-      setTermuxError(null);
-      appendEntry('system', t('log_termux_init', { cmd }));
-      appLog('termux', `One-tap env initialization started (includeBaseSystem=${includeBaseSystem})`);
-      const streamId = makeId();
-      let tailBuf = '';
-      const tailAnsiBuf = createAnsiStreamBuffer();
-      try {
-        const res = await streamShellInTermux(termuxConfig, cmd, {
-          onChunk: (chunk) => {
-            appendStreamChunk(streamId, chunk);
-            const cleanChunk = stripAnsi(tailAnsiBuf.push(chunk));
-            if (cleanChunk) {
-              tailBuf = (tailBuf + cleanChunk).slice(-1200);
-            }
-          },
-        });
-        const remTail = stripAnsi(tailAnsiBuf.flush());
-        if (remTail) {
-          tailBuf = (tailBuf + remTail).slice(-1200);
-        }
-        flushStreamChunk(streamId);
-        setTermuxConnectionState('connected');
-        setLastDurationMs(res.durationMs);
-        if (res.exitCode === 0) {
-          appLog('termux', `One-tap env initialization completed (${formatDurationHMS(res.durationMs)})`);
-          showToast(t('toast_termux_init_ok'));
-        } else {
-          appendEntry('stderr', t('log_termux_exit', { code: res.exitCode }));
-          appLog('termux', `One-tap env initialization exited ${res.exitCode}`, {
-            level: 'error',
-            detail: tailBuf.trim() || undefined,
-          });
-          showToast(t('toast_termux_init_err', { code: res.exitCode }));
-        }
-      } catch (err) {
-        flushStreamChunk(streamId);
-        const msg = err instanceof Error ? err.message : String(err);
-        setTermuxConnectionState('error');
-        setTermuxError(msg);
-        appendEntry('stderr', msg);
-        appLog('termux', `One-tap env initialization error: ${msg}`, {
-          level: 'error',
-          detail: tailBuf.trim() || undefined,
-        });
-        showToast(t('toast_termux_install_fail'));
-      } finally {
-        try {
-          const health = await checkTermuxHealth(termuxConfig);
-          setTermuxHealth(health);
-          void refreshBackupStatus(termuxConfig);
-        } catch {
-          // ignore background health refresh error
-        }
-        flushNativeStateNow();
-        setRunStartedAt(null);
-        setTermuxRunning(false);
-      }
-    },
-    [termuxConfig, termuxRunning, focusOutputPane, appendEntry, appendStreamChunk, flushStreamChunk, refreshBackupStatus, flushNativeStateNow, showToast, t]
   );
 
   const handleRestoreBackedUpPackages = useCallback(async () => {
@@ -2120,6 +2096,11 @@ export default function App() {
 
   const handleInstallPackage = useCallback(
     async (pkgName: string) => {
+      if (activePyodidePackage) {
+        showToast(t('cta_running'));
+        return;
+      }
+      setActivePyodidePackage(pkgName);
       appLog('package', `Installing Pyodide package: ${pkgName}`);
       try {
         const list = await installPyPackage(pkgName, callbacksRef.current);
@@ -2139,9 +2120,11 @@ export default function App() {
         appendEntry('stderr', `${t('toast_pkg_fail', { pkg: pkgName })}: ${msg}`);
         appLog('package', `Failed installing Pyodide package ${pkgName}: ${msg}`, { level: 'error' });
         showToast(t('toast_pkg_fail', { pkg: pkgName }));
+      } finally {
+        setActivePyodidePackage(null);
       }
     },
-    [appendEntry, showToast, t]
+    [activePyodidePackage, appendEntry, showToast, t]
   );
 
   const handleUninstallPyPackage = useCallback(
@@ -3450,6 +3433,7 @@ export default function App() {
         onResetWorkspace={handleResetWorkspace}
         pyodideStatus={pyodideStatus}
         installedPackages={installedPackages}
+        activePyodidePackage={activePyodidePackage}
         onInstallPackage={handleInstallPackage}
         onRefreshPackages={handleRefreshPackages}
         outdatedPackages={outdatedPyPackages}
@@ -3466,6 +3450,8 @@ export default function App() {
         onCheckTermuxOutdated={handleCheckTermuxOutdated}
         onUninstallInTermux={handleUninstallInTermux}
         upgradingTermux={upgradingTermux}
+        termuxRunning={termuxRunning}
+        termuxActiveTask={termuxActiveTask}
         appUpdateResult={appUpdateResult}
         checkingAppUpdate={checkingAppUpdate}
         onOpenUpdateModal={() => {
@@ -3489,7 +3475,6 @@ export default function App() {
         onInstallInTermux={handleInstallInTermux}
         onRunInTermux={handleRunInTermux}
         onRunShellInTermux={handleRunShellInTermux}
-        onInitializeEmbeddedEnv={handleInitializeEmbeddedEnv}
         onGenerateRequirements={handleGenerateRequirements}
         onInstallRequirements={handleInstallRequirements}
         onSaveWorkspaceFile={handleSaveWorkspaceFile}
