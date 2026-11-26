@@ -5181,7 +5181,7 @@ def clipboard_set(text):
             val isUninstall = command.contains("uninstall") || command.contains("remove") || command.contains("purge")
             savePackageBackupSnapshot(forceShrink = isUninstall)
         }
-        if (code != 0 && outputTail.isNotBlank()) {
+        if (code != 0 && code != -1 && outputTail.isNotBlank()) {
             val tailCompact = stripAnsiForLog(outputTail.toString()).trim().takeLast(1200)
             appendNativeLog("Exec", "Non-zero exit ($code) output tail:\\n$tailCompact")
         }
