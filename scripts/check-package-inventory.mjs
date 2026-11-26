@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [source, bridgeSource, catalogSource, exportSource, panelSource, appSource, drawerSource, i18nSource, frostworkSource, frostworkMetadata] = await Promise.all([
+const [source, bridgeSource, catalogSource, exportSource, panelSource, terminalSource, appSource, drawerSource, i18nSource, frostworkSource, frostworkMetadata] = await Promise.all([
   readFile(new URL('../src/services/androidApkBuilder.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/services/termuxBridge.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/data/packageCatalog.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/ToolsAndPackages.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/TermuxIntegrationPanel.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../src/components/TerminalPanel.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/App.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/NegativeScreenDrawer.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/services/i18n.tsx', import.meta.url), 'utf8'),
@@ -78,6 +79,10 @@ assert.match(source, /val updatedAt = obj\.optLong\("updatedAt", 0L\)/);
 assert.match(source, /updatedAt > bestUpdatedAt \|\| \(updatedAt == bestUpdatedAt && score > bestScore\)/, 'newer package snapshots must win over stale larger backups');
 assert.doesNotMatch(panelSource, /python-lxml libxml2 libxslt clang/);
 assert.doesNotMatch(panelSource, /pip install requests beautifulsoup4 lxml httpx/);
+assert.match(panelSource, /PackagePlus/, 'Termux package action icon must be imported when used');
+assert.doesNotMatch(appSource, /handleInitializeEmbeddedEnv|onQuickInitEmbedded/, 'removed manual initialization callback must not remain wired');
+assert.doesNotMatch(terminalSource, /onQuickInitEmbedded/, 'terminal must not expose the removed manual initialization action');
+assert.match(terminalSource, /tmx_py_missing/, 'terminal must explain automatic first-use Python installation');
 assert.match(appSource, /const ensureEmbeddedPythonEnvironment = useCallback/);
 assert.match(appSource, /pkg update -y && pkg install -y python python-pip/);
 assert.doesNotMatch(appSource, /pkg install -y python python-pip python-lxml|clang/);
