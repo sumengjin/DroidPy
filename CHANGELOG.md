@@ -1,3 +1,4 @@
+- **首次初始化失敗安全處理**：首次使用前若無法確認內嵌 Python 狀態，現在會停止安裝並提示連線錯誤，不再錯誤地當成初始化成功；增加同步安裝鎖，防止工具箱重開或快速連點造成重複套件安裝。
 # Changelog / 更新日誌
 
 All notable changes to **DroidPy** are documented in this file.
