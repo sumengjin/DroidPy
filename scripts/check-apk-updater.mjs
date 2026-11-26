@@ -19,7 +19,14 @@ assert.ok(source.includes('installVerifiedApkOrRequestPermission(File(pendingPat
 const onCreateStart = source.indexOf('override fun onCreate(savedInstanceState: Bundle?)');
 const onCreateEnd = source.indexOf('override fun onResume()', onCreateStart);
 assert.ok(onCreateStart >= 0 && onCreateEnd > onCreateStart);
-assert.ok(!source.slice(onCreateStart, onCreateEnd).includes('requestExternalStoragePermissionIfNeeded()'), 'storage Settings must not interrupt first-run startup');
+const firstStoragePromptStart = source.indexOf('if (!firstStoragePermissionPromptHandled)', onCreateStart);
+const firstStoragePromptEnd = source.indexOf('override fun onRenderProcessGone', firstStoragePromptStart);
+assert.ok(firstStoragePromptStart >= 0 && firstStoragePromptEnd > firstStoragePromptStart, 'first-launch storage prompt must be attached to the primary WebView load');
+const firstStoragePrompt = source.slice(firstStoragePromptStart, firstStoragePromptEnd);
+assert.ok(firstStoragePrompt.includes('override fun onPageFinished'));
+assert.ok(firstStoragePrompt.includes('window.decorView.post'), 'storage permission must be requested after the first page is ready');
+assert.ok(firstStoragePrompt.includes('initial_storage_permission_prompted'), 'first-launch storage prompt must be persisted once');
+assert.ok(firstStoragePrompt.includes('requestExternalStoragePermissionIfNeeded()'));
 // Use all-files Settings only for targetSdk 30+; legacy-target apps keep runtime READ/WRITE permissions.
 assert.ok(source.includes('Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&'));
 assert.ok(source.includes('applicationInfo.targetSdkVersion >= Build.VERSION_CODES.R'), 'all-files Settings must only be used when the app targets Android 11+');
