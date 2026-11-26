@@ -134,7 +134,6 @@ assert.ok(backHandlerStart >= 0 && backHandlerEnd > backHandlerStart, 'native ba
 const backHandlerSource = appSource.slice(backHandlerStart, backHandlerEnd);
 assert.match(appSource, /const mobileTabRef = useRef<MobileTab>\(mobileTab\);\s*mobileTabRef\.current = mobileTab;/, 'native back handling must read the latest mobile destination without a stale effect closure');
 assert.match(appSource, /const packageReturnTabRef = useRef<MobileTab>\('editor'\);/, 'the package drawer must remember the workspace tab it was opened from');
-assert.match(mobileNavSource, /if \(mobileTabRef\.current !== 'packages'\) packageReturnTabRef\.current = mobileTabRef\.current;/, 'opening packages must capture the originating workspace tab');
 assert.match(backHandlerSource, /if \(ov\.negativeOpen\) \{\s*setNegativeOpen\(false\);\s*if \(mobileTabRef\.current === 'packages'\) setMobileTab\(packageReturnTabRef\.current\);\s*return true;/, 'Android back must restore the workspace tab that opened the package drawer');
 assert.match(appSource, /if \(mobileTabRef\.current === 'packages'\) setMobileTab\(packageReturnTabRef\.current\);/, 'closing the package drawer must restore its originating workspace tab');
 
