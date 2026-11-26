@@ -1480,12 +1480,15 @@ export default function App() {
   );
 
   const handleRunShellInTermux = useCallback(
-    async (command: string): Promise<boolean> => {
-      if (termuxRunning || termuxOperationLockRef.current || termuxScriptStartLockRef.current) {
+    async (command: string, operationLockAlreadyHeld = false): Promise<boolean> => {
+      if (
+        (operationLockAlreadyHeld && !termuxOperationLockRef.current) ||
+        (!operationLockAlreadyHeld && (termuxRunning || termuxOperationLockRef.current || termuxScriptStartLockRef.current))
+      ) {
         showToast(t('cta_running'));
         return false;
       }
-      termuxOperationLockRef.current = true;
+      if (!operationLockAlreadyHeld) termuxOperationLockRef.current = true;
       focusOutputPane('terminal');
       setTermuxRunning(true);
       setRunStartedAt(Date.now());
@@ -1545,7 +1548,7 @@ export default function App() {
         }
         setRunStartedAt(null);
         setTermuxRunning(false);
-        termuxOperationLockRef.current = false;
+        if (!operationLockAlreadyHeld) termuxOperationLockRef.current = false;
       }
       return succeeded;
     },
@@ -2236,7 +2239,10 @@ export default function App() {
     if (
       termuxConnectionState !== 'connected' ||
       termuxHealth?.hasPython === false ||
-      checkingTermuxOutdated
+      checkingTermuxOutdated ||
+      termuxRunning ||
+      termuxOperationLockRef.current ||
+      termuxScriptStartLockRef.current
     ) {
       return;
     }
@@ -2342,10 +2348,11 @@ export default function App() {
 
   const handleUpgradeAllTermux = useCallback(
     async (kind: 'pip' | 'pkg') => {
-      if (termuxRunning || upgradingTermux) {
+      if (termuxRunning || termuxOperationLockRef.current || termuxScriptStartLockRef.current || upgradingTermux) {
         showToast(t('cta_running'));
         return;
       }
+      termuxOperationLockRef.current = true;
       setUpgradingTermux(true);
       try {
         if (kind === 'pip') {
@@ -2375,7 +2382,8 @@ export default function App() {
               outdatedTargets,
               Boolean(settingsRef.current.pipTrustedHostEmergency),
               termuxHealth?.installedPkgPackages
-            )
+            ),
+            true
           );
           if (ok) {
             setOutdatedTermuxPips([]);
@@ -2383,9 +2391,10 @@ export default function App() {
           }
           return;
         }
-        await handleRunShellInTermux(buildTermuxAptUpgradeCommand());
+        await handleRunShellInTermux(buildTermuxAptUpgradeCommand(), true);
       } finally {
         setUpgradingTermux(false);
+        termuxOperationLockRef.current = false;
       }
     },
     [termuxRunning, upgradingTermux, termuxHealth?.installedPkgPackages, handleRunShellInTermux, showToast, t]
@@ -2393,7 +2402,7 @@ export default function App() {
 
   const handleUpgradeSingleTermuxPip = useCallback(
     async (pkg: string) => {
-      if (termuxRunning || upgradingTermux) {
+      if (termuxRunning || termuxOperationLockRef.current || termuxScriptStartLockRef.current || upgradingTermux) {
         showToast(t('cta_running'));
         return;
       }
@@ -2419,7 +2428,14 @@ export default function App() {
   );
 
   const handleUpgradeAllPackages = useCallback(async () => {
-    if (checkingOutdatedPkgs || upgradingPyPackages || upgradingTermux || termuxRunning) {
+    if (
+      checkingOutdatedPkgs ||
+      upgradingPyPackages ||
+      upgradingTermux ||
+      termuxRunning ||
+      termuxOperationLockRef.current ||
+      termuxScriptStartLockRef.current
+    ) {
       showToast(t('cta_running'));
       return;
     }
@@ -2453,6 +2469,11 @@ export default function App() {
     }
 
     if (termuxConnectionState === 'connected') {
+      if (termuxRunning || termuxOperationLockRef.current || termuxScriptStartLockRef.current) {
+        showToast(t('cta_running'));
+        return;
+      }
+      termuxOperationLockRef.current = true;
       setUpgradingTermux(true);
       try {
         let pipTargets: string[] = [];
@@ -2485,7 +2506,7 @@ export default function App() {
           );
         }
         cmds.push(buildTermuxAptUpgradeCommand());
-        const ok = await handleRunShellInTermux(cmds.join(' && '));
+        const ok = await handleRunShellInTermux(cmds.join(' && '), true);
         if (ok) {
           if (pipTargets.length > 0) {
             upgradedCount += pipTargets.length;
@@ -2494,6 +2515,7 @@ export default function App() {
         }
       } finally {
         setUpgradingTermux(false);
+        termuxOperationLockRef.current = false;
       }
     }
 
@@ -2608,7 +2630,8 @@ export default function App() {
     if (userPips.length === 0) return;
     autoUpdateTermuxRanRef.current = true;
     const timer = window.setTimeout(async () => {
-      if (termuxRunning) return;
+      if (termuxRunning || termuxOperationLockRef.current || termuxScriptStartLockRef.current) return;
+      termuxOperationLockRef.current = true;
       setUpgradingTermux(true);
       const streamId = makeId();
       try {
@@ -2647,6 +2670,7 @@ export default function App() {
         // silent background failure
       } finally {
         setUpgradingTermux(false);
+        termuxOperationLockRef.current = false;
       }
     }, 3200);
     return () => window.clearTimeout(timer);
