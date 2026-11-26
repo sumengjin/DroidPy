@@ -131,7 +131,10 @@ const backHandlerEnd = appSource.indexOf('return () => {', backHandlerStart);
 assert.ok(backHandlerStart >= 0 && backHandlerEnd > backHandlerStart, 'native back handler must exist');
 const backHandlerSource = appSource.slice(backHandlerStart, backHandlerEnd);
 assert.match(appSource, /const mobileTabRef = useRef<MobileTab>\(mobileTab\);\s*mobileTabRef\.current = mobileTab;/, 'native back handling must read the latest mobile destination without a stale effect closure');
-assert.match(backHandlerSource, /if \(ov\.negativeOpen\) \{\s*setNegativeOpen\(false\);\s*if \(mobileTabRef\.current === 'packages'\) setMobileTab\('editor'\);\s*return true;/, 'Android back must return from the package drawer to the editor instead of leaving a blank packages destination');
+assert.match(appSource, /const packageReturnTabRef = useRef<MobileTab>\('editor'\);/, 'the package drawer must remember the workspace tab it was opened from');
+assert.match(mobileNavSource, /if \(mobileTabRef\.current !== 'packages'\) packageReturnTabRef\.current = mobileTabRef\.current;/, 'opening packages must capture the originating workspace tab');
+assert.match(backHandlerSource, /if \(ov\.negativeOpen\) \{\s*setNegativeOpen\(false\);\s*if \(mobileTabRef\.current === 'packages'\) setMobileTab\(packageReturnTabRef\.current\);\s*return true;/, 'Android back must restore the workspace tab that opened the package drawer');
+assert.match(appSource, /if \(mobileTabRef\.current === 'packages'\) setMobileTab\(packageReturnTabRef\.current\);/, 'closing the package drawer must restore its originating workspace tab');
 
 assert.match(appSource, /const handleToggleTermuxPause = useCallback\(async \(\) => \{\s*if \(!termuxScriptRunning\) return;/, 'pause and resume controls must only affect an active Python script');
 assert.match(appSource, /cleaningProcesses \|\|\s*termuxRunning \|\|\s*termuxOperationLockRef\.current \|\|\s*termuxScriptStartLockRef\.current[\s\S]*?termuxOperationLockRef\.current = true;\s*setCleaningProcesses\(true\)/, 'the process watchdog must not kill an active Termux operation');
