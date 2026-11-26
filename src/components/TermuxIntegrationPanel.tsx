@@ -951,7 +951,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                       <div className="flex items-center gap-2 text-xs font-mono font-semibold text-[var(--ide-text)]">
                         <span>{tmx.targetName}</span>
                         <span className="text-[10px] font-semibold tracking-wide rounded-md px-2 py-1 bg-[var(--ide-surface-alt)] text-[var(--ide-accent-text)] shrink-0">
-                          {tmx.mode === 'pkg' ? 'Termux APT' : item.id === 'polars' ? 'TUR' : 'PyPI'}
+                          {tmx.mode === 'pkg' ? 'Termux APT' : item.id === 'polars' ? 'TUR 第三方' : 'PyPI 預設'}
                         </span>
                         {matchedAlias && (
                           <span className="font-sans font-normal text-[11px] text-[var(--ide-accent-text)]">
@@ -1066,7 +1066,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                       {tmx.targetName}
                     </span>
                     <span className="text-[10px] font-semibold tracking-wide rounded-md px-2 py-1 bg-[var(--ide-surface-alt)] text-[var(--ide-accent-text)] shrink-0">
-                      {tmx.mode === 'pkg' ? 'Termux APT' : item.id === 'polars' ? 'TUR' : 'PyPI'}
+                      {tmx.mode === 'pkg' ? 'Termux APT' : item.id === 'polars' ? 'TUR 第三方' : 'PyPI 預設'}
                     </span>
                     {alreadyInstalled && (
                       <Check className="w-3.5 h-3.5 text-[var(--ide-accent)] shrink-0" />
