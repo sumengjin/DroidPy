@@ -116,8 +116,8 @@ const mobileNavStart = appSource.indexOf('Mobile workspace navigation');
 const mobileNavEnd = appSource.indexOf('</nav>', mobileNavStart);
 assert.ok(mobileNavStart >= 0 && mobileNavEnd > mobileNavStart, 'mobile workspace navigation must exist');
 const mobileNavSource = appSource.slice(mobileNavStart, mobileNavEnd);
-assert.match(mobileNavSource, /setNegativeOpen\\(false\\);\\s*setMobileTab\\(id\\)/, 'switching away from the package destination must close its drawer before showing the selected workspace tab');
-assert.match(mobileNavSource, /if \\(id === 'packages'\\)[\\s\\S]*?openNegativeDrawer\\('packages'\\)/, 'the package destination must open the package drawer');
+assert.match(mobileNavSource, /setNegativeOpen\(false\);\s*setMobileTab\(id\)/, 'switching away from the package destination must close its drawer before showing the selected workspace tab');
+assert.match(mobileNavSource, /if \(id === 'packages'\)[\s\S]*?openNegativeDrawer\('packages'\)/, 'the package destination must open the package drawer');
 
 assert.match(appSource, /const handleToggleTermuxPause = useCallback\(async \(\) => \{\s*if \(!termuxScriptRunning\) return;/, 'pause and resume controls must only affect an active Python script');
 assert.match(appSource, /cleaningProcesses \|\|\s*termuxRunning \|\|\s*termuxOperationLockRef\.current \|\|\s*termuxScriptStartLockRef\.current[\s\S]*?termuxOperationLockRef\.current = true;\s*setCleaningProcesses\(true\)/, 'the process watchdog must not kill an active Termux operation');
