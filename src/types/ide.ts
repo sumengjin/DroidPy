@@ -186,6 +186,7 @@ export interface AppStorageCleanupResult {
 }
 
 export interface DroidPyNativeBridge {
+  setSystemBarAppearance?: (isDark: boolean) => void;
   isNativeApp?: () => boolean;
   getAppVersionName?: () => string;
   getBridgeToken?: () => string;
