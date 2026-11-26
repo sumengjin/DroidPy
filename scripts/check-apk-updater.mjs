@@ -16,7 +16,26 @@ assert.ok(source.includes('updatePrefs.edit().putString(pendingInstallKey, apkFi
 assert.ok(source.includes('override fun onResume()'));
 assert.ok(source.includes('packageManager.canRequestPackageInstalls()'));
 assert.ok(source.includes('installVerifiedApkOrRequestPermission(File(pendingPath))'));
+const onCreateStart = source.indexOf('override fun onCreate(savedInstanceState: Bundle?)');
+const onCreateEnd = source.indexOf('override fun onResume()', onCreateStart);
+assert.ok(onCreateStart >= 0 && onCreateEnd > onCreateStart);
+assert.ok(!source.slice(onCreateStart, onCreateEnd).includes('requestExternalStoragePermissionIfNeeded()'), 'storage Settings must not interrupt first-run startup');
+// Use all-files Settings only for targetSdk 30+; legacy-target apps keep runtime READ/WRITE permissions.
+assert.ok(source.includes('Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&'));
+assert.ok(source.includes('applicationInfo.targetSdkVersion >= Build.VERSION_CODES.R'), 'all-files Settings must only be used when the app targets Android 11+');
+assert.ok(source.includes('val requiresAllFilesAccess = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&'));
+assert.ok(source.includes('appContext.applicationInfo.targetSdkVersion >= Build.VERSION_CODES.R'), 'Bridge storage checks must honor the app target SDK');
+const nativeStorageCheckStart = source.indexOf('fun hasStoragePermission(): Boolean {');
+const nativeStorageCheckEnd = source.indexOf('fun requestStoragePermission()', nativeStorageCheckStart);
+assert.ok(nativeStorageCheckStart >= 0 && nativeStorageCheckEnd > nativeStorageCheckStart);
+assert.ok(source.slice(nativeStorageCheckStart, nativeStorageCheckEnd).includes('val requiresAllFilesAccess'), 'NativeDownloadBridge must honor target SDK when checking storage access');
+assert.ok(source.includes('val manageAll = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && appContext.applicationInfo.targetSdkVersion >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()'));
 
+assert.ok(source.includes('applicationInfo.targetSdkVersion <= Build.VERSION_CODES.Q || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager())'), 'legacy-target apps and explicitly authorized all-files apps must retain shared-storage setup');
+assert.ok(source.includes('if (Environment.isExternalStorageManager()) {'));
+assert.ok(source.includes('Opening app-specific all-files access settings'));
+assert.ok(source.includes('legacy-target apps on Android 11+ retain runtime READ/WRITE permissions.'));
+assert.ok(source.includes('ActivityCompat.requestPermissions(this, permsToAsk.toTypedArray(), 1001)'));
 // Redirects must remain HTTPS and on the official GitHub asset delivery hosts.
 assert.ok(updater.includes('fun validateGithubAssetUrl(raw: String): URL'));
 assert.ok(source.includes('import java.net.URL\nimport javax.net.ssl.HttpsURLConnection'));
@@ -73,6 +92,11 @@ assert.ok(workflow.includes('actions/checkout@v5'));
 assert.ok(workflow.includes('actions/setup-node@v5'));
 assert.ok(workflow.includes('actions/setup-python@v6'));
 assert.ok(!workflow.includes('actions/checkout@v4'));
+assert.ok(source.includes('applicationIdSuffix = ".beta"'), 'Debug APK must use a separate application ID');
+assert.ok(source.includes('android:authorities="\\${applicationId}.fileprovider"'), 'FileProvider authority must follow the variant application ID');
+assert.ok(workflow.includes('VNAME="${REL_TAG#v}-Beta"'), 'unpublished APK versionName must use the next release version and end in -Beta');
+assert.ok(workflow.includes('DroidPy-arm64-${DROIDPY_VERSION_NAME}.apk'), 'unpublished APK filename must include its Beta version');
+assert.ok(workflow.includes('*.beta) echo "已確認測試版使用獨立套件 ID'), 'CI must verify Beta APK package ID isolation');
 assert.ok(!workflow.includes('actions/setup-node@v4'));
 assert.ok(!workflow.includes('actions/setup-python@v5'));
 

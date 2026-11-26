@@ -455,13 +455,18 @@ if not any(isinstance(f, _DroidPySslImportHook) for f in sys.meta_path):
         pass
     pip_conf_path = os.path.expanduser("~/.config/pip/pip.conf")
     try:
-        os.makedirs(os.path.dirname(pip_conf_path), exist_ok=True)
-        lines = ["[global]", "no-cache-dir = true", "break-system-packages = true", "disable-pip-version-check = true"]
-        if ca_path:
-            lines.append(f"cert = {ca_path}")
-        with open(pip_conf_path, "w", encoding="utf-8") as fp:
-            fp.write("\\n".join(lines) + "\\n")
-        os.chmod(pip_conf_path, 0o644)
+        # Preserve an existing user pip configuration or private package index.
+        # Fresh Termux profiles use official PyPI by pip's own default.
+        if not os.path.isfile(pip_conf_path):
+            os.makedirs(os.path.dirname(pip_conf_path), exist_ok=True)
+            lines = ["[global]", "index-url = https://pypi.org/simple", "no-cache-dir = true", "break-system-packages = true", "disable-pip-version-check = true"]
+            if ca_path:
+                lines.append(f"cert = {ca_path}")
+            with open(pip_conf_path, "x", encoding="utf-8") as fp:
+                fp.write("\\n".join(lines) + "\\n")
+            os.chmod(pip_conf_path, 0o644)
+    except FileExistsError:
+        pass
     except Exception:
         pass
     return droid_lib, pip_conf_path
@@ -837,53 +842,58 @@ def _build_probe_headers(data):
 
 
 
-def _scikit_learn_source_install_command(trusted_host=False):
-    # Termux source archives can lose the executable bit on sklearn's Meson version script.
-    # Download the official PyPI sdist, restore that bit, then build against native NumPy/SciPy.
-    build_deps = _build_pip_cmd([
-        "meson-python>=0.17.1,<0.20",
-        "cython>=3.1.2,<3.2.6",
-        "joblib>=1.4.0",
-        "narwhals>=2.0.1",
-        "threadpoolctl>=3.5.0",
-    ], trusted_host=trusted_host)
-    installer_code = "\\n".join([
-        "import json, pathlib, stat, subprocess, tarfile, tempfile, urllib.parse",
-        "with tempfile.TemporaryDirectory(prefix='droidpy-sklearn-') as tmp:",
-        "    root = pathlib.Path(tmp)",
-        "    metadata = json.loads(subprocess.check_output(['curl', '-fsSL', 'https://pypi.org/pypi/scikit-learn/json'], text=True))",
-        "    sdist = next(item for item in metadata['urls'] if item['packagetype'] == 'sdist')",
-        "    archive = root / 'scikit-learn-sdist.tar.gz'",
-        "    if urllib.parse.urlparse(sdist['url']).hostname != 'files.pythonhosted.org': raise RuntimeError('Unexpected scikit-learn sdist host')",
-        "    subprocess.check_call(['curl', '-fL', sdist['url'], '-o', str(archive)])",
-        "    source_root = root / 'source'",
-        "    source_root.mkdir()",
-        "    with tarfile.open(archive, 'r:*') as package:",
-        "        package.extractall(source_root, filter='data')",
-        "    source = next(item for item in source_root.iterdir() if item.is_dir())",
-        "    version_script = source / 'sklearn' / '_build_utils' / 'version.py'",
-        "    version_script.parent.mkdir(parents=True, exist_ok=True)",
-        "    version_script.write_text('#!' + __import__('sys').executable + '\\\\nprint(' + repr(metadata['info']['version']) + ')\\\\n', encoding='utf-8')",
-        "    version_script.chmod(version_script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)",
-        "    subprocess.check_call([__import__('sys').executable, '-m', 'pip', 'install', '--no-cache-dir', '--no-build-isolation', '--no-deps', str(source)])",
-    ])
-    installer = shlex.join([sys.executable, "-c", installer_code])
-    return "pkg install -y python-numpy python-scipy ninja curl && " + shlex.join(build_deps) + " && " + installer
+# Central Android package compatibility routes shared by terminal pip and the install API.
+# Keep this registry conservative: only route packages with a known native Android solution.
+def _compatibility_install_command(package_name, trusted_host=False):
+    package = str(package_name).strip().lower().replace("_", "-")
+    if package == "parsel":
+        pip_cmd = shlex.join(_build_pip_cmd(["w3lib<2.6", "parsel"], trusted_host=trusted_host))
+        return "pkg install -y python-lxml && " + pip_cmd
+    native_packages = {
+        "numpy": "python-numpy",
+        "pandas": "python-pandas",
+        "pillow": "python-pillow",
+        "pil": "python-pillow",
+        "lxml": "python-lxml",
+        "cryptography": "python-cryptography",
+        "matplotlib": "matplotlib",
+        "apsw": "python-apsw",
+        "bcrypt": "python-bcrypt",
+        "brotli": "python-brotli",
+        "grpcio": "python-grpcio",
+        "msgpack": "python-msgpack",
+        "psutil": "python-psutil",
+        "pycryptodomex": "python-pycryptodomex",
+        "tflite-runtime": "python-tflite-runtime",
+        "torch": "python-torch",
+        "torchaudio": "python-torchaudio",
+        "torchvision": "python-torchvision",
+        "yt-dlp": "python-yt-dlp",
+    }
+    if package in native_packages:
+        return "pkg install -y " + shlex.quote(native_packages[package])
+    if package == "scipy":
+        return "pkg install -y python-scipy"
+    if package == "polars":
+        return "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"
+    if package in ("scikit-learn", "sklearn"):
+        return "echo " + shlex.quote("DroidPy: no verified Termux ARM64 / Python 3.14 prebuilt scikit-learn package is available; on-device source builds are disabled.") + " >&2; exit 1"
+    return None
+
 
 
 def _normalize_shell_command(command):
-    # Also recognize the absolute Termux Python path emitted by DroidPy's terminal.
-    # Only rewrite a single, unambiguous package command; leave custom shell syntax untouched.
+    # Rewrite only a single, unambiguous pip install; preserve custom shell commands.
     pip_prefix = r"(?:(?:[^\\s;&|]*/)?python(?:3(?:\\.\\d+)?)?\\s+-m\\s+)?"
-    if re.fullmatch(r"\\s*" + pip_prefix + r"pip3?\\s+install\\s+parsel\\s*", command, re.IGNORECASE):
-        return "pkg install -y python-lxml && " + shlex.join(_build_pip_cmd(["w3lib<2.6", "parsel"]))
-    if re.fullmatch(r"\\s*" + pip_prefix + r"pip3?\\s+install\\s+scipy\\s*", command, re.IGNORECASE):
-        return "pkg install -y python-scipy"
-    if re.fullmatch(r"\\s*" + pip_prefix + r"pip3?\\s+install\\s+polars\\s*", command, re.IGNORECASE):
-        # Polars requires Android-native Rust runtime wheels; use the prebuilt TUR package.
-        return "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"
-    if re.fullmatch(r"\\s*" + pip_prefix + r"pip3?\\s+install\\s+scikit-learn\\s*", command, re.IGNORECASE):
-        return _scikit_learn_source_install_command()
+    match = re.fullmatch(
+        r"\\s*" + pip_prefix + r"pip3?\\s+install\\s+([A-Za-z0-9_.-]+)\\s*",
+        command,
+        re.IGNORECASE,
+    )
+    if match:
+        compatibility_command = _compatibility_install_command(match.group(1))
+        if compatibility_command:
+            return compatibility_command
 
     if not re.match(r"^\\s*pkg\\s+install\\b", command, re.IGNORECASE):
         return command
@@ -1236,18 +1246,11 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
             pkgs = shlex.split(target)
             if not pkgs:
                 return self._send_json(400, {"error": "Missing package target"})
+            compatibility_cmd = _compatibility_install_command(pkgs[0], trusted_host=trusted_host) if len(pkgs) == 1 else None
             if mode == "pkg":
                 cmd = ["pkg", "install", "-y"] + pkgs
-            elif target.lower() == "parsel":
-                # w3lib 2.6.0 adds Frostwork, whose Rust extension cannot currently build for Android/Bionic.
-                # Install Termux's prebuilt lxml first, then keep this Parsel install on w3lib < 2.6.
-                pip_cmd = shlex.join(_build_pip_cmd(["w3lib<2.6", "parsel"], trusted_host=trusted_host))
-                cmd = ["sh", "-c", "pkg install -y python-lxml && " + pip_cmd]
-            elif target.lower() == "polars":
-                # Use TUR's signed Android-native Polars package and Rust runtime, not pip/maturin.
-                cmd = ["sh", "-c", "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"]
-            elif target.lower() == "scikit-learn":
-                cmd = ["sh", "-c", _scikit_learn_source_install_command(trusted_host=trusted_host)]
+            elif compatibility_cmd:
+                cmd = ["sh", "-c", compatibility_cmd]
             else:
                 cmd = _build_pip_cmd(pkgs, trusted_host=trusted_host)
             if self.path == "/install-stream":
@@ -1923,6 +1926,18 @@ export const TERMUX_NATIVE_PYTHON_PACKAGES: Record<string, string> = {
   lxml: 'python-lxml',
   cryptography: 'python-cryptography',
   matplotlib: 'matplotlib',
+  'apsw': 'python-apsw',
+  'bcrypt': 'python-bcrypt',
+  'brotli': 'python-brotli',
+  'grpcio': 'python-grpcio',
+  'msgpack': 'python-msgpack',
+  'psutil': 'python-psutil',
+  'pycryptodomex': 'python-pycryptodomex',
+  'tflite-runtime': 'python-tflite-runtime',
+  'torch': 'python-torch',
+  'torchaudio': 'python-torchaudio',
+  'torchvision': 'python-torchvision',
+  'yt-dlp': 'python-yt-dlp',
 };
 
 const PYTHON_ARCHIVE_PATTERN = /\.(?:whl|tar\.gz|tgz|tar\.bz2|tbz2|tar\.xz|txz|tar|zip|egg)(?:$|[?#])/i;

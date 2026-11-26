@@ -1,16 +1,30 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [source, bridgeSource, catalogSource, exportSource, panelSource] = await Promise.all([
+const [source, bridgeSource, catalogSource, exportSource, panelSource, frostworkSource, frostworkMetadata] = await Promise.all([
   readFile(new URL('../src/services/androidApkBuilder.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/services/termuxBridge.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/data/packageCatalog.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/ToolsAndPackages.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/TermuxIntegrationPanel.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../android/app/src/main/assets/python/frostwork/__init__.py', import.meta.url), 'utf8'),
+  readFile(new URL('../android/app/src/main/assets/python/frostwork-0.2.2.dist-info/METADATA', import.meta.url), 'utf8'),
 ]);
 
 const catalogItems = catalogSource.split(/\n  \{\n    id: '/).slice(1);
-assert.ok(catalogItems.length >= 60, 'package catalog should retain its complete inventory');
+assert.ok(catalogItems.length >= 70, 'package catalog should retain its complete inventory');
+assert.match(frostworkSource, /def navigation\(/, 'pure-Python Frostwork navigation fallback must be bundled');
+assert.match(frostworkSource, /class Page:/, 'pure-Python multi-field extraction API must be bundled');
+assert.match(frostworkSource, /def _css_nodes\(/, 'CSS selector fallback must be bundled');
+assert.match(frostworkSource, /def _xpath_nodes\(/, 'XPath selector fallback must be bundled');
+assert.ok(frostworkMetadata.includes('Name: frostwork') && frostworkMetadata.includes('Version: 0.2.2'));
+assert.match(source, /Pure-Python Frostwork fallback seed warning/);
+assert.match(source, /hasNativeFrostwork/, 'a real upstream Frostwork install must take precedence');
+assert.match(source, /isOurFallbackMetadata/, 'fallback cleanup must not delete unrelated user metadata');
+assert.match(source, /if \(!fallbackInit\.exists\(\) \|\| isOurFallback\)/, 'custom user modules must never be overwritten');
+
+assert.ok(source.includes('python/frostwork/__init__.py'));
+
 for (const item of catalogItems) {
   const packageId = item.match(/^([^']+)/)?.[1] || 'unknown';
   assert.match(
@@ -20,9 +34,26 @@ for (const item of catalogItems) {
   );
 }
 assert.match(bridgeSource, /matplotlib:\s*'matplotlib'/);
-assert.match(catalogSource, /避開不相容的 Frostwork Rust 建置/);
+assert.match(catalogSource, /id: 'pandas',[\s\S]*?termux: \{ mode: 'pkg', targetName: 'python-pandas' \}/);
+assert.match(catalogSource, /id: 'matplotlib',[\s\S]*?termux: \{ mode: 'pkg', targetName: 'matplotlib' \}/);
+assert.match(catalogSource, /id: 'psutil',[\s\S]*?termux: \{ mode: 'pkg', targetName: 'python-psutil' \}/);
+assert.match(catalogSource, /id: 'msgpack',[\s\S]*?termux: \{ mode: 'pkg', targetName: 'python-msgpack' \}/);
+assert.match(catalogSource, /id: 'grpcio',[\s\S]*?termux: \{ mode: 'pkg', targetName: 'python-grpcio' \}/);
+assert.match(catalogSource, /id: 'brotli',[\s\S]*?termux: \{ mode: 'pkg', targetName: 'python-brotli' \}/);
+assert.match(catalogSource, /id: 'bcrypt',[\s\S]*?termux: \{ mode: 'pkg', targetName: 'python-bcrypt' \}/);
+assert.match(catalogSource, /id: 'pycryptodomex',[\s\S]*?termux: \{ mode: 'pkg', targetName: 'python-pycryptodomex' \}/);
+assert.match(catalogSource, /id: 'apsw',[\s\S]*?termux: \{ mode: 'pkg', targetName: 'python-apsw' \}/);
+assert.match(catalogSource, /id: 'tflite-runtime',[\s\S]*?termux: \{ mode: 'pkg', targetName: 'python-tflite-runtime' \}/);
+assert.match(catalogSource, /id: 'torch',[\s\S]*?termux: \{ mode: 'pkg', targetName: 'python-torch' \}/);
+assert.match(catalogSource, /id: 'torchvision',[\s\S]*?termux: \{ mode: 'pkg', targetName: 'python-torchvision' \}/);
+assert.match(catalogSource, /id: 'torchaudio',[\s\S]*?termux: \{ mode: 'pkg', targetName: 'python-torchaudio' \}/);
+
+assert.match(source, /'w3lib>=2\.6' parsel/, 'embedded APK installs must use the bundled pure-Python fallback');
+assert.match(source, /w3lib>=2\.6/, 'embedded terminal routing must use the fallback');
+assert.match(bridgeSource, /w3lib<2\.6/, 'standalone Termux bridge must retain its independent compatibility pin');
+
+assert.match(catalogSource, /w3lib 2.6 使用 DroidPy 內建純 Python Frostwork 相容層/);
 assert.match(catalogSource, /Termux User Repository（TUR）預編譯套件提供/);
-assert.match(catalogSource, /Meson\/Cython 無隔離建置/);
 assert.match(source, /"polars" to "python-polars"/);
 assert.match(source, /"python-polars" in missingPkgsOnly/);
 assert.match(panelSource, /python-lxml libxml2 libxslt clang/);
@@ -88,5 +119,12 @@ assert.match(bootstrap, /usrDir\.listFiles\(\)\?\.isNotEmpty\(\) != false/);
 assert.match(bootstrap, /if \(!hasExistingInstall && !hasExistingUsrData\)/);
 assert.match(bootstrap, /if \(hasExistingInstall && !bootstrapMarker\.exists\(\)\)/);
 assert.match(bootstrap, /Detected partial usr\/ data/);
+
+
+
+assert.match(catalogSource, /id: 'scikit-learn',[\s\S]*?目前沒有已驗證的官方 Termux ARM64／Python 3\.14 預編譯版本/);
+assert.match(bridgeSource, /no verified Termux ARM64 \/ Python 3\.14 prebuilt scikit-learn package is available/);
+assert.match(source, /no verified Termux ARM64 \/ Python 3\.14 prebuilt scikit-learn package is available/);
+assert.doesNotMatch(bridgeSource, /def _scikit_learn_source_install_command/);
 
 console.log('Package inventory safety checks passed: dual-source discovery, bounded private output, cleanup and non-shrinking manifest.');

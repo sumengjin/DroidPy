@@ -143,7 +143,7 @@ jobs:
             REL_TAG="v$VNAME"
           else
             REL_TAG="debug-$GITHUB_RUN_NUMBER"
-            VNAME="$VER"
+            VNAME="\${VER}-Beta"
           fi
           SEMVER_PART=$(printf '%s' "$VNAME" | grep -oE '^[0-9]+[.][0-9]+[.][0-9]+' || echo '1.2.34')
           IFS='.' read -r CMAJ CMIN CPAT <<< "$SEMVER_PART"
@@ -216,7 +216,7 @@ jobs:
           if [ "$DROIDPY_RELEASE_BUILD" = true ]; then
             cp android/app/build/outputs/apk/release/*.apk "release-apk/${appSlug}-arm64-\${DROIDPY_RESOLVED_TAG}.apk"
           else
-            cp android/app/build/outputs/apk/debug/*.apk "release-apk/${appSlug}-arm64-debug-$GITHUB_RUN_NUMBER.apk"
+            cp android/app/build/outputs/apk/debug/*.apk "release-apk/${appSlug}-arm64-\${VNAME}.apk"
           fi
 
       - name: Upload APK Artifact
@@ -311,7 +311,7 @@ android {
     defaultConfig {
         applicationId = "${safePkg}"
         minSdk = 24
-        // targetSdk = 28 讓內嵌 Termux bootstrap 能在 App 私有目錄自由執行 pkg / python / clang（GitHub 發佈專用）
+        // Keep API 28 until embedded Termux pkg/python/clang compatibility is validated against newer target SDK behavior.
         targetSdk = 28
         versionCode = System.getenv("DROIDPY_VERSION_CODE")?.toIntOrNull() ?: 1002034
         versionName = System.getenv("DROIDPY_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.34"
@@ -336,6 +336,8 @@ android {
 
     buildTypes {
         getByName("debug") {
+            // Keep prerelease APKs installable beside the stable application.
+            applicationIdSuffix = ".beta"
             val cfg = signingConfigs.findByName("droidpy")
             if (cfg?.storeFile?.exists() == true) {
                 signingConfig = cfg
@@ -405,7 +407,7 @@ ${storagePerms}
         android:theme="@style/Theme.AppCompat.DayNight.NoActionBar">
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="${safePkg}.fileprovider"
+            android:authorities="\${applicationId}.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data
@@ -510,6 +512,8 @@ class MainActivity : AppCompatActivity() {
     private val updatePrefs by lazy { getSharedPreferences("droidpy_update_flow", Context.MODE_PRIVATE) }
     private val pendingInstallKey = "pending_verified_apk_path"
     private val bridgeToken: String by lazy { loadOrCreateBridgeToken() }
+    // Stable and Beta installations must not contend for the same localhost port.
+    private val bridgePort: Int get() = if (packageName.endsWith(".beta")) 8766 else 8765
 
     private fun appendActivityLog(tag: String, message: String) {
         try {
@@ -522,6 +526,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Class-level helper: startup code invokes this throughout the initialization thread.
+    // Keep it outside the thread lambda so every call is in scope before execution.
+    private fun appendStartupLog(tag: String, msg: String) {
+        appendActivityLog(tag, msg)
+    }
+
     private fun installCrashDiagnostics() {
         synchronized(MainActivity::class.java) {
             if (crashDiagnosticsInstalled) return
@@ -532,7 +542,9 @@ class MainActivity : AppCompatActivity() {
                     val stamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
                     val target = File(filesDir, "droidpy_native.log")
                     target.parentFile?.mkdirs()
-                    target.appendText("\\n[$stamp] [FATAL] Uncaught exception on \${thread.name}:\\n\${android.util.Log.getStackTraceString(error)}\\n", Charsets.UTF_8)
+                    val stack = android.util.Log.getStackTraceString(error)
+                    target.appendText("\\n[$stamp] [FATAL] Uncaught exception on \${thread.name}:\\n$stack\\n", Charsets.UTF_8)
+                    android.util.Log.e("DroidPy", "[FATAL] Uncaught exception on \${thread.name}: $stack")
                 } catch (_: Exception) {
                 }
                 if (previous != null) previous.uncaughtException(thread, error)
@@ -557,7 +569,8 @@ class MainActivity : AppCompatActivity() {
                 workspaceDir = workspaceDir,
                 token = bridgeToken,
                 allowedOrigin = bridgeAllowedOrigin,
-                assetManager = assets
+                assetManager = assets,
+                port = bridgePort
             )
             created.start()
             retainedBridge = created
@@ -629,6 +642,9 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun getBridgeToken(): String = bridgeToken
+
+        @JavascriptInterface
+        fun getBridgeEndpoint(): String = "http://127.0.0.1:\${bridgePort}"
 
         @JavascriptInterface
         fun getAppVersionName(): String {
@@ -940,19 +956,15 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun hasStoragePermission(): Boolean {
-            val manageOk = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val requiresAllFilesAccess = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+                applicationInfo.targetSdkVersion >= Build.VERSION_CODES.R
+            return if (requiresAllFilesAccess) {
                 Environment.isExternalStorageManager()
             } else {
-                true
-            }
-            val writeOk = ContextCompat.checkSelfPermission(
-                this@MainActivity,
-                Manifest.permission.WRITE_EXTERNAL_STORAGE
-            ) == PackageManager.PERMISSION_GRANTED
-            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                manageOk
-            } else {
-                writeOk
+                ContextCompat.checkSelfPermission(
+                    this@MainActivity,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+                ) == PackageManager.PERMISSION_GRANTED
             }
         }
 
@@ -1281,15 +1293,21 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         installCrashDiagnostics()
+        appendActivityLog("Startup", "MainActivity.onCreate entered")
 
+        appendActivityLog("Startup", "Creating root container")
         rootContainer = FrameLayout(this)
+        appendActivityLog("Startup", "Creating primary WebView")
         webView = WebView(this)
+        appendActivityLog("Startup", "Building crawler overlay and secondary WebView")
         crawlerOverlay = buildCrawlerOverlay()
 
+        appendActivityLog("Startup", "Attaching views and setting content view")
         rootContainer.addView(webView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         rootContainer.addView(crawlerOverlay, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         setContentView(rootContainer)
 
+        appendActivityLog("Startup", "Configuring primary WebView settings")
         val settings: WebSettings = webView.settings
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
@@ -1305,6 +1323,7 @@ class MainActivity : AppCompatActivity() {
         webView.isHapticFeedbackEnabled = true
         webView.setOnLongClickListener { false }
 
+        appendActivityLog("Startup", "Installing native JavaScript bridge and WebView clients")
         webView.addJavascriptInterface(NativeDownloadBridge(), "DroidPyNative")
         webView.webChromeClient = WebChromeClient()
         webView.webViewClient = object : WebViewClient() {
@@ -1364,6 +1383,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        appendActivityLog("Startup", "Registering back navigation callback")
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (crawlerOverlay.visibility == View.VISIBLE) {
@@ -1417,7 +1437,8 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
-        requestExternalStoragePermissionIfNeeded()
+        // Defer storage authorization until the user invokes a storage feature.
+        // Launching Settings during onCreate interrupts first-run WebView/Bridge startup.
 
         val localWeb = File(filesDir, "www/index.html")
         val hasBundledWww = try {
@@ -1427,18 +1448,22 @@ class MainActivity : AppCompatActivity() {
         }
         val remoteUrl = "${typeof window !== 'undefined' ? window.location.origin : 'https://localhost'}"
         val bridgeAllowedOrigin = when {
-            hasBundledWww -> normalizedOrigin(Uri.parse("http://127.0.0.1:8765/")) ?: "http://127.0.0.1:8765"
+            hasBundledWww -> normalizedOrigin(Uri.parse("http://127.0.0.1:\${bridgePort}/")) ?: "http://127.0.0.1:\${bridgePort}"
             localWeb.exists() -> "null"
             else -> normalizedOrigin(Uri.parse(remoteUrl)) ?: "null"
         }
 
-        thread {
+        appendActivityLog("Startup", "Starting background environment initialization")
+        thread(name = "DroidPy-Startup") {
+            appendActivityLog("Startup", "Background initialization entered")
             val usrDir = File(filesDir, "usr")
             val workspaceDir = File(filesDir, "droidpy_workspace").apply { mkdirs() }
             val homeDir = workspaceDir.parentFile!!
+            appendActivityLog("Startup", "Workspace directory prepared")
             seedDefaultWorkspaceFiles(workspaceDir)
+            appendActivityLog("Startup", "Default workspace seeding completed")
 
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()) {
+            if (applicationInfo.targetSdkVersion <= Build.VERSION_CODES.Q || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager())) {
                 try {
                     File(Environment.getExternalStorageDirectory(), "Download/tmp").mkdirs()
                     File(Environment.getExternalStorageDirectory(), "DroidPy/.droidpy_backup").mkdirs()
@@ -1475,7 +1500,9 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
+            appendStartupLog("Startup", "Cleaning orphaned temporary files")
             cleanupOrphanedFilesOnStartup()
+            appendStartupLog("Startup", "Temporary-file cleanup completed")
 
             val bootstrapMarker = File(usrDir, ".droidpy_bootstrap_ok")
             val hasExistingInstall = bootstrapMarker.exists() ||
@@ -1490,15 +1517,6 @@ class MainActivity : AppCompatActivity() {
             val hasExistingUsrData = usrDir.exists() && (
                 !usrDir.isDirectory || usrDir.listFiles()?.isNotEmpty() != false
             )
-
-            fun appendStartupLog(tag: String, msg: String) {
-                try {
-                    val lf = File(filesDir, "droidpy_native.log")
-                    val ts = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
-                    lf.appendText("[$ts] [$tag] $msg\\n")
-                } catch (_: Exception) {
-                }
-            }
 
             appendStartupLog("MainActivity", "onCreate startup: hasExistingInstall=$hasExistingInstall pid=\${android.os.Process.myPid()} restoredState=\${savedInstanceState != null}")
 
@@ -1532,13 +1550,23 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            localBridge = getOrStartRetainedBridge(usrDir, workspaceDir, bridgeAllowedOrigin)
+            appendStartupLog("Startup", "Bootstrap/runtime preparation completed")
+            appendStartupLog("Bridge", "Starting embedded bridge")
+            try {
+                localBridge = getOrStartRetainedBridge(usrDir, workspaceDir, bridgeAllowedOrigin)
+                appendStartupLog("Bridge", "Embedded bridge started successfully")
+            } catch (error: Exception) {
+                appendStartupLog("Bridge", "Embedded bridge startup FAILED: \${error.stackTraceToString()}")
+                throw error
+            }
 
+            appendStartupLog("Startup", "Background initialization completed; dispatching WebView load")
             runOnUiThread {
+                appendStartupLog("WebView", "Dispatching initial page load")
                 if (hasBundledWww) {
-                    trustedAppOrigin = normalizedOrigin(Uri.parse("http://127.0.0.1:8765/"))
+                    trustedAppOrigin = normalizedOrigin(Uri.parse("http://127.0.0.1:\${bridgePort}/"))
                     trustedLocalWebPath = null
-                    webView.loadUrl("http://127.0.0.1:8765/")
+                    webView.loadUrl("http://127.0.0.1:\${bridgePort}/")
                 } else if (localWeb.exists()) {
                     trustedAppOrigin = null
                     trustedLocalWebPath = localWeb.canonicalPath
@@ -1564,43 +1592,42 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun requestExternalStoragePermissionIfNeeded(force: Boolean = false) {
-        val permsToAsk = mutableListOf<String>()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            listOf(
-                Manifest.permission.READ_MEDIA_IMAGES,
-                Manifest.permission.READ_MEDIA_VIDEO,
-                Manifest.permission.READ_MEDIA_AUDIO
-            ).forEach { perm ->
-                if (ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) {
-                    permsToAsk.add(perm)
-                }
+        // Use the all-files settings flow only when this app actually targets Android 11+.
+        // DroidPy currently targets API 28 for embedded Termux compatibility; on Android 11+
+        // a legacy-target app must continue using the legacy runtime storage permissions.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+            applicationInfo.targetSdkVersion >= Build.VERSION_CODES.R) {
+            if (Environment.isExternalStorageManager()) {
+                appendActivityLog("StoragePermission", "All-files access already granted")
+                return
             }
-        } else {
-            listOf(
-                Manifest.permission.READ_EXTERNAL_STORAGE,
-                Manifest.permission.WRITE_EXTERNAL_STORAGE
-            ).forEach { perm ->
-                if (ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) {
-                    permsToAsk.add(perm)
-                }
-            }
-        }
-        if (permsToAsk.isNotEmpty()) {
-            ActivityCompat.requestPermissions(this, permsToAsk.toTypedArray(), 1001)
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
             try {
                 val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
                     data = Uri.parse("package:\$packageName")
                 }
+                appendActivityLog("StoragePermission", "Opening app-specific all-files access settings")
                 startActivity(intent)
-            } catch (_: Exception) {
+            } catch (error: Exception) {
+                appendActivityLog("StoragePermission", "App-specific settings unavailable: " + error.message)
                 try {
                     startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
-                } catch (_: Exception) {
+                } catch (fallbackError: Exception) {
+                    appendActivityLog("StoragePermission", "Fallback settings unavailable: " + fallbackError.message)
+                    Toast.makeText(this, "無法開啟所有檔案存取權設定：" + fallbackError.message, Toast.LENGTH_LONG).show()
                 }
             }
+            return
+        }
+
+        // Android 10 and legacy-target apps on Android 11+ retain runtime READ/WRITE permissions.
+        val permsToAsk = listOf(
+            Manifest.permission.READ_EXTERNAL_STORAGE,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
+        ).filter { perm ->
+            ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED
+        }
+        if (permsToAsk.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, permsToAsk.toTypedArray(), 1001)
         }
     }
 
@@ -2451,6 +2478,41 @@ class EmbeddedTermuxBridge(
             setReadable(true, false)
             setExecutable(true, false)
         }
+
+        // Install DroidPy's pure-Python Frostwork fallback into the shared user import path.
+        // A real upstream installation always takes precedence; never overwrite user packages.
+        try {
+            val pythonLibRoots = listOf(File(usrDir, "lib"), File(homeDir, "py_user/lib"))
+            val hasNativeFrostwork = pythonLibRoots.any { root ->
+                root.listFiles()?.filter { it.isDirectory && it.name.startsWith("python3.") }
+                    ?.any { File(it, "site-packages/frostwork/__init__.py").isFile } == true
+            }
+            val fallbackDir = File(droidLibDir, "frostwork")
+            val fallbackInit = File(fallbackDir, "__init__.py")
+            val isOurFallback = fallbackInit.isFile &&
+                fallbackInit.readText(Charsets.UTF_8).contains("DroidPy's pure-Python Frostwork compatibility layer")
+            val fallbackMetadata = File(droidLibDir, "frostwork-0.2.2.dist-info")
+            val metadataFile = File(fallbackMetadata, "METADATA")
+            val isOurFallbackMetadata = metadataFile.isFile &&
+                metadataFile.readText(Charsets.UTF_8).contains("DroidPy pure-Python Android compatibility implementation")
+            if (hasNativeFrostwork) {
+                if (isOurFallback) fallbackDir.deleteRecursively()
+                if (isOurFallbackMetadata) fallbackMetadata.deleteRecursively()
+            } else if (!fallbackInit.exists() || isOurFallback) {
+                fallbackDir.mkdirs()
+                appContext.assets.open("python/frostwork/__init__.py").use { input ->
+                    fallbackInit.outputStream().use { output -> input.copyTo(output) }
+                }
+                fallbackMetadata.mkdirs()
+                appContext.assets.open("python/frostwork-0.2.2.dist-info/METADATA").use { input ->
+                    File(fallbackMetadata, "METADATA").outputStream().use { output -> input.copyTo(output) }
+                }
+                File(fallbackMetadata, "top_level.txt").writeText("frostwork\\n", Charsets.UTF_8)
+                File(fallbackMetadata, "INSTALLER").writeText("DroidPy\\n", Charsets.UTF_8)
+            }
+        } catch (error: Exception) {
+            android.util.Log.w("DroidPy", "Pure-Python Frostwork fallback seed warning: " + error.message, error)
+        }
         val pipConfDir = File(homeDir, ".config/pip").apply { mkdirs() }
         val sysPipConf = File(usrDir, "etc/pip.conf")
         val userPipConf = File(pipConfDir, "pip.conf")
@@ -2463,6 +2525,7 @@ class EmbeddedTermuxBridge(
         }
         val pipConfBody = buildString {
             append("[global]\\n")
+            append("index-url = https://pypi.org/simple\\n")
             append("no-cache-dir = true\\n")
             append("break-system-packages = true\\n")
             append("disable-pip-version-check = true\\n")
@@ -2963,7 +3026,9 @@ def clipboard_set(text):
     }
 
     private fun hasStorageAccess(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        val requiresAllFilesAccess = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+            appContext.applicationInfo.targetSdkVersion >= Build.VERSION_CODES.R
+        return if (requiresAllFilesAccess) {
             Environment.isExternalStorageManager()
         } else {
             ContextCompat.checkSelfPermission(
@@ -3211,6 +3276,18 @@ def clipboard_set(text):
         "lxml" to "python-lxml",
         "cryptography" to "python-cryptography",
         "matplotlib" to "matplotlib",
+        "apsw" to "python-apsw",
+        "bcrypt" to "python-bcrypt",
+        "brotli" to "python-brotli",
+        "grpcio" to "python-grpcio",
+        "msgpack" to "python-msgpack",
+        "psutil" to "python-psutil",
+        "pycryptodomex" to "python-pycryptodomex",
+        "tflite-runtime" to "python-tflite-runtime",
+        "torch" to "python-torch",
+        "torchaudio" to "python-torchaudio",
+        "torchvision" to "python-torchvision",
+        "yt-dlp" to "python-yt-dlp",
         "polars" to "python-polars"
     )
 
@@ -3570,7 +3647,8 @@ def clipboard_set(text):
     }
 
     private fun handleClient(socket: Socket) {
-        socket.use { sock ->
+        try {
+            socket.use { sock ->
             sock.soTimeout = 15000
             val bis = BufferedInputStream(sock.getInputStream())
             val headerBuf = ByteArrayOutputStream()
@@ -4001,7 +4079,7 @@ def clipboard_set(text):
 
                 method == "GET" && path == "/sdcard/status" -> {
                     val root = Environment.getExternalStorageDirectory()
-                    val manageAll = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Environment.isExternalStorageManager() else true
+                    val manageAll = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && appContext.applicationInfo.targetSdkVersion >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()
                     val runtimeWrite = ContextCompat.checkSelfPermission(appContext, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
                     val droidpyDir = File(root, "DroidPy").absolutePath
                     var totalBytes = 0L
@@ -4220,64 +4298,18 @@ def clipboard_set(text):
                             val mode = bodyJson.optString("mode", "pip")
                             val target = bodyJson.optString("target", "").trim()
                             val trustedHost = bodyJson.optBoolean("trustedHost", false)
-                            val pythonCmd = File(usrDir, "bin/python3").absolutePath
                             if (mode == "pkg") {
                                 "pkg install -y $target"
-                            } else if (target.equals("parsel", ignoreCase = true)) {
-                                // w3lib 2.6.0 added Frostwork, whose current wheels do not target Android/Bionic.
-                                // Keep Parsel's pure-Python stack Android-compatible and use Termux's prebuilt lxml.
-                                val pipArgs = if (trustedHost) {
-                                    "--no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org"
-                                } else {
-                                    "--no-cache-dir"
-                                }
-                                "pkg install -y python-lxml && $pythonCmd -m pip install $pipArgs 'w3lib<2.6' parsel"
-                            } else if (target.equals("polars", ignoreCase = true)) {
-                                // Use TUR's signed Android-native Polars package and Rust runtime, not pip/maturin.
-                                "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"
-                            } else if (target.equals("scikit-learn", ignoreCase = true)) {
-                                // Termux source archives may lose the executable bit on sklearn's Meson version.py.
-                                // Restore it before building against the already-installed native NumPy/SciPy.
-                                val trustArgs = if (trustedHost) "--trusted-host pypi.org --trusted-host files.pythonhosted.org" else ""
-                                val installerScript = File(usrDir, "tmp/droidpy-install-sklearn.py")
-                                installerScript.parentFile?.mkdirs()
-                                installerScript.writeText("""
-import json
-import pathlib
-import stat
-import subprocess
-import sys
-import tarfile
-import tempfile
-import urllib.parse
-
-with tempfile.TemporaryDirectory(prefix="droidpy-sklearn-") as tmp:
-    root = pathlib.Path(tmp)
-    metadata = json.loads(subprocess.check_output(["curl", "-fsSL", "https://pypi.org/pypi/scikit-learn/json"], text=True))
-    sdist = next(item for item in metadata["urls"] if item["packagetype"] == "sdist")
-    archive = root / "scikit-learn-sdist.tar.gz"
-    if urllib.parse.urlparse(sdist["url"]).hostname != "files.pythonhosted.org":
-        raise RuntimeError("Unexpected scikit-learn sdist host")
-    subprocess.check_call(["curl", "-fL", sdist["url"], "-o", str(archive)])
-    source_root = root / "source"
-    source_root.mkdir()
-    with tarfile.open(archive, "r:*") as package:
-        package.extractall(source_root, filter="data")
-    source = next(item for item in source_root.iterdir() if item.is_dir())
-    version_script = source / "sklearn" / "_build_utils" / "version.py"
-    version_script.parent.mkdir(parents=True, exist_ok=True)
-    version_script.write_text("#!" + sys.executable + "\\nprint(" + repr(metadata["info"]["version"]) + ")\\n", encoding="utf-8")
-    version_script.chmod(version_script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    subprocess.check_call([
-        sys.executable, "-m", "pip", "install", "--no-cache-dir",
-        "--no-build-isolation", "--no-deps", str(source)
-    ])
-""".trimIndent())
-                                "pkg install -y python-numpy python-scipy ninja curl && $pythonCmd -m pip install --no-cache-dir $trustArgs --prefer-binary 'meson-python>=0.17.1,<0.20' 'cython>=3.1.2,<3.2.6' 'joblib>=1.4.0' 'narwhals>=2.0.1' 'threadpoolctl>=3.5.0' && $pythonCmd \\"$installerScript\\""
-                            } else if (trustedHost) {
-                                "$pythonCmd -m pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org $target"
                             } else {
-                                "$pythonCmd -m pip install --no-cache-dir $target"
+                                resolvePackageCompatibilityCommand(target, trustedHost)
+                                    ?: run {
+                                        val pythonCmd = File(usrDir, "bin/python3").absolutePath
+                                        if (trustedHost) {
+                                            "$pythonCmd -m pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org $target"
+                                        } else {
+                                            "$pythonCmd -m pip install --no-cache-dir $target"
+                                        }
+                                    }
                             }
                         }
                         else -> bodyJson.optString("command", "")
@@ -4319,6 +4351,10 @@ with tempfile.TemporaryDirectory(prefix="droidpy-sklearn-") as tmp:
 
                 else -> writeJson(out, 404, JSONObject().put("error", "Not found"))
             }
+            }
+        } catch (_: java.io.IOException) {
+            // A WebView or terminal client may disconnect while a response is being written.
+            // Treat the broken pipe as a normal request teardown, not a fatal worker-thread crash.
         }
     }
 
@@ -4644,68 +4680,42 @@ with tempfile.TemporaryDirectory(prefix="droidpy-sklearn-") as tmp:
         throw IllegalArgumentException("Too many redirects")
     }
 
-    private fun normalizeShellCommand(command: String): String {
-        // Keep the terminal's direct pip route aligned with the package manager's Android Parsel workaround.
-        // Restrict rewriting to the exact, simple install command; do not alter compound/custom shell commands.
-        // Match both short Python commands and DroidPy's absolute app-private interpreter path.
-        // Match both short Python commands and DroidPy's absolute app-private interpreter path.
-        val pipPrefix = """(?:(?:[^\s;&|]*/)?python(?:3(?:\.\d+)?)?\s+-m\s+)?"""
-        val parselPip = Regex("""^\s*""" + pipPrefix + """pip3?\s+install\s+parsel\s*$""", RegexOption.IGNORE_CASE)
-        if (parselPip.matches(command)) {
-            val pythonCmd = File(usrDir, "bin/python3").absolutePath
-            return "pkg install -y python-lxml && $pythonCmd -m pip install --no-cache-dir 'w3lib<2.6' parsel"
+    private fun resolvePackageCompatibilityCommand(target: String, trustedHost: Boolean = false): String? {
+        val packageName = target.trim().lowercase().replace('_', '-')
+        val pythonCmd = File(usrDir, "bin/python3").absolutePath
+        return when (packageName) {
+            "parsel" -> {
+                val pipArgs = if (trustedHost) {
+                    "--no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org"
+                } else {
+                    "--no-cache-dir"
+                }
+                "pkg install -y python-lxml && $pythonCmd -m pip install $pipArgs 'w3lib>=2.6' parsel"
+            }
+            "scipy" -> "pkg install -y python-scipy"
+            "polars" -> "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"
+            "scikit-learn", "sklearn" -> "echo 'DroidPy: no verified Termux ARM64 / Python 3.14 prebuilt scikit-learn package is available; on-device source builds are disabled.' >&2; exit 1"
+            else -> nativeTermuxPackageForPip(packageName)?.let { "pkg install -y $it" }
         }
-        val scipyPip = Regex("""^\s*""" + pipPrefix + """pip3?\s+install\s+scipy\s*$""", RegexOption.IGNORE_CASE)
-        if (scipyPip.matches(command)) return "pkg install -y python-scipy"
-        val polarsPip = Regex("""^\s*""" + pipPrefix + """pip3?\s+install\s+polars\s*$""", RegexOption.IGNORE_CASE)
-        if (polarsPip.matches(command)) {
-            // Polars needs Android-native Rust runtime wheels; use the prebuilt TUR package, not maturin/rustup.
-            return "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"
-        }
-        val sklearnPip = Regex("""^\s*""" + pipPrefix + """pip3?\s+install\s+scikit-learn\s*$""", RegexOption.IGNORE_CASE)
-        if (sklearnPip.matches(command)) {
-            // Reuse Termux's working NumPy/SciPy; patch the upstream Meson version script before building.
-            val pythonCmd = File(usrDir, "bin/python3").absolutePath
-            val installerScript = File(usrDir, "tmp/droidpy-install-sklearn.py")
-            installerScript.parentFile?.mkdirs()
-            installerScript.writeText("""
-import json
-import pathlib
-import stat
-import subprocess
-import sys
-import tarfile
-import tempfile
-import urllib.request
+    }
 
-with tempfile.TemporaryDirectory(prefix="droidpy-sklearn-") as tmp:
-    root = pathlib.Path(tmp)
-    with urllib.request.urlopen("https://pypi.org/pypi/scikit-learn/json", timeout=30) as response:
-        metadata = json.load(response)
-    sdist = next(item for item in metadata["urls"] if item["packagetype"] == "sdist")
-    archive = root / "scikit-learn-sdist.tar.gz"
-    urllib.request.urlretrieve(sdist["url"], archive)
-    source_root = root / "source"
-    source_root.mkdir()
-    with tarfile.open(archive, "r:*") as package:
-        package.extractall(source_root, filter="data")
-    source = next(item for item in source_root.iterdir() if item.is_dir())
-    version_script = source / "sklearn" / "_build_utils" / "version.py"
-    if not version_script.is_file():
-        raise RuntimeError("scikit-learn sdist is missing sklearn/_build_utils/version.py")
-    version_script.chmod(version_script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    subprocess.check_call([
-        sys.executable, "-m", "pip", "install", "--no-cache-dir",
-        "--no-build-isolation", "--no-deps", str(source)
-    ])
-""".trimIndent())
-            return "pkg install -y python-numpy python-scipy ninja && $pythonCmd -m pip install --no-cache-dir --prefer-binary 'meson-python>=0.17.1,<0.20' 'cython>=3.1.2,<3.2.6' 'joblib>=1.4.0' 'narwhals>=2.0.1' 'threadpoolctl>=3.5.0' && $pythonCmd \\"$installerScript\\""
+    private fun normalizeShellCommand(command: String): String {
+        // Only rewrite a single, unambiguous pip install; preserve custom shell commands.
+        // Match both short Python commands and DroidPy's absolute app-private interpreter path.
+        val pipPrefix = """(?:(?:[^\\s;&|]*/)?python(?:3(?:\\.\\d+)?)?\\s+-m\\s+)?"""
+        val pipInstall = Regex(
+            """^\\s*""" + pipPrefix + """pip3?\\s+install\\s+([A-Za-z0-9_.-]+)\\s*$""",
+            RegexOption.IGNORE_CASE
+        )
+        val packageMatch = pipInstall.find(command)
+        if (packageMatch != null) {
+            resolvePackageCompatibilityCommand(packageMatch.groupValues[1])?.let { return it }
         }
-        val installPrefix = Regex("""^\s*pkg\s+install\b""", RegexOption.IGNORE_CASE)
+        val installPrefix = Regex("""^\\s*pkg\\s+install\\b""", RegexOption.IGNORE_CASE)
         val match = installPrefix.find(command) ?: return command
         val tailStart = match.range.last + 1
         val tail = command.substring(tailStart)
-        val tokens = tail.trim().split(Regex("""\s+""")).filter { it.isNotBlank() }
+        val tokens = tail.trim().split(Regex("""\\s+""")).filter { it.isNotBlank() }
         val safeTokens = tokens.isNotEmpty() && tokens.all {
             it.matches(Regex("""(?:--?[A-Za-z][A-Za-z0-9-]*|[A-Za-z0-9][A-Za-z0-9+_.-]*)"""))
         }
@@ -4717,7 +4727,7 @@ with tempfile.TemporaryDirectory(prefix="droidpy-sklearn-") as tmp:
         } else {
             emptyList()
         }
-        val hasAssumeYes = Regex("""(?:^|\s)(?:-y|--assume-yes)(?:\s|$)""", RegexOption.IGNORE_CASE)
+        val hasAssumeYes = Regex("""(?:^|\\s)(?:-y|--assume-yes)(?:\\s|$)""", RegexOption.IGNORE_CASE)
             .containsMatchIn(tail)
         val prefix = match.value + if (hasAssumeYes) "" else " -y"
         return if (safeTokens) prefix + " " + rewritten.joinToString(" ") else {

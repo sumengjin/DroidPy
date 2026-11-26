@@ -1,0 +1,5 @@
+Metadata-Version: 2.1
+Name: frostwork
+Version: 0.2.2
+Summary: DroidPy pure-Python Android compatibility implementation of Frostwork navigation and common extraction APIs
+License: Apache-2.0

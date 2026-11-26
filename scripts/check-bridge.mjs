@@ -56,12 +56,42 @@ assert.ok(generated.slice(explicitStopStart, explicitStopEnd).includes('os.killp
 assert.ok(generated.includes('os.killpg(pgid, signal.SIGSTOP if should_pause else signal.SIGCONT)'));
 assert.ok(generated.includes('def _normalize_shell_command(command):'));
 assert.ok(generated.includes('python-polars'));
-assert.ok(generated.includes('--no-build-isolation'));
-assert.ok(generated.includes('meson-python>=0.17.1,<0.20'));
-assert.ok(generated.includes('elif target.lower() == "polars":'));
-assert.ok(generated.includes('elif target.lower() == "scikit-learn":'));
-assert.ok(generated.includes('pkg install -y python-numpy python-scipy ninja'));
-assert.ok(generated.includes('cython>=3.1.2,<3.2.6'));
+
+
+assert.ok(generated.includes('index-url = https://pypi.org/simple'));
+assert.ok(generated.includes('if not os.path.isfile(pip_conf_path):'));
+assert.ok(generated.includes('with open(pip_conf_path, "x", encoding="utf-8") as fp:'));
+assert.ok(generated.includes('Preserve an existing user pip configuration or private package index.'));
+assert.ok(generated.includes('def _compatibility_install_command(package_name, trusted_host=False):'));
+assert.ok(generated.includes('if package == "parsel":'));
+assert.ok(generated.includes('if package == "scipy":'));
+assert.ok(generated.includes('if package == "polars":'));
+assert.ok(generated.includes('if package in ("scikit-learn", "sklearn"):'));
+assert.ok(generated.includes('no verified Termux ARM64 / Python 3.14 prebuilt scikit-learn package is available'));
+assert.ok(generated.includes('"pandas": "python-pandas"'));
+assert.ok(generated.includes('"numpy": "python-numpy"'));
+assert.ok(generated.includes('"matplotlib": "matplotlib"'));
+assert.ok(generated.includes('"cryptography": "python-cryptography"'));
+assert.ok(generated.includes('"apsw": "python-apsw"'));
+assert.ok(generated.includes('"bcrypt": "python-bcrypt"'));
+assert.ok(generated.includes('"brotli": "python-brotli"'));
+assert.ok(generated.includes('"grpcio": "python-grpcio"'));
+assert.ok(generated.includes('"msgpack": "python-msgpack"'));
+assert.ok(generated.includes('"psutil": "python-psutil"'));
+assert.ok(generated.includes('"pycryptodomex": "python-pycryptodomex"'));
+assert.ok(generated.includes('"tflite-runtime": "python-tflite-runtime"'));
+assert.ok(generated.includes('"torch": "python-torch"'));
+assert.ok(generated.includes('"torchaudio": "python-torchaudio"'));
+assert.ok(generated.includes('"torchvision": "python-torchvision"'));
+assert.ok(generated.includes('"yt-dlp": "python-yt-dlp"'));
+assert.ok(generated.includes('shlex.quote("DroidPy: no verified Termux ARM64 / Python 3.14 prebuilt scikit-learn package is available; on-device source builds are disabled.")'));
+assert.ok(generated.includes('_compatibility_install_command(pkgs[0], trusted_host=trusted_host)'));
+
+
+
+
+
+
 assert.ok(generated.includes('return re.sub(r"^(\\s*pkg\\s+install\\b)", r"\\1 -y"'));
 assert.ok(generated.includes('BoundedThreadingHTTPServer(("127.0.0.1", 8765), DroidPyBridgeHandler)'));
 
@@ -75,10 +105,29 @@ assert.ok(androidBuilder.includes('oldExecutor?.shutdown()'));
 assert.ok(!androidBuilder.includes('oldExecutor?.shutdownNow()'));
 assert.ok(androidBuilder.includes('activeClientSockets.add(client)'));
 assert.ok(androidBuilder.includes('activeClientSockets.remove(client)'));
+assert.ok(androidBuilder.includes('private val bridgePort: Int get() = if (packageName.endsWith(".beta")) 8766 else 8765'));
+assert.ok(androidBuilder.includes('port = bridgePort'));
+assert.ok(androidBuilder.includes('fun getBridgeEndpoint(): String') && androidBuilder.includes('bridgePort}'));
+assert.ok(androidBuilder.includes('webView.loadUrl("http://127.0.0.1:') && androidBuilder.includes('bridgePort}/")'));
+const nativeEndpointSource = await readFile('src/App.tsx', 'utf8');
+assert.ok(nativeEndpointSource.includes('window.DroidPyNative?.getBridgeEndpoint?.()'));
+assert.ok(nativeEndpointSource.includes('endpointUrl: nativeEndpoint || savedConfig.endpointUrl || DEFAULT_TERMUX_CONFIG.endpointUrl'));
+const nativeBridgeTypes = await readFile('src/types/ide.ts', 'utf8');
+assert.ok(nativeBridgeTypes.includes('getBridgeEndpoint?: () => string;'));
 assert.ok(androidBuilder.includes('retainedBridge'));
 assert.ok(androidBuilder.includes('Keeping embedded bridge alive across Activity configuration recreation'));
 assert.ok(androidBuilder.includes('installCrashDiagnostics()'));
 assert.ok(androidBuilder.includes('[FATAL] Uncaught exception'));
+assert.ok(androidBuilder.includes('android.util.Log.i("DroidPy", "[$tag] $message")'), "startup diagnostics must mirror tagged messages to Logcat");
+assert.ok(androidBuilder.includes('appendStartupLog("Bridge", "Starting embedded bridge")'));
+assert.ok(androidBuilder.includes('Embedded bridge started successfully'));
+assert.ok(androidBuilder.includes('Embedded bridge startup FAILED:'));
+const nativeClientHandlerStart = androidBuilder.indexOf('private fun handleClient(socket: Socket) {');
+const nativeClientHandlerEnd = androidBuilder.indexOf('private data class SafeProbeResponse', nativeClientHandlerStart);
+assert.ok(nativeClientHandlerStart >= 0 && nativeClientHandlerEnd > nativeClientHandlerStart);
+const nativeClientHandler = androidBuilder.slice(nativeClientHandlerStart, nativeClientHandlerEnd);
+assert.ok(nativeClientHandler.includes('catch (_: java.io.IOException)'));
+assert.ok(nativeClientHandler.includes('normal request teardown, not a fatal worker-thread crash'));
 assert.ok(androidBuilder.includes('pid=\\${android.os.Process.myPid()}'));
 assert.ok(androidBuilder.includes('onRenderProcessGone'));
 assert.ok(androidBuilder.includes('Renderer process gone didCrash='));
@@ -116,27 +165,39 @@ assert.ok(androidBuilder.includes('ProcessBuilder(shFile.absolutePath, "-c", nor
 assert.ok(androidBuilder.includes('"pandas" to "python-pandas"'));
 assert.ok(androidBuilder.includes('"numpy" to "python-numpy"'));
 assert.ok(androidBuilder.includes('"scipy" to "python-scipy"'));
-assert.ok(androidBuilder.includes('val parselPip = Regex('));
-assert.ok(androidBuilder.includes("w3lib<2.6' parsel"));
-assert.ok(androidBuilder.includes('val scipyPip = Regex('));
-assert.ok(androidBuilder.includes('return "pkg install -y python-scipy"'));
-assert.ok(androidBuilder.includes('val polarsPip = Regex('));
-assert.ok(androidBuilder.includes('pkg install -y tur-repo && pkg update -y && pkg install -y python-polars'));
-assert.ok(androidBuilder.includes('val sklearnPip = Regex('));
-assert.ok(androidBuilder.includes('"--no-build-isolation", "--no-deps"'));
-assert.ok(androidBuilder.includes('subprocess.check_call(['));
+assert.ok(androidBuilder.includes('index-url = https://pypi.org/simple'));
+assert.ok(androidBuilder.includes('private fun resolvePackageCompatibilityCommand(target: String, trustedHost: Boolean = false): String?'));
+assert.ok(androidBuilder.includes('"parsel" ->'));
+assert.ok(androidBuilder.includes("w3lib>=2.6' parsel"));
+assert.ok(androidBuilder.includes('"scipy" -> "pkg install -y python-scipy"'));
+assert.ok(androidBuilder.includes('"polars" -> "pkg install -y tur-repo && pkg update -y && pkg install -y python-polars"'));
+assert.ok(androidBuilder.includes('"scikit-learn", "sklearn" ->'));
+assert.ok(androidBuilder.includes('no verified Termux ARM64 / Python 3.14 prebuilt scikit-learn package is available'));
+assert.ok(androidBuilder.includes('else -> nativeTermuxPackageForPip(packageName)?.let { "pkg install -y $it" }'));
+assert.ok(androidBuilder.includes('resolvePackageCompatibilityCommand(target, trustedHost)'));
+assert.ok(androidBuilder.includes('resolvePackageCompatibilityCommand(packageMatch.groupValues[1])'));
+
+
 assert.ok(androidBuilder.includes('"polars" to "python-polars"'));
 assert.ok(androidBuilder.includes('"matplotlib" to "matplotlib"'));
+assert.ok(androidBuilder.includes('"apsw" to "python-apsw"'));
+assert.ok(androidBuilder.includes('"bcrypt" to "python-bcrypt"'));
+assert.ok(androidBuilder.includes('"brotli" to "python-brotli"'));
+assert.ok(androidBuilder.includes('"grpcio" to "python-grpcio"'));
+assert.ok(androidBuilder.includes('"msgpack" to "python-msgpack"'));
+assert.ok(androidBuilder.includes('"psutil" to "python-psutil"'));
+assert.ok(androidBuilder.includes('"pycryptodomex" to "python-pycryptodomex"'));
+assert.ok(androidBuilder.includes('"tflite-runtime" to "python-tflite-runtime"'));
+assert.ok(androidBuilder.includes('"torch" to "python-torch"'));
+assert.ok(androidBuilder.includes('"torchaudio" to "python-torchaudio"'));
+assert.ok(androidBuilder.includes('"torchvision" to "python-torchvision"'));
+assert.ok(androidBuilder.includes('"yt-dlp" to "python-yt-dlp"'));
 assert.ok(androidBuilder.includes('nativeTermuxPackageForPip(name)'));
-assert.ok(androidBuilder.includes('target.equals("parsel", ignoreCase = true)'));
-assert.ok(androidBuilder.includes('target.equals("polars", ignoreCase = true)'));
-assert.ok(androidBuilder.includes('target.equals("scikit-learn", ignoreCase = true)'));
+assert.ok(androidBuilder.includes('val pipInstall = Regex('));
+assert.ok(androidBuilder.includes('val packageMatch = pipInstall.find(command)'));
 assert.ok(androidBuilder.includes('val pipPrefix ='));
-assert.ok(androidBuilder.includes('version_script.write_text'));
-assert.ok(androidBuilder.includes('version_script.chmod'));
-assert.ok(androidBuilder.includes('package.extractall(source_root, filter="data")'));
-assert.ok(androidBuilder.includes("pkg install -y python-lxml && $pythonCmd -m pip install $pipArgs 'w3lib<2.6' parsel"));
-assert.ok(androidBuilder.includes('w3lib 2.6.0 added Frostwork'));
+assert.ok(androidBuilder.includes("pkg install -y python-lxml && $pythonCmd -m pip install $pipArgs 'w3lib>=2.6' parsel"));
+assert.ok(androidBuilder.includes('private fun resolvePackageCompatibilityCommand(target: String, trustedHost: Boolean = false): String?'));
 assert.ok(androidBuilder.includes('val nativeRestoreTargets = linkedSetOf<String>()'));
 assert.ok(androidBuilder.includes('val remainingPips = mutableListOf<String>()'));
 assert.ok(androidBuilder.includes('Restoring native Termux packages: '));
@@ -180,16 +241,18 @@ assert.ok(!androidBuilder.includes('private val executor = Executors.newCachedTh
 // Only the explicit Stop control is allowed to abort its AbortController.
 const termuxBridgeSource = await readFile('src/services/termuxBridge.ts', 'utf8');
 assert.ok(termuxBridgeSource.includes('已有 Termux 工作正在執行'));
-assert.ok(termuxBridgeSource.includes('target.lower() == "parsel"'));
+assert.ok(termuxBridgeSource.includes('def _compatibility_install_command(package_name, trusted_host=False):'));
+assert.ok(termuxBridgeSource.includes('package == "parsel"'));
 assert.ok(termuxBridgeSource.includes('w3lib<2.6'));
 assert.ok(termuxBridgeSource.includes('pkg install -y python-lxml && '));
 assert.ok(termuxBridgeSource.includes('shlex.join(_build_pip_cmd(["w3lib<2.6", "parsel"]'));
 assert.ok(termuxBridgeSource.includes('pkg install -y python-scipy'));
 assert.ok(termuxBridgeSource.includes('normalized_cmd = _normalize_shell_command(cmd_str)'));
-assert.ok(termuxBridgeSource.includes('Also recognize the absolute Termux Python path'));
-assert.ok(termuxBridgeSource.includes('_scikit_learn_source_install_command'));
-assert.ok(termuxBridgeSource.includes('version_script.write_text'));
-assert.ok(termuxBridgeSource.includes('version_script.chmod'));
+assert.ok(termuxBridgeSource.includes('Rewrite only a single, unambiguous pip install'));
+assert.ok(!termuxBridgeSource.includes('_scikit_learn_source_install_command'));
+
+
+
 assert.ok(termuxBridgeSource.includes('pip_prefix = r"(?:(?:[^\\\\s;&|]*/)?python'));
 
 assert.ok(!termuxBridgeSource.includes("  abortActiveTermuxStream();\n  const controller = new AbortController();"));
@@ -346,6 +409,18 @@ const cases = [
   ['pip', 'lxml', 'pkg', 'python-lxml'],
   ['pip', 'cryptography', 'pkg', 'python-cryptography'],
   ['pip', 'matplotlib', 'pkg', 'matplotlib'],
+  ['pip', 'apsw', 'pkg', 'python-apsw'],
+  ['pip', 'bcrypt', 'pkg', 'python-bcrypt'],
+  ['pip', 'brotli', 'pkg', 'python-brotli'],
+  ['pip', 'grpcio', 'pkg', 'python-grpcio'],
+  ['pip', 'msgpack', 'pkg', 'python-msgpack'],
+  ['pip', 'psutil', 'pkg', 'python-psutil'],
+  ['pip', 'pycryptodomex', 'pkg', 'python-pycryptodomex'],
+  ['pip', 'tflite-runtime', 'pkg', 'python-tflite-runtime'],
+  ['pip', 'torch', 'pkg', 'python-torch'],
+  ['pip', 'torchaudio', 'pkg', 'python-torchaudio'],
+  ['pip', 'torchvision', 'pkg', 'python-torchvision'],
+  ['pip', 'yt-dlp', 'pkg', 'python-yt-dlp'],
   ['pkg', 'matplotlib', 'pkg', 'matplotlib'],
   ['pkg', 'numpy', 'pkg', 'python-numpy'],
   ['pkg', './dist/library.tar.gz', 'pip', './dist/library.tar.gz'],
@@ -368,6 +443,37 @@ for (const [inputMode, input, expectedMode, expectedTarget] of cases) {
   const resolved = resolveTermuxInstallTarget(inputMode, input);
   assert.equal(resolved.mode, expectedMode, `${inputMode} ${input} mode`);
   assert.equal(resolved.target, expectedTarget, `${inputMode} ${input} target`);
+}
+
+// Execute the actual generated Python route functions to verify direct terminal installs.
+const routeTestFile = path.join(os.tmpdir(), 'droidpy-package-route-test.py');
+const routeSourceFile = path.join(os.tmpdir(), 'droidpy-route-generated.py');
+const routeTest = [
+  'import ast, re, shlex, sys',
+  'source = open(sys.argv[1], encoding="utf-8").read()',
+  'tree = ast.parse(source)',
+  'wanted = {"_compatibility_install_command", "_normalize_shell_command"}',
+  'nodes = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name in wanted]',
+  'assert {node.name for node in nodes} == wanted',
+  'namespace = {"re": re, "shlex": shlex, "_build_pip_cmd": lambda args, trusted_host=False: ["pip", "install", *args]}',
+  'exec(compile(ast.Module(body=nodes, type_ignores=[]), "<package-routes>", "exec"), namespace)',
+  'expected = {"numpy": "python-numpy", "pandas": "python-pandas", "pillow": "python-pillow", "pil": "python-pillow", "lxml": "python-lxml", "cryptography": "python-cryptography", "matplotlib": "matplotlib", "apsw": "python-apsw", "bcrypt": "python-bcrypt", "brotli": "python-brotli", "grpcio": "python-grpcio", "msgpack": "python-msgpack", "psutil": "python-psutil", "pycryptodomex": "python-pycryptodomex", "tflite-runtime": "python-tflite-runtime", "torch": "python-torch", "torchaudio": "python-torchaudio", "torchvision": "python-torchvision", "yt-dlp": "python-yt-dlp", "scipy": "python-scipy"}',
+  'for name, target in expected.items():',
+  '    command = "pkg install -y " + shlex.quote(target)',
+  '    assert namespace["_compatibility_install_command"](name) == command, (name, namespace["_compatibility_install_command"](name))',
+  '    assert namespace["_normalize_shell_command"]("pip install " + name) == command, (name, namespace["_normalize_shell_command"]("pip install " + name))',
+  'assert namespace["_normalize_shell_command"]("pip install numpy==2.0.0") == "pip install numpy==2.0.0"',
+  'assert namespace["_normalize_shell_command"]("pip install requests pandas") == "pip install requests pandas"',
+  'assert namespace["_normalize_shell_command"]("pip install scikit-learn").startswith("echo ")',
+];
+await writeFile(routeTestFile, routeTest.join('\n'), 'utf8');
+await writeFile(routeSourceFile, generated, 'utf8');
+try {
+  const result = spawnSync('python3', [routeTestFile, routeSourceFile], { encoding: 'utf8' });
+  if (result.status !== 0) throw new Error(`Generated package route test failed:\n${result.stdout}\n${result.stderr}`);
+} finally {
+  await rm(routeTestFile, { force: true });
+  await rm(routeSourceFile, { force: true });
 }
 assert.ok(generated.includes('cmd = [sys.executable, "-m", "pip", "install", "--prefer-binary"]'));
 console.log('Generated Termux Bridge token/origin checks and Python syntax validation passed.');
