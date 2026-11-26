@@ -682,7 +682,7 @@ python ${entryFile}
           key={id}
           type="button"
           onClick={() => setActiveWindow(id)}
-          className="w-full min-h-[62px] px-3.5 py-3 rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] active:scale-[0.99] flex items-center justify-between gap-3 text-left transition-all min-w-0"
+          className="w-full min-h-[76px] px-3.5 py-3.5 rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] active:scale-[0.99] flex items-center justify-between gap-3 text-left transition-all min-w-0"
         >
           <div className="w-10 h-10 rounded-xl bg-[var(--ide-accent-soft)] text-[var(--ide-accent)] flex items-center justify-center shrink-0">
             <Icon className="w-5 h-5" />
@@ -696,7 +696,7 @@ python ${entryFile}
                 </span>
               )}
             </div>
-            <div className="text-xs text-[var(--ide-text-muted)] truncate mt-0.5">{desc}</div>
+            <div className="text-xs text-[var(--ide-text-muted)] line-clamp-2 mt-1 leading-relaxed">{desc}</div>
           </div>
           <ChevronRight className="w-4 h-4 text-[var(--ide-text-muted)] shrink-0" />
         </button>
