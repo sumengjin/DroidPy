@@ -13,7 +13,7 @@ const [source, bridgeSource, catalogSource, exportSource, panelSource, frostwork
 
 const catalogItems = catalogSource.split(/\n  \{\n    id: '/).slice(1);
 assert.ok(catalogItems.length >= 70, 'package catalog should retain its complete inventory');
-const themeCardNamesBlock = exportSource.match(/const THEME_CARD_NAMES:[\\s\\S]*?\\n};/)?.[0];
+const themeCardNamesBlock = exportSource.match(/const THEME_CARD_NAMES:[\s\S]*?\n};/)?.[0];
 assert.ok(themeCardNamesBlock, 'theme selector must define compact card labels');
 const themeCardLabels = [...themeCardNamesBlock.matchAll(/'zh-TW': '([^']+)'/g)].map((match) => match[1]);
 assert.equal(themeCardLabels.length, 14, 'all 14 built-in themes must have a card label');
