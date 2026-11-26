@@ -3381,11 +3381,11 @@ export default function App() {
         )}
       </main>
 
-      {/* Phone MD3 Bottom Navigation Bar (Icon-only pill indicator) */}
+      {/* Phone MD3 Bottom Navigation: keep primary workspace and tools visible */}
       {deviceClass === 'phone' && (
       <nav
         aria-label={t('nav_workspace')}
-        className="relative z-10 shrink-0 h-[64px] pb-safe bg-[var(--md-surface-container-low)] border-t border-[var(--ide-border)] grid grid-cols-4"
+        className="relative z-10 shrink-0 h-[66px] pb-safe bg-[var(--md-surface-container-low)] border-t border-[var(--ide-border)] grid grid-cols-5"
       >
         {(
           [
@@ -3393,26 +3393,34 @@ export default function App() {
             { id: 'console', label: t('mob_console'), Icon: TerminalIcon },
             { id: 'files', label: t('mob_files'), Icon: FolderOpen },
             { id: 'browser', label: t('mob_browser'), Icon: Globe },
+            { id: 'tools', label: t('neg_title'), Icon: Menu },
           ] as const
         ).map(({ id, label, Icon }) => {
-          const active = mobileTab === id;
+          const active = id === 'tools' ? negativeOpen : mobileTab === id;
           return (
             <button
               key={id}
               type="button"
-              onClick={() => setMobileTab(id)}
-              className={`min-h-[48px] flex flex-col items-center justify-center gap-1 transition-colors ${
+              onClick={() => {
+                if (id === 'tools') {
+                  openNegativeDrawer('termux');
+                } else {
+                  setMobileTab(id);
+                }
+              }}
+              aria-label={label}
+              className={`min-h-[48px] min-w-0 flex flex-col items-center justify-center gap-0.5 transition-colors ${
                 active ? 'text-[var(--ide-accent-text)]' : 'text-[var(--ide-text-muted)]'
               }`}
             >
               <span
-                className={`w-14 h-7 rounded-full flex items-center justify-center transition-colors ${
+                className={`w-12 h-7 rounded-full flex items-center justify-center transition-colors ${
                   active ? 'md-nav-pill' : ''
                 }`}
               >
                 <Icon className="w-5 h-5" />
               </span>
-              <span className="text-[11px] font-medium tracking-tight">{label}</span>
+              <span className="text-[10px] font-medium tracking-tight truncate max-w-full px-0.5">{label}</span>
             </button>
           );
         })}
