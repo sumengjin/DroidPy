@@ -3513,6 +3513,9 @@ export default function App() {
                   setMobileTab('packages');
                   openNegativeDrawer('packages');
                 } else {
+                  // Leaving the package destination must also dismiss its drawer.
+                  // Otherwise the selected tab changes underneath the still-open overlay.
+                  setNegativeOpen(false);
                   setMobileTab(id);
                 }
               }}
