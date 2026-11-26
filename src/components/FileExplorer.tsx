@@ -314,7 +314,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
             <button
               type="button"
               onClick={() => void onSaveToDirectory()}
-              className="min-h-[32px] px-2.5 rounded-lg bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] text-[11px] font-medium whitespace-nowrap shrink-0"
+              className="min-h-[44px] px-3 rounded-lg bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] text-xs font-medium whitespace-nowrap shrink-0"
             >
               {t('files_dir_write')}
             </button>
@@ -322,7 +322,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
             <button
               type="button"
               onClick={() => void onLinkDirectory()}
-              className="min-h-[32px] px-2.5 rounded-lg border border-[var(--ide-border)] text-[11px] font-medium inline-flex items-center gap-1 hover:bg-[var(--ide-accent-soft)] whitespace-nowrap shrink-0"
+              className="min-h-[44px] px-3 rounded-lg border border-[var(--ide-border)] text-xs font-medium inline-flex items-center gap-1 hover:bg-[var(--ide-accent-soft)] whitespace-nowrap shrink-0"
             >
               <FolderSync className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
               <span>{t('files_dir_auth')}</span>
@@ -349,7 +349,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                   setNativeStorageGranted(Boolean(window.DroidPyNative?.hasStoragePermission?.()));
                 }, 800);
               }}
-              className={`min-h-[28px] px-2 rounded-lg text-[11px] font-semibold whitespace-nowrap shrink-0 ${
+              className={`min-h-[44px] px-3 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 ${
                 nativeStorageGranted
                   ? 'border border-[var(--ide-border)] bg-[var(--ide-bg)] text-[var(--ide-text)] hover:border-[var(--ide-accent)]'
                   : 'bg-amber-600 text-white'
@@ -363,7 +363,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
               <button
                 type="button"
                 onClick={onOpenSdcardManager}
-                className="flex-1 min-h-[30px] px-2 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-bg)] text-[11px] font-medium hover:border-[var(--ide-accent)] truncate"
+                className="flex-1 min-h-[44px] px-2 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium hover:border-[var(--ide-accent)] truncate"
               >
                 {t('sd_quick_manage')}
               </button>
@@ -372,7 +372,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
               <button
                 type="button"
                 onClick={() => void onBackupToSdcard()}
-                className="flex-1 min-h-[30px] px-2 rounded-lg bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] text-[11px] font-medium truncate"
+                className="flex-1 min-h-[44px] px-2 rounded-lg bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] text-xs font-medium truncate"
               >
                 {t('sd_quick_backup')}
               </button>
@@ -436,7 +436,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                 <button
                   type="submit"
                   aria-label="儲存檔名"
-                  className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg bg-[var(--ide-accent)] text-white"
+                  className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg bg-[var(--ide-accent)] text-white"
                 >
                   <Check className="w-4 h-4" />
                 </button>
@@ -444,7 +444,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                   type="button"
                   onClick={() => setRenamingId(null)}
                   aria-label="取消重新命名"
-                  className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg bg-[var(--ide-surface-alt)] border border-[var(--ide-border)] text-[var(--ide-text-muted)]"
+                  className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg bg-[var(--ide-surface-alt)] border border-[var(--ide-border)] text-[var(--ide-text-muted)]"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -508,7 +508,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                       setRenameValue(file.name);
                     }}
                     aria-label={`重新命名 ${file.name}`}
-                    className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-surface)]"
+                    className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-surface)]"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
                   </button>
@@ -517,7 +517,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                       type="button"
                       onClick={() => setConfirmDeleteId(file.id)}
                       aria-label={`刪除 ${file.name}`}
-                      className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
+                      className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -609,7 +609,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                           <button
                             type="button"
                             onClick={() => handleRestoreSnapshot(snap)}
-                            className="min-h-[38px] px-3 rounded-xl bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] text-xs font-semibold inline-flex items-center gap-1 whitespace-nowrap"
+                            className="min-h-[44px] px-3 rounded-xl bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] text-xs font-semibold inline-flex items-center gap-1 whitespace-nowrap"
                           >
                             <RotateCcw className="w-3.5 h-3.5" />
                             <span>{t('bak_restore_btn')}</span>
@@ -618,7 +618,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                         <button
                           type="button"
                           onClick={() => void handleExportSnapshot(snap)}
-                          className="min-h-[38px] px-2.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium inline-flex items-center gap-1 whitespace-nowrap"
+                          className="min-h-[44px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium inline-flex items-center gap-1 whitespace-nowrap"
                         >
                           <FileDown className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
                           <span>{t('bak_export_btn')}</span>
@@ -636,7 +636,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                           <button
                             type="button"
                             onClick={() => handleDeleteSnapshot(snap.id)}
-                            className="min-h-[38px] px-2.5 rounded-xl bg-red-600 text-white text-xs font-medium ml-auto"
+                            className="min-h-[44px] px-3 rounded-xl bg-red-600 text-white text-xs font-medium ml-auto"
                           >
                             {t('files_delete')}
                           </button>
@@ -645,7 +645,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                             type="button"
                             onClick={() => setConfirmDeleteBackupId(snap.id)}
                             aria-label={t('files_delete')}
-                            className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl text-[var(--ide-text-muted)] hover:text-red-500 ml-auto"
+                            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-[var(--ide-text-muted)] hover:text-red-500 ml-auto"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
