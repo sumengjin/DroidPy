@@ -1718,17 +1718,22 @@ export default function App() {
   }, [termuxConfig, termuxPaused, termuxScriptRunning, appendEntry, showToast]);
 
   const handleStopTermux = useCallback(async () => {
-    abortActiveTermuxStream();
-    appLog('termux', 'User stopped running Termux process', { level: 'warn' });
+    appLog('termux', 'User requested Stop for the active Termux process', { level: 'warn' });
     try {
+      // Stop the native process tree first. A disconnected output stream alone
+      // intentionally does not terminate the Python process.
       await stopTermuxProcess(termuxConfig);
+      // Wait until the old stream releases its single-job slot before another
+      // script can start.
+      await abortActiveTermuxStream();
+      setTermuxPaused(false);
       appendEntry('system', t('log_termux_stop'));
       showToast(t('toast_termux_stopped'));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : t('toast_termux_disconnected'));
-    } finally {
-      setTermuxPaused(false);
-      setTermuxRunning(false);
+      // Keep the running state and start lock intact when native Stop is not confirmed.
+      const message = err instanceof Error ? err.message : t('toast_termux_disconnected');
+      appendEntry('stderr', message);
+      showToast(message);
     }
   }, [termuxConfig, appendEntry, showToast, t]);
 
@@ -3522,6 +3527,9 @@ export default function App() {
                   onStopScript={() => void handleStopTermux()}
                   canRunScript={Boolean(activeFile)}
                   onSendTermuxStdin={handleSendTermuxStdin}
+                  paused={termuxPaused}
+                  canPause={termuxScriptRunning}
+                  onTogglePause={handleToggleTermuxPause}
                   onOpenLogs={() => setShowLogsModal(true)}
                   enableSandboxAddon={Boolean(settings.enableSandboxAddon)}
                   isDark={getThemeMeta(settings.theme).isDark}
