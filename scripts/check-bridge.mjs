@@ -16,7 +16,7 @@ const bundle = await build({
   write: false,
 });
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`;
-const { buildTermuxBridgeScript, resolveTermuxInstallTarget } = await import(moduleUrl);
+const { buildTermuxBridgeScript, resolveTermuxInstallTarget, buildTermuxUninstallCommand } = await import(moduleUrl);
 
 const token = 'a'.repeat(64);
 const origin = 'https://droidpy-ci.example';
@@ -56,6 +56,16 @@ assert.ok(generated.slice(explicitStopStart, explicitStopEnd).includes('os.killp
 assert.ok(generated.includes('os.killpg(pgid, signal.SIGSTOP if should_pause else signal.SIGCONT)'));
 assert.ok(generated.includes('def _normalize_shell_command(command):'));
 assert.ok(generated.includes('python-polars'));
+assert.equal(
+  buildTermuxUninstallCommand('pip', 'polars'),
+  'pkg uninstall -y python-polars',
+  'TUR Polars must be removed through APT, not pip'
+);
+assert.equal(
+  buildTermuxUninstallCommand('pip', 'requests'),
+  'pip uninstall -y requests',
+  'ordinary PyPI packages must continue to uninstall through pip'
+);
 
 
 assert.ok(generated.includes('index-url = https://pypi.org/simple'));
