@@ -193,7 +193,7 @@ const zhTW = {
   tmx_env_embedded: '內建引擎',
   tmx_env_external: '外部 Termux',
   tmx_py_ready: 'Python 已就緒',
-  tmx_py_missing: '首次使用時會自動安裝 Python，請稍候',
+  tmx_py_missing: '尚未安裝 Python；首次執行或安裝套件時會自動安裝。',
 
   // Settings, Storage, Packages & Android Deployment
   set_lang_title: '介面語言',
@@ -750,7 +750,7 @@ const zhCN: Record<TranslationKey, string> = {
   tmx_env_embedded: '内置引擎',
   tmx_env_external: '外部 Termux',
   tmx_py_ready: 'Python 已就绪',
-  tmx_py_missing: '首次使用时会自动安装 Python，请稍候',
+  tmx_py_missing: '尚未安装 Python；首次运行或安装软件包时会自动安装。',
 
   set_lang_title: '界面语言',
   set_lang_desc: '切换 DroidPy 显示语言',
@@ -1301,7 +1301,7 @@ const en: Record<TranslationKey, string> = {
   tmx_env_embedded: 'Embedded Engine',
   tmx_env_external: 'External Termux',
   tmx_py_ready: 'Python Ready',
-  tmx_py_missing: 'Python will be installed automatically on first use',
+  tmx_py_missing: 'Python is not installed; it will be installed on the first run or package install.',
 
   set_lang_title: 'Language',
   set_lang_desc: 'Switch DroidPy interface language',
@@ -1852,7 +1852,7 @@ const ja: Record<TranslationKey, string> = {
   tmx_env_embedded: '内蔵エンジン',
   tmx_env_external: '外部 Termux',
   tmx_py_ready: 'Python 準備完了',
-  tmx_py_missing: '初回使用時に Python を自動導入します',
+  tmx_py_missing: 'Python は未導入です。初回実行またはパッケージ導入時に自動インストールされます。',
 
   set_lang_title: '表示言語',
   set_lang_desc: 'DroidPy の表示言語を切り替えます',
