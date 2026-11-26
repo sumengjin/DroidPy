@@ -17,6 +17,10 @@ import { ToolsAndPackages } from './ToolsAndPackages';
 import { useI18n } from '../services/i18n';
 import { OutdatedPackageInfo } from '../services/pyodideRuntime';
 import { TermuxOutdatedPipItem } from '../services/termuxBridge';
+
+declare global {
+  interface Window { __droidpySettingsBack?: () => boolean; }
+}
 import { AppUpdateCheckResult } from '../services/appUpdater';
 
 interface NegativeScreenDrawerProps {
@@ -150,6 +154,13 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
   const backdropTouchRef = React.useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const [showCategories, setShowCategories] = React.useState(true);
   React.useEffect(() => {
+    window.__droidpySettingsBack = () => {
+      if (!showCategories) { setShowCategories(true); return true; }
+      return false;
+    };
+    return () => { delete window.__droidpySettingsBack; };
+  }, [showCategories]);
+  React.useEffect(() => {
     if (open) setShowCategories(true);
   }, [open]);
   if (!open) return null;
@@ -216,9 +227,9 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
             </div>
             <div className="divide-y divide-[var(--ide-border)] rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] overflow-hidden">
               {[
-                { id: 'termux' as const, label: t('neg_tab_termux'), Icon: Terminal, desc: 'Python 執行環境、連線與維護' },
-                { id: 'packages' as const, label: t('neg_tab_packages'), Icon: Package, desc: 'Termux 與沙盒套件管理' },
-                { id: 'android' as const, label: t('neg_tab_storage'), Icon: HardDrive, desc: '裝置儲存空間與工作目錄' },
+                { id: 'termux' as const, label: 'Termux', Icon: Terminal, desc: 'Python 執行環境、連線與維護' },
+                { id: 'packages' as const, label: '套件管理', Icon: Package, desc: 'Termux 與沙盒套件管理' },
+                { id: 'android' as const, label: 'Android 管理', Icon: HardDrive, desc: '裝置儲存空間與工作目錄' },
                 { id: 'settings' as const, label: '個人化與設定', Icon: Sliders, desc: '外觀、編輯器、語言與應用程式' },
               ].map(({ id, label, Icon, desc }) => (
                 <button
