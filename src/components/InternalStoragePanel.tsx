@@ -10,6 +10,7 @@ import {
   Save,
   FolderSync,
   Trash2,
+  X,
   Loader2,
   HardDrive,
 } from 'lucide-react';
@@ -42,6 +43,7 @@ interface InternalStoragePanelProps {
   onNotify: (msg: string) => void;
   fullScreen?: boolean;
   onlyPythonFiles?: boolean;
+  onClose?: () => void;
 }
 
 function formatSize(bytes: number): string {
@@ -60,6 +62,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
   onNotify,
   fullScreen = false,
   onlyPythonFiles = false,
+  onClose,
 }) => {
   const { t } = useI18n();
   const [status, setStatus] = useState<SdcardStatusInfo | null>(null);
@@ -277,6 +280,16 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
                 <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
                 <span>{t('sd_refresh_btn')}</span>
               </button>
+              {onClose && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label="返回檔案"
+                  className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)]"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
 
