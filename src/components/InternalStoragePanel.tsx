@@ -347,6 +347,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
       {/* Action Buttons: Save Active & Backup Project */}
       {showSdcard && (
         <>
+          {!onlyPythonFiles && (
           <div className="flex flex-wrap items-center gap-2 min-w-0">
             <button
               type="button"
@@ -382,6 +383,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
               </button>
             )}
           </div>
+          )}
 
       {/* Path Bar + Mkdir */}
       <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)]">
