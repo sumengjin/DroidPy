@@ -85,7 +85,7 @@ assert.match(appSource, /await ensureEmbeddedPythonEnvironment\(\)/);
 assert.match(appSource, /Unable to verify Python before first use/);
 assert.match(appSource, /termuxOperationLockRef\.current = true/);
 assert.match(appSource, /termuxOperationLockRef\.current = false/);
-assert.match(appSource, /if \(termuxRunning \|\| termuxOperationLockRef\.current\)/);
+assert.match(appSource, /if \(termuxRunning \|\| termuxOperationLockRef\.current \|\| termuxScriptStartLockRef\.current\)/, 'package installation and removal must not overlap active Python execution');
 assert.match(appSource, /if \(termuxRunning \|\| termuxOperationLockRef\.current \|\| termuxScriptStartLockRef\.current\)/, 'Python execution must not race a native package installation');
 assert.match(appSource, /termuxOperationLockRef\.current = true[\s\S]*?streamShellInTermux/, 'native shell operations must acquire the shared Termux operation lock');
 assert.match(appSource, /termuxOperationLockRef\.current = false/, 'native Termux operation lock must be released after completion');
