@@ -498,6 +498,10 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
@@ -654,6 +658,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     inner class NativeDownloadBridge {
+        @JavascriptInterface
+        fun setSystemBarAppearance(isDark: Boolean) {
+            runOnUiThread {
+                WindowInsetsControllerCompat(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = !isDark
+                    isAppearanceLightNavigationBars = !isDark
+                }
+            }
+        }
+
         @JavascriptInterface
         fun isNativeApp(): Boolean = true
 
@@ -1342,6 +1356,19 @@ class MainActivity : AppCompatActivity() {
         installCrashDiagnostics()
         appendActivityLog("Startup", "MainActivity.onCreate entered")
 
+        appendActivityLog("Startup", "Enabling edge-to-edge system bars")
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isStatusBarContrastEnforced = false
+            window.isNavigationBarContrastEnforced = false
+        }
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            isAppearanceLightStatusBars = true
+            isAppearanceLightNavigationBars = true
+        }
+
         appendActivityLog("Startup", "Creating root container")
         rootContainer = FrameLayout(this)
         appendActivityLog("Startup", "Creating primary WebView")
@@ -1353,6 +1380,18 @@ class MainActivity : AppCompatActivity() {
         rootContainer.addView(webView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         rootContainer.addView(crawlerOverlay, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         setContentView(rootContainer)
+        ViewCompat.setOnApplyWindowInsetsListener(rootContainer) { _, insets ->
+            val density = resources.displayMetrics.density.coerceAtLeast(1f)
+            val statusTopDp = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top / density
+            val navigationBottomDp = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom / density
+            webView.evaluateJavascript(
+                "document.documentElement.style.setProperty('--droidpy-statusbar-inset', '${statusTopDp}px');" +
+                    "document.documentElement.style.setProperty('--droidpy-navigationbar-inset', '${navigationBottomDp}px');",
+                null
+            )
+            insets
+        }
+        ViewCompat.requestApplyInsets(rootContainer)
 
         appendActivityLog("Startup", "Configuring primary WebView settings")
         val settings: WebSettings = webView.settings
