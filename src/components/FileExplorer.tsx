@@ -431,7 +431,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                   autoFocus
                   value={renameValue}
                   onChange={(e) => setRenameValue(e.target.value)}
-                  className="flex-1 min-w-0 min-h-[38px] px-2.5 rounded-lg bg-[var(--ide-bg)] border border-[var(--ide-accent)] text-sm font-mono focus:outline-none"
+                  className="flex-1 min-w-0 min-h-[44px] px-2.5 rounded-lg bg-[var(--ide-bg)] border border-[var(--ide-accent)] text-sm font-mono focus:outline-none"
                 />
                 <button
                   type="submit"
@@ -487,14 +487,14 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                       onDeleteFile(file.id);
                       setConfirmDeleteId(null);
                     }}
-                    className="min-h-[36px] px-2.5 rounded-lg bg-red-600 text-white text-xs font-medium"
+                    className="min-h-[44px] px-2.5 rounded-lg bg-red-600 text-white text-xs font-medium"
                   >
                     {t('files_delete')}
                   </button>
                   <button
                     type="button"
                     onClick={() => setConfirmDeleteId(null)}
-                    className="min-h-[36px] px-2 rounded-lg bg-[var(--ide-surface)] border border-[var(--ide-border)] text-xs"
+                    className="min-h-[44px] px-2 rounded-lg bg-[var(--ide-surface)] border border-[var(--ide-border)] text-xs"
                   >
                     {t('files_cancel')}
                   </button>
@@ -627,7 +627,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                           <button
                             type="button"
                             onClick={() => void onSyncBackupSdcard(snap)}
-                            className="min-h-[38px] px-2.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium whitespace-nowrap"
+                            className="min-h-[44px] px-2.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium whitespace-nowrap"
                           >
                             {t('bak_sync_sdcard_btn')}
                           </button>
@@ -685,7 +685,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                       key={cat.id}
                       type="button"
                       onClick={() => setTemplateCategory(cat.id)}
-                      className={`min-h-[36px] px-3 rounded-xl text-[11px] font-medium whitespace-nowrap shrink-0 transition-colors ${
+                      className={`min-h-[44px] px-3 rounded-xl text-[11px] font-medium whitespace-nowrap shrink-0 transition-colors ${
                         active
                           ? 'bg-[var(--ide-accent)] text-white font-semibold'
                           : 'bg-[var(--ide-surface)] border border-[var(--ide-border)] text-[var(--ide-text-muted)] hover:border-[var(--ide-accent)]'
