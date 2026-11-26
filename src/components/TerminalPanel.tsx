@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Trash2, Copy, Check, AlertCircle, CornerDownLeft, Download, Maximize2, X, FileText, Pause, Play, Square } from 'lucide-react';
+import { Trash2, Copy, Check, AlertCircle, CornerDownLeft, Download, Maximize2, X, FileText } from 'lucide-react';
 import { ExecutionEngine, PyodideStatus, TerminalEntry } from '../types/ide';
 import { renderAnsiText, stripAnsi } from '../utils/ansiParser';
 import { useI18n } from '../services/i18n';
@@ -20,13 +20,8 @@ interface TerminalPanelProps {
   inputSessionActive?: boolean;
   onSubmitInput: (value: string) => void;
   onRunRepl: (statement: string) => Promise<void>;
-  onRunScript: () => void;
-  onStopScript: () => void;
-  canRunScript: boolean;
   onSendTermuxStdin?: (text: string) => Promise<void>;
-  paused?: boolean;
-  canPause?: boolean;
-  onTogglePause?: () => void;
+  executionBusy?: boolean;
   onOpenLogs?: () => void;
   enableSandboxAddon?: boolean;
   isDark?: boolean;
@@ -178,13 +173,8 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   inputSessionActive = false,
   onSubmitInput,
   onRunRepl,
-  onRunScript,
-  onStopScript,
-  canRunScript,
   onSendTermuxStdin,
-  paused = false,
-  canPause = false,
-  onTogglePause,
+  executionBusy = false,
   onOpenLogs,
   enableSandboxAddon = false,
   isDark,
@@ -369,7 +359,8 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
               <button
                 type="button"
                 onClick={() => onChangeEngine('pyodide')}
-                className={`min-h-[44px] px-2 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap ${
+                disabled={executionBusy}
+                className={`min-h-[44px] px-2 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap disabled:opacity-40 ${
                   engine === 'pyodide'
                     ? 'bg-[var(--ide-surface)] text-[var(--ide-text)] shadow-sm'
                     : 'text-[var(--ide-text-muted)]'
@@ -381,7 +372,8 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             <button
               type="button"
               onClick={() => onChangeEngine('termux')}
-              className={`min-h-[44px] px-2 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap ${
+              disabled={executionBusy}
+              className={`min-h-[44px] px-2 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap disabled:opacity-40 ${
                 engine === 'termux'
                   ? 'bg-[var(--ide-accent)] text-white shadow-sm'
                   : 'text-[var(--ide-text-muted)]'
@@ -409,29 +401,6 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-1 shrink-0">
-          {engine === 'termux' && status === 'running' ? (
-            <button type="button" onClick={onStopScript} aria-label={t('cta_stop_run')} title={t('cta_stop_run')} className="min-h-[44px] px-3 flex items-center gap-1.5 rounded-xl bg-red-600 text-white text-xs font-semibold whitespace-nowrap">
-              <Square className="w-3.5 h-3.5 fill-current" />
-              <span>{t('cta_stop_short')}</span>
-            </button>
-          ) : (
-            <button type="button" onClick={onRunScript} disabled={!canRunScript || status === 'running' || status === 'loading'} aria-label={t('cta_run_program')} title={t('cta_run_program')} className="min-h-[44px] px-3 flex items-center gap-1.5 rounded-xl bg-[var(--ide-accent)] text-white text-xs font-semibold whitespace-nowrap disabled:opacity-40">
-              <Play className="w-3.5 h-3.5 fill-current" />
-              <span>{t('cta_run_short')}</span>
-            </button>
-          )}
-          {engine === 'termux' && status === 'running' && canPause && onTogglePause && (
-            <button
-              type="button"
-              onClick={onTogglePause}
-              aria-label={paused ? '繼續腳本' : '暫停腳本'}
-              title={paused ? '繼續腳本' : '暫停腳本'}
-              className="min-h-[44px] px-2.5 flex items-center gap-1 rounded-xl bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] text-xs font-semibold transition-colors whitespace-nowrap"
-            >
-              {paused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
-              <span>{paused ? '繼續' : '暫停'}</span>
-            </button>
-          )}
           {selectedText.length > 0 && (
             <button
               type="button"
