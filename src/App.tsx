@@ -3269,7 +3269,6 @@ export default function App() {
                       onChangeEngine={setExecutionEngine}
                       termuxConnected={termuxConnectionState === 'connected'}
                       embeddedMissingPython={Boolean(termuxHealth?.embedded && termuxHealth.hasPython === false)}
-                      onQuickInitEmbedded={() => void handleInitializeEmbeddedEnv(true)}
                       runStartedAt={runStartedAt}
                       lastDurationMs={lastDurationMs}
                       pendingInputPrompt={pendingInputPrompt}
@@ -3434,7 +3433,6 @@ export default function App() {
                   onChangeEngine={setExecutionEngine}
                   termuxConnected={termuxConnectionState === 'connected'}
                   embeddedMissingPython={Boolean(termuxHealth?.embedded && termuxHealth.hasPython === false)}
-                  onQuickInitEmbedded={() => void handleInitializeEmbeddedEnv(true)}
                   runStartedAt={runStartedAt}
                   lastDurationMs={lastDurationMs}
                   pendingInputPrompt={pendingInputPrompt}
