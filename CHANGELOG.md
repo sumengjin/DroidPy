@@ -3,8 +3,10 @@
 All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
+- **修正 CI 分支觸發規則與重複執行**：PR 檢查不再限制目標分支只能是 main/master，堆疊式 PR 也會自動執行測試與建置；同一 PR 有新提交時會取消過期檢查，只保留最新版本驗證，正式分支與標籤發布不會被取消。
 - **改善手機版主要導覽與工具入口**：底部導覽新增固定可見的「工具」入口，無需依賴側邊緣滑動或頂部選單即可開啟 Termux、套件、儲存與系統功能；工具分類改為圖示與文字垂直排列、增加觸控高度，首頁功能卡片加大並允許描述換行，降低誤觸與辨識成本。
-- **明確保留 Python 官方 PyPI 套件索引**：APK 內建環境與外部 Termux Bridge 的 pip 設定都明確以 `https://pypi.org/simple` 作為預設索引；Termux APT 原生預編譯路由仍優先處理已確認的 Android 套件，第三方 wheel 不會覆蓋 PyPI 預設來源，並須驗證 Android／Python ABI。\n- **擴充官方 Termux ARM64 預編譯套件目錄**：新增 psutil、msgpack、gRPC、Brotli、bcrypt、PyCryptodomeX、APSW、TensorFlow Lite Runtime、PyTorch、TorchVision、TorchAudio 等原生套件，並將 yt-dlp 改為官方預編譯套件；終端機、套件管理介面與備份還原共用相同套件名稱對應。PyTorch 系列標示為按需安裝，不預先塞入 APK。；外部 Termux 若已有使用者自訂 `pip.conf`，DroidPy 不會覆寫私有索引或憑證設定，新環境才建立 PyPI 預設設定。
+- **明確保留 Python 官方 PyPI 套件索引**：APK 內建環境與外部 Termux Bridge 的 pip 設定都明確以 `https://pypi.org/simple` 作為預設索引；Termux APT 原生預編譯路由仍優先處理已確認的 Android 套件，第三方 wheel 不會覆蓋 PyPI 預設來源，並須驗證 Android／Python ABI。 外部 Termux 若已有使用者自訂 `pip.conf`，DroidPy 不會覆寫私有索引或憑證設定，新環境才建立 PyPI 預設設定。
+- **擴充官方 Termux ARM64 預編譯套件目錄**：新增 psutil、msgpack、gRPC、Brotli、bcrypt、PyCryptodomeX、APSW、TensorFlow Lite Runtime、PyTorch、TorchVision、TorchAudio 等原生套件，並將 yt-dlp 改為官方預編譯套件；終端機、套件管理介面與備份還原共用相同套件名稱對應。PyTorch 系列標示為按需安裝，不預先塞入 APK。
 - **統一終端機與套件管理介面的官方預編譯路由**：直接輸入 `pip install numpy`、`pandas`、`matplotlib`、`pillow`、`lxml`、`cryptography` 等單一套件時，APK 內建與獨立 Termux Bridge 現在都會優先改用 Termux APT 預編譯套件；版本限制、extras、多套件與 requirements 命令不會被錯誤改寫。
 - **調整 Pandas 與 Matplotlib 的 Android 安裝來源**：套件目錄與一鍵安裝提示統一使用 Termux 預編譯 `python-pandas`／`matplotlib`，避免 pip 在手機上重複編譯 NumPy、pandas 或 contourpy 等原生依賴。
 - **集中管理 Android 套件相容路由**：APK 內建 Bridge 與獨立 Termux Bridge 都將 Parsel、SciPy、Polars 的特殊安裝規則集中管理；scikit-learn 因缺少已驗證的 Android ARM64／Python 3.14 預編譯版本，兩種環境均改為明確提示不可安裝，APK 內建環境使用 Frostwork 純 Python 相容層，獨立 Termux 環境保留安全的 w3lib 相容限制，避免兩種執行環境混用不適用的模組。
