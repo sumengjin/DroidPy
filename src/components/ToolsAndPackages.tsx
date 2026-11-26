@@ -84,6 +84,10 @@ import {
 } from '../services/pyodideRuntime';
 import { AppUpdateCheckResult, getInstalledAppVersion } from '../services/appUpdater';
 
+declare global {
+  interface Window { __droidpyToolsBack?: () => boolean; }
+}
+
 const THEME_CARD_NAMES: Record<ThemeId, { 'zh-TW': string; 'zh-CN': string }> = {
   rose: { 'zh-TW': '櫻花蜜桃', 'zh-CN': '樱花蜜桃' },
   lavender: { 'zh-TW': '薰衣草紫', 'zh-CN': '薰衣草紫' },
@@ -277,6 +281,33 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
   const [nativeStorageGranted, setNativeStorageGranted] = useState<boolean>(() =>
     Boolean(window.DroidPyNative?.hasStoragePermission?.())
   );
+
+  useEffect(() => {
+    window.__droidpyToolsBack = () => {
+      if (activeWindow) {
+        setActiveWindow(null);
+        return true;
+      }
+      if (activeSubView === 'termux' && termuxFolder) {
+        setTermuxFolder(null);
+        return true;
+      }
+      if (activeSubView === 'packages' && packageFolder) {
+        setPackageFolder(null);
+        return true;
+      }
+      if (activeSubView === 'android' && storageFolder) {
+        setStorageFolder(null);
+        return true;
+      }
+      if (activeSubView === 'settings' && settingsFolder) {
+        setSettingsFolder(null);
+        return true;
+      }
+      return false;
+    };
+    return () => { delete window.__droidpyToolsBack; };
+  }, [activeWindow, activeSubView, termuxFolder, packageFolder, storageFolder, settingsFolder]);
 
   useEffect(() => {
     setActiveWindow(null);
