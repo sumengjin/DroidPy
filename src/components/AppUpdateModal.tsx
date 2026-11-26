@@ -74,10 +74,10 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
     latest?.apkAssets[0] ??
     null;
   const currentNorm = normalizeVersionStr(currentVersion);
+  // Never substitute another version's notes: show only an exact match for the installed version.
   const currentRelease: AppReleaseInfo | null =
     releases.find((r) => normalizeVersionStr(r.version) === currentNorm) ??
     BUILTIN_LOCAL_RELEASES.find((r) => normalizeVersionStr(r.version) === currentNorm) ??
-    BUILTIN_LOCAL_RELEASES[0] ??
     null;
 
   const handleSaveAndCheck = async (e: React.FormEvent) => {
@@ -283,7 +283,7 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
           )}
 
           {/* Current Installed Version Changelog Only (shown when already up to date) */}
-          {!hasUpdate && currentRelease && (
+          {!hasUpdate && (
             <div className="rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] p-4 space-y-2.5">
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
@@ -291,13 +291,13 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
                     <span>{t('upd_current_changelog_title')}</span>
                     <span className="font-mono text-[var(--ide-accent-text)]">v{currentVersion}</span>
                   </div>
-                  {currentRelease.publishedAt && (
+                  {currentRelease?.publishedAt && (
                     <div className="text-[11px] text-[var(--ide-text-muted)] tabular-nums mt-0.5">
                       {currentRelease.publishedAt.slice(0, 10)}
                     </div>
                   )}
                 </div>
-                {currentRelease.apkAssets[0] && (
+                {currentRelease?.apkAssets[0] && (
                   <button
                     type="button"
                     onClick={() =>
@@ -314,7 +314,7 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
                 )}
               </div>
               <pre className="selectable-text text-xs text-[var(--ide-text)] whitespace-pre-wrap font-sans leading-relaxed max-h-60 overflow-y-auto ide-scroll">
-                {currentRelease.body || t('upd_no_notes')}
+                {currentRelease?.body || t('upd_no_notes')}
               </pre>
             </div>
           )}
