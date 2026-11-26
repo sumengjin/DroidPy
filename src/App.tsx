@@ -1293,18 +1293,28 @@ export default function App() {
 
     const command = 'pkg update -y && pkg install -y python python-pip';
     const streamId = makeId();
+    let bootstrapOutputTail = '';
+    const bootstrapAnsiBuffer = createAnsiStreamBuffer();
     appLog('termux', 'First-use Python bootstrap started (python, python-pip only)');
     appendEntry('system', t('log_termux_init', { cmd: command }));
     try {
       const result = await streamShellInTermux(termuxConfig, command, {
-        onChunk: (chunk) => appendStreamChunk(streamId, chunk),
+        onChunk: (chunk) => {
+          appendStreamChunk(streamId, chunk);
+          const clean = stripAnsi(bootstrapAnsiBuffer.push(chunk));
+          if (clean) bootstrapOutputTail = (bootstrapOutputTail + clean).slice(-1800);
+        },
       });
+      const remainder = stripAnsi(bootstrapAnsiBuffer.flush());
+      if (remainder) bootstrapOutputTail = (bootstrapOutputTail + remainder).slice(-1800);
       flushStreamChunk(streamId);
       setTermuxConnectionState('connected');
       setLastDurationMs(result.durationMs);
       if (result.exitCode !== 0) {
+        const detail = bootstrapOutputTail.trim() || '首次安裝未提供錯誤輸出';
         appendEntry('stderr', t('log_termux_exit', { code: result.exitCode }));
-        appLog('termux', `First-use Python bootstrap failed (exit=${result.exitCode})`, { level: 'error' });
+        appendEntry('stderr', detail);
+        appLog('termux', `First-use Python bootstrap failed (exit=${result.exitCode})`, { level: 'error', detail });
         showToast(t('toast_termux_init_err', { code: result.exitCode }));
         return false;
       }
