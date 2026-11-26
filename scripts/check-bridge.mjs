@@ -373,7 +373,7 @@ assert.ok(!termuxBridgeSource.includes('_scikit_learn_source_install_command'));
 assert.ok(termuxBridgeSource.includes('pip_prefix = r"(?:(?:[^\\\\s;&|]*/)?python'));
 
 assert.ok(!termuxBridgeSource.includes("  abortActiveTermuxStream();\n  const controller = new AbortController();"));
-const abortHelperStart = termuxBridgeSource.indexOf('export function abortActiveTermuxStream(): void {');
+const abortHelperStart = termuxBridgeSource.indexOf('export async function abortActiveTermuxStream(): Promise<void> {');
 const abortHelperEnd = termuxBridgeSource.indexOf('\n}', abortHelperStart);
 assert.ok(abortHelperStart >= 0 && abortHelperEnd > abortHelperStart);
 assert.ok(!termuxBridgeSource.slice(abortHelperStart, abortHelperEnd).includes('activeStreamController = null'));
