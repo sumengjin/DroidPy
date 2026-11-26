@@ -620,6 +620,7 @@ export default function App() {
     if (themeMeta) {
       themeMeta.setAttribute('content', meta.themeColorMeta);
     }
+    window.DroidPyNative?.setSystemBarAppearance?.(meta.isDark);
   }, [settings]);
 
   useEffect(() => {
