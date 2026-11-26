@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { PythonFile, ScriptBackupSnapshot, TermuxConfig } from '../types/ide';
-import { SdcardFileBrowser } from './SdcardFileBrowser';
+import { InternalStoragePanel } from './InternalStoragePanel';
 import { SNIPPET_CATEGORIES, SNIPPET_TEMPLATES, SnippetCategoryId } from '../data/defaultFiles';
 import { useI18n } from '../services/i18n';
 import { copyTextReliable } from '../utils/clipboard';
@@ -779,15 +779,28 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
         </button>
       </div>
       {showDeviceBrowser && termuxConfig && onOpenExternalFile && (
-        <SdcardFileBrowser
-          config={termuxConfig}
-          onClose={() => setShowDeviceBrowser(false)}
-          onOpenFile={(file) => {
-            setShowDeviceBrowser(false);
-            onOpenExternalFile(file);
-          }}
-          onNotify={onNotify}
-        />
+        <div className="absolute inset-0 z-30 overflow-hidden bg-[var(--ide-bg)]">
+          <InternalStoragePanel
+            mode="sdcard"
+            fullScreen
+            onlyPythonFiles
+            termuxConfig={termuxConfig}
+            files={files}
+            activeFile={files.find((file) => file.id === activeFileId) ?? files[0]}
+            onOpenSdcardFile={(name, content, path) => {
+              setShowDeviceBrowser(false);
+              onOpenExternalFile({ name, content, path });
+            }}
+            onNotify={onNotify}
+          />
+          <button
+            type="button"
+            onClick={() => setShowDeviceBrowser(false)}
+            className="absolute right-3 top-3 z-40 min-h-[40px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-semibold shadow"
+          >
+            返回檔案
+          </button>
+        </div>
       )}
     </div>
   );
