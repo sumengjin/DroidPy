@@ -1362,7 +1362,7 @@ export default function App() {
     termuxScriptCompletionRef.current = scriptCompletion;
     focusOutputPane('terminal');
     setTermuxPaused(false);
-    setTermuxScriptRunning(true);
+    setTermuxScriptRunning(false);
     setTermuxRunning(true);
     setTermuxActiveTask(`run:${entryFile.name}`);
     setRunStartedAt(Date.now());
@@ -1386,6 +1386,7 @@ export default function App() {
         appendEntry('system', `已將 ${entryFile.name} 儲存回原資料夾`);
       }
       if (termuxStopRequestedRef.current) return;
+      setTermuxScriptRunning(true);
 
       const res = await streamRunInTermux(termuxConfig, entryFile, files, {
         onChunk: (chunk) => {
