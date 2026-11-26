@@ -3376,7 +3376,6 @@ export default function App() {
                       termuxEmbedded={Boolean(termuxHealth?.embedded)}
                       termuxConfig={termuxConfig}
                       onOpenExternalFile={handleOpenExternalPythonFile}
-                      onOpenSdcardManager={() => openNegativeDrawer('android')}
                       onBackupToSdcard={handleBackupToSdcard}
                       onPullFromTermux={() => syncFilesFromTermux(true)}
                       onLinkDirectory={handleLinkDirectory}
@@ -3554,7 +3553,6 @@ export default function App() {
                   termuxEmbedded={Boolean(termuxHealth?.embedded)}
                       termuxConfig={termuxConfig}
                       onOpenExternalFile={handleOpenExternalPythonFile}
-                  onOpenSdcardManager={() => openNegativeDrawer('android')}
                   onBackupToSdcard={handleBackupToSdcard}
                   onPullFromTermux={() => syncFilesFromTermux(true)}
                   onLinkDirectory={handleLinkDirectory}
