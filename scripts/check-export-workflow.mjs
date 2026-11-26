@@ -49,7 +49,7 @@ assert.ok(workflow.includes('needs.build-apk.outputs.is_release == \'true\''));
 assert.ok(workflow.includes('android/app/build/outputs/apk/release/*.apk'));
 assert.ok(workflow.includes('android/app/build/outputs/apk/debug/*.apk'));
 assert.ok(workflow.includes('DROIDPY_STORE_PASSWORD=%s') && workflow.includes('CUSTOM_STORE_PASS'), 'workflow must export the protected signing password without embedding its value');
-assert.ok(workflow.includes("printf '%s\\n' \"$SIGNER_OUTPUT\""));
+assert.ok(/printf '%s(?:\\n|\n)' "\$SIGNER_OUTPUT"/.test(workflow), 'generated signer output must be printed with a newline');
 assert.ok(workflow.includes("DroidPy-arm64-apk-$GITHUB_RUN_NUMBER"));
 assert.ok(!workflow.includes('29C549F02AB1781D42D94A6D80530EC8EF86670C82605F9255FDD95D5D545EBA'));
 assert.ok(workflow.includes('PR/debug builds use the temporary Android debug signer'));
