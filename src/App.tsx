@@ -1816,7 +1816,7 @@ export default function App() {
       '            os.makedirs(os.path.dirname(cfg_path), exist_ok=True)',
       '            update_pip_config_preserving_existing_settings(cfg_path)',
       '        except Exception:',
-      '            pass'
+      '            pass',
       'else:',
       '    print("NO_CERT_SOURCE_FOUND")',
       'EOF',
