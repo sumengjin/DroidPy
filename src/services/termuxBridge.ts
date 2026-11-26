@@ -1414,11 +1414,13 @@ async function termuxFetch<T>(
 }
 
 let activeStreamController: AbortController | null = null;
+let activeStreamCompletion: Promise<void> | null = null;
 
-export function abortActiveTermuxStream(): void {
-  // Keep the slot occupied until the aborted request reaches its cleanup path.
-  // This prevents a rapid second tap from racing the server-side Stop request.
+export async function abortActiveTermuxStream(): Promise<void> {
+  // Keep the single-job slot occupied until the aborted reader has completed cleanup.
+  const completion = activeStreamCompletion;
   activeStreamController?.abort();
+  if (completion) await completion;
 }
 
 async function termuxStreamRequest(
@@ -1431,12 +1433,17 @@ async function termuxStreamRequest(
   if (activeStreamController) {
     throw new Error('已有 Termux 工作正在執行；請先停止目前工作後再試。');
   }
-  const controller = new AbortController();
-  activeStreamController = controller;
 
-  let res: Response;
+  const controller = new AbortController();
+  let settleCompletion!: () => void;
+  const completion = new Promise<void>((resolve) => {
+    settleCompletion = resolve;
+  });
+  activeStreamController = controller;
+  activeStreamCompletion = completion;
+
   try {
-    res = await fetch(`${base}${path}`, {
+    const res = await fetch(`${base}${path}`, {
       method: 'POST',
       signal: controller.signal,
       headers: {
@@ -1445,53 +1452,34 @@ async function termuxStreamRequest(
       },
       body: JSON.stringify(payload),
     });
-  } catch (err) {
-    if (activeStreamController === controller) {
-      activeStreamController = null;
-    }
-    if (err instanceof Error && err.name === 'AbortError') {
-      return { exitCode: -1, durationMs: 0 };
-    }
-    if (err instanceof TypeError) {
-      throw new Error(`無法連線至 Termux 橋接服務 (${base})，請先在 Termux 啟動新版橋接腳本`);
-    }
-    throw err;
-  }
 
-  if (!res.ok) {
-    if (activeStreamController === controller) {
-      activeStreamController = null;
+    if (!res.ok) {
+      let msg = `Termux 橋接回應錯誤 (${res.status})`;
+      try {
+        const errJson = (await res.json()) as { error?: string };
+        if (errJson.error) msg = errJson.error;
+      } catch {
+        // ignore non-json
+      }
+      throw new Error(msg);
     }
-    let msg = `Termux 橋接回應錯誤 (${res.status})`;
-    try {
-      const errJson = (await res.json()) as { error?: string };
-      if (errJson.error) msg = errJson.error;
-    } catch {
-      // ignore non-json
+
+    if (!res.body) {
+      throw new Error('Termux 串流回應為空，請重新複製新版啟動指令啟動橋接');
     }
-    throw new Error(msg);
-  }
 
-  if (!res.body) {
-    if (activeStreamController === controller) {
-      activeStreamController = null;
-    }
-    throw new Error('Termux 串流回應為空，請重新複製新版啟動指令啟動橋接');
-  }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let exitCode = 0;
+    let durationMs = 0;
+    let sawDone = false;
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let exitCode = 0;
-  let durationMs = 0;
-  let sawDone = false;
-
-  try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
+      const lines = buffer.split('\\n');
       buffer = lines.pop() ?? '';
 
       for (const line of lines) {
@@ -1516,18 +1504,25 @@ async function termuxStreamRequest(
         }
       }
     }
+
+    return { exitCode: sawDone ? exitCode : 1, durationMs };
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
-      return { exitCode: -1, durationMs };
+      return { exitCode: -1, durationMs: 0 };
+    }
+    if (err instanceof TypeError) {
+      throw new Error(`無法連線至 Termux 橋接服務 (${base})，請先在 Termux 啟動新版橋接腳本`);
     }
     throw err;
   } finally {
     if (activeStreamController === controller) {
       activeStreamController = null;
     }
+    if (activeStreamCompletion === completion) {
+      activeStreamCompletion = null;
+    }
+    settleCompletion();
   }
-
-  return { exitCode: sawDone ? exitCode : 1, durationMs };
 }
 
 export async function checkTermuxHealth(config: TermuxConfig): Promise<TermuxHealthInfo> {
