@@ -5102,22 +5102,23 @@ def clipboard_set(text):
                 pb.redirectErrorStream(true)
                 pb.environment().putAll(buildEnv())
 
-                proc = pb.start()
+                val startedProcess = pb.start()
+                proc = startedProcess
                 val stopImmediately = synchronized(activeProcessLock) {
-                    activeProcess = proc
+                    activeProcess = startedProcess
                     activeProcessStarting = false
                     activeProcessPaused = false
                     activeProcessStopRequested
                 }
                 if (stopImmediately) {
-                    appendNativeLog("Exec", "Stop arrived during process launch; terminating pid=" + processPid(proc))
-                    killProcessTree(proc)
+                    appendNativeLog("Exec", "Stop arrived during process launch; terminating pid=" + processPid(startedProcess))
+                    killProcessTree(startedProcess)
                 }
                 activeProcessStartedAt.set(System.currentTimeMillis())
-                appendNativeLog("Exec", "Process started pid=\${processPid(proc)} command=\${normalizedCommand.take(120)}")
+                appendNativeLog("Exec", "Process started pid=\${processPid(startedProcess)} command=\${normalizedCommand.take(120)}")
                 var clientDisconnected = false
                 val charBuf = CharArray(1024)
-                val inpReader = InputStreamReader(proc.inputStream, Charsets.UTF_8)
+                val inpReader = InputStreamReader(startedProcess.inputStream, Charsets.UTF_8)
                 while (true) {
                     val n = inpReader.read(charBuf)
                     if (n < 0) break
@@ -5129,14 +5130,14 @@ def clipboard_set(text):
                                 sendStdout(s)
                             } catch (e: Exception) {
                                 clientDisconnected = true
-                                appendNativeLog("Exec", "Stream client disconnected; continuing process pid=\${processPid(proc)} (\${e.javaClass.simpleName}: \${e.message})")
+                                appendNativeLog("Exec", "Stream client disconnected; continuing process pid=\${processPid(startedProcess)} (\${e.javaClass.simpleName}: \${e.message})")
                             }
                         }
                     }
                 }
-                code = proc.waitFor()
+                code = startedProcess.waitFor()
                 if (activeProcessStopRequested) code = -1
-                appendNativeLog("Exec", "Process exited pid=\${processPid(proc)} exitCode=$code")
+                appendNativeLog("Exec", "Process exited pid=\${processPid(startedProcess)} exitCode=$code")
             } catch (e: Exception) {
                 if (activeProcessStopRequested) {
                     code = -1
