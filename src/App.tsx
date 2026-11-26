@@ -1356,6 +1356,11 @@ export default function App() {
       let outputTail = '';
       const outputTailAnsiBuf = createAnsiStreamBuffer();
 
+      if (entryFile.externalPath) {
+        await writeSdcardFile(termuxConfig, entryFile.externalPath, entryFile.content);
+        appendEntry('system', `已將 ${entryFile.name} 儲存回原資料夾`);
+      }
+
       const res = await streamRunInTermux(termuxConfig, entryFile, files, {
         onChunk: (chunk) => {
           if (chunk.length > 0) {
@@ -2120,6 +2125,35 @@ export default function App() {
     setActiveFileId(newFile.id);
     setMobileTab('editor');
   }, []);
+
+  const handleOpenExternalPythonFile = useCallback(
+    (file: { name: string; content: string; path: string }) => {
+      const existing = filesRef.current.find((item) => item.externalPath === file.path);
+      if (existing) {
+        setFiles((prev) =>
+          prev.map((item) =>
+            item.id === existing.id
+              ? { ...item, name: file.name, content: file.content, updatedAt: Date.now() }
+              : item
+          )
+        );
+        setActiveFileId(existing.id);
+      } else {
+        const imported: PythonFile = {
+          id: makeId(),
+          name: file.name,
+          content: file.content,
+          updatedAt: Date.now(),
+          externalPath: file.path,
+        };
+        setFiles((prev) => [...prev, imported]);
+        setActiveFileId(imported.id);
+      }
+      setMobileTab('editor');
+      showToast(`已開啟 ${file.name}；執行時會先同步回原資料夾`);
+    },
+    [showToast]
+  );
 
   const handleRenameFile = useCallback((id: string, nextName: string) => {
     const clean = sanitizeFileName(nextName);
@@ -3341,6 +3375,8 @@ export default function App() {
                       linkedDirName={linkedDirHandle?.name ?? null}
                       termuxConnected={termuxConnectionState === 'connected'}
                       termuxEmbedded={Boolean(termuxHealth?.embedded)}
+                      termuxConfig={termuxConfig}
+                      onOpenExternalFile={handleOpenExternalPythonFile}
                       onOpenSdcardManager={() => openNegativeDrawer('android')}
                       onBackupToSdcard={handleBackupToSdcard}
                       onPullFromTermux={() => syncFilesFromTermux(true)}
@@ -3517,6 +3553,8 @@ export default function App() {
                   linkedDirName={linkedDirHandle?.name ?? null}
                   termuxConnected={termuxConnectionState === 'connected'}
                   termuxEmbedded={Boolean(termuxHealth?.embedded)}
+                      termuxConfig={termuxConfig}
+                      onOpenExternalFile={handleOpenExternalPythonFile}
                   onOpenSdcardManager={() => openNegativeDrawer('android')}
                   onBackupToSdcard={handleBackupToSdcard}
                   onPullFromTermux={() => syncFilesFromTermux(true)}
