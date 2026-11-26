@@ -137,7 +137,7 @@ assert.match(appSource, /const packageReturnTabRef = useRef<MobileTab>\('editor'
 assert.match(backHandlerSource, /if \(ov\.negativeOpen\) \{\s*setNegativeOpen\(false\);\s*if \(mobileTabRef\.current === 'packages'\) setMobileTab\(packageReturnTabRef\.current\);\s*return true;/, 'Android back must restore the workspace tab that opened the package drawer');
 assert.match(appSource, /if \(mobileTabRef\.current === 'packages'\) setMobileTab\(packageReturnTabRef\.current\);/, 'closing the package drawer must restore its originating workspace tab');
 
-assert.match(appSource, /const handleToggleTermuxPause = useCallback\(async \(\) => \{\s*if \(!termuxScriptRunning\) return;/, 'pause and resume controls must only affect an active Python script');
+assert.match(appSource, /const handleToggleTermuxPause = useCallback\(async \(\) => \{\s*if \(!termuxScriptRunning \|\| termuxStopLockRef\.current \|\| termuxPauseToggleLockRef\.current\) return;/, 'pause and resume controls must only affect an active Python script and must serialize with Stop');
 assert.match(appSource, /cleaningProcesses \|\|\s*termuxRunning \|\|\s*termuxOperationLockRef\.current \|\|\s*termuxScriptStartLockRef\.current[\s\S]*?termuxOperationLockRef\.current = true;\s*setCleaningProcesses\(true\)/, 'the process watchdog must not kill an active Termux operation');
 
 assert.match(appSource, /termuxOperationLockRef\.current = false/);
