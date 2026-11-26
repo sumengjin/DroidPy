@@ -4142,6 +4142,9 @@ def clipboard_set(text):
                 }
 
                 method == "POST" && path == "/stop" -> {
+                    val stopSource = bodyJson.optString("source", "unknown").take(40)
+                    val stopOperation = bodyJson.optString("operation", "unknown").take(40)
+                    appendNativeLog("Exec", "Stop endpoint invoked source=$stopSource operation=$stopOperation")
                     var proc = activeProcess
                     val starting = activeProcessStarting
                     if (proc != null || starting) {
@@ -4157,7 +4160,7 @@ def clipboard_set(text):
                     }
                     var stopped = true
                     if (proc != null) {
-                        appendNativeLog("Exec", "Explicit Stop request: force stopping process tree pid=" + processPid(proc))
+                        appendNativeLog("Exec", "Stop request: force stopping process tree pid=" + processPid(proc))
                         killProcessTree(proc)
                         try {
                             if (proc.isAlive) proc.waitFor(2, TimeUnit.SECONDS)
@@ -4173,7 +4176,7 @@ def clipboard_set(text):
                         }
                     } else {
                         stopped = !activeProcessStarting
-                        appendNativeLog("Exec", if (stopped) "Explicit Stop request received; no active process" else "Stop timed out while waiting for process launch")
+                        appendNativeLog("Exec", if (stopped) "Stop request received; no active process" else "Stop timed out while waiting for process launch")
                     }
                     if (stopped) activeProcessPaused = false
                     writeJson(
