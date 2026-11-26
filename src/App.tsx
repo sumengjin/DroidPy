@@ -20,6 +20,7 @@ import {
   PanelLeft,
   Columns2,
   Menu,
+  Settings as SettingsIcon,
   Sparkles,
   Download,
   Package,
@@ -344,7 +345,7 @@ export default function App() {
   mobileTabRef.current = mobileTab;
   const packageReturnTabRef = useRef<MobileTab>('editor');
   const [negativeOpen, setNegativeOpen] = useState(false);
-  const [negativeSection, setNegativeSection] = useState<NegativeScreenSection>('termux');
+  const [negativeSection, setNegativeSection] = useState<NegativeScreenSection>('settings');
   const [tabletSplit, setTabletSplit] = useState(true);
   const [tabletPaneTab, setTabletPaneTab] = useState<TabletPaneTab>('terminal');
   const [crawlerSession, setCrawlerSession] = useState<CrawlerSessionData>(() => {
@@ -3131,7 +3132,7 @@ export default function App() {
             aria-label={t('neg_open_aria')}
             className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full border border-[var(--ide-border)] bg-[var(--ide-bg)] text-[var(--ide-text)] active:scale-95 transition-transform shrink-0"
           >
-            <Menu className="w-5 h-5" />
+            <SettingsIcon className="w-5 h-5" />
           </button>
           <img
             src="/icon.svg"
@@ -3577,16 +3578,15 @@ export default function App() {
         )}
       </main>
 
-      {/* Mobile workspace navigation: direct access to the five everyday destinations */}
+      {/* Mobile workspace navigation: direct access to the four everyday destinations */}
       {deviceClass === 'phone' && (
       <nav
         aria-label={t('nav_workspace')}
-        className="relative z-[60] shrink-0 h-[70px] pb-safe bg-[var(--md-surface-container-low)] border-t border-[var(--ide-border)] grid grid-cols-5"
+        className="relative z-[60] shrink-0 h-[70px] pb-safe bg-[var(--md-surface-container-low)] border-t border-[var(--ide-border)] grid grid-cols-4"
       >
         {(
           [
             { id: 'editor', label: t('mob_editor'), Icon: Code2 },
-            { id: 'packages', label: t('neg_tab_packages'), Icon: Package },
             { id: 'console', label: t('mob_console'), Icon: TerminalIcon },
             { id: 'files', label: t('mob_files'), Icon: FolderOpen },
             { id: 'browser', label: t('mob_browser'), Icon: Globe },
@@ -3598,16 +3598,10 @@ export default function App() {
               key={id}
               type="button"
               onClick={() => {
-                if (id === 'packages') {
-                  if (mobileTabRef.current !== 'packages') packageReturnTabRef.current = mobileTabRef.current;
-                  setMobileTab('packages');
-                  openNegativeDrawer('packages');
-                } else {
-                  // Leaving the package destination must also dismiss its drawer.
-                  // Otherwise the selected tab changes underneath the still-open overlay.
-                  setNegativeOpen(false);
-                  setMobileTab(id);
-                }
+                // The bottom bar is reserved for everyday workspaces. Packages and
+                // maintenance tools live behind the Settings entry in the app header.
+                setNegativeOpen(false);
+                setMobileTab(id);
               }}
               aria-label={label}
               aria-current={active ? 'page' : undefined}
