@@ -19,7 +19,8 @@ import {
   FileUp,
 } from 'lucide-react';
 import JSZip from 'jszip';
-import { PythonFile, ScriptBackupSnapshot } from '../types/ide';
+import { PythonFile, ScriptBackupSnapshot, TermuxConfig } from '../types/ide';
+import { SdcardFileBrowser } from './SdcardFileBrowser';
 import { SNIPPET_CATEGORIES, SNIPPET_TEMPLATES, SnippetCategoryId } from '../data/defaultFiles';
 import { useI18n } from '../services/i18n';
 import { copyTextReliable } from '../utils/clipboard';
@@ -38,6 +39,8 @@ interface FileExplorerProps {
   linkedDirName: string | null;
   termuxConnected?: boolean;
   termuxEmbedded?: boolean;
+  termuxConfig?: TermuxConfig;
+  onOpenExternalFile?: (file: { name: string; content: string; path: string }) => void;
   onOpenSdcardManager?: () => void;
   onBackupToSdcard?: () => Promise<void>;
   onPullFromTermux?: () => Promise<void>;
@@ -66,6 +69,8 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   linkedDirName,
   termuxConnected,
   termuxEmbedded,
+  termuxConfig,
+  onOpenExternalFile,
   onOpenSdcardManager,
   onBackupToSdcard,
   onPullFromTermux,
@@ -87,6 +92,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [showDeviceBrowser, setShowDeviceBrowser] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [templateCategory, setTemplateCategory] = useState<SnippetCategoryId>('all');
   const [showBackups, setShowBackups] = useState(false);
@@ -269,7 +275,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-[var(--ide-surface-alt)] text-[var(--ide-text)]">
+    <div className="relative flex flex-col h-full bg-[var(--ide-surface-alt)] text-[var(--ide-text)]">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--ide-border)] bg-[var(--ide-surface)] shrink-0">
         <div>
@@ -359,6 +365,15 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
             </button>
           </div>
           <div className="flex items-center gap-1.5">
+            {termuxConfig && (
+              <button
+                type="button"
+                onClick={() => setShowDeviceBrowser(true)}
+                className="flex-1 min-h-[44px] px-2 rounded-lg bg-[var(--ide-accent)] text-white text-xs font-semibold truncate"
+              >
+                瀏覽裝置檔案
+              </button>
+            )}
             {onOpenSdcardManager && (
               <button
                 type="button"
@@ -763,6 +778,17 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           <span>{t('files_zip')}</span>
         </button>
       </div>
+      {showDeviceBrowser && termuxConfig && onOpenExternalFile && (
+        <SdcardFileBrowser
+          config={termuxConfig}
+          onClose={() => setShowDeviceBrowser(false)}
+          onOpenFile={(file) => {
+            setShowDeviceBrowser(false);
+            onOpenExternalFile(file);
+          }}
+          onNotify={onNotify}
+        />
+      )}
     </div>
   );
 };
