@@ -90,6 +90,7 @@ assert.match(appSource, /setTermuxActiveTask\(\`install:\$\{target\.trim\(\)\}\`
 assert.match(exportSource, /activePyodidePackage/);
 assert.match(exportSource, /installingPkg \|\| activePyodidePackage/, 'the package search action must retain its spinner after the drawer remounts');
 assert.match(exportSource, /disabled=\{!!installingPkg \|\| !!activePyodidePackage/, 'package actions must remain disabled while an app-level Pyodide install is active');
+assert.match(exportSource, /overscroll-x-contain touch-pan-x/, 'horizontal package category gestures must stay within their scroller');
 assert.match(panelSource, /activeTermuxTask === \`install:\$\{tmx\.targetName\}\`/);
 assert.match(panelSource, /disabled=\{!!busyAction \|\| termuxRunning/);
 assert.doesNotMatch(panelSource, /handleInitEmbedded/);
