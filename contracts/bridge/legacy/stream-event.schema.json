@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://droidpy.dev/contracts/bridge/legacy/stream-event.schema.json",
+  "title": "DroidPy legacy Bridge NDJSON stream event",
+  "description": "Characterization schema for the existing Python and embedded Kotlin Bridge stream protocol. This is not the proposed v1 envelope.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "data"
+      ],
+      "properties": {
+        "type": {
+          "const": "stdout"
+        },
+        "data": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "exitCode",
+        "durationMs"
+      ],
+      "properties": {
+        "type": {
+          "const": "done"
+        },
+        "exitCode": {
+          "type": "integer"
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  ]
+}
