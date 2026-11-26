@@ -82,7 +82,7 @@ const TerminalEntryRow = React.memo<TerminalEntryRowProps>(
               <button
                 type="button"
                 onClick={() => onExpandPlot(entry.imageDataUrl!)}
-                className="min-h-[32px] px-2 flex items-center gap-1 rounded-md text-xs text-[var(--ide-text-muted)] hover:bg-[var(--ide-accent-soft)]"
+                className="min-h-[44px] px-2 flex items-center gap-1 rounded-md text-xs text-[var(--ide-text-muted)] hover:bg-[var(--ide-accent-soft)]"
               >
                 <Maximize2 className="w-3.5 h-3.5" />
                 <span>{plotZoomLabel}</span>
@@ -96,7 +96,7 @@ const TerminalEntryRow = React.memo<TerminalEntryRowProps>(
                     'image/png'
                   )
                 }
-                className="min-h-[32px] px-2 flex items-center gap-1 rounded-md text-xs text-[var(--ide-accent-text)] hover:bg-[var(--ide-accent-soft)]"
+                className="min-h-[44px] px-2 flex items-center gap-1 rounded-md text-xs text-[var(--ide-accent-text)] hover:bg-[var(--ide-accent-soft)]"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>PNG</span>
