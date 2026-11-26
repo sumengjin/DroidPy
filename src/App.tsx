@@ -1753,7 +1753,7 @@ export default function App() {
     }
   }, [termuxConfig, termuxPaused, termuxScriptRunning, appendEntry, showToast]);
 
-  const handleStopTermux = useCallback(async (source: 'tablet-header' | 'phone-header' = 'unknown') => {
+  const handleStopTermux = useCallback(async (source: 'tablet-header' | 'phone-header' | 'unknown' = 'unknown') => {
     if (termuxStopLockRef.current || (!termuxRunning && !termuxScriptStartLockRef.current)) return;
     // Package restore is a long-running maintenance task; require a second confirmation
     // so an accidental touch cannot silently terminate the APT operation.
