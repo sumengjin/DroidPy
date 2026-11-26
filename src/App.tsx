@@ -3143,6 +3143,7 @@ export default function App() {
               <span>{isCoreLoading ? t('cta_loading_core') : isRunning ? t('cta_running') : t('cta_run_program')}</span>
             </button>
           )}
+        </div>
       </header>
       )}
 
@@ -3214,6 +3215,7 @@ export default function App() {
               <span>{isCoreLoading ? t('cta_loading_short') : isRunning ? t('cta_running') : t('cta_run_short')}</span>
             </button>
           ) : null}
+        </div>
       </header>
       )}
 
