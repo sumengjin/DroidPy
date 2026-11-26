@@ -19,7 +19,6 @@ import {
   Maximize2,
   PanelLeft,
   Columns2,
-  Settings as SettingsIcon,
   Sparkles,
   Download,
 } from 'lucide-react';
@@ -343,7 +342,7 @@ export default function App() {
   mobileTabRef.current = mobileTab;
   const packageReturnTabRef = useRef<MobileTab>('editor');
   const [negativeOpen, setNegativeOpen] = useState(false);
-  const [negativeSection, setNegativeSection] = useState<NegativeScreenSection>('settings');
+  const [negativeSection, setNegativeSection] = useState<NegativeScreenSection>('termux');
   const [tabletSplit, setTabletSplit] = useState(true);
   const [tabletPaneTab, setTabletPaneTab] = useState<TabletPaneTab>('terminal');
   const [crawlerSession, setCrawlerSession] = useState<CrawlerSessionData>(() => {
@@ -3119,7 +3118,7 @@ export default function App() {
             title={t('neg_title')}
             className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full border border-[var(--ide-border)] bg-[var(--ide-bg)] text-[var(--ide-text)] active:scale-95 transition-transform shrink-0"
           >
-            <SettingsIcon className="w-5 h-5" />
+            <PanelLeft className="w-5 h-5" />
           </button>
           <img
             src="/icon.svg"
@@ -3595,7 +3594,7 @@ export default function App() {
               type="button"
               onClick={() => {
                 // The bottom bar is reserved for everyday workspaces. Packages and
-                // maintenance tools live behind the Settings entry in the app header.
+                // maintenance tools live behind the workspace menu in the app header.
                 setNegativeOpen(false);
                 setMobileTab(id);
               }}
