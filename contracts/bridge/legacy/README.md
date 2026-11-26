@@ -25,3 +25,10 @@ The PTY/process output is merged into the `stdout` event in both implementations
 ## Next compatibility work
 
 Before introducing a versioned protocol, add route-specific request/response schemas and fixtures, then run the same characterization cases against both servers. Do not use this legacy schema as a reason to change either runtime's behavior.
+
+## HTTP characterization fixture
+
+- `fixtures/stop-no-active.python.json`: expected response shape from the external Python handler when `POST /stop` has no active process (`stopped: false`).
+- `fixtures/stop-no-active.kotlin.json`: expected response shape from the embedded Kotlin handler for the same state (`ok: true`, without a `stopped` field).
+
+These are source-derived characterization expectations, not device-captured integration results. Their purpose is to preserve the known legacy difference until both implementations are exercised by a shared test harness.
