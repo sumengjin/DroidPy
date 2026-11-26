@@ -1578,7 +1578,7 @@ python ${entryFile}
         return (
           <div className="space-y-3">
             <p className="text-xs text-[var(--ide-text-muted)] px-0.5">{t('set_theme_desc')}</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2.5">
               {IDE_THEMES.map((themeItem) => {
                 const isSelected = settings.theme === themeItem.id;
                 const localized = getLocalizedThemeText(themeItem.id, locale);
@@ -1590,39 +1590,32 @@ python ${entryFile}
                       onUpdateSettings({ theme: themeItem.id });
                       onNotify(t('toast_theme_applied', { name: localized.name }));
                     }}
-                    className={`min-h-[72px] p-3.5 rounded-2xl border text-left flex items-center justify-between gap-3 transition-all ${
+                    aria-pressed={isSelected}
+                    className={`min-h-[88px] p-3 rounded-xl border text-left flex flex-col gap-2 transition-all ${
                       isSelected
                         ? 'border-[var(--ide-accent)] bg-[var(--ide-accent-soft)]'
                         : 'border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)]'
                     }`}
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div
-                        className="w-10 h-10 rounded-xl border border-black/10 dark:border-white/10 shrink-0 overflow-hidden grid grid-cols-2"
-                        style={{ backgroundColor: themeItem.swatchBg }}
-                        aria-hidden="true"
-                      >
-                        <div style={{ backgroundColor: themeItem.swatchSurface }} />
-                        <div style={{ backgroundColor: themeItem.swatchAccent }} />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold text-[var(--ide-text)] truncate">
-                          {localized.name}
-                        </div>
-                        <div className="text-xs text-[var(--ide-text-muted)] truncate mt-0.5">
-                          {themeItem.category === 'feminine'
-                            ? t('theme_cat_feminine')
-                            : t('theme_cat_classic')}{' '}
-                          · {localized.subtitle}
-                        </div>
-                      </div>
+                    <div className="flex items-center justify-between gap-2 min-w-0">
+                      <span className="text-sm font-semibold text-[var(--ide-text)] truncate">
+                        {localized.name}
+                      </span>
+                      {isSelected && (
+                        <span className="w-5 h-5 rounded-full bg-[var(--ide-accent)] text-white flex items-center justify-center shrink-0">
+                          <Check className="w-3 h-3" />
+                        </span>
+                      )}
                     </div>
-
-                    {isSelected && (
-                      <div className="w-6 h-6 rounded-full bg-[var(--ide-accent)] text-white flex items-center justify-center shrink-0">
-                        <Check className="w-3.5 h-3.5" />
-                      </div>
-                    )}
+                    <div
+                      className="h-8 w-full rounded-lg border border-black/10 dark:border-white/10 overflow-hidden grid grid-cols-3"
+                      style={{ backgroundColor: themeItem.swatchBg }}
+                      aria-hidden="true"
+                    >
+                      <span style={{ backgroundColor: themeItem.swatchBg }} />
+                      <span style={{ backgroundColor: themeItem.swatchSurface }} />
+                      <span style={{ backgroundColor: themeItem.swatchAccent }} />
+                    </div>
                   </button>
                 );
               })}
