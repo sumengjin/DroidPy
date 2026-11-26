@@ -3563,10 +3563,7 @@ export default function App() {
                 if (id === 'packages') {
                   if (mobileTabRef.current !== 'packages') packageReturnTabRef.current = mobileTabRef.current;
                   setMobileTab('packages');
-                  // Select the package destination explicitly before opening the drawer.
-                  // This avoids depending on a previous Tools tab selection or mount timing.
-                  setNegativeSection('packages');
-                  setNegativeOpen(true);
+                  openNegativeDrawer('packages');
                 } else {
                   // Leaving the package destination must also dismiss its drawer.
                   // Otherwise the selected tab changes underneath the still-open overlay.
