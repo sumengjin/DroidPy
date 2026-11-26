@@ -12,6 +12,7 @@ import {
   Loader2,
   Cpu,
   ArrowUpCircle,
+  PackagePlus,
   Search,
   Trash2,
   Activity,
