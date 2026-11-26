@@ -117,7 +117,7 @@ Runtime／Platform Provider 應回報能力，而不是讓 UI 依賴硬編碼的
 - `controlProcess`：停止／暫停／繼續（逐項宣告支援情況）。
 - `installPackage`／`removePackage`：套件操作，必須同時回報套件管理器與來源。
 - `listPackages`：清單及盤點完整度。
-- `syncWorkspace)：以明確檔案清單和相對路徑同步資料。
+- `syncWorkspace`：以明確檔案清單和相對路徑同步資料。
 
 這些是概念能力，不要求所有 Provider 都實作全部方法。缺少能力必須回報「不支援」，不能用空成功回應掩蓋。
 
