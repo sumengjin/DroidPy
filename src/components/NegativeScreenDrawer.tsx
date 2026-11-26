@@ -173,9 +173,6 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
           start.moved = true;
         }
       }}
-      onTouchEnd={() => {
-        // A drag that starts on a category/control must never become a backdrop-dismiss click.
-      }}
       onClick={(e) => {
         const touch = backdropTouchRef.current;
         backdropTouchRef.current = null;
