@@ -255,6 +255,9 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
     activeSubView === 'packages' ? 'pkg_native' : null
   );
   const [settingsFolder, setSettingsFolder] = useState<'appearance' | 'editor' | 'app' | null>(null);
+  const [termuxFolder, setTermuxFolder] = useState<'runtime' | 'maintenance' | null>(null);
+  const [packageFolder, setPackageFolder] = useState<'termux' | 'sandbox' | null>(null);
+  const [storageFolder, setStorageFolder] = useState<'device' | 'workspace' | null>(null);
   const [pkgQuery, setPkgQuery] = useState('');
   const [installingPkg, setInstallingPkg] = useState<string | null>(null);
   const [uninstallingPkg, setUninstallingPkg] = useState<string | null>(null);
@@ -277,11 +280,12 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
     Boolean(window.DroidPyNative?.hasStoragePermission?.())
   );
 
-  // Open the native package manager immediately when the user enters Packages.
-  // The runtime selector below keeps the sandbox manager one tap away.
   useEffect(() => {
-    setActiveWindow(activeSubView === 'packages' ? 'pkg_native' : null);
+    setActiveWindow(null);
     setSettingsFolder(null);
+    setTermuxFolder(null);
+    setPackageFolder(null);
+    setStorageFolder(null);
   }, [activeSubView]);
 
   const pyodideCatalog = useMemo(
@@ -725,6 +729,34 @@ python ${entryFile}
           <ChevronRight className="w-4 h-4 text-[var(--ide-text-muted)] shrink-0" />
         </button>
       ))}
+    </div>
+  );
+
+  const renderFolderList = <T extends string>(
+    folders: Array<{ id: T; title: string; desc: string }>,
+    onSelect: (id: T) => void
+  ) => (
+    <div className="divide-y divide-[var(--ide-border)]">
+      {folders.map((folder) => (
+        <button key={folder.id} type="button" onClick={() => onSelect(folder.id)}
+          className="w-full min-h-[76px] px-2.5 py-3 flex items-center gap-3 text-left hover:bg-[var(--ide-surface)] active:bg-[var(--ide-surface-alt)]">
+          <span className="w-10 h-10 rounded-xl bg-[var(--ide-accent-soft)] text-[var(--ide-accent)] flex items-center justify-center shrink-0"><Folder className="w-5 h-5" /></span>
+          <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-[var(--ide-text)]">{folder.title}</span><span className="block text-xs text-[var(--ide-text-muted)] mt-1">{folder.desc}</span></span>
+          <ChevronRight className="w-4 h-4 text-[var(--ide-text-muted)] shrink-0" />
+        </button>
+      ))}
+    </div>
+  );
+
+  const renderFolderContents = (title: string, items: HubOptionItem[], onBack: () => void) => (
+    <div>
+      <button type="button" onClick={onBack} className="mb-2 min-h-[44px] px-2 inline-flex items-center gap-2 text-sm font-semibold text-[var(--ide-accent-text)]">
+        <ArrowLeft className="w-4 h-4" />{t('win_back')}
+      </button>
+      <div className="flex items-center gap-2 px-2 pb-2 text-sm font-semibold text-[var(--ide-text)]">
+        <Folder className="w-4 h-4 text-[var(--ide-accent)]" />{title}
+      </div>
+      {renderHubOptionList(items)}
     </div>
   );
 
@@ -2119,55 +2151,71 @@ python ${entryFile}
 
   const renderHubHome = () => {
     if (activeSubView === 'termux') {
-      return renderHubOptionList(pythonHubOptions);
+      if (!termuxFolder) {
+        return renderFolderList([
+          { id: 'runtime' as const, title: t('hub_py_folder_runtime'), desc: t('hub_py_folder_runtime_desc') },
+          { id: 'maintenance' as const, title: t('hub_py_folder_maintenance'), desc: t('hub_py_folder_maintenance_desc') },
+        ], setTermuxFolder);
+      }
+      const items = termuxFolder === 'runtime'
+        ? pythonHubOptions.filter((item) => ['py_conn', 'py_init', 'py_shell'].includes(item.id))
+        : pythonHubOptions.filter((item) => ['py_maint', 'py_bridge'].includes(item.id));
+      return renderFolderContents(
+        termuxFolder === 'runtime' ? t('hub_py_folder_runtime') : t('hub_py_folder_maintenance'),
+        items,
+        () => setTermuxFolder(null)
+      );
     }
     if (activeSubView === 'packages') {
       return (
         <div className="space-y-3">
           {renderBackupBanner()}
-          {renderHubOptionList(packageHubOptions)}
+          {!packageFolder
+            ? renderFolderList([
+                { id: 'termux' as const, title: t('hub_pkg_folder_termux'), desc: t('hub_pkg_folder_termux_desc') },
+                { id: 'sandbox' as const, title: t('hub_pkg_folder_sandbox'), desc: t('hub_pkg_folder_sandbox_desc') },
+              ], setPackageFolder)
+            : renderFolderContents(
+                packageFolder === 'termux' ? t('hub_pkg_folder_termux') : t('hub_pkg_folder_sandbox'),
+                packageHubOptions.filter((item) => item.id === (packageFolder === 'termux' ? 'pkg_native' : 'pkg_sandbox')),
+                () => setPackageFolder(null)
+              )}
         </div>
       );
     }
     if (activeSubView === 'android') {
-      return renderHubOptionList(storageHubOptions);
+      if (!storageFolder) {
+        return renderFolderList([
+          { id: 'device' as const, title: t('hub_storage_folder_device'), desc: t('hub_storage_folder_device_desc') },
+          { id: 'workspace' as const, title: t('hub_storage_folder_workspace'), desc: t('hub_storage_folder_workspace_desc') },
+        ], setStorageFolder);
+      }
+      const items = storageFolder === 'device'
+        ? storageHubOptions.filter((item) => ['st_sdcard', 'st_cache'].includes(item.id))
+        : storageHubOptions.filter((item) => item.id === 'st_dir');
+      return renderFolderContents(
+        storageFolder === 'device' ? t('hub_storage_folder_device') : t('hub_storage_folder_workspace'),
+        items,
+        () => setStorageFolder(null)
+      );
     }
     if (activeSubView === 'settings') {
       if (!settingsFolder) {
-        const folders = [
-          { id: 'appearance' as const, title: t('hub_set_appearance'), desc: t('hub_set_appearance_desc'), count: 3 },
-          { id: 'editor' as const, title: t('hub_set_editor'), desc: t('hub_set_editor_desc'), count: 1 },
-          { id: 'app' as const, title: t('hub_set_app'), desc: t('hub_set_app_desc'), count: 2 },
-        ];
-        return (
-          <div className="divide-y divide-[var(--ide-border)]">
-            {folders.map((folder) => (
-              <button key={folder.id} type="button" onClick={() => setSettingsFolder(folder.id)}
-                className="w-full min-h-[76px] px-2.5 py-3 flex items-center gap-3 text-left hover:bg-[var(--ide-surface)] active:bg-[var(--ide-surface-alt)]">
-                <span className="w-10 h-10 rounded-xl bg-[var(--ide-accent-soft)] text-[var(--ide-accent)] flex items-center justify-center shrink-0"><Folder className="w-5 h-5" /></span>
-                <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-[var(--ide-text)]">{folder.title}</span><span className="block text-xs text-[var(--ide-text-muted)] mt-1">{folder.desc}</span></span>
-                <ChevronRight className="w-4 h-4 text-[var(--ide-text-muted)] shrink-0" />
-              </button>
-            ))}
-          </div>
-        );
+        return renderFolderList([
+          { id: 'appearance' as const, title: t('hub_set_appearance'), desc: t('hub_set_appearance_desc') },
+          { id: 'editor' as const, title: t('hub_set_editor'), desc: t('hub_set_editor_desc') },
+          { id: 'app' as const, title: t('hub_set_app'), desc: t('hub_set_app_desc') },
+        ], setSettingsFolder);
       }
       const folderItems = settingsFolder === 'appearance'
         ? settingsHubOptions.filter((item) => ['set_theme', 'set_bg3d', 'set_lang'].includes(item.id))
         : settingsFolder === 'editor'
           ? settingsHubOptions.filter((item) => item.id === 'set_editor')
           : settingsHubOptions.filter((item) => ['set_app', 'set_apk'].includes(item.id));
-      return (
-        <div>
-          <button type="button" onClick={() => setSettingsFolder(null)} className="mb-2 min-h-[44px] px-2 inline-flex items-center gap-2 text-sm font-semibold text-[var(--ide-accent-text)]">
-            <ArrowLeft className="w-4 h-4" />{t('win_back')}
-          </button>
-          <div className="flex items-center gap-2 px-2 pb-2 text-sm font-semibold text-[var(--ide-text)]">
-            <Folder className="w-4 h-4 text-[var(--ide-accent)]" />
-            {settingsFolder === 'appearance' ? t('hub_set_appearance') : settingsFolder === 'editor' ? t('hub_set_editor') : t('hub_set_app')}
-          </div>
-          {renderHubOptionList(folderItems)}
-        </div>
+      return renderFolderContents(
+        settingsFolder === 'appearance' ? t('hub_set_appearance') : settingsFolder === 'editor' ? t('hub_set_editor') : t('hub_set_app'),
+        folderItems,
+        () => setSettingsFolder(null)
       );
     }
     return (
@@ -2181,64 +2229,38 @@ python ${entryFile}
     );
   };
 
+  const activeFolderLabel = activeSubView === 'termux'
+    ? termuxFolder === 'runtime' ? t('hub_py_folder_runtime') : termuxFolder === 'maintenance' ? t('hub_py_folder_maintenance') : ''
+    : activeSubView === 'packages'
+      ? packageFolder === 'termux' ? t('hub_pkg_folder_termux') : packageFolder === 'sandbox' ? t('hub_pkg_folder_sandbox') : ''
+      : activeSubView === 'android'
+        ? storageFolder === 'device' ? t('hub_storage_folder_device') : storageFolder === 'workspace' ? t('hub_storage_folder_workspace') : ''
+        : activeSubView === 'settings'
+          ? settingsFolder === 'appearance' ? t('hub_set_appearance') : settingsFolder === 'editor' ? t('hub_set_editor') : settingsFolder === 'app' ? t('hub_set_app') : ''
+          : '';
+
   return (
     <div className="h-full overflow-y-auto ide-scroll bg-[var(--ide-bg)] text-[var(--ide-text)]">
       {activeWindow && activeOptionMeta ? (
         <>
-          <div className="bg-[var(--ide-bg)] border-b border-[var(--ide-border)] px-3.5 py-2.5 space-y-2.5">
-            {activeSubView === 'packages' ? (
-              <>
-                <div className="flex items-center gap-2">
-                  <Package className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
-                  <span className="text-sm font-semibold text-[var(--ide-text)]">{t('neg_tab_packages')}</span>
-                </div>
-                <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-[var(--ide-surface-alt)] border border-[var(--ide-border)]">
-                  <button
-                    type="button"
-                    onClick={() => setActiveWindow('pkg_native')}
-                    aria-pressed={activeWindow === 'pkg_native'}
-                    className={`min-h-[44px] rounded-lg px-2 text-xs font-semibold inline-flex items-center justify-center gap-2 transition-colors ${
-                      activeWindow === 'pkg_native'
-                        ? 'bg-[var(--ide-accent)] text-white shadow-sm'
-                        : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
-                    }`}
-                  >
-                    <Package className="w-4 h-4" />
-                    <span className="truncate">{t('hub_pkg_native')}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveWindow('pkg_sandbox')}
-                    aria-pressed={activeWindow === 'pkg_sandbox'}
-                    className={`min-h-[44px] rounded-lg px-2 text-xs font-semibold inline-flex items-center justify-center gap-2 transition-colors ${
-                      activeWindow === 'pkg_sandbox'
-                        ? 'bg-[var(--ide-accent)] text-white shadow-sm'
-                        : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
-                    }`}
-                  >
-                    <Cpu className="w-4 h-4" />
-                    <span className="truncate">{t('hub_pkg_sandbox')}</span>
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div className="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setActiveWindow(null)}
-                  className="min-h-[44px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] text-xs font-semibold inline-flex items-center gap-1.5 shrink-0 transition-colors"
-                >
-                  <ArrowLeft className="w-4 h-4 text-[var(--ide-accent)]" />
-                  <span>{t('win_back')}</span>
-                </button>
-                <div className="flex items-center gap-2 min-w-0 flex-1">
+          <div className="bg-[var(--ide-bg)] border-b border-[var(--ide-border)] px-3.5 py-2.5">
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => setActiveWindow(null)}
+                className="min-h-[44px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] text-xs font-semibold inline-flex items-center gap-1.5 shrink-0 transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4 text-[var(--ide-accent)]" />
+                <span>{t('win_back')}</span>
+              </button>
+              <div className="min-w-0 flex-1">
+                {activeFolderLabel && <div className="text-[11px] text-[var(--ide-text-muted)] truncate">{activeFolderLabel}</div>}
+                <div className="flex items-center gap-2 min-w-0">
                   <activeOptionMeta.Icon className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
-                  <span className="text-sm font-semibold text-[var(--ide-text)] truncate">
-                    {activeOptionMeta.title}
-                  </span>
+                  <span className="text-sm font-semibold text-[var(--ide-text)] truncate">{activeOptionMeta.title}</span>
                 </div>
               </div>
-            )}
+            </div>
           </div>
           <div
             className={`${
