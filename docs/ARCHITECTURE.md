@@ -36,9 +36,10 @@ DroidPy 不應被目前的 TypeScript／React 技術選型限制未來功能、�
 目前至少有兩種不同執行器，不能假設其能力與套件環境相同：
 
 - **Pyodide**：`src/services/pyodideRuntime.ts`，Python 3.12 WebAssembly，使用瀏覽器記憶體檔案系統與 micropip；另有 `droid` 裝置功能橋接。
-- **Termux CPython**：由 `src/services/termuxBridge.ts` 產生 Python HTTP 服務，執行原生 ARM64 Python、shell、PTY 與 APT／pip 套件操作。
+- **Termux CPython**：由 `src/services/termuxBridge.ts` 產生 Python HTTP 服務，執行原生 ARM64 Python、shell、PTY 與 APT／pip 套件操作；它是完整開發環境的主力 Provider。
+- **Chaquopy（候選 Provider，尚未整合）**：透過 Android Gradle Plugin 將 CPython 與選定的 Python 套件整合進 Android App，讓 Kotlin／Java 與 Python 在 App 內直接互通。適合內建功能、離線基礎能力及需要緊密呼叫 Android API 的工作；其套件供應與原生擴充受 Chaquopy 支援範圍、Android ABI 和建置期整合方式限制，不能視為 Termux APT／TUR 或一般 Termux pip 環境的替代品。
 
-兩個執行器應被視為不同的 Runtime Provider。它們可實作共同的基本能力，但各自的能力、限制、套件索引、ABI 與檔案可見範圍必須明確回報，不可假裝完全相同。
+三者應被視為不同的 Runtime Provider。它們可實作共同的基本能力，但各自的能力、限制、套件索引、ABI 與檔案可見範圍必須明確回報，不可假裝完全相同。Chaquopy 在完成獨立技術驗證前只列為候選，不代表已支援或已進入正式 APK。
 
 ### 2.3 Android 原生層
 
@@ -60,7 +61,7 @@ DroidPy 不應被目前的 TypeScript／React 技術選型限制未來功能、�
 |---|---|---|---|
 | Presentation | 編輯器、終端、套件中心、檔案、瀏覽器與無障礙 UI | TypeScript／React，未來可替換 | Kotlin 私有類別、Python 內部模組 |
 | Application Facade | 工作階段、命令調度、狀態協調、錯誤呈現 | 任意合適語言 | 特定 UI 框架 |
-| Runtime Providers | Pyodide、Termux CPython，以及未來其他語言執行器 | Python、Rust、C/C++、Java/Kotlin 等 | React 元件 |
+| Runtime Providers | Pyodide、Termux CPython、候選 Chaquopy，以及未來其他語言執行器 | Python、Rust、C/C++、Java/Kotlin 等 | React 元件 |
 | Platform Services | Android 權限、檔案、Cookie、背景工作、通知、硬體能力 | Kotlin／Java；必要時 JNI | Web UI 狀態 |
 | Shared Contracts | 命令、事件、資料模型、錯誤、能力宣告與版本 | JSON／JSON Schema 等語言中立格式 | 任一語言專屬型別 |
 | Native Extensions | 高效能運算、系統函式庫、原生套件 | Rust／C／C++ 等 | UI 直接呼叫原生細節 |
@@ -121,6 +122,8 @@ Runtime／Platform Provider 應回報能力，而不是讓 UI 依賴硬編碼的
 
 這些是概念能力，不要求所有 Provider 都實作全部方法。缺少能力必須回報「不支援」，不能用空成功回應掩蓋。
 
+Provider 的選擇應依能力、工作類型與使用者設定決定：Termux 優先承擔完整互動式開發、shell 與廣泛套件管理；Chaquopy 若驗證通過，承擔 APK 內建、離線且需直接呼叫 Android API 的 Python 功能；Pyodide 承擔瀏覽器沙盒與免安裝試跑。可提供自動選擇及手動覆寫，但不得在使用者不知情下把專案切換到另一個套件環境。不同 Provider 的套件環境、ABI、檔案可見範圍與已安裝套件清單必須分開盤點，不能假裝共用或自動搬移。
+
 未來新增語言執行器時，應透過 Provider 註冊與語言描述資料接入；不得要求 UI 為每種語言複製一整套畫面。語言描述可包括 ID、顯示名稱、檔案副檔名、執行入口、除錯能力、套件管理器與環境需求。真正的執行與套件安裝仍由對應 Provider 負責。
 
 ## 6. 遷移順序
@@ -147,8 +150,9 @@ Runtime／Platform Provider 應回報能力，而不是讓 UI 依賴硬編碼的
 - 保持現有儲存資料格式與使用者工作區向後相容。
 
 ### Phase 4 — 擴充語言與原生能力
-- 依真實需求新增其他 Runtime Provider。
-- 對效能或 Android 系統整合需求，再選擇 Rust／C/C++／JNI 等實作。
+- 先建立 Chaquopy 獨立技術驗證：確認現有 Gradle／Buildozer APK 流程能否整合、Python 版本與 ARM64 ABI、Kotlin↔Python 雙向呼叫、代表性套件相容性、離線啟動、APK 體積、簽名及 CI；驗證不通過就保留為研究項目，不影響 Termux 主路線。
+- 若驗證通過，再以獨立 Provider 接入；Termux CPython 仍是完整開發環境主力，Pyodide 仍是瀏覽器沙盒，不強迫所有工作負載使用同一引擎。
+- 依真實需求新增其他 Runtime Provider。對效能或 Android 系統整合需求，再選擇 Rust／C/C++／JNI 等實作。
 - 任何新語言都必須遵守共同契約與測試，不要求 TypeScript 成為中介語言。
 
 ## 7. 不可破壞的產品約束
