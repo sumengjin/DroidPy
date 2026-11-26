@@ -3,6 +3,7 @@
 All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
+- **精簡重複設定**：保留原有全部內置主題與配色；移除編輯器設定中重複的沙盒開關，沙盒啟用狀態統一在套件管理頁控制，並刪除重複的啟用按鈕。
 - **啟動手機版工作區大改版第一階段**：將套件管理提升為底部主導覽的一級入口；套件頁直接以全螢幕呈現，不再以窄側欄遮住主要內容；工具分類與套件操作加大觸控區，套件清單交由頁面單一捲動區管理，減少巢狀捲動與誤觸。編輯器、終端機、檔案與瀏覽器原有功能保持不變。
 - **改善手機版主要導覽與工具入口**：底部導覽新增固定可見的「工具」入口，無需依賴側邊緣滑動或頂部選單即可開啟 Termux、套件、儲存與系統功能；工具分類改為圖示與文字垂直排列、增加觸控高度，首頁功能卡片加大並允許描述換行，降低誤觸與辨識成本。
 - **明確保留 Python 官方 PyPI 套件索引**：APK 內建環境與外部 Termux Bridge 的 pip 設定都明確以 `https://pypi.org/simple` 作為預設索引；Termux APT 原生預編譯路由仍優先處理已確認的 Android 套件，第三方 wheel 不會覆蓋 PyPI 預設來源，並須驗證 Android／Python ABI。\n- **擴充官方 Termux ARM64 預編譯套件目錄**：新增 psutil、msgpack、gRPC、Brotli、bcrypt、PyCryptodomeX、APSW、TensorFlow Lite Runtime、PyTorch、TorchVision、TorchAudio 等原生套件，並將 yt-dlp 改為官方預編譯套件；終端機、套件管理介面與備份還原共用相同套件名稱對應。PyTorch 系列標示為按需安裝，不預先塞入 APK。；外部 Termux 若已有使用者自訂 `pip.conf`，DroidPy 不會覆寫私有索引或憑證設定，新環境才建立 PyPI 預設設定。
