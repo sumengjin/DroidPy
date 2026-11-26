@@ -1646,6 +1646,7 @@ export default function App() {
   );
 
   const handleToggleTermuxPause = useCallback(async () => {
+    if (!termuxScriptRunning) return;
     try {
       if (termuxPaused) {
         await resumeTermuxProcess(termuxConfig);
@@ -1661,7 +1662,7 @@ export default function App() {
       appendEntry('stderr', message);
       showToast(message);
     }
-  }, [termuxConfig, termuxPaused, appendEntry, showToast]);
+  }, [termuxConfig, termuxPaused, termuxScriptRunning, appendEntry, showToast]);
 
   const handleStopTermux = useCallback(async () => {
     abortActiveTermuxStream();
@@ -1695,7 +1696,13 @@ export default function App() {
 
   const handleCleanupStuckProcesses = useCallback(
     async (manual = false) => {
-      if (cleaningProcesses) return;
+      if (
+        cleaningProcesses ||
+        termuxRunning ||
+        termuxOperationLockRef.current ||
+        termuxScriptStartLockRef.current
+      ) return;
+      termuxOperationLockRef.current = true;
       setCleaningProcesses(true);
       try {
         const res = await cleanupTermuxProcesses(termuxConfigRef.current, manual);
@@ -1725,9 +1732,10 @@ export default function App() {
         }
       } finally {
         setCleaningProcesses(false);
+        termuxOperationLockRef.current = false;
       }
     },
-    [cleaningProcesses, appendEntry, showToast, t]
+    [cleaningProcesses, termuxRunning, appendEntry, showToast, t]
   );
 
   const handleRebuildPipCertifi = useCallback(async () => {
