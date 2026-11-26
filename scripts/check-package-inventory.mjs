@@ -13,6 +13,11 @@ const [source, bridgeSource, catalogSource, exportSource, panelSource, frostwork
 
 const catalogItems = catalogSource.split(/\n  \{\n    id: '/).slice(1);
 assert.ok(catalogItems.length >= 70, 'package catalog should retain its complete inventory');
+const themeCardNamesBlock = exportSource.match(/const THEME_CARD_NAMES:[\\s\\S]*?\\n};/)?.[0];
+assert.ok(themeCardNamesBlock, 'theme selector must define compact card labels');
+const themeCardLabels = [...themeCardNamesBlock.matchAll(/'zh-TW': '([^']+)'/g)].map((match) => match[1]);
+assert.equal(themeCardLabels.length, 14, 'all 14 built-in themes must have a card label');
+assert.ok(themeCardLabels.every((label) => [...label].length === 4), 'Traditional Chinese theme card labels must be exactly four characters');
 assert.match(frostworkSource, /def navigation\(/, 'pure-Python Frostwork navigation fallback must be bundled');
 assert.match(frostworkSource, /class Page:/, 'pure-Python multi-field extraction API must be bundled');
 assert.match(frostworkSource, /def _css_nodes\(/, 'CSS selector fallback must be bundled');
