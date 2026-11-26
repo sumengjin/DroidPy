@@ -2246,6 +2246,7 @@ export default function App() {
     ) {
       return;
     }
+    termuxOperationLockRef.current = true;
     setCheckingTermuxOutdated(true);
     try {
       const res = await execTermuxShell(termuxConfigRef.current, 'pip list --outdated --format=json');
@@ -2259,6 +2260,7 @@ export default function App() {
       // ignore check error
     } finally {
       setCheckingTermuxOutdated(false);
+      termuxOperationLockRef.current = false;
     }
   }, [termuxConnectionState, termuxHealth?.hasPython, termuxHealth?.installedPkgPackages, checkingTermuxOutdated, termuxRunning, showToast, t]);
 
