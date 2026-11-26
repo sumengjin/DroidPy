@@ -420,9 +420,24 @@ jobs:
           # 產生包含歷史版本 APK 下載清單的發佈說明（不刪除既有歷史 Release 與 APK）
           {
             if [ -f CHANGELOG.md ]; then
-              cat CHANGELOG.md
+              # Publish only the newest numbered release section; keep Unreleased and older history out of the in-app notes.
+              CHANGELOG_SECTION=$(awk '
+                /^## \\[[0-9]+\\.[0-9]+\\.[0-9]+\\]/ {
+                  if (found) exit
+                  found = 1
+                }
+                /^## \\[/ && found && $0 !~ /^## \\[[0-9]+\\.[0-9]+\\.[0-9]+\\]/ { exit }
+                found { print }
+              ' CHANGELOG.md)
+              if [ -n "$CHANGELOG_SECTION" ]; then
+                printf '%s\\n' "$CHANGELOG_SECTION"
+              else
+                echo "# DroidPy ${REL_TAG}"
+                echo "此版本尚未提供專屬更新日誌。"
+              fi
             else
               echo "# DroidPy ${REL_TAG}"
+              echo "此版本尚未提供專屬更新日誌。"
             fi
             echo ""
             echo "---"
