@@ -182,20 +182,20 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
             onClose();
           }
         }}
-        className="w-[90vw] max-w-[460px] h-full rounded-r-[28px] bg-[var(--ide-bg)] text-[var(--ide-text)] border-r border-[var(--ide-border)] shadow-2xl flex flex-col overflow-hidden"
+        className="w-full sm:w-[90vw] sm:max-w-[460px] h-full rounded-none sm:rounded-r-[28px] bg-[var(--ide-bg)] text-[var(--ide-text)] border-r border-[var(--ide-border)] shadow-2xl flex flex-col overflow-hidden"
       >
         {/* Drawer Header */}
-        <div className="px-4 py-3 pt-safe border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] flex items-center justify-between gap-3 shrink-0">
+        <div className="px-4 py-3.5 pt-safe border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
             <img
               src="/icon.svg"
               alt="DroidPy"
-              className="w-7 h-7 rounded-lg shrink-0"
+              className="w-9 h-9 rounded-xl shrink-0"
               referrerPolicy="no-referrer"
             />
             <div className="min-w-0">
-              <h2 className="text-sm font-bold truncate">{t('neg_title')}</h2>
-              <p className="text-[11px] text-[var(--ide-text-muted)] truncate">{t('neg_subtitle')}</p>
+              <h2 className="text-base font-bold truncate">{t('neg_title')}</h2>
+              <p className="text-xs text-[var(--ide-text-muted)] truncate mt-0.5">{t('neg_subtitle')}</p>
             </div>
           </div>
           <button
