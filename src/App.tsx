@@ -3381,35 +3381,37 @@ export default function App() {
         )}
       </main>
 
-      {/* Phone MD3 Bottom Navigation: keep primary workspace and tools visible */}
+      {/* Mobile workspace navigation: direct access to the five everyday destinations */}
       {deviceClass === 'phone' && (
       <nav
         aria-label={t('nav_workspace')}
-        className="relative z-10 shrink-0 h-[66px] pb-safe bg-[var(--md-surface-container-low)] border-t border-[var(--ide-border)] grid grid-cols-5"
+        className="relative z-10 shrink-0 h-[70px] pb-safe bg-[var(--md-surface-container-low)] border-t border-[var(--ide-border)] grid grid-cols-5"
       >
         {(
           [
             { id: 'editor', label: t('mob_editor'), Icon: Code2 },
+            { id: 'packages', label: t('neg_tab_packages'), Icon: Package },
             { id: 'console', label: t('mob_console'), Icon: TerminalIcon },
             { id: 'files', label: t('mob_files'), Icon: FolderOpen },
             { id: 'browser', label: t('mob_browser'), Icon: Globe },
-            { id: 'tools', label: t('neg_title'), Icon: Menu },
           ] as const
         ).map(({ id, label, Icon }) => {
-          const active = id === 'tools' ? negativeOpen : mobileTab === id;
+          const active = mobileTab === id;
           return (
             <button
               key={id}
               type="button"
               onClick={() => {
-                if (id === 'tools') {
-                  openNegativeDrawer('termux');
+                if (id === 'packages') {
+                  setMobileTab('packages');
+                  openNegativeDrawer('packages');
                 } else {
                   setMobileTab(id);
                 }
               }}
               aria-label={label}
-              className={`min-h-[48px] min-w-0 flex flex-col items-center justify-center gap-0.5 transition-colors ${
+              aria-current={active ? 'page' : undefined}
+              className={`min-h-[52px] min-w-0 flex flex-col items-center justify-center gap-1 transition-colors active:scale-[0.97] ${
                 active ? 'text-[var(--ide-accent-text)]' : 'text-[var(--ide-text-muted)]'
               }`}
             >
@@ -3420,7 +3422,7 @@ export default function App() {
               >
                 <Icon className="w-5 h-5" />
               </span>
-              <span className="text-[10px] font-medium tracking-tight truncate max-w-full px-0.5">{label}</span>
+              <span className="text-[10px] font-semibold tracking-tight truncate max-w-full px-0.5">{label}</span>
             </button>
           );
         })}
@@ -3432,7 +3434,10 @@ export default function App() {
         open={negativeOpen}
         section={negativeSection}
         onChangeSection={setNegativeSection}
-        onClose={() => setNegativeOpen(false)}
+        onClose={() => {
+          setNegativeOpen(false);
+          if (mobileTab === 'packages') setMobileTab('editor');
+        }}
         files={files}
         activeFile={activeFile}
         settings={settings}
