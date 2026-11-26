@@ -6,6 +6,7 @@ export interface PythonFile {
   name: string;
   content: string;
   updatedAt: number;
+  externalPath?: string;
 }
 
 export type TerminalEntryType =
