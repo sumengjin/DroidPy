@@ -1,0 +1,92 @@
+# Bridge 相容性盤點（Phase 1）
+
+> 盤點基準：`architecture/language-neutral-core`，2026-11-27
+> 狀態：靜態程式碼盤點 v0.1；尚未加入新協定或修改現有 Bridge 行為。
+> 對照來源：`src/services/termuxBridge.ts`、`src/services/androidApkBuilder.ts`（其中產生 `EmbeddedTermuxBridge` Kotlin 原始碼）。
+
+## 1. 實作位置與運行方式
+
+| 項目 | 外部 Termux | APK 內嵌環境 |
+|---|---|---|
+| 實作語言 | Python | Kotlin |
+| Server | `ThreadingHTTPServer` 衍生類別 | `ServerSocket` + 有界 `ThreadPoolExecutor` |
+| 預設端點 | `127.0.0.1:8765` | 穩定版 8765；Beta 8766 |
+| Token | 由 App 產生並經啟動命令傳入 Python Bridge | Android 私有目錄保存的每安裝隨機 token |
+| 工作目錄 | `~/droidpy_workspace` | App 私有 Termux workspace |
+| 串流 | HTTP NDJSON | HTTP NDJSON |
+| 來源 | `src/services/termuxBridge.ts` | `src/services/androidApkBuilder.ts` 產生 Kotlin |
+
+兩個實作並不是同一份程式碼的不同語言版本。它們共用部分路由名稱與使用者體驗，但功能集合、資料來源和內部程序管理方式有差異。
+
+## 2. 外部 Python Bridge 目前路由
+
+| 方法 | 路徑 | 用途 | 回應形式 |
+|---|---|---|---|
+| GET | `/health` | Python 版本、架構、工具與 pip／APT 套件盤點 | JSON |
+| GET | `/files` | 讀取工作區允許副檔名的小型檔案 | JSON |
+| POST | `/run` | 同步執行 Python 檔案 | JSON |
+| POST | `/run-stream` | PTY Python 執行與輸出 | NDJSON |
+| POST | `/shell` | 同步執行 shell 命令 | JSON |
+| POST | `/shell-stream` | PTY shell 輸出 | NDJSON |
+| POST | `/install` | pip／pkg 安裝 | JSON |
+| POST | `/install-stream` | pip／pkg 安裝串流 | NDJSON |
+| POST | `/stdin` | 對作用中的 PTY 傳送輸入 | JSON |
+| POST | `/stop` | 明確停止作用中的程序 | JSON |
+| POST | `/pause`、`/resume` | 暫停／繼續作用中的程序 | JSON |
+| POST | `/probe-url` | 受安全限制的 URL 探測 | JSON |
+| POST | `/maintenance/cleanup-processes` | 程序清理診斷／維護 | JSON |
+| OPTIONS | 預檢 | 限制方法、來源與允許標頭 | HTTP 204 |
+
+Python Bridge 的串流事件目前主要為 `{"type":"stdout","data":"..."}` 與結束事件 `{"type":"done","exitCode":...,"durationMs":...}`。PTY 將 stdout／stderr 合併，因此事件類型不能被誤解為完整保留原始 stdout／stderr 分流。
+
+## 3. APK 內嵌 Kotlin Bridge 目前能力
+
+Kotlin 路由集合除健康檢查、工作區檔案、執行／shell／安裝串流、stdin、停止／暫停／繼續及 URL 探測外，還包括：
+
+| 方法 | 路徑 | 能力 |
+|---|---|---|
+| GET | `/backup/status` | 套件備份與盤點完整度 |
+| POST | `/backup/restore` | 依備份還原原生與 pip 套件 |
+| GET | `/logs` | 讀取 App 原生日誌與受限 logcat |
+| POST | `/logs/clear` | 清理原生日誌 |
+| GET | `/storage/app-usage` | App 私有儲存空間盤點 |
+| POST | `/storage/cleanup` | 受限制的儲存清理 |
+| GET | `/sdcard/status` | Android 共用儲存權限與狀態 |
+| GET | `/sdcard/list` | 共用儲存目錄列表 |
+| POST | `/sdcard/read`、`/write` | 共用儲存檔案讀寫 |
+| POST | `/sdcard/mkdir`、`/delete` | 共用儲存目錄建立與刪除 |
+| POST | `/droid-action` | Android 原生裝置動作 |
+| POST | `/maintenance/cleanup-processes` | 內嵌環境程序維護 |
+
+內嵌 Kotlin Bridge 還能提供打包的 Web 靜態資產；該行為不是外部 Termux Python Bridge 的通用 Runtime 能力。
+
+## 4. 已確認的相容性差異
+
+1. **功能集合不相同。** 外部 Python Bridge 沒有 Kotlin 端的套件備份還原、原生日誌、App 儲存空間與 SD 卡操作路由。UI 必須依 Provider 能力顯示或停用功能，不能只依「已連線」推斷全部功能可用。
+2. **健康資料來源不相同。** Python 端透過目前 Python／dpkg 環境盤點；Kotlin 端直接檢查內嵌 `usr/`、套件清單與 App 私有資料。相同欄位名稱不代表資料收集語義完全一致。
+3. **Python 版本回報不對稱。** 外部 Bridge 回報真實 `platform.python_version()`；目前內嵌 Kotlin 健康資料以 `Termux Embedded` 等標籤回報，應在新能力模型中分開提供 runtime label 與實際版本。
+4. **串流事件資訊不足。** 目前以 `type/data` 和 `done` 為主，缺少統一 request ID、事件序號、progress／process-state／cancelled 等標準事件。
+5. **執行語義不同。** Python 端具有非串流 `/run`、`/install` 與 `/shell`；內嵌 Kotlin 目前主要透過串流路由執行。不能假設所有 Provider 都支援相同同步模式。
+6. **程序控制需要逐項驗證。** 兩邊均有明確停止與 PTY 控制，但程序保留、客戶端斷線、重啟後控制能力與輸出尾端處理必須用同一組測試驗證，不能僅以路由存在判定相容。
+
+## 5. 安全基線（新契約必須保留）
+
+- 僅綁定／接受預期的 loopback Host，驗證可信任 Origin。
+- 以每安裝權杖驗證受保護的 API；不在日誌、共享儲存或診斷回報暴露權杖。
+- 限制請求大小、Header 大小、讀取逾時、工作佇列與並行請求數。
+- 拒絕重複或含糊的 Content-Length／Transfer-Encoding framing。
+- URL 探測必須保留 SSRF、DNS／Redirect 與跨來源敏感 Header 防護。
+- 使用者程序不能因單純 HTTP 客戶端斷線而被意外殺掉；停止必須是明確、已驗證的操作。
+- SD 卡讀寫／刪除需維持 canonical path 與儲存權限檢查。
+
+## 6. Phase 1 下一步
+
+- [ ] 對每條共用路由記錄 request JSON 欄位、成功回應、錯誤狀態與錯誤 JSON。
+- [ ] 對兩個實作建立相同輸入 fixture，確認共同語義與允許差異。
+- [ ] 以同一組測試驗證權杖錯誤、Origin／Host 錯誤、超大請求、無效 JSON、逾時、串流斷線、明確停止。
+- [ ] 加入能力宣告 fixture，將「不支援」與「執行失敗」區分。
+- [ ] 在相容性測試通過前，不移除舊路由、不更改 8765／8766，也不遷移 UI 呼叫。
+
+## 7. 本文件的限制
+
+這是靜態原始碼盤點，不是兩個 Bridge 已通過同一組整合測試的聲明。表中功能需再以實際 request／response fixture 與 Android 10+ 裝置測試驗證。
