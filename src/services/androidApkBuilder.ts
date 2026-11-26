@@ -163,9 +163,9 @@ jobs:
             printf '%s' "$CUSTOM_KS_B64" | base64 --decode > android/app/droidpy-release.keystore
             keytool -list -keystore android/app/droidpy-release.keystore -storepass "$CUSTOM_STORE_PASS" -alias "$CUSTOM_KEY_ALIAS" >/dev/null
             echo 'DROIDPY_KEYSTORE_FILE=droidpy-release.keystore' >> "$GITHUB_ENV"
-            printf 'DROIDPY_STORE_PASSWORD=%s\\n' "$CUSTOM_STORE_PASS" >> "$GITHUB_ENV"
-            printf 'DROIDPY_KEY_ALIAS=%s\\n' "$CUSTOM_KEY_ALIAS" >> "$GITHUB_ENV"
-            printf 'DROIDPY_KEY_PASSWORD=%s\\n' "$CUSTOM_KEY_PASS" >> "$GITHUB_ENV"
+            printf 'DROIDPY_STORE_PASSWORD=%s\n' "$CUSTOM_STORE_PASS" >> "$GITHUB_ENV"
+            printf 'DROIDPY_KEY_ALIAS=%s\n' "$CUSTOM_KEY_ALIAS" >> "$GITHUB_ENV"
+            printf 'DROIDPY_KEY_PASSWORD=%s\n' "$CUSTOM_KEY_PASS" >> "$GITHUB_ENV"
             ACTUAL_KEYSTORE_SHA256=$(keytool -exportcert -keystore android/app/droidpy-release.keystore -storepass "$CUSTOM_STORE_PASS" -alias "$CUSTOM_KEY_ALIAS" | sha256sum | awk '{print toupper($1)}')
             echo "DROIDPY_EXPECTED_CERT_SHA256=$ACTUAL_KEYSTORE_SHA256" >> "$GITHUB_ENV"
             echo "Verified protected Release signing certificate: $ACTUAL_KEYSTORE_SHA256"
@@ -195,8 +195,8 @@ jobs:
           APKSIGNER=$(find "\${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/build-tools" -type f -name apksigner -perm -u+x 2>/dev/null | sort -V | tail -n1)
           if [ -z "$APKSIGNER" ]; then echo '::error::Android apksigner not found.'; exit 1; fi
           SIGNER_OUTPUT=$("$APKSIGNER" verify --verbose --print-certs "$APK_PATH" 2>&1)
-          printf '%s\\n' "$SIGNER_OUTPUT"
-          ACTUAL_SHA256=$(printf '%s\\n' "$SIGNER_OUTPUT" | sed -nE 's/.*certificate SHA-256 digest: *([0-9A-Fa-f:]+).*/\\1/ip' | head -n1 | tr -d ':' | tr '[:lower:]' '[:upper:]')
+          printf '%s\n' "$SIGNER_OUTPUT"
+          ACTUAL_SHA256=$(printf '%s\n' "$SIGNER_OUTPUT" | sed -nE 's/.*certificate SHA-256 digest: *([0-9A-Fa-f:]+).*/\\1/ip' | head -n1 | tr -d ':' | tr '[:lower:]' '[:upper:]')
           if ! [[ "$ACTUAL_SHA256" =~ ^[0-9A-F]{64}$ ]]; then echo '::error::Invalid APK signer fingerprint.'; exit 1; fi
           if [ "$DROIDPY_RELEASE_BUILD" = true ]; then
             EXPECTED_SHA256="\${DROIDPY_EXPECTED_CERT_SHA256:-}"
@@ -253,17 +253,17 @@ jobs:
           if [ -z "$APK_FILE" ]; then echo '::error::Verified Release APK artifact is missing.'; exit 1; fi
           RELEASE_NOTES_FILE=$(mktemp)
           CHANGELOG_SECTION=$(awk '
-            /^## \\[[0-9]+\\.[0-9]+\\.[0-9]+\\]/ {
+            /^## \[[0-9]+\.[0-9]+\.[0-9]+\]/ {
               if (found) exit
               found = 1
             }
-            /^## \\[/ && found && $0 !~ /^## \\[[0-9]+\\.[0-9]+\\.[0-9]+\\]/ { exit }
+            /^## \[/ && found && $0 !~ /^## \[[0-9]+\.[0-9]+\.[0-9]+\]/ { exit }
             found { print }
           ' CHANGELOG.md)
           if [ -n "$CHANGELOG_SECTION" ]; then
-            printf '%s\\n' "$CHANGELOG_SECTION" > "$RELEASE_NOTES_FILE"
+            printf '%s\n' "$CHANGELOG_SECTION" > "$RELEASE_NOTES_FILE"
           else
-            printf '# DroidPy %s\\n此版本尚未提供專屬更新日誌。\\n' "$RELEASE_TAG" > "$RELEASE_NOTES_FILE"
+            printf '# DroidPy %s\n此版本尚未提供專屬更新日誌。\\n' "$RELEASE_TAG" > "$RELEASE_NOTES_FILE"
           fi
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" "$APK_FILE" --clobber
