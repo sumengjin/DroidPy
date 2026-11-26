@@ -323,13 +323,16 @@ const stopHandlerStart = appSource.indexOf('const handleStopTermux = useCallback
 const stopHandlerEnd = appSource.indexOf('const handleBackupToSdcard', stopHandlerStart);
 assert.ok(stopHandlerStart >= 0 && stopHandlerEnd > stopHandlerStart);
 const stopHandler = appSource.slice(stopHandlerStart, stopHandlerEnd);
-assert.ok(stopHandler.indexOf('await stopTermuxProcess(termuxConfig)') < stopHandler.indexOf('await abortActiveTermuxStream()'), 'native process must be stopped before aborting its output stream');
+assert.ok(stopHandler.indexOf('await stopTermuxProcess(termuxConfig)') < stopHandler.indexOf('await waitForActiveTermuxStream()'), 'native process must be stopped before waiting for its output stream');
 assert.ok(!stopHandler.includes('setTermuxRunning(false)'), 'failed Stop must not unlock a still-running process');
 assert.ok(appSource.includes('termuxScriptStartLockRef.current = true'));
 assert.ok(appSource.includes('termuxScriptStartLockRef.current = false'));
 const termuxBridgeUi = await readFile('src/services/termuxBridge.ts', 'utf8');
 assert.ok(termuxBridgeUi.includes('activeStreamCompletion'));
+assert.ok(termuxBridgeUi.includes('waitForActiveTermuxStream'));
 assert.ok(termuxBridgeUi.includes('await completion'), 'Stop must wait for the old stream slot to be released');
+assert.ok(androidBuilder.includes('activeProcess === proc'));
+assert.ok(androidBuilder.includes('stopped = !proc.isAlive && activeProcess !== proc'));
 assert.ok(!androidBuilder.includes('private val executor = Executors.newCachedThreadPool()'));
 
 // The tool center uses real folder -> document navigation and preserves parent folders on Back.
