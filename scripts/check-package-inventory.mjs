@@ -27,6 +27,10 @@ assert.match(frostworkSource, /class Page:/, 'pure-Python multi-field extraction
 assert.match(frostworkSource, /def _css_nodes\(/, 'CSS selector fallback must be bundled');
 assert.match(frostworkSource, /def _xpath_nodes\(/, 'XPath selector fallback must be bundled');
 assert.ok(frostworkMetadata.includes('Name: frostwork') && frostworkMetadata.includes('Version: 0.2.2'));
+assert.match(source, /crawlerNavigationStartedAt/, 'native crawler must track page navigation timing');
+assert.match(source, /Page started url=/, 'native crawler must log navigation start');
+assert.match(source, /Page finished durationMs=/, 'native crawler must log completed page load duration');
+assert.match(source, /request\?\.isForMainFrame == true/, 'native crawler must distinguish main-frame errors from subresource errors');
 assert.match(source, /Pure-Python Frostwork fallback seed warning/);
 assert.match(source, /hasNativeFrostwork/, 'a real upstream Frostwork install must take precedence');
 assert.match(source, /isOurFallbackMetadata/, 'fallback cleanup must not delete unrelated user metadata');
