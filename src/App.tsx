@@ -1988,6 +1988,7 @@ export default function App() {
     } finally {
       setRunStartedAt(null);
       setPendingInputPrompt(null);
+      setInputSessionActive(false);
       inputResolverRef.current = null;
     }
   }, [
