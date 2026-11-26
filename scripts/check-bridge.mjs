@@ -154,14 +154,15 @@ assert.ok(generated.includes('return re.sub(r"^(\\s*pkg\\s+install\\b)", r"\\1 -
 assert.ok(generated.includes('BoundedThreadingHTTPServer(("127.0.0.1", 8765), DroidPyBridgeHandler)'));
 
 // Android edge-to-edge system bars must stay transparent while app content respects insets.
-const androidBuilder = await readFile('src/services/androidApkBuilder.ts', 'utf8');
-assert.ok(androidBuilder.includes('WindowCompat.setDecorFitsSystemWindows(window, false)'));
-assert.ok(androidBuilder.includes('window.statusBarColor = Color.TRANSPARENT'));
-assert.ok(androidBuilder.includes('window.navigationBarColor = Color.TRANSPARENT'));
-assert.ok(androidBuilder.includes('WindowInsetsCompat.Type.statusBars()'));
-assert.ok(androidBuilder.includes('WindowInsetsCompat.Type.navigationBars()'));
-assert.ok(androidBuilder.includes("--droidpy-statusbar-inset'))"));
-assert.ok(androidBuilder.includes('fun setSystemBarAppearance(isDark: Boolean)'));
+const edgeToEdgeBuilder = await readFile('src/services/androidApkBuilder.ts', 'utf8');
+assert.ok(edgeToEdgeBuilder.includes('WindowCompat.setDecorFitsSystemWindows(window, false)'));
+assert.ok(edgeToEdgeBuilder.includes('window.statusBarColor = Color.TRANSPARENT'));
+assert.ok(edgeToEdgeBuilder.includes('window.navigationBarColor = Color.TRANSPARENT'));
+assert.ok(edgeToEdgeBuilder.includes('WindowInsetsCompat.Type.statusBars()'));
+assert.ok(edgeToEdgeBuilder.includes('WindowInsetsCompat.Type.navigationBars()'));
+assert.ok(edgeToEdgeBuilder.includes("setProperty('--droidpy-statusbar-inset'"));
+assert.ok(edgeToEdgeBuilder.includes('fun setSystemBarAppearance(isDark: Boolean)'));
+assert.ok(edgeToEdgeBuilder.includes('override fun onPageFinished(view: WebView?, url: String?)'));
 const systemBarApp = await readFile('src/App.tsx', 'utf8');
 assert.ok(systemBarApp.includes('window.DroidPyNative?.setSystemBarAppearance?.(meta.isDark)'));
 const systemBarTypes = await readFile('src/types/ide.ts', 'utf8');
