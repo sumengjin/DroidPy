@@ -4825,7 +4825,7 @@ def clipboard_set(text):
         val match = installPrefix.find(command) ?: return command
         val tailStart = match.range.last + 1
         val tail = command.substring(tailStart)
-        val tokens = tail.trim().split(Regex("""\\s+""")).filter { it.isNotBlank() }
+        val tokens = tail.trim().split(Regex("""\s+""")).filter { it.isNotBlank() }
         val safeTokens = tokens.isNotEmpty() && tokens.all {
             it.matches(Regex("""(?:--?[A-Za-z][A-Za-z0-9-]*|[A-Za-z0-9][A-Za-z0-9+_.-]*)"""))
         }
