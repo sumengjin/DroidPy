@@ -916,6 +916,7 @@ export default function App() {
 
         const savedPkgs = sandboxPackagesRef.current;
         if (savedPkgs.length > 0) {
+          pyodidePackageOperationLockRef.current = true;
           try {
             const currentList = await listPyPackages(callbacksRef.current);
             if (cancelled) return;
@@ -937,6 +938,8 @@ export default function App() {
             }
           } catch {
             // ignore restore list failures
+          } finally {
+            pyodidePackageOperationLockRef.current = false;
           }
         }
       } catch (err) {
