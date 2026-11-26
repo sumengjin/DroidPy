@@ -85,7 +85,7 @@ import {
   isSecureBridgeToken,
   CORE_TERMUX_PIP_PACKAGES,
   TermuxOutdatedPipItem,
-  abortActiveTermuxStream,
+  waitForActiveTermuxStream,
   backupWorkspaceToSdcard,
   buildTermuxAptUpgradeCommand,
   buildTermuxPipUpgradeCommand,
@@ -1725,7 +1725,7 @@ export default function App() {
       await stopTermuxProcess(termuxConfig);
       // Wait until the old stream releases its single-job slot before another
       // script can start.
-      await abortActiveTermuxStream();
+      await waitForActiveTermuxStream();
       setTermuxPaused(false);
       appendEntry('system', t('log_termux_stop'));
       showToast(t('toast_termux_stopped'));
