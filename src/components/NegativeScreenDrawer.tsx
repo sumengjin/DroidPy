@@ -159,7 +159,7 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex bg-black/55"
+      className="fixed inset-0 z-50 flex bg-[var(--ide-bg)]"
       onTouchStart={(e) => {
         const touch = e.touches[0];
         if (!touch) return;
@@ -185,7 +185,7 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
     >
       <aside
         onClick={(e) => e.stopPropagation()}
-        className="w-full sm:w-[90vw] sm:max-w-[460px] h-full rounded-none sm:rounded-r-[28px] bg-[var(--ide-bg)] text-[var(--ide-text)] border-r border-[var(--ide-border)] shadow-2xl flex flex-col overflow-hidden"
+        className="w-full h-full rounded-none bg-[var(--ide-bg)] text-[var(--ide-text)] flex flex-col overflow-hidden"
       >
         {/* Drawer Header */}
         <div className="px-4 py-3.5 pt-safe border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] flex items-center justify-between gap-3 shrink-0">
@@ -211,7 +211,7 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
           </button>
         </div>
 
-        {/* Segmented Drawer Tabs */}
+        {/* Workspace section navigation */}
         <div className="px-2.5 sm:px-3 py-2 border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] shrink-0">
           <div className="grid grid-cols-4 gap-1.5 p-1.5 rounded-2xl bg-[var(--ide-bg)] border border-[var(--ide-border)]">
             {tabs.map(({ id, label, Icon }) => {
