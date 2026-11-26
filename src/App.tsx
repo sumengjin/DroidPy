@@ -265,6 +265,31 @@ function mergeTerminalChunk(prev: string, chunk: string): string {
 
 export default function App() {
   const { deviceClass, isLandscape } = useDeviceLayout();
+
+  // Android WebView versions on Android 11 do not consistently apply 100dvh
+  // when the IME opens. Mirror the actually visible viewport into the app shell
+  // so flex-based panes (especially the terminal output) resize above the keyboard.
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const syncVisibleViewportHeight = () => {
+      const height = Math.round(viewport?.height ?? window.innerHeight);
+      if (height > 0) {
+        document.documentElement.style.setProperty('--droidpy-viewport-height', `${height}px`);
+      }
+    };
+
+    syncVisibleViewportHeight();
+    window.addEventListener('resize', syncVisibleViewportHeight);
+    viewport?.addEventListener('resize', syncVisibleViewportHeight);
+    viewport?.addEventListener('scroll', syncVisibleViewportHeight);
+
+    return () => {
+      window.removeEventListener('resize', syncVisibleViewportHeight);
+      viewport?.removeEventListener('resize', syncVisibleViewportHeight);
+      viewport?.removeEventListener('scroll', syncVisibleViewportHeight);
+      document.documentElement.style.removeProperty('--droidpy-viewport-height');
+    };
+  }, []);
   const [files, setFiles] = useState<PythonFile[]>(() => {
     const nativeSnap = getInitialNativeSnapshot();
     if (nativeSnap?.files && Array.isArray(nativeSnap.files) && nativeSnap.files.length > 0) {
@@ -2940,6 +2965,7 @@ export default function App() {
             setNegativeOpen(true);
           }
         }}
+        style={{ height: 'var(--droidpy-viewport-height, 100dvh)' }}
         className={`h-dvh flex flex-col ${
           is3dBgActive ? 'bg-transparent' : 'bg-[var(--ide-bg)]'
         } text-[var(--ide-text)] overflow-hidden relative`}
