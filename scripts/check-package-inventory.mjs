@@ -52,7 +52,9 @@ assert.match(source, /'w3lib>=2\.6' parsel/, 'embedded APK installs must use the
 assert.match(source, /w3lib>=2\.6/, 'embedded terminal routing must use the fallback');
 assert.match(bridgeSource, /w3lib<2\.6/, 'standalone Termux bridge must retain its independent compatibility pin');
 
-assert.match(catalogSource, /w3lib 2.6 使用 DroidPy 內建純 Python Frostwork 相容層/);
+assert.match(catalogSource, /外部 Termux 固定 w3lib<2\.6；APK 內建環境使用 Frostwork 純 Python 相容層支援 w3lib 2\.6\+/);
+assert.match(bridgeSource, /return 'pkg uninstall -y python-polars'/, 'TUR Polars uninstall must use the native package manager');
+assert.match(panelSource, /item\.id === 'polars' \? 'python-polars' : tmx\.targetName/, 'TUR Polars installed state must read the APT inventory');
 assert.match(catalogSource, /Termux User Repository（TUR）預編譯套件提供/);
 assert.match(source, /"polars" to "python-polars"/);
 assert.match(source, /"python-polars" in missingPkgsOnly/);
