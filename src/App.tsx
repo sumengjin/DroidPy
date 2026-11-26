@@ -3558,6 +3558,7 @@ export default function App() {
                 <FileExplorer
                   files={files}
                   activeFileId={activeFile.id}
+                  showHeaderTitle={false}
                   linkedDirName={linkedDirHandle?.name ?? null}
                   termuxConnected={termuxConnectionState === 'connected'}
                   termuxEmbedded={Boolean(termuxHealth?.embedded)}
