@@ -87,6 +87,7 @@ import {
   CORE_TERMUX_PIP_PACKAGES,
   TermuxOutdatedPipItem,
   waitForActiveTermuxStream,
+  waitForActiveTermuxStreamReady,
   backupWorkspaceToSdcard,
   buildTermuxAptUpgradeCommand,
   buildTermuxPipUpgradeCommand,
@@ -1758,6 +1759,8 @@ export default function App() {
     setTermuxStopping(true);
     appLog('termux', 'User requested Stop for the active Termux process', { level: 'warn' });
     try {
+      const streamReady = await waitForActiveTermuxStreamReady();
+      if (!streamReady) throw new Error('原生執行請求尚未確認啟動，停止狀態未確認；請稍後重試。');
       await stopTermuxProcess(termuxConfig);
       await waitForActiveTermuxStream();
       if (scriptCompletion) await scriptCompletion;
