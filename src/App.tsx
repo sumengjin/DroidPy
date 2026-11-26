@@ -22,6 +22,7 @@ import {
   Menu,
   Sparkles,
   Download,
+  Package,
 } from 'lucide-react';
 import { registerSW } from 'virtual:pwa-register';
 import { DEFAULT_FILES } from './data/defaultFiles';
