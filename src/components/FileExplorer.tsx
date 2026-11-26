@@ -784,6 +784,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
             mode="sdcard"
             fullScreen
             onlyPythonFiles
+            onClose={() => setShowDeviceBrowser(false)}
             termuxConfig={termuxConfig}
             files={files}
             activeFile={files.find((file) => file.id === activeFileId) ?? files[0]}
@@ -793,13 +794,6 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
             }}
             onNotify={onNotify}
           />
-          <button
-            type="button"
-            onClick={() => setShowDeviceBrowser(false)}
-            className="absolute right-3 top-3 z-40 min-h-[40px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-semibold shadow"
-          >
-            返回檔案
-          </button>
         </div>
       )}
     </div>
