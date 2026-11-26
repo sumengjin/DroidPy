@@ -1726,13 +1726,19 @@ export async function sendTermuxStdin(config: TermuxConfig, text: string): Promi
   );
 }
 
-export async function stopTermuxProcess(config: TermuxConfig): Promise<void> {
+export async function stopTermuxProcess(
+  config: TermuxConfig,
+  metadata: { source?: string; operation?: string } = {}
+): Promise<void> {
   await termuxFetch<{ ok: boolean }>(
     config,
     '/stop',
     {
       method: 'POST',
-      body: JSON.stringify({}),
+      body: JSON.stringify({
+        source: metadata.source || 'unknown',
+        operation: metadata.operation || 'unknown',
+      }),
     },
     4000
   );
