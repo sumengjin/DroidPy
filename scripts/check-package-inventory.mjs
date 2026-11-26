@@ -64,6 +64,8 @@ assert.match(bridgeSource, /scipy: 'python-scipy'/, 'SciPy must use the official
 assert.match(panelSource, /item\.id === 'polars' \? 'python-polars' : tmx\.targetName/, 'TUR Polars installed state must read the APT inventory');
 assert.match(catalogSource, /Termux User Repository（TUR）預編譯套件提供/);
 assert.match(source, /"polars" to "python-polars"/);
+assert.match(source, /"scipy" to "python-scipy"/, 'backup restore must use the official native SciPy package');
+assert.match(source, /if \("python-polars" in missingPkgsOnly\)[\s\S]*?pkg install -y tur-repo/, 'Polars restore must enable the signed TUR repository before installing');
 assert.match(source, /"python-polars" in missingPkgsOnly/);
 assert.match(source, /val safePkgName = Regex\("""\^\[A-Za-z0-9\]\[A-Za-z0-9\+\.\-\]\*\$"""\)/, 'APT package names from backup manifests must be validated before shell use');
 assert.match(source, /if \(!safePkgName\.matches\(v\)\)/, 'invalid APT backup entries must be skipped');
