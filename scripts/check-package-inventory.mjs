@@ -90,6 +90,16 @@ assert.match(certifiHandler, /stat\.S_IMODE\(os\.stat\(cfg_path\)\.st_mode\)/, '
 assert.match(certifiHandler, /os\.replace\(tmp_path, cfg_path\)/, 'SSL repair must atomically replace pip configuration');
 assert.doesNotMatch(certifiHandler, /with open\(cfg_path, "w"/, 'SSL repair must not truncate user pip.conf directly');
 assert.match(appSource, /termuxOperationLockRef\.current = true/);
+assert.match(appSource, /const pyodidePackageOperationLockRef = useRef\(false\)/, 'Pyodide package operations must have a synchronous shared lock');
+const pyInstallHandler = appSource.slice(appSource.indexOf('const handleInstallPackage'), appSource.indexOf('const handleUninstallPyPackage'));
+assert.match(pyInstallHandler, /pyodidePackageOperationLockRef\.current\)\s*\{[\s\S]*?pyodidePackageOperationLockRef\.current = true/, 'rapid Pyodide install taps must be serialized synchronously');
+const pyUninstallHandler = appSource.slice(appSource.indexOf('const handleUninstallPyPackage'), appSource.indexOf('const handleRefreshPackages'));
+assert.match(pyUninstallHandler, /pyodidePackageOperationLockRef\.current\)\s*\{[\s\S]*?pyodidePackageOperationLockRef\.current = true[\s\S]*?finally\s*\{\s*pyodidePackageOperationLockRef\.current = false/, 'Pyodide uninstall must not overlap install or upgrade');
+const pyUpgradeHandler = appSource.slice(appSource.indexOf('const handleUpgradePyPackage'), appSource.indexOf('const handleCheckAndUpgradeAllPy'));
+assert.match(pyUpgradeHandler, /pyodidePackageOperationLockRef\.current = true[\s\S]*?pyodidePackageOperationLockRef\.current = false/, 'single Pyodide upgrades must acquire and release the shared lock');
+const pyBulkUpgradeHandler = appSource.slice(appSource.indexOf('const handleCheckAndUpgradeAllPy'), appSource.indexOf('const handleCheckTermuxOutdated'));
+assert.match(pyBulkUpgradeHandler, /pyodidePackageOperationLockRef\.current = true[\s\S]*?pyodidePackageOperationLockRef\.current = false/, 'bulk Pyodide upgrades must acquire and release the shared lock');
+assert.match(appSource, /if \(pyodideStatus === 'ready'\) \{\s*pyodidePackageOperationLockRef\.current = true/,'combined package upgrades must lock the Pyodide phase');
 assert.match(appSource, /const handleToggleTermuxPause = useCallback\(async \(\) => \{\s*if \(!termuxScriptRunning\) return;/, 'pause and resume controls must only affect an active Python script');
 assert.match(appSource, /cleaningProcesses \|\|\s*termuxRunning \|\|\s*termuxOperationLockRef\.current \|\|\s*termuxScriptStartLockRef\.current[\s\S]*?termuxOperationLockRef\.current = true;\s*setCleaningProcesses\(true\)/, 'the process watchdog must not kill an active Termux operation');
 
