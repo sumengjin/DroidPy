@@ -251,11 +251,27 @@ jobs:
           set -euo pipefail
           APK_FILE=$(find release-apk -maxdepth 1 -type f -name '*.apk' -print | head -n1)
           if [ -z "$APK_FILE" ]; then echo '::error::Verified Release APK artifact is missing.'; exit 1; fi
+          RELEASE_NOTES_FILE=$(mktemp)
+          CHANGELOG_SECTION=$(awk '
+            /^## \\[[0-9]+\\.[0-9]+\\.[0-9]+\\]/ {
+              if (found) exit
+              found = 1
+            }
+            /^## \\[/ && found && $0 !~ /^## \\[[0-9]+\\.[0-9]+\\.[0-9]+\\]/ { exit }
+            found { print }
+          ' CHANGELOG.md)
+          if [ -n "$CHANGELOG_SECTION" ]; then
+            printf '%s\\n' "$CHANGELOG_SECTION" > "$RELEASE_NOTES_FILE"
+          else
+            printf '# DroidPy %s\\n此版本尚未提供專屬更新日誌。\\n' "$RELEASE_TAG" > "$RELEASE_NOTES_FILE"
+          fi
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" "$APK_FILE" --clobber
+            gh release edit "$RELEASE_TAG" --notes-file "$RELEASE_NOTES_FILE"
           else
-            gh release create "$RELEASE_TAG" "$APK_FILE" --title "${appSlug} $RELEASE_TAG" --notes-file CHANGELOG.md --target "$GITHUB_SHA"
-          fi`
+            gh release create "$RELEASE_TAG" "$APK_FILE" --title "${appSlug} $RELEASE_TAG" --notes-file "$RELEASE_NOTES_FILE" --target "$GITHUB_SHA"
+          fi
+          rm -f "$RELEASE_NOTES_FILE"`
   );
 
   // 2. Gradle root files
