@@ -382,7 +382,7 @@ export const ToolsAndPackages: React.FC<ToolsAndPackagesProps> = ({
 
   const handleUninstall = async (target: string) => {
     const clean = target.trim();
-    if (!clean || !onUninstallPackage || installingPkg || uninstallingPkg) return;
+    if (!clean || !onUninstallPackage || installingPkg || activePyodidePackage || uninstallingPkg) return;
     setUninstallingPkg(clean);
     try {
       await onUninstallPackage(clean);
@@ -1091,12 +1091,12 @@ python ${entryFile}
                       disabled={!pkgQuery.trim() || !!installingPkg || !!activePyodidePackage}
                       className="min-h-[50px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-sm font-semibold disabled:opacity-40 flex items-center gap-2 whitespace-nowrap shrink-0 transition-colors"
                     >
-                      {installingPkg ? (
+                      {installingPkg || activePyodidePackage ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
                       ) : (
                         <Download className="w-4 h-4" />
                       )}
-                      <span>{installingPkg ? t('pkg_installing') : t('pkg_install')}</span>
+                      <span>{installingPkg || activePyodidePackage ? t('pkg_installing') : t('pkg_install')}</span>
                     </button>
                   </form>
 
@@ -1139,7 +1139,7 @@ python ${entryFile}
                             {isInstalled && !isCoreSystem && onUninstallPackage ? (
                               <button
                                 type="button"
-                                disabled={!!installingPkg || !!uninstallingPkg}
+                                disabled={!!installingPkg || !!activePyodidePackage || !!uninstallingPkg}
                                 onClick={() => void handleUninstall(targetPkg)}
                                 className="min-h-[34px] px-3 rounded-lg border border-red-300 dark:border-red-900/60 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 text-xs font-medium whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 disabled:opacity-40"
                               >
@@ -1153,7 +1153,7 @@ python ${entryFile}
                             ) : (
                               <button
                                 type="button"
-                                disabled={isInstalled || !!installingPkg || !!uninstallingPkg}
+                                disabled={isInstalled || !!installingPkg || !!activePyodidePackage || !!uninstallingPkg}
                                 onClick={() => void handleInstall(targetPkg)}
                                 className={`min-h-[34px] px-3 rounded-lg text-xs font-medium whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 ${
                                   isInstalled
@@ -1293,7 +1293,7 @@ python ${entryFile}
                           {isInstalled && !isCoreSystem && onUninstallPackage ? (
                             <button
                               type="button"
-                              disabled={!!installingPkg || !!uninstallingPkg}
+                              disabled={!!installingPkg || !!activePyodidePackage || !!uninstallingPkg}
                               onClick={() => void handleUninstall(targetName)}
                               className="min-h-[38px] px-3 rounded-xl border border-red-300 dark:border-red-900/60 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 text-xs font-medium whitespace-nowrap shrink-0 flex items-center gap-1.5 transition-colors disabled:opacity-40"
                             >
@@ -1307,7 +1307,7 @@ python ${entryFile}
                           ) : (
                             <button
                               type="button"
-                              disabled={isInstalled || !!installingPkg || !!uninstallingPkg}
+                              disabled={isInstalled || !!installingPkg || !!activePyodidePackage || !!uninstallingPkg}
                               onClick={() => void handleInstall(targetName)}
                               className={`min-h-[40px] px-3 rounded-xl text-xs font-medium whitespace-nowrap shrink-0 flex items-center gap-1.5 transition-colors ${
                                 isInstalled
