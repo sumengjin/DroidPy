@@ -150,7 +150,7 @@ const DEFAULT_SETTINGS: EditorSettings = {
   tabSize: 4,
   wordWrap: true,
   showSymbolBar: true,
-  theme: 'rose',
+  theme: 'dark',
   locale: 'zh-TW',
   androidStoragePermission: true,
   autoUpdatePackages: getAutoUpdatePackagesPref(),
