@@ -3354,6 +3354,12 @@ export default function App() {
                   inputSessionActive={inputSessionActive}
                       onSubmitInput={handleSubmitInput}
                       onRunRepl={handleRunRepl}
+                  onRunScript={handleRunCode}
+                  onStopScript={() => void handleStopTermux()}
+                  canRunScript={Boolean(activeFile)}
+                      onRunScript={handleRunCode}
+                      onStopScript={() => void handleStopTermux()}
+                      canRunScript={Boolean(activeFile)}
                       onSendTermuxStdin={handleSendTermuxStdin}
                       paused={termuxPaused}
                       canPause={termuxScriptRunning}
