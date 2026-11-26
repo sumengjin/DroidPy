@@ -2135,7 +2135,7 @@ python ${entryFile}
     if (activeSubView === 'settings') {
       if (!settingsFolder) {
         const folders = [
-          { id: 'appearance' as const, title: t('set_theme_title'), desc: t('set_theme_desc'), count: 3 },
+          { id: 'appearance' as const, title: t('hub_set_appearance'), desc: t('hub_set_appearance_desc'), count: 3 },
           { id: 'editor' as const, title: t('hub_set_editor'), desc: t('hub_set_editor_desc'), count: 1 },
           { id: 'app' as const, title: t('hub_set_app'), desc: t('hub_set_app_desc'), count: 2 },
         ];
@@ -2164,7 +2164,7 @@ python ${entryFile}
           </button>
           <div className="flex items-center gap-2 px-2 pb-2 text-sm font-semibold text-[var(--ide-text)]">
             <Folder className="w-4 h-4 text-[var(--ide-accent)]" />
-            {settingsFolder === 'appearance' ? t('set_theme_title') : settingsFolder === 'editor' ? t('hub_set_editor') : t('hub_set_app')}
+            {settingsFolder === 'appearance' ? t('hub_set_appearance') : settingsFolder === 'editor' ? t('hub_set_editor') : t('hub_set_app')}
           </div>
           {renderHubOptionList(folderItems)}
         </div>
