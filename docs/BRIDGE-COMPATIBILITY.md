@@ -60,7 +60,25 @@ Kotlin 路由集合除健康檢查、工作區檔案、執行／shell／安裝�
 
 內嵌 Kotlin Bridge 還能提供打包的 Web 靜態資產；該行為不是外部 Termux Python Bridge 的通用 Runtime 能力。
 
-## 4. 已確認的相容性差異
+## 4. 共用客戶端目前送出的資料形狀
+
+以下欄位由 `src/services/termuxBridge.ts` 的實際呼叫端確認。空白 POST 以空 JSON 物件表示；Token 放在 `X-DroidPy-Token` Header，不放進 JSON body。
+
+| 路徑 | Request body | 重要回應欄位／事件 |
+|---|---|---|
+| `GET /health` | 無 | `ok`、`embedded`、`hasPython`、`pythonVersion`、`arch`、套件盤點 |
+| `GET /files` | 無 | `files[]: name, content, updatedAt` |
+| `POST /run-stream` | `entry`、`files[]: name, content` | NDJSON `stdout/data`、`done/exitCode/durationMs` |
+| `POST /install-stream` | `mode`（pip/pkg）、`target`、`trustedHost` | NDJSON 輸出與完成事件 |
+| `POST /shell-stream` | `command` | NDJSON 輸出與完成事件 |
+| `POST /stdin` | `data` | `ok` |
+| `POST /stop`、`/pause`、`/resume` | 空物件 | `ok` 與程序控制狀態 |
+| `POST /probe-url` | `url`、可選 `userAgent`、`cookieHeader`、`extraHeaders` | `ok`、`finalUrl`、`statusCode`、`setCookies`、`headers`、`bodyPreview` |
+| `POST /maintenance/cleanup-processes` | `manual` | 程序清理結果 |
+
+外部 Python Bridge 額外支援同步 `POST /run`、`/install`、`/shell`，其輸入欄位與相應串流版本相同。內嵌 Kotlin 路由清單沒有 `/run` 或 `/install`，目前執行與安裝主要走串流端點；不能把這些非串流端點當成兩邊的共同能力。
+
+## 5. 已確認的相容性差異
 
 1. **功能集合不相同。** 外部 Python Bridge 沒有 Kotlin 端的套件備份還原、原生日誌、App 儲存空間與 SD 卡操作路由。UI 必須依 Provider 能力顯示或停用功能，不能只依「已連線」推斷全部功能可用。
 2. **健康資料來源不相同。** Python 端透過目前 Python／dpkg 環境盤點；Kotlin 端直接檢查內嵌 `usr/`、套件清單與 App 私有資料。相同欄位名稱不代表資料收集語義完全一致。
@@ -69,7 +87,7 @@ Kotlin 路由集合除健康檢查、工作區檔案、執行／shell／安裝�
 5. **執行語義不同。** Python 端具有非串流 `/run`、`/install` 與 `/shell`；內嵌 Kotlin 目前主要透過串流路由執行。不能假設所有 Provider 都支援相同同步模式。
 6. **程序控制需要逐項驗證。** 兩邊均有明確停止與 PTY 控制，但程序保留、客戶端斷線、重啟後控制能力與輸出尾端處理必須用同一組測試驗證，不能僅以路由存在判定相容。
 
-## 5. 安全基線（新契約必須保留）
+## 6. 安全基線（新契約必須保留）
 
 - 僅綁定／接受預期的 loopback Host，驗證可信任 Origin。
 - 以每安裝權杖驗證受保護的 API；不在日誌、共享儲存或診斷回報暴露權杖。
@@ -79,7 +97,7 @@ Kotlin 路由集合除健康檢查、工作區檔案、執行／shell／安裝�
 - 使用者程序不能因單純 HTTP 客戶端斷線而被意外殺掉；停止必須是明確、已驗證的操作。
 - SD 卡讀寫／刪除需維持 canonical path 與儲存權限檢查。
 
-## 6. Phase 1 下一步
+## 7. Phase 1 下一步
 
 - [ ] 對每條共用路由記錄 request JSON 欄位、成功回應、錯誤狀態與錯誤 JSON。
 - [ ] 對兩個實作建立相同輸入 fixture，確認共同語義與允許差異。
@@ -87,6 +105,6 @@ Kotlin 路由集合除健康檢查、工作區檔案、執行／shell／安裝�
 - [ ] 加入能力宣告 fixture，將「不支援」與「執行失敗」區分。
 - [ ] 在相容性測試通過前，不移除舊路由、不更改 8765／8766，也不遷移 UI 呼叫。
 
-## 7. 本文件的限制
+## 8. 本文件的限制
 
 這是靜態原始碼盤點，不是兩個 Bridge 已通過同一組整合測試的聲明。表中功能需再以實際 request／response fixture 與 Android 10+ 裝置測試驗證。
