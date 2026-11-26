@@ -86,6 +86,7 @@ assert.match(appSource, /Unable to verify Python before first use/);
 assert.match(appSource, /termuxPackageInstallLockRef\.current = true/);
 assert.match(appSource, /termuxPackageInstallLockRef\.current = false/);
 assert.match(appSource, /if \(termuxRunning \|\| termuxPackageInstallLockRef\.current\)/);
+assert.match(appSource, /if \(termuxRunning \|\| termuxPackageInstallLockRef\.current \|\| termuxScriptStartLockRef\.current\)/, 'Python execution must not race a native package installation');
 assert.match(appSource, /setTermuxActiveTask\(\`install:\$\{target\.trim\(\)\}\`\)/);
 assert.match(exportSource, /activePyodidePackage/);
 assert.match(exportSource, /installingPkg \|\| activePyodidePackage/, 'the package search action must retain its spinner after the drawer remounts');
