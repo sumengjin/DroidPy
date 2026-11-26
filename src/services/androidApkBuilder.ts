@@ -5028,13 +5028,25 @@ def clipboard_set(text):
             .containsMatchIn(normalizedCommand)
         appendNativeLog("Exec", "Stream shell start: \${normalizedCommand.take(180)}")
 
-        out.write((
-            "HTTP/1.1 200 OK\\r\\n" +
-            corsHeaders() +
-            "Content-Type: application/x-ndjson; charset=utf-8\\r\\n" +
-            "Connection: close\\r\\n\\r\\n"
-        ).toByteArray())
-        out.flush()
+        synchronized(activeProcessLock) {
+            activeProcessStopRequested = false
+            activeProcessStarting = true
+        }
+        try {
+            out.write((
+                "HTTP/1.1 200 OK\\r\\n" +
+                corsHeaders() +
+                "Content-Type: application/x-ndjson; charset=utf-8\\r\\n" +
+                "Connection: close\\r\\n\\r\\n"
+            ).toByteArray())
+            out.flush()
+        } catch (error: Exception) {
+            synchronized(activeProcessLock) {
+                activeProcessStarting = false
+                activeProcessStopRequested = false
+            }
+            throw error
+        }
 
         fun sendStdout(text: String) {
             val line = JSONObject().put("type", "stdout").put("data", text).toString() + "\\n"
@@ -5042,10 +5054,6 @@ def clipboard_set(text):
             out.flush()
         }
 
-        synchronized(activeProcessLock) {
-            activeProcessStopRequested = false
-            activeProcessStarting = true
-        }
         if (!shFile.exists()) {
             try {
                 sendStdout("[DroidPy] Waiting for Termux bootstrap extraction...\\n")
