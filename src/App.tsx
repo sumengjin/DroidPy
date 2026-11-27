@@ -374,6 +374,18 @@ export default function App() {
   const tabletSplit = tabletWorkspace.split;
   const tabletPaneTab = tabletWorkspace.activePane;
   const setTabletPaneTab = tabletWorkspace.setActivePane;
+  const previousTabletLandscapeRef = useRef(isLandscape);
+  useEffect(() => {
+    if (deviceClass === 'tablet' && previousTabletLandscapeRef.current !== isLandscape) {
+      if (isLandscape) {
+        const nextPane = mobileTab === 'console' ? 'terminal' : mobileTab === 'files' || mobileTab === 'browser' ? mobileTab : 'editor';
+        setTabletPaneTab(nextPane);
+      } else {
+        setMobileTab(tabletPaneTab === 'terminal' ? 'console' : tabletPaneTab);
+      }
+    }
+    previousTabletLandscapeRef.current = isLandscape;
+  }, [deviceClass, isLandscape, mobileTab, tabletPaneTab, setTabletPaneTab]);
   const [crawlerSession, setCrawlerSession] = useState<CrawlerSessionData>(() => {
     const nativeSnap = getInitialNativeSnapshot();
     if (nativeSnap?.crawlerSession) {
