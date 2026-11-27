@@ -1097,42 +1097,65 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
             return self._send_json(200, {"files": items})
         return self._send_json(404, {"error": "Not found"})
 
-    def _stream_pty_command(self, cmd, shell=False):
-        self._begin_ndjson()
+    def _stream_pty_command(self, cmd, shell=False, before_start=None):
+        if not _reserve_process_start():
+            return self._send_json(409, {"error": "另一個 Termux 工作仍在執行，已拒絕這次操作"})
+        master_fd = None
+        slave_fd = None
+        proc = None
         t0 = time.perf_counter()
-        master_fd, slave_fd = pty.openpty()
-        env = _resolve_certifi_env(os.environ.copy())
-
-        proc = subprocess.Popen(
-            cmd,
-            shell=shell,
-            cwd=WORKSPACE,
-            stdin=slave_fd,
-            stdout=slave_fd,
-            stderr=slave_fd,
-            env=env,
-            preexec_fn=os.setsid,
-            close_fds=True,
-        )
-        os.close(slave_fd)
-        _set_active(proc.pid, proc.pid, master_fd)
-
-        decoder = codecs.getincrementaldecoder("utf-8")("replace")
-        client_disconnected = False
-
-        def emit_stream_event(event):
-            nonlocal client_disconnected
-            if client_disconnected:
-                return
-            try:
-                self._write_ndjson(event)
-            except OSError:
-                # The HTTP client does not own the child process. Keep draining
-                # the PTY so a full output buffer cannot block the user's script.
-                # The authenticated /stop endpoint remains the only stop control.
-                client_disconnected = True
-
         try:
+            # Publish stream readiness only after reserving the process slot. A Stop
+            # arriving during file staging is remembered and applied after Popen.
+            self._begin_ndjson()
+            if before_start is not None:
+                try:
+                    before_start()
+                except Exception as exc:
+                    self._write_ndjson({
+                        "type": "stdout",
+                        "data": "[DroidPy] 無法安全寫入工作區檔案：{}: {}\\n".format(type(exc).__name__, exc),
+                    })
+                    self._write_ndjson({"type": "done", "exitCode": 1, "durationMs": int((time.perf_counter() - t0) * 1000)})
+                    return
+
+            master_fd, slave_fd = pty.openpty()
+            env = _resolve_certifi_env(os.environ.copy())
+            proc = subprocess.Popen(
+                cmd,
+                shell=shell,
+                cwd=WORKSPACE,
+                stdin=slave_fd,
+                stdout=slave_fd,
+                stderr=slave_fd,
+                env=env,
+                preexec_fn=os.setsid,
+                close_fds=True,
+            )
+            os.close(slave_fd)
+            slave_fd = None
+            stop_requested = _set_active(proc.pid, proc.pid, master_fd)
+            if stop_requested:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+            decoder = codecs.getincrementaldecoder("utf-8")("replace")
+            client_disconnected = False
+
+            def emit_stream_event(event):
+                nonlocal client_disconnected
+                if client_disconnected:
+                    return
+                try:
+                    self._write_ndjson(event)
+                except OSError:
+                    # The HTTP client does not own the child process. Keep draining
+                    # the PTY so a full output buffer cannot block the user's script.
+                    # The authenticated /stop endpoint remains the only stop control.
+                    client_disconnected = True
+
             while True:
                 rlist, _, _ = select.select([master_fd], [], [], 0.1)
                 if master_fd in rlist:
@@ -1164,15 +1187,20 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
             if tail:
                 emit_stream_event({"type": "stdout", "data": tail})
             code = proc.wait()
+            duration_ms = int((time.perf_counter() - t0) * 1000)
+            emit_stream_event({"type": "done", "exitCode": code, "durationMs": duration_ms})
         finally:
             _clear_active()
-            try:
-                os.close(master_fd)
-            except OSError:
-                pass
-
-        duration_ms = int((time.perf_counter() - t0) * 1000)
-        emit_stream_event({"type": "done", "exitCode": code, "durationMs": duration_ms})
+            if master_fd is not None:
+                try:
+                    os.close(master_fd)
+                except OSError:
+                    pass
+            if slave_fd is not None:
+                try:
+                    os.close(slave_fd)
+                except OSError:
+                    pass
 
     def _read_json_body(self):
         if self.headers.get_all("Transfer-Encoding"):
