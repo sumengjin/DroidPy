@@ -14,6 +14,8 @@ const borderlessButtonStyle: CSSProperties = {
   appearance: 'none',
   WebkitAppearance: 'none',
   backgroundImage: 'none',
+  backgroundColor: 'transparent',
+  borderRadius: 0,
   WebkitTapHighlightColor: 'transparent',
 };
 
@@ -63,20 +65,20 @@ export function WorkspaceExecutionControls({
   onRun,
 }: WorkspaceExecutionControlsProps) {
   const isPhone = variant === 'phone';
-  const buttonSize = isPhone ? 'min-h-[44px] px-3 rounded-full' : 'min-h-[40px] px-3 rounded-xl';
+  const buttonSize = isPhone ? 'min-h-[44px] px-2' : 'min-h-[40px] px-2';
   const compactText = 'text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap';
 
   return (
     <div className="relative z-30 flex items-center gap-1.5 shrink-0 overflow-visible">
       {pendingInput && (
-        <button style={borderlessButtonStyle} type="button" onClick={onCancelInput} className={`dp-execution-control ${buttonSize} bg-red-600 text-white ${compactText}`}>
+        <button style={borderlessButtonStyle} type="button" onClick={onCancelInput} className={`dp-execution-control ${buttonSize} text-red-600 dark:text-red-400 ${compactText}`}>
           <Square className="w-3.5 h-3.5 fill-current" />
           <span>{labels.cancelInput}</span>
         </button>
       )}
 
       {termuxStopping ? (
-        <button style={borderlessButtonStyle} type="button" disabled aria-busy="true" className={`dp-execution-control ${buttonSize} bg-red-600/80 text-white ${compactText}`}>
+        <button style={borderlessButtonStyle} type="button" disabled aria-busy="true" className={`dp-execution-control ${buttonSize} text-red-600 dark:text-red-400 ${compactText}`}>
           <Loader2 className="w-3.5 h-3.5 animate-spin" />
           <span>{labels.stopping}</span>
         </button>
@@ -89,7 +91,7 @@ export function WorkspaceExecutionControls({
               disabled={termuxPauseBusy}
               aria-label={termuxPaused ? labels.resume : labels.pause}
               aria-pressed={termuxPaused}
-              className={`dp-execution-control ${buttonSize} bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] disabled:opacity-50 ${compactText}`}
+              className={`dp-execution-control ${buttonSize} text-[var(--ide-accent-text)] disabled:opacity-50 ${compactText}`}
             >
               {termuxPauseBusy ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -101,7 +103,7 @@ export function WorkspaceExecutionControls({
               <span>{termuxPaused ? labels.resume : labels.pause}</span>
             </button>
           )}
-          <button style={borderlessButtonStyle} type="button" onClick={onStop} className={`dp-execution-control ${buttonSize} bg-red-600 text-white ${compactText}`}>
+          <button style={borderlessButtonStyle} type="button" onClick={onStop} className={`dp-execution-control ${buttonSize} text-red-600 dark:text-red-400 ${compactText}`}>
             <Square className="w-3.5 h-3.5 fill-current" />
             <span>{labels.stop}</span>
           </button>
@@ -111,7 +113,7 @@ export function WorkspaceExecutionControls({
           type="button"
           onClick={onRun}
           disabled={isRunning || isCoreLoading}
-          className={`dp-execution-control ${buttonSize} bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white ${compactText} transition-colors`}
+          className={`dp-execution-control ${buttonSize} text-[var(--ide-accent-text)] disabled:opacity-50 ${compactText} transition-colors`}
         >
           {isRunning || isCoreLoading ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
