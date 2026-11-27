@@ -168,12 +168,14 @@ assert.match(workspaceHeaderSource, /labels\.console[\s\S]*?labels\.files[\s\S]*
 assert.match(appSource, /<WorkspaceFileTabs[\s\S]*?variant="tablet"/, 'tablet file tabs must live inside the editor pane, not occupy a second global header row');
 assert.match(appSource, /pointer-events-none absolute inset-0 z-\[1\]/, 'one continuous paper layer must cover the entire viewport behind phone and tablet chrome');
 assert.match(appSource, /const workspaceSurfaceAlpha =\s*1 - Math\.min\(100, Math\.max\(0, settings\.workspaceTransparency \?\? 35\)\) \/ 100/, 'workspace transparency must map the 0–100 slider to a clamped 1–0 alpha');
-assert.match(appSource, /backgroundColor: is3dBgActive\s*\? 'var\(--ide-workspace-surface\)'\s*: 'var\(--ide-bg\)'/, 'tablet editor and terminal panes must use the adjustable theme-glass surface instead of remaining transparent');
-assert.doesNotMatch(cssSource, /--ide-bg:\s*rgba\(/, 'the 3D mode must not replace the original theme background token with a fixed-alpha color');
+assert.match(appSource, /One continuous translucent paper surface covers the full viewport[\\s\\S]*?hexToRgba\\(activeThemeMeta\\.swatchBg, workspaceSurfaceAlpha\\)/, 'one full-screen paper surface must own the live transparency alpha');
+assert.doesNotMatch(appSource, /Each pane therefore owns its adjustable theme-glass surface/, 'tablet panes must not draw a second alpha surface over the full-screen paper');
+assert.match(appSource, /tablet-landscape-split-paper/, 'tablet divider aperture must remain available in the single paper layer');
+assert.doesNotMatch(themeCssSource, /--ide-bg:\s*rgba\(/, 'the 3D mode must not replace the original theme background token with a fixed-alpha color');
 assert.match(exportSource, /id="workspace-transparency"[\s\S]*?type="range"[\s\S]*?min=\{0\}[\s\S]*?max=\{100\}[\s\S]*?onChange=\{\(event\) => onUpdateSettings\(\{ workspaceTransparency: Number\(event\.target\.value\) \}\)\}/, 'the transparency slider must write its numeric value into shared settings state');
 assert.match(appSource, /const handleUpdateSettings = useCallback\(\(patch: Partial<EditorSettings>\)[\s\S]*?setSettings\(\(prev\) => \(\{ \.\.\.prev, \.\.\.patch \}\)\)/, 'workspace appearance updates must be applied to the shared settings state');
 assert.match(appSource, /localStorage\.setItem\(STORAGE_SETTINGS_KEY, JSON\.stringify\(settings\)\)/, 'workspace transparency settings must persist between launches');
-assert.match(appSource, /backgroundColor: is3dBgActive[\s\S]*?hexToRgba\(activeThemeMeta\.swatchBg, workspaceSurfaceAlpha\)[\s\S]*?: 'var\(--ide-surface\)'/, 'the visible full-screen paper layer must use the live slider alpha over 3D and an opaque theme surface when 3D is disabled');
+assert.match(appSource, /One continuous translucent paper surface covers the full viewport[\\s\\S]*?hexToRgba\\(activeThemeMeta\\.swatchBg, workspaceSurfaceAlpha\\)/, 'one full-screen paper surface must own the live transparency alpha');
 assert.match(appSource, /className="relative z-10 flex-1 min-h-0 min-w-0 w-full flex flex-col overflow-hidden bg-transparent"/, 'workspace content must share the full-screen paper instead of drawing a second sheet');
 assert.match(workspaceHeaderSource, /minHeight:[\s\S]*?droidpy-statusbar-inset/, 'workspace header must reserve Android status bar safe-area height');
 assert.match(executionControlsSource, /dp-execution-control/, 'execution controls must use the dedicated native-WebView border reset class');
