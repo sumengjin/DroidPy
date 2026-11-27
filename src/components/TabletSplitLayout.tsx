@@ -114,8 +114,7 @@ export function TabletSplitLayout({ split, orientation, children }: TabletSplitL
     >
       <span
         aria-hidden="true"
-        className="pointer-events-none block shrink-0"
-        className={`tablet-gel-divider-core ${horizontal ? 'tablet-gel-divider-core-vertical' : 'tablet-gel-divider-core-horizontal'} ${isDragging ? 'tablet-gel-divider-core-active' : ''}`}
+        className={`pointer-events-none block shrink-0 tablet-gel-divider-core ${horizontal ? 'tablet-gel-divider-core-vertical' : 'tablet-gel-divider-core-horizontal'} ${isDragging ? 'tablet-gel-divider-core-active' : ''}`}
         style={horizontal
           ? { width: '1mm', height: '100%' }
           : { width: '100%', height: '1mm' }}
