@@ -187,7 +187,6 @@ assert.match(designTokensSource, /\.dp-nav-item\[aria-pressed="true"\]/, 'select
 assert.match(designTokensSource, /\.dp-icon-button/, 'transparent icon-only actions must use a shared focus and disabled-state primitive');
 const legacySurfaceSources = await Promise.all([
   readFile(new URL('../src/components/FileExplorer.tsx', import.meta.url), 'utf8'),
-  readFile(new URL('../src/components/CrawlerBrowserPanel.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/InternalStoragePanel.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/AppUpdateModal.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/HelpTutorialModal.tsx', import.meta.url), 'utf8'),
