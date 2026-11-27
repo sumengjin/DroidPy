@@ -219,8 +219,6 @@ assert.doesNotMatch(terminalSource, /stdinValue|replValue|replInputRef|handleRep
 assert.doesNotMatch(terminalSource, /bg-\[var\(--ide-surface\)\].*flex items-center gap-2 shrink-0/, 'terminal input bars must not add a second opaque surface');
 assert.match(settingsWorkspaceSource, /fixed inset-0 z-\[1000\][\s\S]*?backgroundColor: 'var\(--ide-surface\)'/, 'settings must be a fully opaque top-level workspace');
 assert.match(appSource, /<TabletSplitLayout split=\{tabletSplit\} orientation=\{isLandscape \? 'horizontal' : 'vertical'\}>/, 'tablet panes must use the adjustable workbench layout');
-const tabletSplitSource = await readFile(new URL('../src/components/TabletSplitLayout.tsx', import.meta.url), 'utf8');
-assert.match(appSource, /<TabletSplitLayout split={tabletSplit} orientation={isLandscape \? 'horizontal' : 'vertical'}>/, 'tablet panes must use the adjustable workbench layout');
 assert.match(tabletSplitSource, /setPrimaryPercent\(Math\.min\(75, Math\.max\(25, raw\)\)\)/, 'tablet workbench split must be user-adjustable within usable bounds');
 assert.match(tabletSplitSource, /onPointerDown=[\s\S]*?setPointerCapture[\s\S]*?onPointerMove=[\s\S]*?updateFromPointer/, 'tablet workbench divider must support touch and mouse dragging');
 assert.ok(tabletSplitSource.includes('role="separator"') && tabletSplitSource.includes('aria-valuemin={25}') && tabletSplitSource.includes('aria-valuemax={75}') && tabletSplitSource.includes('onKeyDown={handleKeyDown}'), 'tablet workbench divider must expose accessible keyboard resizing');
