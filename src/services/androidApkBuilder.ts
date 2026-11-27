@@ -4386,8 +4386,10 @@ def clipboard_set(text):
                                     for (i in 0 until batch.length()) {
                                         val item = batch.getJSONObject(i)
                                         val name = File(item.optString("name", "")).name
-                                        if (name.isNotBlank()) {
-                                            File(destDir, name).writeText(item.optString("content", ""), Charsets.UTF_8)
+                                        if (name.isNotBlank() && name != "." && name != "..") {
+                                            val target = File(destDir, name)
+                                            val bytes = item.optString("content", "").toByteArray(Charsets.UTF_8)
+                                            writeFileAtomically(target, bytes)
                                             count++
                                         }
                                     }
@@ -4400,8 +4402,8 @@ def clipboard_set(text):
                                 if (target == null) {
                                     writeJson(out, 400, JSONObject().put("error", "Invalid path"))
                                 } else {
-                                    target.parentFile?.mkdirs()
-                                    target.writeText(bodyJson.optString("content", ""), Charsets.UTF_8)
+                                    val bytes = bodyJson.optString("content", "").toByteArray(Charsets.UTF_8)
+                                    writeFileAtomically(target, bytes)
                                     writeJson(out, 200, JSONObject().put("ok", true).put("path", target.absolutePath))
                                 }
                             }
