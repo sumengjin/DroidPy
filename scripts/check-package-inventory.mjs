@@ -165,6 +165,11 @@ assert.match(mobileNavSource, /variant="phone"/, 'phone navigation must use the 
 assert.match(mobileNavSource, /setSettingsWorkspaceOpen\(false\);\s*setMobileTab\(destination === 'terminal' \? 'console' : destination\)/, 'switching workspaces must close the Settings workspace before showing the selected destination');
 const workspaceNavigationSource = await readFile(new URL('../src/components/WorkspaceNavigation.tsx', import.meta.url), 'utf8');
 assert.match(workspaceNavigationSource, /grid grid-cols-4/, 'phone navigation must expose four primary workspaces');
+assert.match(workspaceNavigationSource, /w-full h-11 shrink-0 flex items-center justify-between/, 'tablet navigation must be a compact horizontal workspace switcher, not a permanent side rail');
+assert.match(workspaceNavigationSource, /flex-row min-h-\[36px\]/, 'tablet destinations must use a horizontal control layout');
+assert.match(appSource, /deviceClass === 'tablet' \? 'flex-col' : 'flex-row'/, 'tablet workspace navigation must sit above the workbench');
+assert.match(appSource, /flex-\[1\.15\]/, 'tablet landscape editor must receive a flexible weighted share of the workbench');
+assert.doesNotMatch(appSource, /w-\[56%\]|h-\[56%\]/, 'tablet split panes must not use the old fixed 56 percent layout');
 assert.match(workspaceNavigationSource, /dp-nav-item/, 'phone and tablet navigation must use the shared interaction token');
 const fileTabsSource = await readFile(new URL('../src/components/WorkspaceFileTabs.tsx', import.meta.url), 'utf8');
 assert.match(fileTabsSource, /dp-nav-item/, 'file tabs must share the selected-state interaction token');
@@ -173,7 +178,7 @@ assert.ok(appSource.includes('tabletWorkspace.toggleSplit'), 'tablet split view 
 assert.ok(workspaceHeaderSource.includes('aria-pressed={tabletSplit}'), 'split layout toggle must expose its selected state');
 assert.match(appSource, /aria-current={active \? 'page' : undefined}/, 'secondary workspace tabs must expose their selected state');
 const designTokensSource = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
-assert.match(designTokensSource, /\.dp-nav-item\[aria-current="page"\][\s\S]*?border-color: var\(--ide-accent\)[\s\S]*?color: var\(--ide-accent-text\)/, 'selected navigation destinations must use theme-aware accent outlines and text');
+assert.match(designTokensSource, /\.dp-nav-item\[aria-current="page"\][\s\S]*?color: var\(--ide-accent-text\)/, 'selected navigation destinations must use theme-aware foreground color only');
 assert.match(designTokensSource, /\.dp-nav-item:not\(\[aria-current="page"\]\)[\s\S]*?color: var\(--ide-text\)/, 'unselected navigation destinations must remain transparent and lower emphasis');
 assert.match(designTokensSource, /\.dp-nav-item:disabled[\s\S]*?opacity: 0\.38/, 'disabled navigation controls must be visibly distinct from unselected controls');
 assert.match(designTokensSource, /\.dp-workspace-row/, 'settings and package work rows must use the new surface-free row primitive');
