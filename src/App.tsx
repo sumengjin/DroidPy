@@ -265,6 +265,9 @@ function mergeTerminalChunk(prev: string, chunk: string): string {
 
 export default function App() {
   const { deviceClass, isLandscape } = useDeviceLayout();
+  // Portrait tablets deliberately use the same single-workspace shell as phones.
+  // The adjustable two-pane workbench is reserved for landscape tablets.
+  const isPhoneLayout = deviceClass === 'phone' || (deviceClass === 'tablet' && !isLandscape);
 
   // Android WebView versions on Android 11 do not consistently apply 100dvh
   // when the IME opens. Mirror the actually visible viewport into the app shell
@@ -3099,7 +3102,7 @@ export default function App() {
       />
 
       {/* Tablet workspace header: file navigation, split layout and shared execution controls. */}
-      {deviceClass === 'tablet' && (
+      {deviceClass === 'tablet' && isLandscape && (
         <WorkspaceHeader
           variant="tablet"
           activeFile={activeFile}
@@ -3151,7 +3154,7 @@ export default function App() {
       )}
 
       {/* Phone workspace header: contextual destination and shared execution controls. */}
-      {deviceClass === 'phone' && (
+      {isPhoneLayout && (
         <WorkspaceHeader
           variant="phone"
           activeFile={activeFile}
@@ -3238,9 +3241,9 @@ export default function App() {
         )}
 
       {/* Main Content Area (Mobile & Tablet Only) */}
-      <main data-active-workspace={deviceClass === 'phone' ? mobileTab : tabletPaneTab} className="relative z-10 flex-1 min-h-0 min-w-0 w-full flex flex-col overflow-hidden bg-transparent">
-        {deviceClass === 'tablet' ? (
-          <TabletSplitLayout split={tabletSplit} orientation={isLandscape ? 'horizontal' : 'vertical'}>
+      <main data-active-workspace={isPhoneLayout ? mobileTab : tabletPaneTab} className="relative z-10 flex-1 min-h-0 min-w-0 w-full flex flex-col overflow-hidden bg-transparent">
+        {deviceClass === 'tablet' && isLandscape ? (
+          <TabletSplitLayout split={tabletSplit} orientation="horizontal">
             {/* Tablet Primary Editor Pane */}
             {(tabletSplit || tabletPaneTab === 'editor') && (
             <section
@@ -3534,7 +3537,7 @@ export default function App() {
       </main>
 
       {/* Phone navigation is the compact presentation of the same workspace model used on tablets. */}
-      {deviceClass === 'phone' && (
+      {isPhoneLayout && (
         <WorkspaceNavigation
           variant="phone"
           activeDestination={mobileTab === 'console' ? 'terminal' : mobileTab === 'files' ? 'files' : mobileTab === 'browser' ? 'browser' : 'editor'}
