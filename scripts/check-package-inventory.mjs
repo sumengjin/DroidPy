@@ -367,4 +367,23 @@ assert.match(source, /if \(handled == "true"\) \{[\s\S]*?lastBackPressedAt = 0L/
 assert.match(source, /if \(webView\.canGoBack\(\)\) \{\s*lastBackPressedAt = 0L/, 'WebView history navigation must reset the native exit timer');
 assert.match(source, /if \(crawlerOverlay\.visibility == View\.VISIBLE\) \{\s*\/\/ A Back press consumed inside the browser must never count toward app exit\.\s*lastBackPressedAt = 0L/, 'crawler browser navigation must not count toward app exit');
 
+
+// Regression checks for the reported phone/tablet UI defects.
+const settingsWorkspaceSource = await readFile(new URL('../src/components/SettingsWorkspace.tsx', import.meta.url), 'utf8');
+const executionControlsSource = await readFile(new URL('../src/components/WorkspaceExecutionControls.tsx', import.meta.url), 'utf8');
+assert.match(settingsWorkspaceSource, /backgroundColor: getThemeMeta\(settings\.theme\)\.swatchBg/, 'Settings must use an opaque theme base color so the previous workspace cannot show through');
+assert.match(settingsWorkspaceSource, /z-\[100\].*isolate/, 'Settings must sit above all workspace content in an isolated stacking context');
+assert.match(settingsWorkspaceSource, /aria-modal="true"/, 'Settings must be exposed as a modal full-screen workspace');
+assert.match(workspaceHeaderSource, /relative z-30 isolate/, 'the workspace header must remain above the terminal pane when their bounds meet');
+const tabletSplitControl = workspaceHeaderSource.indexOf('onClick={onToggleSplit}');
+const tabletSettingsControl = workspaceHeaderSource.indexOf('onClick={onOpenSettings}', workspaceHeaderSource.indexOf('onClick={onToggleSplit}'));
+assert.ok(tabletSplitControl >= 0 && tabletSettingsControl > tabletSplitControl, 'tablet Settings must appear to the right of the Focus Editor / split control');
+assert.match(executionControlsSource, /border-2 border-\[var\(--ide-accent\)\]/, 'Run/Pause controls must retain a complete visible accent border');
+assert.match(appSource, /const navigatePhoneWorkspace = useCallback\(\(destination: 'editor' \| 'terminal' \| 'files' \| 'browser'\)/, 'phone navigation must use one explicit destination handler');
+assert.match(appSource, /onNavigate=\{navigatePhoneWorkspace\}/, 'phone bottom navigation must call the explicit destination handler');
+assert.match(appSource, /data-active-workspace=\{deviceClass === 'phone' \? mobileTab : tabletPaneTab\}/, 'the active workspace must be observable on the rendered content root');
+assert.match(appSource, /mobileTab === 'console' && \(/, 'the phone terminal page must render from the selected navigation state');
+assert.match(appSource, /mobileTab === 'files' && \(/, 'the phone files page must render from the selected navigation state');
+assert.match(appSource, /mobileTab === 'browser' \? 'flex-1 min-h-0 overflow-hidden' : 'hidden'/, 'the phone browser page must render from the selected navigation state');
+
 console.log('Package inventory and navigation safety checks passed: dual-source discovery, bounded private output, cleanup, non-shrinking manifest and Back-stack exit guard.');
