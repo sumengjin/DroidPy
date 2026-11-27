@@ -250,7 +250,7 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
         <div className="flex-1 min-h-0 overflow-hidden">
           <ToolsAndPackages
             activeSubView={section}
-            compactDrawer
+            workspaceMode
             files={files}
             activeFile={activeFile}
             settings={settings}

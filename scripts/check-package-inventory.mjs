@@ -137,6 +137,9 @@ assert.match(workspaceNavigationSource, /border-\[var\(--ide-accent\)\]\/75/, 's
 assert.match(workspaceNavigationSource, /border-transparent bg-transparent text-\[var\(--ide-text-muted\)\]/, 'unselected navigation destinations must remain transparent and visually quieter');
 assert.doesNotMatch(workspaceNavigationSource, /id: 'packages'/, 'package management must not occupy a primary bottom-navigation destination');
 assert.match(drawerSource, /id: 'packages' as const, label: t\('neg_category_packages'\)/, 'package management must remain available as a translated dedicated Settings category');
+assert.match(exportSource, /activeSubView === 'packages'[\s\S]*?renderHubOptionList\(packageHubOptions/, 'package management must open directly without an intermediate folder screen');
+assert.doesNotMatch(exportSource, /renderFolderList|renderFolderContents|setPackageFolder|setTermuxFolder|setStorageFolder|setSettingsFolder/, 'the Settings workspace must not retain nested folder navigation');
+assert.match(exportSource, /workspaceMode\?: boolean/, 'the system center must use workspace layout terminology rather than drawer terminology');
 assert.match(i18nSource, /neg_category_packages:/, 'package management category label must be localized');
 assert.match(i18nSource, /neg_category_packages_desc:/, 'package management category description must be localized');
 const backHandlerStart = appSource.indexOf('window.__droidpyHandleBack = () => {');
