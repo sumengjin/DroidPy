@@ -4,7 +4,7 @@ import {
   EditorSettings,
   ExecutionEngine,
   InstalledPackage,
-  NegativeScreenSection,
+  SettingsWorkspaceSection,
   PackageBackupStatus,
   ProcessCleanupResult,
   PyodideStatus,
@@ -25,8 +25,8 @@ import { AppUpdateCheckResult } from '../services/appUpdater';
 
 interface SettingsWorkspaceProps {
   open: boolean;
-  section: NegativeScreenSection;
-  onChangeSection: (section: NegativeScreenSection) => void;
+  section: SettingsWorkspaceSection;
+  onChangeSection: (section: SettingsWorkspaceSection) => void;
   onClose: () => void;
   files: PythonFile[];
   activeFile: PythonFile;

@@ -53,7 +53,7 @@ export interface EditorSettings {
 }
 
 export type MobileTab = 'editor' | 'console' | 'browser' | 'files' | 'packages';
-export type NegativeScreenSection = 'termux' | 'packages' | 'android' | 'settings';
+export type SettingsWorkspaceSection = 'termux' | 'packages' | 'android' | 'settings';
 export type DeviceClass = 'phone' | 'tablet';
 export type TabletPaneTab = 'terminal' | 'browser' | 'files';
 

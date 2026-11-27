@@ -31,7 +31,7 @@ import {
   ExecutionEngine,
   InstalledPackage,
   MobileTab,
-  NegativeScreenSection,
+  SettingsWorkspaceSection,
   PackageBackupStatus,
   ProcessCleanupResult,
   PyodideStatus,
@@ -363,8 +363,8 @@ export default function App() {
     }
   }, [mobileTab]);
   const packageReturnTabRef = useRef<MobileTab>('editor');
-  const [negativeOpen, setNegativeOpen] = useState(false);
-  const [negativeSection, setNegativeSection] = useState<NegativeScreenSection>('termux');
+  const [settingsWorkspaceOpen, setSettingsWorkspaceOpen] = useState(false);
+  const [settingsWorkspaceSection, setSettingsWorkspaceSection] = useState<SettingsWorkspaceSection>('termux');
   const tabletWorkspace = useTabletWorkspace();
   const tabletSplit = tabletWorkspace.split;
   const tabletPaneTab = tabletWorkspace.activePane;
@@ -547,14 +547,14 @@ export default function App() {
     showHelpModal,
     showLogsModal,
     showUpdateModal,
-    negativeOpen,
+    settingsWorkspaceOpen,
     mobileNewFileOpen,
   });
   overlayStateRef.current = {
     showHelpModal,
     showLogsModal,
     showUpdateModal,
-    negativeOpen,
+    settingsWorkspaceOpen,
     mobileNewFileOpen,
   };
   const inputResolverRef = useRef<{
@@ -732,9 +732,9 @@ export default function App() {
         setShowHelpModal(false);
         return true;
       }
-      if (ov.negativeOpen) {
+      if (ov.settingsWorkspaceOpen) {
         if (window.__droidpySettingsBack?.()) return true;
-        setNegativeOpen(false);
+        setSettingsWorkspaceOpen(false);
         if (mobileTabRef.current === 'packages') setMobileTab(packageReturnTabRef.current);
         return true;
       }
@@ -3012,21 +3012,21 @@ export default function App() {
 
   useEffect(() => {
     if (
-      negativeOpen &&
-      negativeSection === 'packages' &&
+      settingsWorkspaceOpen &&
+      settingsWorkspaceSection === 'packages' &&
       pyodideStatus === 'ready' &&
       installedPackages.length === 0
     ) {
       void handleRefreshPackages();
     }
-  }, [negativeOpen, negativeSection, pyodideStatus, installedPackages.length, handleRefreshPackages]);
+  }, [settingsWorkspaceOpen, settingsWorkspaceSection, pyodideStatus, installedPackages.length, handleRefreshPackages]);
 
   const isRunning = pyodideStatus === 'running' || termuxRunning;
   const isCoreLoading = executionEngine === 'pyodide' && pyodideStatus === 'loading';
 
-  const openNegativeDrawer = useCallback((sec: NegativeScreenSection = 'termux') => {
-    setNegativeSection(sec);
-    setNegativeOpen(true);
+  const openSettingsWorkspace = useCallback((sec: SettingsWorkspaceSection = 'termux') => {
+    setSettingsWorkspaceSection(sec);
+    setSettingsWorkspaceOpen(true);
   }, []);
 
   const renderInlineNewFileBar = () => (
@@ -3049,7 +3049,7 @@ export default function App() {
         setMobileNewFileName('');
         setMobileNewFileOpen(false);
       }}
-      className="flex items-center gap-1.5 px-2.5 py-2 border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] shrink-0"
+      className="flex items-center gap-1.5 px-2.5 py-2 border-b border-[var(--ide-border)] bg-transparent shrink-0"
     >
       <input
         type="text"
@@ -3171,7 +3171,7 @@ export default function App() {
           }}
           onSelectFile={setActiveFileId}
           onCreateFile={() => setMobileNewFileOpen((open) => !open)}
-          onOpenSettings={() => setNegativeOpen(true)}
+          onOpenSettings={() => setSettingsWorkspaceOpen(true)}
           execution={{
             pendingInput: pendingInputPrompt !== null,
             termuxStopping,
@@ -3251,7 +3251,7 @@ export default function App() {
             }}
             settingsLabel={t('neg_title')}
             onNavigate={tabletWorkspace.navigate}
-            onOpenSettings={() => setNegativeOpen(true)}
+            onOpenSettings={() => setSettingsWorkspaceOpen(true)}
           />
         )}
         {deviceClass === 'tablet' ? (
@@ -3572,7 +3572,7 @@ export default function App() {
             browser: t('mob_browser'),
           }}
           onNavigate={(destination) => {
-            setNegativeOpen(false);
+            setSettingsWorkspaceOpen(false);
             setMobileTab(destination === 'terminal' ? 'console' : destination);
           }}
           ariaLabel={t('nav_workspace')}
@@ -3581,11 +3581,11 @@ export default function App() {
 
       {/* Full-screen Settings workspace, independent of the editor navigation shell. */}
       <SettingsWorkspace
-        open={negativeOpen}
-        section={negativeSection}
-        onChangeSection={setNegativeSection}
+        open={settingsWorkspaceOpen}
+        section={settingsWorkspaceSection}
+        onChangeSection={setSettingsWorkspaceSection}
         onClose={() => {
-          setNegativeOpen(false);
+          setSettingsWorkspaceOpen(false);
           if (mobileTabRef.current === 'packages') setMobileTab(packageReturnTabRef.current);
         }}
         files={files}
@@ -3662,7 +3662,7 @@ export default function App() {
           setMobileTab('browser');
         }}
         onNavigateAndroid={() => {
-          openNegativeDrawer('android');
+          openSettingsWorkspace('android');
         }}
         onNotify={showToast}
       />
