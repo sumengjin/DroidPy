@@ -114,7 +114,7 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
         : []),
     ];
     return combined
-      .filter((line) => (!onlyErrors || /\b(error|err|warn|warning|fatal|exception|traceback)\b/i.test(line)) && (!q || line.toLowerCase().includes(q)))
+      .filter((line) => (!onlyErrors || /\b(error|err|warn|warning|fatal|exception|traceback|[EW])\b/i.test(line)) && (!q || line.toLowerCase().includes(q)))
       .slice(-300);
   }, [nativeLogs, searchQuery, onlyErrors]);
 
