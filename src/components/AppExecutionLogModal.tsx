@@ -271,6 +271,10 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
             </div>
           </div>
 
+          <p className="text-[11px] leading-relaxed text-[var(--ide-text-muted)]">
+            {activeTab === 'execution' ? t('logs_hint_execution') : activeTab === 'app' ? t('logs_hint_app') : t('logs_hint_native')}
+          </p>
+
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative flex-1 min-w-[180px]">
               <Search className="w-3.5 h-3.5 text-[var(--ide-text-muted)] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
