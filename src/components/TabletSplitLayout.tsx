@@ -66,9 +66,12 @@ export function TabletSplitLayout({ split, orientation, children }: TabletSplitL
           if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
         }}
         onKeyDown={handleKeyDown}
-        className={`relative z-20 flex items-center justify-center touch-none outline-none focus-visible:bg-[var(--ide-accent-soft)] ${horizontal ? 'cursor-col-resize' : 'cursor-row-resize'}`}
+        className={`relative z-20 flex items-center justify-center touch-none outline-none backdrop-blur-[3px] focus-visible:bg-[var(--ide-accent-soft)] ${horizontal ? 'cursor-col-resize' : 'cursor-row-resize'}`}
       >
-        <span className={`rounded-full bg-[var(--ide-border)] ${horizontal ? 'w-[3px] h-10' : 'h-[3px] w-10'}`} />
+        <span
+          aria-hidden="true"
+          className={`rounded-full bg-[var(--ide-divider-glass)] shadow-[0_0_0_1px_var(--ide-divider-glow),0_0_10px_var(--ide-divider-glow)] ${horizontal ? 'w-[2px] h-12' : 'h-[2px] w-12'}`}
+        />
       </div>
       {panes[1]}
     </div>
