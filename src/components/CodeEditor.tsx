@@ -431,7 +431,7 @@ function createEditorTheme(themeId: ThemeId, fontSize: number, transparentBg = f
   // Keep the editor canvas transparent like the terminal instead of stacking
   // a second tinted layer above the paper.
   const editorBg = transparentBg ? 'transparent' : t.bg;
-  const gutterBg = transparentBg ? hexToRgba(t.gutterBg, meta.isDark ? 0.78 : 0.82) : t.gutterBg;
+  const gutterBg = transparentBg ? 'transparent' : t.gutterBg;
   const panelBg = transparentBg ? hexToRgba(t.panelBg, 0.9) : t.panelBg;
   return EditorView.theme(
     {
@@ -455,12 +455,23 @@ function createEditorTheme(themeId: ThemeId, fontSize: number, transparentBg = f
       '.cm-gutters': {
         backgroundColor: gutterBg,
         color: t.gutterFg,
-        borderRight: `1px solid ${t.gutterBorder}`,
+        borderRight: transparentBg ? 'none' : `1px solid ${t.gutterBorder}`,
+        paddingLeft: '1px',
+        paddingRight: '1px',
         fontVariantNumeric: 'tabular-nums',
         userSelect: 'none',
       },
+      '.cm-gutterElement': {
+        padding: '0 2px',
+        fontSize: '0.82em',
+      },
+      '.cm-lineNumbers .cm-gutterElement': {
+        minWidth: '0',
+        paddingLeft: '2px',
+        paddingRight: '2px',
+      },
       '.cm-activeLineGutter': {
-        backgroundColor: t.activeGutterBg,
+        backgroundColor: transparentBg ? 'transparent' : t.activeGutterBg,
         color: t.accent,
         fontWeight: '600',
       },
