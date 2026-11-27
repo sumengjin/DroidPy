@@ -193,7 +193,7 @@ assert.match(themeCssSource, /\.android-symbol-bar[\s\S]*?width: 100%[\s\S]*?bor
 assert.match(symbolBarSource, /android-symbol-bar/, 'the Android symbol bar must use the dedicated compact style');
 assert.match(symbolBarSource, /onPointerDown=\{handleStripPointerDown\}[\s\S]*onPointerMove=\{handleStripPointerMove\}[\s\S]*onPointerUp=\{finishStripPointer\}/, 'the complete symbol strip must capture and own the Android pointer gesture');
 assert.match(symbolBarSource, /e\.currentTarget\.setPointerCapture\(e\.pointerId\)/, 'the strip must retain the gesture when the finger moves over another pane');
-assert.match(symbolBarSource, /startScrollLeft - deltaX[\s\S]*scrollWidth - e\.currentTarget\.clientWidth/, 'horizontal dragging must scroll the symbol row with the finger and reveal off-screen symbols');
+assert.match(symbolBarSource, /scrollWidth - e\.currentTarget\.clientWidth[\s\S]*startScrollLeft - deltaX/, 'horizontal dragging must scroll the symbol row with the finger and reveal off-screen symbols');
 assert.match(symbolBarSource, /findSymbolAtX\(e\.currentTarget, e\.clientX\)/, 'selection must use symbol geometry rather than hit-testing elements obscured by the terminal pane');
 assert.match(symbolBarSource, /finishStripPointer[\s\S]*onInsert\(selected\.insert, selected\.offset \?\? 0\)/, 'the final symbol under the finger must be inserted only on pointer release');
 assert.match(symbolBarSource, /relative z-50[\s\S]*\[touch-action:none\]/, 'the symbol strip must sit above the terminal overlap and suppress native long-press gestures');
