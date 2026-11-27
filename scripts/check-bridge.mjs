@@ -255,7 +255,7 @@ assert.ok(nativeStreamShell.includes('Stream client disconnected; continuing pro
 assert.ok(!nativeStreamShell.includes('proc.destroyForcibly()'), 'a dropped output socket must not kill the Python child');
 assert.ok(nativeStreamShell.indexOf('val reserved = synchronized(activeProcessLock)') < nativeStreamShell.indexOf('beforeStart?.invoke()'));
 assert.ok(nativeStreamShell.indexOf('out.write((') < nativeStreamShell.indexOf('beforeStart?.invoke()'), 'native stream readiness must be sent only after reserving the operation, but before staging');
-assert.ok(nativeStreamShell.includes('target.readBytes()') && nativeStreamShell.includes('committedBytes.contentEquals(bytes)'), 'native Bridge must verify the committed file bytes before execution');
+assert.ok(androidBuilder.includes('target.readBytes()') && androidBuilder.includes('committedBytes.contentEquals(bytes)'), 'native Bridge must verify the committed file bytes before execution');
 assert.ok(generated.includes('committed.read() != content.encode("utf-8")'), 'external Bridge must verify committed file bytes before execution');
 assert.ok(androidBuilder.includes('processSnapshot = synchronized(activeProcessLock)'), 'native Stop must read process and starting state atomically');
 const runLoggingSource = await readFile('src/App.tsx', 'utf8');
