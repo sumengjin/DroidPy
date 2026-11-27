@@ -498,7 +498,7 @@ button.dp-execution-control::after {
 
 /* Phone and non-split terminal retain their shared frame. */
 .terminal-console-surface {
-  background: color-mix(in srgb, var(--ide-surface) 34%, transparent) !important;
+  background: var(--ide-workspace-surface, color-mix(in srgb, var(--ide-surface) 34%, transparent)) !important;
   border: 1px solid color-mix(in srgb, var(--ide-border) 72%, transparent) !important;
   border-radius: 10px !important;
   box-shadow: none !important;
