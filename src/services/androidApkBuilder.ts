@@ -3942,10 +3942,11 @@ def clipboard_set(text):
             when {
                 method == "GET" && path == "/health" -> {
                     val binDir = File(usrDir, "bin")
-                    val pyBin = listOf(File(binDir, "python"), File(binDir, "python3")).firstOrNull { it.exists() }
-                        ?: binDir.listFiles()?.firstOrNull {
-                            it.name.startsWith("python3.") && !it.name.endsWith("-config") && it.isFile
-                        }
+                    val pyBin = listOf(File(binDir, "python"), File(binDir, "python3")).firstOrNull {
+                        it.isFile && it.canExecute()
+                    } ?: binDir.listFiles()?.firstOrNull {
+                        it.name.startsWith("python3.") && !it.name.endsWith("-config") && it.isFile && it.canExecute()
+                    }
                     val hasPython = pyBin != null
 
                     val pipInventory = collectInstalledPipInventory()
@@ -4094,15 +4095,23 @@ def clipboard_set(text):
                             steps.add("echo '[DroidPy] Python package inventory is incomplete; skipped pip restore safely. Initialize Python, then retry restore.'")
                         }
                         // Use the same embedded Termux interpreter for imports and pip installs.
-                        val pythonCmd = File(usrDir, "bin/python3").absolutePath
+                        val binDir = File(usrDir, "bin")
+                        val pythonCmd = listOf(File(binDir, "python"), File(binDir, "python3")).firstOrNull {
+                            it.isFile && it.canExecute()
+                        } ?: binDir.listFiles()?.firstOrNull {
+                            it.name.startsWith("python3.") && !it.name.endsWith("-config") && it.isFile && it.canExecute()
+                        }?.absolutePath
                         if (pipInventory.complete) {
                             val restoreFailureFile = File(workspaceDir, ".droidpy-restore-failed").absolutePath
-                            steps.add("test -x $pythonCmd || { echo '[DroidPy] Python is not ready; package restore aborted.' >&2; exit 127; }")
-                            steps.add("rm -f $restoreFailureFile")
-                            if (remainingPips.isNotEmpty()) {
-                                steps.add("if $pythonCmd -m pip install --no-cache-dir --prefer-binary " + remainingPips.joinToString(" ") + "; then echo '[DroidPy] Remaining pip packages restored.'; else echo '[DroidPy] One or more pip packages failed to restore.' >&2; touch $restoreFailureFile; fi")
+                            if (pythonCmd == null) {
+                                steps.add("echo '[DroidPy] No executable Termux Python interpreter was found; native package restore completed but pip restore was skipped.' >&2")
+                            } else {
+                                steps.add("rm -f $restoreFailureFile")
+                                if (remainingPips.isNotEmpty()) {
+                                    steps.add("if '$pythonCmd' -m pip install --no-cache-dir --prefer-binary " + remainingPips.joinToString(" ") + "; then echo '[DroidPy] Remaining pip packages restored.'; else echo '[DroidPy] One or more pip packages failed to restore.' >&2; touch $restoreFailureFile; fi")
+                                }
+                                steps.add("test ! -f $restoreFailureFile")
                             }
-                            steps.add("test ! -f $restoreFailureFile")
                         }
                         val restoreCmd = if (steps.isEmpty()) {
                             "echo '[DroidPy] 所有已備份套件均已存在，無需還原。'"
