@@ -186,14 +186,14 @@ assert.match(appSource, /shrink-0 bg-transparent/, 'phone editor controls must n
 assert.match(themeCssSource, /--ide-sheet-bg: color-mix\(in srgb, var\(--ide-surface\) 82%, transparent\)/, 'the single paper surface must be slightly translucent so the 3D glass environment remains visible');
 assert.doesNotMatch(themeCssSource, /--ide-surface:\s*rgba\(|--ide-surface-alt:\s*rgba\(/, '3D atmosphere must not make nested workspace surfaces translucent');
 assert.match(terminalSource, /<div className="flex flex-col h-full bg-transparent text-\[var\(--ide-text\)\] overflow-hidden">/, 'terminal output must not create a second opaque sheet');
-assert.match(terminalSource, /className="terminal-console-surface flex-1 min-h-0 flex flex-col overflow-hidden"[\s\S]*?ref=\{scrollRef\}[\s\S]*?className="terminal-input-row/, 'terminal output and the single command line must be nested inside one continuous surface');
+assert.match(terminalSource, /className="terminal-console-surface flex-1 min-h-0 flex flex-col overflow-hidden"[\s\S]*?onClick=\{\(event\) => \{[\s\S]*?inputRef\.current\?\.focus\([\s\S]*?ref=\{scrollRef\}[\s\S]*?className="terminal-input-row/, 'the whole terminal surface must focus its shared input when tapped');
 assert.match(themeCssSource, /\.terminal-console-surface[\s\S]*?border: 1px solid[\s\S]*?border-radius: 10px/, 'the terminal output and input must share one visible outer frame');
-assert.match(themeCssSource, /\.terminal-console-surface \.terminal-input-row[\s\S]*?width: 66\.6667%[\s\S]*?border: 0 !important/, 'the command row must remain two-thirds width without its own frame');
-assert.match(themeCssSource, /\.android-symbol-bar[\s\S]*?width: 66\.6667%[\s\S]*?border: 0 !important/, 'the editor symbol bar must be one-third narrower and borderless');
+assert.match(themeCssSource, /\.terminal-console-surface \.terminal-input-row[\s\S]*?width: 100% !important[\s\S]*?border: 0 !important/, 'the terminal command row must fill the shared terminal surface without its own frame');
+assert.match(themeCssSource, /\.android-symbol-bar[\s\S]*?width: 100%[\s\S]*?border: 0 !important/, 'the editor symbol bar must follow the full editor width and remain borderless');
 assert.match(symbolBarSource, /android-symbol-bar/, 'the Android symbol bar must use the dedicated compact style');
 assert.doesNotMatch(symbolBarSource, /border border-\[var\(--ide-border\)\]|border-t border-\[var\(--ide-border\)\]/, 'symbol bar controls and strip must not draw borders');
 assert.equal((terminalSource.match(/terminal-input-row px-2 py-1 bg-transparent flex items-center gap-2 shrink-0/g) || []).length, 1, 'the terminal must render exactly one persistent shared input row');
-assert.match(themeCssSource, /\.terminal-input-row[\s\S]*width: 66\.6667% !important[\s\S]*flex: 0 0 auto/, 'the shared terminal input row width must be fixed at two-thirds including the full row');
+assert.match(themeCssSource, /\.terminal-input-row[\s\S]*width: 100% !important[\s\S]*flex: 0 0 auto/, 'the shared terminal input row must span the full terminal width');
 assert.equal((terminalSource.match(/enterKeyHint="send"/g) || []).length, 1, 'the shared Android terminal keyboard must use the Send action');
 assert.match(terminalSource, /const submitTerminalInput = async \(\)[\s\S]*waitingForPythonInput[\s\S]*onSubmitInput\(value\)/, 'the shared terminal input must route Python input() responses through the pending resolver');
 assert.match(terminalSource, /engine === 'termux' && status === 'running'[\s\S]*onSendTermuxStdin\(value\)/, 'the shared terminal input must route active Termux stdin to the running process');
