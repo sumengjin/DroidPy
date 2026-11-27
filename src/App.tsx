@@ -72,6 +72,7 @@ import {
 } from './utils/crawlerSession';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useDeviceLayout } from './hooks/useDeviceLayout';
+import { useTabletWorkspace } from './hooks/useTabletWorkspace';
 import { getThemeMeta } from './services/themes';
 import {
   I18nProvider,
@@ -363,8 +364,11 @@ export default function App() {
   const packageReturnTabRef = useRef<MobileTab>('editor');
   const [negativeOpen, setNegativeOpen] = useState(false);
   const [negativeSection, setNegativeSection] = useState<NegativeScreenSection>('termux');
-  const [tabletSplit, setTabletSplit] = useState(true);
-  const [tabletPaneTab, setTabletPaneTab] = useState<'editor' | TabletPaneTab>('terminal');
+  const tabletWorkspace = useTabletWorkspace();
+  const tabletSplit = tabletWorkspace.split;
+  const tabletPaneTab = tabletWorkspace.activePane;
+  const setTabletSplit = tabletWorkspace.setSplit;
+  const setTabletPaneTab = tabletWorkspace.setActivePane;
   const [crawlerSession, setCrawlerSession] = useState<CrawlerSessionData>(() => {
     const restoreSession = (saved?: Partial<CrawlerSessionData> | null): CrawlerSessionData => {
       const restored = { ...DEFAULT_CRAWLER_SESSION, ...saved };
@@ -1292,11 +1296,10 @@ export default function App() {
 
   const focusOutputPane = useCallback(
     (pane: 'terminal' | 'browser' = 'terminal') => {
-      setTabletSplit(true);
-      setTabletPaneTab(pane);
+      tabletWorkspace.focusOutput(pane);
       setMobileTab(pane === 'browser' ? 'browser' : 'console');
     },
-    []
+    [tabletWorkspace.focusOutput]
   );
 
   // Install only the Python runtime essentials on first actual use.
@@ -3148,15 +3151,7 @@ export default function App() {
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
-            onClick={() => {
-              if (tabletSplit) {
-                setTabletPaneTab('editor');
-                setTabletSplit(false);
-              } else {
-                if (tabletPaneTab === 'editor') setTabletPaneTab('terminal');
-                setTabletSplit(true);
-              }
-            }}
+            onClick={tabletWorkspace.toggleSplit}
             className={`min-h-[40px] px-3 rounded-xl border text-xs font-medium inline-flex items-center gap-1.5 whitespace-nowrap transition-colors ${
               tabletSplit
                 ? 'border-[var(--ide-accent)]/50 bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)]'
@@ -3322,10 +3317,7 @@ export default function App() {
               files: t('mob_files'),
               browser: t('mob_browser'),
             }}
-            onNavigate={(destination) => {
-              setTabletPaneTab(destination);
-              setTabletSplit(false);
-            }}
+            onNavigate={tabletWorkspace.navigate}
           />
         )}
         {deviceClass === 'tablet' ? (
