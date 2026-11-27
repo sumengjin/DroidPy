@@ -63,7 +63,9 @@ export function TabletSplitLayout({ split, orientation, children }: TabletSplitL
       return;
     }
     root.style.setProperty('--tablet-divider-center', `${dividerCenter}px`);
-    return () => root.style.removeProperty('--tablet-divider-center');
+    return () => {
+      root.style.removeProperty('--tablet-divider-center');
+    };
   }, [split, horizontal, bounds.width, dividerCenter]);
 
   const updateFromPointer = (event: PointerEvent<HTMLDivElement>) => {
