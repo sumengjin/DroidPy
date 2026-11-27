@@ -432,7 +432,7 @@ function createEditorTheme(themeId: ThemeId, fontSize: number, transparentBg = f
   // a second tinted layer above the paper.
   const editorBg = transparentBg ? 'transparent' : t.bg;
   const gutterBg = transparentBg ? 'transparent' : t.gutterBg;
-  const panelBg = transparentBg ? hexToRgba(t.panelBg, 0.9) : t.panelBg;
+  const panelBg = transparentBg ? 'var(--ide-workspace-surface, transparent)' : t.panelBg;
   return EditorView.theme(
     {
       '&': {
