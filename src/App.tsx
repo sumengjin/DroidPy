@@ -173,7 +173,7 @@ const DEFAULT_SETTINGS: EditorSettings = {
   pipTrustedHostEmergency: false,
   enable3dBg: true,
   atmosphere3dMode: 'auto',
-  workspaceTransparency: 18,
+  workspaceTransparency: 35,
 };
 
 interface PersistedIdeSnapshot {
@@ -3101,7 +3101,7 @@ export default function App() {
   // Keep the slider's 0–100 value as the actual alpha mapping:
   // 0 = opaque theme canvas, 100 = fully transparent.
   const workspaceSurfaceAlpha =
-    1 - Math.min(100, Math.max(0, settings.workspaceTransparency ?? 18)) / 100;
+    1 - Math.min(100, Math.max(0, settings.workspaceTransparency ?? 35)) / 100;
 
   return (
     <I18nProvider
@@ -3292,7 +3292,14 @@ export default function App() {
             {/* Tablet Primary Editor Pane */}
             {(tabletSplit || tabletPaneTab === 'editor') && (
             <section
-              className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-transparent"
+              className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden"
+              style={{
+                // The split-paper mask intentionally opens the divider slit.
+                // Each pane therefore owns its adjustable theme-glass surface.
+                backgroundColor: is3dBgActive
+                  ? 'var(--ide-workspace-surface)'
+                  : 'var(--ide-bg)',
+              }}
             >
               <div className="shrink-0 px-2 pt-1">
                 <WorkspaceFileTabs
@@ -3375,7 +3382,14 @@ export default function App() {
 
             {/* Tablet Secondary Output / Files / Browser Workspace */}
             {(tabletSplit || tabletPaneTab !== 'editor') && (
-              <aside className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-transparent">
+              <aside
+                className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden"
+                style={{
+                  backgroundColor: is3dBgActive
+                    ? 'var(--ide-workspace-surface)'
+                    : 'var(--ide-bg)',
+                }}
+              >
                 <div className="flex-1 min-h-0 overflow-hidden">
                   <div className={tabletPaneTab === 'terminal' ? 'h-full' : 'hidden'}>
                     <TerminalPanel
