@@ -4496,12 +4496,7 @@ def clipboard_set(text):
                                         stream.write(bytes)
                                         stream.fd.sync()
                                     }
-                                    java.nio.file.Files.move(
-                                        temp.toPath(),
-                                        target.toPath(),
-                                        java.nio.file.StandardCopyOption.ATOMIC_MOVE,
-                                        java.nio.file.StandardCopyOption.REPLACE_EXISTING
-                                    )
+                                    android.system.Os.rename(temp.absolutePath, target.absolutePath)
                                     val committedBytes = target.readBytes()
                                     if (!committedBytes.contentEquals(bytes)) {
                                         throw java.io.IOException("Workspace read-back verification failed for $name")
