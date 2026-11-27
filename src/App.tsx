@@ -3169,6 +3169,8 @@ export default function App() {
             splitView: t('tab_split_view'),
             focusEditor: t('tab_focus_editor'),
           }}
+          onSelectFile={setActiveFileId}
+          onCreateFile={() => setMobileNewFileOpen((open) => !open)}
           onOpenSettings={() => setNegativeOpen(true)}
           execution={{
             pendingInput: pendingInputPrompt !== null,

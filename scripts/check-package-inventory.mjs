@@ -138,7 +138,7 @@ const fileTabsSource = await readFile(new URL('../src/components/WorkspaceFileTa
 assert.match(fileTabsSource, /dp-nav-item/, 'file tabs must share the selected-state interaction token');
 assert.match(fileTabsSource, /aria-selected={active}/, 'file tabs must expose their selected state accessibly');
 assert.ok(appSource.includes('tabletWorkspace.toggleSplit'), 'tablet split view must remain available');
-assert.ok(appSource.includes('aria-pressed={tabletSplit}'), 'split layout toggle must expose its selected state');
+assert.ok(workspaceHeaderSource.includes('aria-pressed={tabletSplit}'), 'split layout toggle must expose its selected state');
 assert.match(appSource, /aria-current={active \? 'page' : undefined}/, 'secondary workspace tabs must expose their selected state');
 const designTokensSource = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
 assert.match(designTokensSource, /\.dp-nav-item\[aria-current="page"\][\s\S]*?border-color: var\(--ide-accent\)[\s\S]*?color: var\(--ide-accent-text\)/, 'selected navigation destinations must use theme-aware accent outlines and text');

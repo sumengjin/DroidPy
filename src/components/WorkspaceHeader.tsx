@@ -1,4 +1,4 @@
-import { Settings } from 'lucide-react';
+import { Columns2, Maximize2, Settings } from 'lucide-react';
 import type { MobileTab, PythonFile } from '../types/ide';
 import { WorkspaceExecutionControls } from './WorkspaceExecutionControls';
 import { WorkspaceFileTabs } from './WorkspaceFileTabs';
@@ -127,7 +127,7 @@ export function WorkspaceHeader({
             aria-pressed={tabletSplit}
             className="dp-nav-item min-h-[40px] px-3 rounded-xl text-xs font-medium inline-flex items-center gap-1.5 whitespace-nowrap"
           >
-            {tabletSplit ? <span aria-hidden="true">↗</span> : <span aria-hidden="true">▥</span>}
+            {tabletSplit ? <Maximize2 className="w-3.5 h-3.5" /> : <Columns2 className="w-3.5 h-3.5" />}
             <span>{tabletSplit ? labels.focusEditor : labels.splitView}</span>
           </button>
         )}
