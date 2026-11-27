@@ -19,6 +19,7 @@ const themeCssSource = await readFile(new URL('../src/index.css', import.meta.ur
 const workspaceHeaderSource = await readFile(new URL('../src/components/WorkspaceHeader.tsx', import.meta.url), 'utf8');
 const executionControlsSource = await readFile(new URL('../src/components/WorkspaceExecutionControls.tsx', import.meta.url), 'utf8');
 const codeEditorSource = await readFile(new URL('../src/components/CodeEditor.tsx', import.meta.url), 'utf8');
+const symbolBarSource = await readFile(new URL('../src/components/AndroidSymbolBar.tsx', import.meta.url), 'utf8');
 const pyodidePackagesSource = await readFile(new URL('../src/components/PyodidePackageWorkspace.tsx', import.meta.url), 'utf8');
 const termuxPackagesSource = await readFile(new URL('../src/components/TermuxPackageWorkspace.tsx', import.meta.url), 'utf8');
 
@@ -186,7 +187,11 @@ assert.match(themeCssSource, /--ide-sheet-bg: color-mix\(in srgb, var\(--ide-sur
 assert.doesNotMatch(themeCssSource, /--ide-surface:\s*rgba\(|--ide-surface-alt:\s*rgba\(/, '3D atmosphere must not make nested workspace surfaces translucent');
 assert.match(terminalSource, /<div className="flex flex-col h-full bg-transparent text-\[var\(--ide-text\)\] overflow-hidden">/, 'terminal output must not create a second opaque sheet');
 assert.match(terminalSource, /className="terminal-console-surface flex-1 min-h-0 flex flex-col overflow-hidden"[\s\S]*?ref=\{scrollRef\}[\s\S]*?className="terminal-input-row/, 'terminal output and the single command line must be nested inside one continuous surface');
-assert.match(themeCssSource, /\.terminal-console-surface[\s\S]*?background: transparent !important[\s\S]*?border: 0 !important/, 'the unified terminal surface must not draw a separate input card or border');
+assert.match(themeCssSource, /\.terminal-console-surface[\s\S]*?border: 1px solid[\s\S]*?border-radius: 10px/, 'the terminal output and input must share one visible outer frame');
+assert.match(themeCssSource, /\.terminal-console-surface \.terminal-input-row[\s\S]*?width: 66\.6667%[\s\S]*?border: 0 !important/, 'the command row must remain two-thirds width without its own frame');
+assert.match(themeCssSource, /\.android-symbol-bar[\s\S]*?width: 66\.6667%[\s\S]*?border: 0 !important/, 'the editor symbol bar must be one-third narrower and borderless');
+assert.match(symbolBarSource, /android-symbol-bar/, 'the Android symbol bar must use the dedicated compact style');
+assert.doesNotMatch(symbolBarSource, /border border-\[var\(--ide-border\)\]|border-t border-\[var\(--ide-border\)\]/, 'symbol bar controls and strip must not draw borders');
 assert.equal((terminalSource.match(/terminal-input-row px-2 py-1 bg-transparent flex items-center gap-2 shrink-0/g) || []).length, 1, 'the terminal must render exactly one persistent shared input row');
 assert.match(themeCssSource, /\.terminal-input-row[\s\S]*width: 66\.6667% !important[\s\S]*flex: 0 0 auto/, 'the shared terminal input row width must be fixed at two-thirds including the full row');
 assert.equal((terminalSource.match(/enterKeyHint="send"/g) || []).length, 1, 'the shared Android terminal keyboard must use the Send action');
