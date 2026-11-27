@@ -427,7 +427,10 @@ function hexToRgba(hex: string, alpha: number): string {
 function createEditorTheme(themeId: ThemeId, fontSize: number, transparentBg = false) {
   const meta = getThemeMeta(themeId);
   const t = EDITOR_SURFACE_TOKENS[themeId] ?? EDITOR_SURFACE_TOKENS.rose;
-  const editorBg = transparentBg ? hexToRgba(t.bg, meta.isDark ? 0.72 : 0.76) : t.bg;
+  // The workspace paper already provides the shared translucent surface.
+  // Keep the editor canvas transparent like the terminal instead of stacking
+  // a second tinted layer above the paper.
+  const editorBg = transparentBg ? 'transparent' : t.bg;
   const gutterBg = transparentBg ? hexToRgba(t.gutterBg, meta.isDark ? 0.78 : 0.82) : t.gutterBg;
   const panelBg = transparentBg ? hexToRgba(t.panelBg, 0.9) : t.panelBg;
   return EditorView.theme(
