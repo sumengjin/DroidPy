@@ -3390,7 +3390,7 @@ export default function App() {
               }
             >
                 {/* Mobile file strip and compact editor actions */}
-                <div className="shrink-0 border-b border-[var(--ide-border)] bg-[var(--ide-surface-alt)]">
+                <div className="shrink-0 bg-transparent">
                   <div className="flex items-center gap-1.5 px-2 pt-2 pb-1">
                     <WorkspaceFileTabs files={files} activeFileId={activeFile.id} onSelect={setActiveFileId} onCreate={() => setMobileNewFileOpen((open) => !open)} createLabel={t('files_new_btn')} filesLabel={t('files_title')} variant="phone" />
                   </div>
