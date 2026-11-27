@@ -512,6 +512,55 @@ button.dp-execution-control::after {
   box-shadow: none !important;
 }
 
+/* Tablet divider: clear gel-like optical strip, never an opaque rule. */
+.tablet-gel-divider {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--ide-accent) 2%, transparent),
+    color-mix(in srgb, var(--ide-accent) 9%, transparent) 48%,
+    color-mix(in srgb, var(--ide-accent) 3%, transparent)
+  );
+  -webkit-backdrop-filter: blur(3px) saturate(1.45);
+  backdrop-filter: blur(3px) saturate(1.45);
+  box-shadow: inset 1px 0 0 color-mix(in srgb, white 22%, transparent),
+    inset -1px 0 0 color-mix(in srgb, var(--ide-accent) 18%, transparent),
+    0 0 12px color-mix(in srgb, var(--ide-accent) 9%, transparent);
+}
+
+.tablet-gel-divider-active {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--ide-accent) 5%, transparent),
+    color-mix(in srgb, var(--ide-accent) 18%, transparent) 48%,
+    color-mix(in srgb, var(--ide-accent) 6%, transparent)
+  );
+  -webkit-backdrop-filter: blur(5px) saturate(1.8);
+  backdrop-filter: blur(5px) saturate(1.8);
+  box-shadow: inset 1px 0 0 color-mix(in srgb, white 34%, transparent),
+    inset -1px 0 0 color-mix(in srgb, var(--ide-accent) 28%, transparent),
+    0 0 18px color-mix(in srgb, var(--ide-accent) 16%, transparent);
+}
+
+.tablet-gel-divider-core {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, white 30%, transparent),
+    color-mix(in srgb, var(--ide-accent) 12%, transparent),
+    color-mix(in srgb, white 24%, transparent)
+  );
+  box-shadow: 0 0 5px color-mix(in srgb, var(--ide-accent) 18%, transparent);
+}
+
+.tablet-gel-divider-core-active {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, white 48%, transparent),
+    color-mix(in srgb, var(--ide-accent) 24%, transparent),
+    color-mix(in srgb, white 42%, transparent)
+  );
+  box-shadow: 0 0 8px color-mix(in srgb, var(--ide-accent) 28%, transparent);
+}
+
 .terminal-console-surface .terminal-input-row {
   width: 100% !important;
   max-width: none !important;
