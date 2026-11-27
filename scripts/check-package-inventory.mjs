@@ -162,10 +162,12 @@ assert.ok(workspaceNavigationSource.includes("'w-full flex-col min-h-[56px] px-1
 assert.match(workspaceHeaderSource, /onNavigate\?\.\(id\)/, 'tablet workspace destinations must be integrated into the single top header');
 assert.match(workspaceHeaderSource, /labels\.console[\s\S]*?labels\.files[\s\S]*?labels\.browser/, 'tablet header must expose terminal, files and browser destinations once');
 assert.match(appSource, /<WorkspaceFileTabs[\s\S]*?variant="tablet"/, 'tablet file tabs must live inside the editor pane, not occupy a second global header row');
-assert.match(appSource, /className="relative z-10 flex-1 min-h-0 min-w-0 w-full flex flex-col overflow-hidden bg-\[var\(--ide-sheet-bg\)\]"/, 'the middle workspace must own one opaque sheet while the top and bottom chrome remain transparent');
+assert.match(appSource, /className="pointer-events-none absolute inset-0 z-\[1\]"/, 'one continuous paper layer must cover the entire viewport behind phone and tablet chrome');
+assert.match(appSource, /backgroundColor: is3dBgActive \? 'var\(--ide-sheet-bg\)' : 'var\(--ide-surface\)'/, 'the paper layer must remain translucent over active 3D scenery and solid when 3D is disabled');
+assert.match(appSource, /className="relative z-10 flex-1 min-h-0 min-w-0 w-full flex flex-col overflow-hidden bg-transparent"/, 'workspace content must share the full-screen paper instead of drawing a second sheet');
 assert.match(appSource, /mobileTab === 'editor'[\s\S]*?flex-1 min-h-0 flex flex-col overflow-hidden bg-transparent/, 'phone editor content must sit directly on the shared workspace sheet');
 assert.match(appSource, /shrink-0 bg-transparent/, 'phone editor controls must not create a second opaque paper layer');
-assert.match(themeCssSource, /html\[data-theme\] \{\s*--ide-sheet-bg: var\(--ide-surface\);/, 'every theme must provide an opaque workspace sheet color');
+assert.match(themeCssSource, /--ide-sheet-bg: color-mix\(in srgb, var\(--ide-surface\) 82%, transparent\)/, 'the single paper surface must be slightly translucent so the 3D glass environment remains visible');
 assert.doesNotMatch(themeCssSource, /--ide-surface:\s*rgba\(|--ide-surface-alt:\s*rgba\(/, '3D atmosphere must not make nested workspace surfaces translucent');
 assert.match(terminalSource, /<div className="flex flex-col h-full bg-transparent text-\[var\(--ide-text\)\] overflow-hidden">/, 'terminal output must not create a second opaque sheet');
 assert.match(settingsWorkspaceSource, /fixed inset-0 z-\[1000\][\s\S]*?backgroundColor: 'var\(--ide-surface\)'/, 'settings must be a fully opaque top-level workspace');
@@ -175,6 +177,7 @@ assert.match(appSource, /<TabletSplitLayout split={tabletSplit} orientation={isL
 assert.match(tabletSplitSource, /setPrimaryPercent\(Math\.min\(75, Math\.max\(25, raw\)\)\)/, 'tablet workbench split must be user-adjustable within usable bounds');
 assert.match(tabletSplitSource, /onPointerDown=[\s\S]*?setPointerCapture[\s\S]*?onPointerMove=[\s\S]*?updateFromPointer/, 'tablet workbench divider must support touch and mouse dragging');
 assert.ok(tabletSplitSource.includes('role="separator"') && tabletSplitSource.includes('aria-valuemin={25}') && tabletSplitSource.includes('aria-valuemax={75}') && tabletSplitSource.includes('onKeyDown={handleKeyDown}'), 'tablet workbench divider must expose accessible keyboard resizing');
+assert.match(tabletSplitSource, /--ide-divider-glass/, 'tablet splitter must retain its translucent glass divider grip');
 assert.doesNotMatch(appSource, /w-\[56%\]|h-\[56%\]/, 'tablet split panes must not use the old fixed 56 percent layout');
 assert.match(workspaceNavigationSource, /dp-nav-item/, 'phone and tablet navigation must use the shared interaction token');
 const fileTabsSource = await readFile(new URL('../src/components/WorkspaceFileTabs.tsx', import.meta.url), 'utf8');
