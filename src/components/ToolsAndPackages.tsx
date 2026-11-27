@@ -1484,7 +1484,7 @@ python ${entryFile}
             termuxConfig={termuxConfig}
             files={files}
             activeFile={activeFile}
-            onOpenSdcardFile={(filename, content) => onSaveWorkspaceFile(filename, content, true)}
+            onOpenSdcardFile={(filename, content, path) => onSaveWorkspaceFile(filename, content, true, path)}
             onNotify={onNotify}
           />
         ) : (
@@ -1575,8 +1575,8 @@ python ${entryFile}
                 termuxConfig={termuxConfig}
                 files={files}
                 activeFile={activeFile}
-                onOpenSdcardFile={(filename, content) =>
-                  onSaveWorkspaceFile(filename, content, true)
+                onOpenSdcardFile={(filename, content, path) =>
+                  onSaveWorkspaceFile(filename, content, true, path)
                 }
                 onNotify={onNotify}
               />
