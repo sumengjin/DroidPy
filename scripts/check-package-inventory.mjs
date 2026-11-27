@@ -167,7 +167,9 @@ assert.match(workspaceHeaderSource, /onNavigate\?\.\(id\)/, 'tablet workspace de
 assert.match(workspaceHeaderSource, /labels\.console[\s\S]*?labels\.files[\s\S]*?labels\.browser/, 'tablet header must expose terminal, files and browser destinations once');
 assert.match(appSource, /<WorkspaceFileTabs[\s\S]*?variant="tablet"/, 'tablet file tabs must live inside the editor pane, not occupy a second global header row');
 assert.match(appSource, /pointer-events-none absolute inset-0 z-\[1\]/, 'one continuous paper layer must cover the entire viewport behind phone and tablet chrome');
-assert.match(appSource, /const workspaceSurfaceAlpha =\s*1 - Math\.min\(100, Math\.max\(0, settings\.workspaceTransparency \\?\\? 35\)\) \/ 100/, 'workspace transparency must map the 0–100 slider to a clamped 1–0 alpha');
+assert.match(appSource, /const workspaceSurfaceAlpha =\s*1 - Math\.min\(100, Math\.max\(0, settings\.workspaceTransparency \?\? 35\)\) \/ 100/, 'workspace transparency must map the 0–100 slider to a clamped 1–0 alpha');
+assert.match(appSource, /backgroundColor: is3dBgActive\s*\? 'var\(--ide-workspace-surface\)'\s*: 'var\(--ide-bg\)'/, 'tablet editor and terminal panes must use the adjustable theme-glass surface instead of remaining transparent');
+assert.doesNotMatch(cssSource, /--ide-bg:\s*rgba\(/, 'the 3D mode must not replace the original theme background token with a fixed-alpha color');
 assert.match(exportSource, /id="workspace-transparency"[\s\S]*?type="range"[\s\S]*?min=\{0\}[\s\S]*?max=\{100\}[\s\S]*?onChange=\{\(event\) => onUpdateSettings\(\{ workspaceTransparency: Number\(event\.target\.value\) \}\)\}/, 'the transparency slider must write its numeric value into shared settings state');
 assert.match(appSource, /const handleUpdateSettings = useCallback\(\(patch: Partial<EditorSettings>\)[\s\S]*?setSettings\(\(prev\) => \(\{ \.\.\.prev, \.\.\.patch \}\)\)/, 'workspace appearance updates must be applied to the shared settings state');
 assert.match(appSource, /localStorage\.setItem\(STORAGE_SETTINGS_KEY, JSON\.stringify\(settings\)\)/, 'workspace transparency settings must persist between launches');
