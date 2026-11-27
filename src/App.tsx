@@ -53,7 +53,7 @@ import { HelpTutorialModal } from './components/HelpTutorialModal';
 import { AppExecutionLogModal } from './components/AppExecutionLogModal';
 import { AppUpdateModal } from './components/AppUpdateModal';
 import { DynamicAtmosphere3D } from './components/DynamicAtmosphere3D';
-import { appLog, clearAppLogs } from './services/appLogger';
+import { appLog } from './services/appLogger';
 import {
   getAutoUpdatePackagesPref,
   getSavedGithubRepo,
@@ -543,24 +543,11 @@ export default function App() {
   const isOnline = useOnlineStatus();
 
   useEffect(() => {
-    // Start every launch with a fresh application-log session. User files,
-    // settings, and package backups are deliberately left untouched.
-    clearAppLogs();
     const isNativeApp = Boolean(window.DroidPyNative?.isNativeApp?.());
     if (!isNativeApp) {
       registerSW({ immediate: true });
     }
-    let alreadyLogged = startupBootLoggedInModule;
-    try {
-      if (!alreadyLogged && sessionStorage.getItem('droidpy_boot_logged_v1') === '1') {
-        alreadyLogged = true;
-      }
-      if (!alreadyLogged) {
-        sessionStorage.setItem('droidpy_boot_logged_v1', '1');
-      }
-    } catch {
-      // ignore sessionStorage errors
-    }
+    const alreadyLogged = startupBootLoggedInModule;
     if (!alreadyLogged) {
       startupBootLoggedInModule = true;
       appLog(
