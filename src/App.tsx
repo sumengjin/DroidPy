@@ -3328,32 +3328,6 @@ export default function App() {
             {/* Tablet Secondary Output / Files / Browser Workspace */}
             {(tabletSplit || tabletPaneTab !== 'editor') && (
               <aside className={`${tabletSplit ? (isLandscape ? 'flex-[0.85]' : 'flex-[0.95]') : 'flex-1'} min-w-0 min-h-0 flex flex-col overflow-hidden bg-transparent`}>
-                <div className="flex items-center justify-between gap-2 px-2 h-8 bg-transparent shrink-0">
-                  <div className="flex items-center gap-1">
-                    {(
-                      [
-                        { id: 'terminal', label: t('mob_console'), Icon: TerminalIcon },
-                        { id: 'files', label: t('mob_files'), Icon: FolderOpen },
-                        { id: 'browser', label: t('mob_browser'), Icon: Globe },
-                      ] as const
-                    ).map(({ id, label, Icon }) => {
-                      const active = tabletPaneTab === id;
-                      return (
-                        <button
-                          key={id}
-                          type="button"
-                          onClick={() => setTabletPaneTab(id)}
-                          aria-current={active ? 'page' : undefined}
-                          className="dp-nav-item min-h-[30px] px-2 text-[11px] font-medium inline-flex items-center gap-1.5 whitespace-nowrap"
-                        >
-                          <Icon className="w-3.5 h-3.5" />
-                          <span>{label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
                 <div className="flex-1 min-h-0 overflow-hidden">
                   <div className={tabletPaneTab === 'terminal' ? 'h-full' : 'hidden'}>
                     <TerminalPanel
