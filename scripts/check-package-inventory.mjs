@@ -219,7 +219,7 @@ assert.doesNotMatch(terminalSource, /stdinValue|replValue|replInputRef|handleRep
 assert.doesNotMatch(terminalSource, /bg-\[var\(--ide-surface\)\].*flex items-center gap-2 shrink-0/, 'terminal input bars must not add a second opaque surface');
 assert.match(settingsWorkspaceSource, /fixed inset-0 z-\[1000\][\s\S]*?backgroundColor: 'var\(--ide-surface\)'/, 'settings must be a fully opaque top-level workspace');
 assert.match(appSource, /const isPhoneLayout = deviceClass === 'phone' \|\| \(deviceClass === 'tablet' && !isLandscape\)/, 'portrait tablets must use the same single-workspace shell as phones');
-assert.match(appSource, /deviceClass === 'tablet' && isLandscape \? \([\s\S]*?<TabletSplitLayout split=\{tabletSplit\} orientation="horizontal">/, 'only landscape tablets may render the adjustable side-by-side workbench');
+assert.match(appSource, /is3dBgActive && deviceClass === 'tablet' && isLandscape \? \([\s\S]*?<TabletSplitLayout split=\{tabletSplit\} orientation="horizontal">/, 'only landscape tablets may render the adjustable side-by-side workbench');
 assert.match(appSource, /\{isPhoneLayout && \([\s\S]*?<WorkspaceHeader[\s\S]*?variant="phone"/, 'portrait tablets must use the phone workspace header');
 assert.match(appSource, /\{isPhoneLayout && \([\s\S]*?<WorkspaceNavigation[\s\S]*?variant="phone"/, 'portrait tablets must use the phone bottom navigation');
 assert.match(tabletSplitSource, /setPrimaryPercent\(Math\.min\(75, Math\.max\(25, raw\)\)\)/, 'tablet workbench split must be user-adjustable within usable bounds');
