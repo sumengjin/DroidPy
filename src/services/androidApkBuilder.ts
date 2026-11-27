@@ -4363,13 +4363,16 @@ def clipboard_set(text):
                         writeJson(out, 413, JSONObject().put("error", "檔案超過 512 KB 上限"))
                     } else {
                         try {
+                            val sourceBytes = target.readBytes()
+                            val sourceContent = String(sourceBytes, Charsets.UTF_8)
+                            appendNativeLog("Storage", "SD-card file read name=\${target.name} \${fileWriteDiagnostic(sourceBytes)}")
                             writeJson(
                                 out,
                                 200,
                                 JSONObject()
                                     .put("name", target.name)
                                     .put("relPath", relPath)
-                                    .put("content", target.readText(Charsets.UTF_8))
+                                    .put("content", sourceContent)
                             )
                         } catch (e: Exception) {
                             writeJson(out, 403, JSONObject().put("error", e.message ?: "讀取失敗"))
