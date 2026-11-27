@@ -16,7 +16,7 @@ interface ContainerBounds {
 
 /**
  * A genuinely adjustable tablet workbench divider.
- * The visible divider is a transparent 1 mm line spanning the full viewport;
+ * The visible divider is a centered, rounded 1.5 mm clear-glass capsule;
  * its wider invisible hit target keeps touch and mouse dragging practical.
  */
 export function TabletSplitLayout({ split, orientation, children }: TabletSplitLayoutProps) {
@@ -130,15 +130,15 @@ export function TabletSplitLayout({ split, orientation, children }: TabletSplitL
         aria-hidden="true"
         className="pointer-events-none absolute block shrink-0 tablet-divider-clear-core"
         style={horizontal
-          ? { width: '1.5mm', height: '100%' }
-          : { width: '100%', height: '1.5mm' }}
+          ? { width: '1.5mm', height: '84%', top: '8%', borderRadius: '9999px' }
+          : { width: '84%', height: '1.5mm', left: '8%', borderRadius: '9999px' }}
       />
       <span
         aria-hidden="true"
         className={`pointer-events-none absolute block rounded-full tablet-gel-handle ${horizontal ? 'tablet-gel-handle-vertical' : 'tablet-gel-handle-horizontal'} ${isDragging ? 'tablet-gel-handle-active' : ''}`}
         style={horizontal
-          ? { left: '50%', top: '66.6667%', transform: 'translate(-50%, -50%)' }
-          : { left: '66.6667%', top: '50%', transform: 'translate(-50%, -50%)' }}
+          ? { left: '50%', top: '64%', transform: 'translate(-50%, -50%)' }
+          : { left: '64%', top: '50%', transform: 'translate(-50%, -50%)' }}
       />
     </div>,
     document.body
