@@ -683,6 +683,8 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
             upgradingTermux={upgradingTermux}
             termuxRunning={termuxRunning}
             activeTermuxTask={activeTermuxTask}
+            busyAction={busyAction}
+            onBusyActionChange={setBusyAction}
           />
         )}
 
