@@ -1228,7 +1228,7 @@ python ${entryFile}
                     </p>
                   </div>
                   <output htmlFor="workspace-transparency" className="text-sm font-semibold tabular-nums text-[var(--ide-accent-text)] shrink-0">
-                    {Math.min(100, Math.max(0, settings.workspaceTransparency ?? 18))}%
+                    {Math.min(100, Math.max(0, settings.workspaceTransparency ?? 35))}%
                   </output>
                 </div>
                 <input
@@ -1237,7 +1237,7 @@ python ${entryFile}
                   min={0}
                   max={100}
                   step={1}
-                  value={Math.min(100, Math.max(0, settings.workspaceTransparency ?? 18))}
+                  value={Math.min(100, Math.max(0, settings.workspaceTransparency ?? 35))}
                   disabled={settings.enable3dBg === false}
                   onChange={(event) => onUpdateSettings({ workspaceTransparency: Number(event.target.value) })}
                   aria-label="工作區透明度"
