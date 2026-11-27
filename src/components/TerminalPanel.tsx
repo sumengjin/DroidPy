@@ -297,14 +297,14 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       // Keep Android WebView's soft keyboard available for consecutive stdin prompts.
       event.preventDefault();
       void submitTerminalInput();
-    } else if (!inputSessionActive && pendingInputPrompt === null && event.key === 'ArrowUp') {
+    } else if (!inputSessionActive && pendingInputPrompt === null && !(engine === 'termux' && status === 'running') && event.key === 'ArrowUp') {
       event.preventDefault();
       const nextIdx = Math.min(historyIdx + 1, commandHistory.length - 1);
       if (commandHistory[nextIdx] !== undefined) {
         setHistoryIdx(nextIdx);
         setTerminalValue(commandHistory[nextIdx]);
       }
-    } else if (!inputSessionActive && pendingInputPrompt === null && event.key === 'ArrowDown') {
+    } else if (!inputSessionActive && pendingInputPrompt === null && !(engine === 'termux' && status === 'running') && event.key === 'ArrowDown') {
       event.preventDefault();
       const nextIdx = historyIdx - 1;
       if (nextIdx < 0) {
