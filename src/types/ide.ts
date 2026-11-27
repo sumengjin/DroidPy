@@ -50,6 +50,7 @@ export interface EditorSettings {
   pipTrustedHostEmergency?: boolean;
   enable3dBg?: boolean;
   atmosphere3dMode?: Atmosphere3dMode;
+  workspaceTransparency?: number;
 }
 
 export type MobileTab = 'editor' | 'console' | 'browser' | 'files' | 'packages';
