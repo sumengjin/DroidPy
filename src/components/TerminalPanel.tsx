@@ -184,11 +184,11 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const outputWasAtBottomRef = useRef(true);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const replInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [stdinValue, setStdinValue] = useState('');
-  const [replValue, setReplValue] = useState('');
-  const [replHistory, setReplHistory] = useState<string[]>([]);
+  // One persistent input field serves Python input(), Termux stdin and the
+  // normal shell/Python REPL. The active runtime state selects the destination.
+  const [terminalValue, setTerminalValue] = useState('');
+  const [commandHistory, setCommandHistory] = useState<string[]>([]);
   const [historyIdx, setHistoryIdx] = useState<number>(-1);
   const [copied, setCopied] = useState(false);
   const [copiedSel, setCopiedSel] = useState(false);
@@ -211,10 +211,10 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   }, [entries, pendingInputPrompt]);
 
   useEffect(() => {
-    if (pendingInputPrompt !== null) {
+    if (pendingInputPrompt !== null || inputSessionActive) {
       inputRef.current?.focus();
     }
-  }, [pendingInputPrompt]);
+  }, [pendingInputPrompt, inputSessionActive]);
 
   // Keep the newest output visible when Android's soft keyboard changes the
   // visual viewport, without pulling users away from older output they are reading.
@@ -239,7 +239,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     const text = entries
       .filter((e) => e.type !== 'plot')
       .map((e) => stripAnsi(e.content))
-      .join('\n');
+      .join('\\n');
     if (!text) return;
     const ok = await copyTextReliable(text);
     if (ok) {
@@ -258,87 +258,61 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     }
   };
 
-  const submitPromptInput = () => {
-    if (pendingInputPrompt === null) return;
-    const value = stdinValue;
-    setStdinValue('');
-    onSubmitInput(value);
-    // Keep the same DOM input focused while Python advances to its next input().
+  const submitTerminalInput = async () => {
+    const value = terminalValue;
+    const waitingForPythonInput = inputSessionActive || pendingInputPrompt !== null;
+
+    if (waitingForPythonInput) {
+      setTerminalValue('');
+      onSubmitInput(value);
+      window.requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
+      return;
+    }
+
+    if (engine === 'termux' && status === 'running') {
+      if (!onSendTermuxStdin) return;
+      setTerminalValue('');
+      await onSendTermuxStdin(value);
+      window.requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
+      return;
+    }
+
+    const statement = value.trim();
+    if (!statement || status === 'running' || (engine === 'pyodide' && status === 'loading')) return;
+
+    setCommandHistory((prev) => [statement, ...prev.slice(0, 29)]);
+    setHistoryIdx(-1);
+    setTerminalValue('');
+    await onRunRepl(statement);
     window.requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
   };
 
-  const handleStdinSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    submitPromptInput();
+  const handleTerminalSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    void submitTerminalInput();
   };
 
-  const handleStdinKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-      // Avoid Android WebView treating each answer as the end of the input session.
-      e.preventDefault();
-      submitPromptInput();
-    }
-  };
-
-  const submitRepl = async () => {
-    const trimmed = replValue.trim();
-    if (!trimmed || status === 'running' || (engine === 'pyodide' && status === 'loading')) return;
-    setReplHistory((prev) => [trimmed, ...prev.slice(0, 29)]);
-    setHistoryIdx(-1);
-    setReplValue('');
-    await onRunRepl(trimmed);
-    replInputRef.current?.focus();
-  };
-
-  const handleReplSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    void submitRepl();
-  };
-
-  const sendTermuxStdinValue = async () => {
-    if (!onSendTermuxStdin) return;
-    const val = stdinValue;
-    setStdinValue('');
-    // Keep the same input focused between consecutive interactive prompts.
-    inputRef.current?.focus();
-    await onSendTermuxStdin(val);
-    window.requestAnimationFrame(() => inputRef.current?.focus());
-  };
-
-  const handleTermuxStdinSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    void sendTermuxStdinValue();
-  };
-
-  const handleTermuxStdinKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-      // Prevent Android WebView's default form/IME action from treating each
-      // answer as a completed editing session and dismissing the soft keyboard.
-      e.preventDefault();
-      void sendTermuxStdinValue();
-    }
-  };
-
-  const handleReplKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-      e.preventDefault();
-      void submitRepl();
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      const nextIdx = Math.min(historyIdx + 1, replHistory.length - 1);
-      if (replHistory[nextIdx] !== undefined) {
+  const handleTerminalKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+      // Keep Android WebView's soft keyboard available for consecutive stdin prompts.
+      event.preventDefault();
+      void submitTerminalInput();
+    } else if (!inputSessionActive && pendingInputPrompt === null && event.key === 'ArrowUp') {
+      event.preventDefault();
+      const nextIdx = Math.min(historyIdx + 1, commandHistory.length - 1);
+      if (commandHistory[nextIdx] !== undefined) {
         setHistoryIdx(nextIdx);
-        setReplValue(replHistory[nextIdx]);
+        setTerminalValue(commandHistory[nextIdx]);
       }
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault();
+    } else if (!inputSessionActive && pendingInputPrompt === null && event.key === 'ArrowDown') {
+      event.preventDefault();
       const nextIdx = historyIdx - 1;
       if (nextIdx < 0) {
         setHistoryIdx(-1);
-        setReplValue('');
-      } else if (replHistory[nextIdx] !== undefined) {
+        setTerminalValue('');
+      } else if (commandHistory[nextIdx] !== undefined) {
         setHistoryIdx(nextIdx);
-        setReplValue(replHistory[nextIdx]);
+        setTerminalValue(commandHistory[nextIdx]);
       }
     }
   };
@@ -488,86 +462,57 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         )}
       </div>
 
-      {/* Inline input() prompt bar when script requests stdin */}
-      {(inputSessionActive || pendingInputPrompt !== null) ? (
-        <form
-          onSubmit={handleStdinSubmit}
-          className="terminal-input-row px-2 py-1 bg-transparent flex items-center gap-2 shrink-0"
+      {/* One shared terminal input: prompt responses, Termux stdin and REPL commands. */}
+      <form
+        onSubmit={handleTerminalSubmit}
+        className="terminal-input-row px-2 py-1 bg-transparent flex items-center gap-2 shrink-0"
+      >
+        <span className={`text-xs font-semibold whitespace-nowrap shrink-0 ${inputSessionActive || pendingInputPrompt !== null ? 'text-amber-700 dark:text-amber-300' : 'text-[var(--ide-accent-text)]'}`}>
+          {inputSessionActive || pendingInputPrompt !== null
+            ? t('term_input_label')
+            : engine === 'termux' ? '$' : '>>>'}
+        </span>
+        <input
+          ref={inputRef}
+          type="text"
+          value={terminalValue}
+          onChange={(event) => setTerminalValue(event.target.value)}
+          onKeyDown={handleTerminalKeyDown}
+          enterKeyHint="send"
+          aria-label={inputSessionActive || pendingInputPrompt !== null ? t('term_input_label') : 'Terminal command'}
+          disabled={
+            !inputSessionActive &&
+            pendingInputPrompt === null &&
+            (status === 'running' || (engine === 'pyodide' && status === 'loading')) &&
+            !(engine === 'termux' && status === 'running' && onSendTermuxStdin)
+          }
+          placeholder={
+            pendingInputPrompt ||
+            (inputSessionActive
+              ? t('term_input_placeholder')
+              : engine === 'termux' && status === 'running'
+                ? t('term_stdin_placeholder')
+                : engine === 'termux'
+                  ? t('term_repl_termux_placeholder')
+                  : t('term_repl_py_placeholder'))
+          }
+          className="flex-1 min-w-0 min-h-[44px] px-2 bg-transparent !border-0 !shadow-none text-sm font-mono text-[var(--ide-text)] placeholder:text-[var(--ide-text-muted)] focus:outline-none focus:ring-0"
+        />
+        <button
+          type="submit"
+          disabled={
+            (inputSessionActive || pendingInputPrompt !== null)
+              ? false
+              : engine === 'termux' && status === 'running'
+                ? !onSendTermuxStdin || !terminalValue
+                : !terminalValue.trim() || status === 'running' || (engine === 'pyodide' && status === 'loading')
+          }
+          className="terminal-submit-button shrink-0 min-h-[36px] px-2.5 rounded-lg inline-flex items-center justify-center gap-1 text-xs font-semibold text-white bg-[var(--ide-accent)] disabled:opacity-40"
         >
-          <span className="text-xs font-semibold text-amber-700 dark:text-amber-300 whitespace-nowrap shrink-0">
-            {t('term_input_label')}
-          </span>
-          <input
-            ref={inputRef}
-            type="text"
-            value={stdinValue}
-            onChange={(e) => setStdinValue(e.target.value)}
-            onKeyDown={handleStdinKeyDown}
-            enterKeyHint="send"
-            aria-label={t('term_input_label')}
-            placeholder={pendingInputPrompt || t('term_input_placeholder')}
-            className="flex-1 min-w-0 min-h-[40px] px-2 bg-transparent !border-0 !shadow-none text-sm font-mono text-[var(--ide-text)] focus:outline-none focus:ring-0"
-          />
-          <button type="submit" className="terminal-submit-button shrink-0 min-h-[36px] px-2.5 rounded-lg inline-flex items-center justify-center gap-1 text-xs font-semibold text-white bg-[var(--ide-accent)]">
-            <Send className="w-3.5 h-3.5" />
-            <span>送出</span>
-          </button>
-        </form>
-      ) : engine === 'termux' && status === 'running' ? (
-        <form
-          onSubmit={handleTermuxStdinSubmit}
-          className="terminal-input-row px-2 py-1 bg-transparent flex items-center gap-2 shrink-0"
-        >
-          <span className="text-xs font-semibold text-[var(--ide-accent-text)] pl-1.5 whitespace-nowrap shrink-0">
-            {t('term_stdin_label')}
-          </span>
-          <input
-            ref={inputRef}
-            type="text"
-            enterKeyHint="send"
-            aria-label={t('term_stdin_label')}
-            value={stdinValue}
-            onChange={(e) => setStdinValue(e.target.value)}
-            onKeyDown={handleTermuxStdinKeyDown}
-            placeholder={t('term_stdin_placeholder')}
-            className="flex-1 min-w-0 min-h-[40px] px-2 bg-transparent !border-0 !shadow-none text-sm font-mono text-[var(--ide-text)] focus:outline-none focus:ring-0"
-          />
-          <button type="submit" disabled={!onSendTermuxStdin} className="terminal-submit-button shrink-0 min-h-[36px] px-2.5 rounded-lg inline-flex items-center justify-center gap-1 text-xs font-semibold text-white bg-[var(--ide-accent)] disabled:opacity-40">
-            <Send className="w-3.5 h-3.5" />
-            <span>送出</span>
-          </button>
-        </form>
-      ) : (
-        /* Persistent Interactive Python REPL Input */
-        <form
-          onSubmit={handleReplSubmit}
-          className="terminal-input-row px-2 py-1 bg-transparent flex items-center gap-2 shrink-0"
-        >
-          <span className="font-mono text-xs font-semibold text-[var(--ide-accent-text)] pl-2 shrink-0 select-none">
-            {engine === 'termux' ? '$' : '>>>'}
-          </span>
-          <input
-            ref={replInputRef}
-            type="text"
-            enterKeyHint="send"
-            value={replValue}
-            onChange={(e) => setReplValue(e.target.value)}
-            onKeyDown={handleReplKeyDown}
-            disabled={status === 'running' || (engine === 'pyodide' && status === 'loading')}
-            placeholder={
-              engine === 'termux'
-                ? t('term_repl_termux_placeholder')
-                : t('term_repl_py_placeholder')
-            }
-            aria-label="REPL"
-            className="flex-1 min-w-0 min-h-[44px] px-2 bg-transparent font-mono text-sm text-[var(--ide-text)] placeholder:text-[var(--ide-text-muted)] focus:outline-none"
-          />
-          <button type="submit" disabled={!replValue.trim() || status === 'running' || (engine === 'pyodide' && status === 'loading')} className="terminal-submit-button shrink-0 min-h-[36px] px-2.5 rounded-lg inline-flex items-center justify-center gap-1 text-xs font-semibold text-white bg-[var(--ide-accent)] disabled:opacity-40">
-            <Send className="w-3.5 h-3.5" />
-            <span>執行</span>
-          </button>
-        </form>
-      )}
+          <Send className="w-3.5 h-3.5" />
+          <span>{inputSessionActive || pendingInputPrompt !== null || (engine === 'termux' && status === 'running') ? '送出' : '執行'}</span>
+        </button>
+      </form>
 
       {/* Plot Lightbox Modal */}
       {expandedPlot && (
