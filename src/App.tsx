@@ -47,6 +47,7 @@ import { CodeEditor, CodeEditorHandle } from './components/CodeEditor';
 import { AndroidSymbolBar } from './components/AndroidSymbolBar';
 import { TerminalPanel } from './components/TerminalPanel';
 import { FileExplorer } from './components/FileExplorer';
+import { WorkspaceNavigationRail } from './components/WorkspaceNavigationRail';
 import { NegativeScreenDrawer } from './components/NegativeScreenDrawer';
 import { CrawlerBrowserPanel } from './components/CrawlerBrowserPanel';
 import { HelpTutorialModal } from './components/HelpTutorialModal';
@@ -3313,42 +3314,19 @@ export default function App() {
       {/* Main Content Area (Mobile & Tablet Only) */}
       <main className="relative z-10 flex-1 min-h-0 flex overflow-hidden">
         {deviceClass === 'tablet' && (
-          <nav
-            aria-label={t('nav_workspace')}
-            className="w-[76px] shrink-0 flex flex-col items-center gap-2 py-3 border-r border-[var(--ide-border)] bg-[var(--md-surface-container-low)]"
-          >
-            {([
-              { id: 'editor', label: t('mob_editor'), Icon: Code2 },
-              { id: 'terminal', label: t('mob_console'), Icon: TerminalIcon },
-              { id: 'files', label: t('mob_files'), Icon: FolderOpen },
-              { id: 'browser', label: t('mob_browser'), Icon: Globe },
-            ] as const).map(({ id, label, Icon }) => {
-              const active = tabletSplit
-                ? id === 'editor' || tabletPaneTab === id
-                : tabletPaneTab === id;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => {
-                    setTabletPaneTab(id);
-                    setTabletSplit(false);
-                  }}
-                  aria-label={label}
-                  aria-current={active ? 'page' : undefined}
-                  title={label}
-                  className={`w-14 min-h-[60px] rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-colors ${
-                    active
-                      ? 'bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)]'
-                      : 'text-[var(--ide-text-muted)] hover:bg-[var(--ide-surface-alt)] hover:text-[var(--ide-text)]'
-                  }`}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span className="text-[10px] font-semibold leading-tight">{label}</span>
-                </button>
-              );
-            })}
-          </nav>
+          <WorkspaceNavigationRail
+            activeDestination={tabletPaneTab}
+            labels={{
+              editor: t('mob_editor'),
+              terminal: t('mob_console'),
+              files: t('mob_files'),
+              browser: t('mob_browser'),
+            }}
+            onNavigate={(destination) => {
+              setTabletPaneTab(destination);
+              setTabletSplit(false);
+            }}
+          />
         )}
         {deviceClass === 'tablet' ? (
           <div className={`flex-1 min-h-0 flex ${isLandscape ? 'flex-row' : 'flex-col'} overflow-hidden`}>
