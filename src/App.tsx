@@ -3275,29 +3275,36 @@ export default function App() {
                     type="button"
                     onClick={handleFormatActiveFile}
                     aria-label={t('toolbar_format_title')}
-                    className="min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]"
+                    title={t('toolbar_format_title')}
+                    className="min-h-[34px] min-w-[52px] px-1 flex flex-col items-center justify-center gap-0.5 rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]"
                   >
                     <AlignLeft className="w-4 h-4" />
+                    <span className="text-[9px] leading-none whitespace-nowrap">{t('toolbar_format_title')}</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => editorRef.current?.openSearch()}
                     aria-label={t('toolbar_search_title')}
-                    className="min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]"
+                    title={t('toolbar_search_title')}
+                    className="min-h-[34px] min-w-[52px] px-1 flex flex-col items-center justify-center gap-0.5 rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]"
                   >
                     <Search className="w-4 h-4" />
+                    <span className="text-[9px] leading-none whitespace-nowrap">{t('toolbar_search_title')}</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => handleUpdateSettings({ showSymbolBar: !settings.showSymbolBar })}
                     aria-label={t('toolbar_symbol_bar_title')}
-                    className={`min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg ${
+                    title={t('toolbar_symbol_bar_title')}
+                    aria-pressed={settings.showSymbolBar}
+                    className={`min-h-[34px] min-w-[52px] px-1 flex flex-col items-center justify-center gap-0.5 rounded-lg ${
                       settings.showSymbolBar
-                        ? 'text-[var(--ide-accent-text)] bg-[var(--ide-accent-soft)]'
+                        ? 'text-[var(--ide-accent-text)]'
                         : 'text-[var(--ide-text-muted)]'
                     }`}
                   >
                     <Keyboard className="w-4 h-4" />
+                    <span className="text-[9px] leading-none whitespace-nowrap">{t('toolbar_symbol_bar_title')}</span>
                   </button>
                 </div>
               </div>
@@ -3411,31 +3418,35 @@ export default function App() {
                         onClick={handleFormatActiveFile}
                         aria-label={t('toolbar_format_title')}
                         title={t('toolbar_format_title')}
-                        className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-accent-text)]"
+                        className="min-h-[36px] min-w-[52px] px-1 flex flex-col items-center justify-center gap-0.5 rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-accent-text)]"
                       >
                         <AlignLeft className="w-4 h-4" />
+                        <span className="text-[9px] leading-none whitespace-nowrap">{t('toolbar_format_title')}</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => editorRef.current?.openSearch()}
                         aria-label={t('toolbar_search_title')}
                         title={t('toolbar_search_title')}
-                        className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:bg-[var(--ide-surface)]"
+                        className="min-h-[36px] min-w-[52px] px-1 flex flex-col items-center justify-center gap-0.5 rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-accent-text)]"
                       >
                         <Search className="w-4 h-4" />
+                        <span className="text-[9px] leading-none whitespace-nowrap">{t('toolbar_search_title')}</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => handleUpdateSettings({ showSymbolBar: !settings.showSymbolBar })}
                         aria-label={t('toolbar_symbol_bar_title')}
                         title={t('toolbar_symbol_bar_title')}
-                        className={`min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg ${
+                        aria-pressed={settings.showSymbolBar}
+                        className={`min-h-[36px] min-w-[52px] px-1 flex flex-col items-center justify-center gap-0.5 rounded-lg ${
                           settings.showSymbolBar
-                            ? 'text-[var(--ide-accent-text)] bg-[var(--ide-accent-soft)]'
-                            : 'text-[var(--ide-text-muted)] hover:bg-[var(--ide-surface)]'
+                            ? 'text-[var(--ide-accent-text)]'
+                            : 'text-[var(--ide-text-muted)]'
                         }`}
                       >
                         <Keyboard className="w-4 h-4" />
+                        <span className="text-[9px] leading-none whitespace-nowrap">{t('toolbar_symbol_bar_title')}</span>
                       </button>
                     </div>
                   </div>
