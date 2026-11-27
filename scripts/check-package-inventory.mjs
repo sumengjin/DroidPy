@@ -16,8 +16,6 @@ const [source, bridgeSource, catalogSource, exportSource, panelSource, terminalS
   readFile(new URL('../android/app/src/main/assets/python/frostwork-0.2.2.dist-info/METADATA', import.meta.url), 'utf8'),
  ]);
 const themeCssSource = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
-const workspaceHeaderSource = await readFile(new URL('../src/components/WorkspaceHeader.tsx', import.meta.url), 'utf8');
-const executionControlsSource = await readFile(new URL('../src/components/WorkspaceExecutionControls.tsx', import.meta.url), 'utf8');
 const codeEditorSource = await readFile(new URL('../src/components/CodeEditor.tsx', import.meta.url), 'utf8');
 const pyodidePackagesSource = await readFile(new URL('../src/components/PyodidePackageWorkspace.tsx', import.meta.url), 'utf8');
 const termuxPackagesSource = await readFile(new URL('../src/components/TermuxPackageWorkspace.tsx', import.meta.url), 'utf8');
