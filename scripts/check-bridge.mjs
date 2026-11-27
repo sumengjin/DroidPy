@@ -348,6 +348,17 @@ assert.ok(androidBuilder.includes('Stop arrived during process launch'));
 const streamReservation = androidBuilder.indexOf('activeProcessStarting = true', streamShellStart);
 const streamHeaders = androidBuilder.indexOf('HTTP/1.1 200 OK', streamShellStart);
 assert.ok(streamReservation >= 0 && streamHeaders > streamReservation, 'native process start must be reserved before acknowledging the stream');
+const streamReservationGuard = androidBuilder.indexOf('if (activeProcess != null || activeProcessStarting)', streamShellStart);
+const workspaceStageCall = androidBuilder.indexOf('beforeStart?.invoke()', streamShellStart);
+assert.ok(streamReservationGuard >= 0 && streamReservationGuard < workspaceStageCall, 'overlapping streamed operations must be rejected before touching workspace files');
+assert.ok(androidBuilder.includes('Rejected overlapping streamed operation'));
+assert.ok(androidBuilder.includes('另一個 Termux 工作仍在執行，已拒絕這次操作'));
+assert.ok(androidBuilder.includes('java.io.FileOutputStream(temp).use'));
+assert.ok(androidBuilder.includes('stream.fd.sync()'));
+assert.ok(androidBuilder.includes('temp.renameTo(target)'), 'workspace scripts must be replaced atomically');
+assert.ok(androidBuilder.includes('Workspace file committed name=$name bytes='));
+assert.ok(androidBuilder.includes('streamShellCommand(out, shellCmd, stageWorkspaceFiles)'), 'script staging must happen inside the reserved native operation');
+
 assert.ok(androidBuilder.includes('code = -1'), 'intentional Stop must not be reported as script failure');
 assert.ok(androidBuilder.includes('Requesting shared-storage permission on first launch'));
 assert.ok(!androidBuilder.includes('private val executor = Executors.newCachedThreadPool()'));
