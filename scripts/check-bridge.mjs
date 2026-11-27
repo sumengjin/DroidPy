@@ -200,6 +200,11 @@ const systemBarCss = await readFile('src/index.css', 'utf8');
 assert.ok(systemBarCss.includes('var(--droidpy-statusbar-inset, 0px)'));
 assert.ok(systemBarCss.includes('var(--droidpy-navigationbar-inset, 0px)'));
 
+// Native and external Termux bridges emit NDJSON records terminated by real LF bytes.
+// The client must split on an actual newline, not the two-character backslash+n sequence.
+assert.ok(termuxBridgeSource.includes("buffer.split('\\n')"), 'NDJSON parser must split on real newline characters');
+assert.ok(!termuxBridgeSource.includes("buffer.split('\\\\n')"), 'NDJSON parser must not split on a literal backslash+n sequence');
+
 // Every fresh app launch must discard the previous application/native diagnostic session.
 const appLoggerSource = await readFile('src/services/appLogger.ts', 'utf8');
 assert.ok(appLoggerSource.includes('resetStoredLogsForNewSession()'));
