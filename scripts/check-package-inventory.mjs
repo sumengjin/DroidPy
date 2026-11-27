@@ -271,7 +271,7 @@ assert.match(pyodidePackagesSource, /overscroll-x-contain touch-pan-x/, 'horizon
 assert.match(termuxPackagesSource, /activeTermuxTask === \`install:\$\{tmx\.targetName\}\`/);
 assert.match(termuxPackagesSource, /disabled=\{!!busyAction \|\| termuxRunning/);
 assert.doesNotMatch(panelSource, /handleInitEmbedded/);
-assert.ok(settingsWorkspaceSource.includes('fixed inset-0 z-[100] isolate flex flex-col') && settingsWorkspaceSource.includes('backgroundColor: getThemeMeta(settings.theme).swatchBg'), 'Settings must occupy an opaque independent full-screen workspace');
+assert.ok(settingsWorkspaceSource.includes('fixed inset-0 z-[1000] isolate flex flex-col') && settingsWorkspaceSource.includes("backgroundColor: 'var(--ide-surface)'"), 'Settings must occupy an opaque independent full-screen workspace above the editor and atmosphere layers');
 assert.ok(!settingsWorkspaceSource.includes('bg-black/35') && !settingsWorkspaceSource.includes('md:max-w-6xl'), 'Settings must not be rendered as a dimmed slide-over dialog');
 assert.ok(settingsWorkspaceSource.includes('dp-nav-item'), 'Settings categories must use the shared theme-aware interaction primitive');
 const allSettingsSwitchSource = exportSource + pyodidePackagesSource;
