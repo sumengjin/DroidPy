@@ -4145,18 +4145,25 @@ def clipboard_set(text):
                     val stopSource = bodyJson.optString("source", "unknown").take(40)
                     val stopOperation = bodyJson.optString("operation", "unknown").take(40)
                     appendNativeLog("Exec", "Stop endpoint invoked source=$stopSource operation=$stopOperation")
-                    var proc = activeProcess
-                    val starting = activeProcessStarting
+                    var processSnapshot = synchronized(activeProcessLock) {
+                        activeProcess to activeProcessStarting
+                    }
+                    var proc = processSnapshot.first
+                    val starting = processSnapshot.second
                     if (proc != null || starting) {
                         synchronized(activeProcessLock) { activeProcessStopRequested = true }
                     }
                     // Stop can arrive before ProcessBuilder publishes the child PID.
                     if (proc == null && starting) {
                         val startDeadline = System.currentTimeMillis() + 3500L
-                        while (activeProcessStarting && activeProcess == null && System.currentTimeMillis() < startDeadline) {
+                        while (System.currentTimeMillis() < startDeadline) {
+                            processSnapshot = synchronized(activeProcessLock) {
+                                activeProcess to activeProcessStarting
+                            }
+                            proc = processSnapshot.first
+                            if (proc != null || !processSnapshot.second) break
                             try { Thread.sleep(20L) } catch (_: InterruptedException) { break }
                         }
-                        proc = activeProcess
                     }
                     var stopped = true
                     if (proc != null) {
@@ -4167,15 +4174,21 @@ def clipboard_set(text):
                         } catch (_: Exception) {
                         }
                         val cleanupDeadline = System.currentTimeMillis() + 2500L
-                        while ((activeProcess === proc || activeProcessStarting) && System.currentTimeMillis() < cleanupDeadline) {
+                        while (System.currentTimeMillis() < cleanupDeadline) {
+                            val stillActive = synchronized(activeProcessLock) {
+                                activeProcess === proc || activeProcessStarting
+                            }
+                            if (!stillActive) break
                             try { Thread.sleep(20L) } catch (_: InterruptedException) { break }
                         }
-                        stopped = !proc.isAlive && activeProcess !== proc && !activeProcessStarting
+                        stopped = synchronized(activeProcessLock) {
+                            !proc.isAlive && activeProcess !== proc && !activeProcessStarting
+                        }
                         if (!stopped) {
                             appendNativeLog("Exec", "Stop did not complete process/stream cleanup before timeout pid=" + processPid(proc))
                         }
                     } else {
-                        stopped = !activeProcessStarting
+                        stopped = synchronized(activeProcessLock) { !activeProcessStarting }
                         appendNativeLog("Exec", if (stopped) "Stop request received; no active process" else "Stop timed out while waiting for process launch")
                     }
                     if (stopped) activeProcessPaused = false
