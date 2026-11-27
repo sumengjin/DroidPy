@@ -40,18 +40,11 @@ export function WorkspaceNavigation({
       aria-label={ariaLabel}
       className={isPhone
         ? 'relative z-[60] grid grid-cols-4 shrink-0 min-h-[64px] pb-safe px-2'
-        : 'w-[76px] shrink-0 flex flex-col items-center justify-between gap-3 py-3'}
+        : 'w-14 shrink-0 flex flex-col items-center justify-start py-2'}
     >
-      {!isPhone && (
-        <div className="flex flex-col items-center gap-2 pt-1">
-          <img src="/icon.svg" alt="DroidPy" className="w-8 h-8" referrerPolicy="no-referrer" />
-          <span className="text-[9px] font-bold tracking-[0.16em] text-[var(--ide-text-muted)]">DPY</span>
-        </div>
-      )}
-
       <div className={isPhone
         ? 'grid grid-cols-4 items-center gap-1 w-full'
-        : 'flex flex-col items-center gap-2 w-full px-2'}
+        : 'flex flex-col items-center gap-1 w-full px-1'}
       >
         {DESTINATIONS.map(({ id, Icon }) => {
           const active = activeDestination === id;
@@ -63,8 +56,8 @@ export function WorkspaceNavigation({
               aria-label={labels[id]}
               aria-current={active ? 'page' : undefined}
               title={labels[id]}
-              className={`dp-nav-item min-w-0 flex flex-col items-center justify-center gap-1.5 ${
-                isPhone ? 'min-h-[56px] rounded-xl px-1' : 'w-full min-h-[64px] rounded-xl px-1'
+              className={`dp-nav-item min-w-0 flex flex-col items-center justify-center gap-1 ${
+                isPhone ? 'min-h-[48px] px-1' : 'w-full min-h-[52px] px-1'
               }`}
             >
               <Icon className={isPhone ? 'w-[19px] h-[19px]' : 'w-5 h-5'} strokeWidth={active ? 2.3 : 1.8} />
@@ -80,7 +73,7 @@ export function WorkspaceNavigation({
           onClick={onOpenSettings}
           aria-label={settingsLabel}
           title={settingsLabel}
-          className="dp-nav-item w-full min-h-[56px] rounded-xl flex flex-col items-center justify-center gap-1.5"
+          className="dp-nav-item w-full min-h-[48px] flex flex-col items-center justify-center gap-1"
         >
           <Settings className="w-5 h-5" strokeWidth={1.8} />
           <span className="text-[10px] font-semibold">{settingsLabel}</span>
