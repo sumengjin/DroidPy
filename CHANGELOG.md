@@ -1,3 +1,10 @@
+## [Unreleased]
+
+### Fixed — 每次啟動重置診斷日誌
+- 每次 DroidPy 啟動時清空上一輪應用程式日誌與 Android 原生日誌；不再從 localStorage 還原舊的應用日誌。
+- 重置範圍僅限診斷日誌，不觸碰使用者程式檔案、設定、Termux 環境、套件及備份。
+- 強制停止、正常關閉後再次啟動，以及覆蓋升級後首次啟動均建立全新日誌工作階段；重新安裝則由 Android 應用資料重建自然清空。
+
 # Changelog / 更新日誌
 
 All notable changes to **DroidPy** are documented in this file.
