@@ -3259,12 +3259,12 @@ export default function App() {
               className={`${
                 tabletSplit
                   ? isLandscape
-                    ? 'w-[56%] border-r border-[var(--ide-border)]'
+                    ? 'w-[56%]'
                     : 'h-[56%] border-b border-[var(--ide-border)]'
                   : 'flex-1'
               } min-w-0 min-h-0 flex flex-col overflow-hidden bg-transparent`}
             >
-              <div className="flex items-center justify-between gap-2 px-3 h-10 border-b border-[var(--ide-border)]/50 bg-transparent shrink-0">
+              <div className="flex items-center justify-between gap-2 px-2 h-8 bg-transparent shrink-0">
                 <div className="flex items-center gap-2 text-xs text-[var(--ide-text-muted)] font-mono truncate">
                   <span className="font-semibold text-[var(--ide-text)]">{activeFile.name}</span>
                   <span aria-hidden="true">·</span>
@@ -3330,7 +3330,7 @@ export default function App() {
             {/* Tablet Secondary Output / Files / Browser Workspace */}
             {(tabletSplit || tabletPaneTab !== 'editor') && (
               <aside className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-transparent">
-                <div className="flex items-center justify-between gap-2 px-3 h-10 border-b border-[var(--ide-border)] bg-[var(--ide-surface-alt)] shrink-0">
+                <div className="flex items-center justify-between gap-2 px-2 h-8 bg-transparent shrink-0">
                   <div className="flex items-center gap-1">
                     {(
                       [
@@ -3346,7 +3346,7 @@ export default function App() {
                           type="button"
                           onClick={() => setTabletPaneTab(id)}
                           aria-current={active ? 'page' : undefined}
-                          className="dp-nav-item min-h-[34px] px-3 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 whitespace-nowrap"
+                          className="dp-nav-item min-h-[30px] px-2 text-[11px] font-medium inline-flex items-center gap-1.5 whitespace-nowrap"
                         >
                           <Icon className="w-3.5 h-3.5" />
                           <span>{label}</span>
