@@ -79,7 +79,7 @@ export function WorkspaceHeader({
           : labels.browser;
 
   return (
-    <header className={`relative z-10 flex items-center justify-between gap-2 pt-safe bg-transparent shrink-0 ${
+    <header className={`relative z-30 isolate flex items-center justify-between gap-2 pt-safe bg-transparent shrink-0 overflow-visible ${
       isPhone ? 'h-11 px-2' : 'h-12 px-3 gap-3'
     }`}>
       {isPhone ? (
@@ -96,7 +96,7 @@ export function WorkspaceHeader({
           <span className="text-sm font-semibold leading-tight truncate">{title}</span>
         </div>
       ) : (
-        <nav aria-label={labels.editor} className="flex items-center gap-1 min-w-0 flex-1">
+        <nav aria-label={labels.editor} className="flex items-center gap-1 min-w-0 flex-1 basis-0 overflow-hidden">
           {([
             { id: 'editor', label: labels.editor, Icon: Code2 },
             { id: 'terminal', label: labels.console, Icon: TerminalIcon },
@@ -122,18 +122,7 @@ export function WorkspaceHeader({
         </nav>
       )}
 
-      <div className="flex items-center gap-2 shrink-0">
-        {!isPhone && onOpenSettings && (
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            aria-label={labels.openSettings}
-            title={labels.settings}
-            className="dp-icon-button min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl shrink-0"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
-        )}
+      <div className="relative z-30 flex items-center gap-1.5 shrink-0 overflow-visible">
         {!isPhone && (
           <button
             type="button"
@@ -143,6 +132,17 @@ export function WorkspaceHeader({
           >
             {tabletSplit ? <Maximize2 className="w-3.5 h-3.5" /> : <Columns2 className="w-3.5 h-3.5" />}
             <span>{tabletSplit ? labels.focusEditor : labels.splitView}</span>
+          </button>
+        )}
+        {!isPhone && onOpenSettings && (
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            aria-label={labels.openSettings}
+            title={labels.settings}
+            className="dp-icon-button min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl shrink-0"
+          >
+            <Settings className="w-4 h-4" />
           </button>
         )}
         <WorkspaceExecutionControls
