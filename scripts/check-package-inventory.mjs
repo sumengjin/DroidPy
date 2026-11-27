@@ -191,11 +191,12 @@ assert.match(themeCssSource, /\.terminal-console-surface[\s\S]*?border: 1px soli
 assert.match(themeCssSource, /\.terminal-console-surface \.terminal-input-row[\s\S]*?width: 100% !important[\s\S]*?border: 0 !important/, 'the terminal command row must fill the shared terminal surface without its own frame');
 assert.match(themeCssSource, /\.android-symbol-bar[\s\S]*?width: 100%[\s\S]*?border: 0 !important/, 'the editor symbol bar must follow the full editor width and remain borderless');
 assert.match(symbolBarSource, /android-symbol-bar/, 'the Android symbol bar must use the dedicated compact style');
-assert.match(symbolBarSource, /onTouchStart=\{handleTouchStart\}[\s\S]*onTouchMove=\{handleTouchMove\}[\s\S]*onTouchEnd=\{finishTouchGesture\}/, 'the whole symbol strip must own one continuous Android touch gesture');
-assert.match(symbolBarSource, /e\.preventDefault\(\)[\s\S]*lastTouchAtRef\.current = Date\.now\(\)/, 'touch-down must suppress native long-press and keyboard behavior');
-assert.match(symbolBarSource, /document\.elementFromPoint\(x, y\)[\s\S]*data-symbol-index/, 'horizontal symbol swipes must track the symbol currently under the finger');
-assert.match(symbolBarSource, /finishTouchGesture[\s\S]*onInsert\(selected\.insert, selected\.offset \?\? 0\)/, 'the final selected symbol must be inserted only when the touch gesture ends');
-assert.doesNotMatch(symbolBarSource, /setPointerCapture|onPointerDown=\{handleSymbolPointerDown/, 'individual symbol buttons must not capture touch pointers');
+assert.match(symbolBarSource, /onPointerDown=\{handleStripPointerDown\}[\s\S]*onPointerMove=\{handleStripPointerMove\}[\s\S]*onPointerUp=\{finishStripPointer\}/, 'the complete symbol strip must capture and own the Android pointer gesture');
+assert.match(symbolBarSource, /e\.currentTarget\.setPointerCapture\(e\.pointerId\)/, 'the strip must retain the gesture when the finger moves over another pane');
+assert.match(symbolBarSource, /startScrollLeft - deltaX[\s\S]*scrollWidth - e\.currentTarget\.clientWidth/, 'horizontal dragging must scroll the symbol row with the finger and reveal off-screen symbols');
+assert.match(symbolBarSource, /findSymbolAtX\(e\.currentTarget, e\.clientX\)/, 'selection must use symbol geometry rather than hit-testing elements obscured by the terminal pane');
+assert.match(symbolBarSource, /finishStripPointer[\s\S]*onInsert\(selected\.insert, selected\.offset \?\? 0\)/, 'the final symbol under the finger must be inserted only on pointer release');
+assert.match(symbolBarSource, /relative z-50[\s\S]*\[touch-action:none\]/, 'the symbol strip must sit above the terminal overlap and suppress native long-press gestures');
 assert.doesNotMatch(symbolBarSource, /border border-\[var\(--ide-border\)\]|border-t border-\[var\(--ide-border\)\]/, 'symbol bar controls and strip must not draw borders');
 assert.equal((terminalSource.match(/terminal-input-row px-2 py-1 bg-transparent flex items-center gap-2 shrink-0/g) || []).length, 1, 'the terminal must render exactly one persistent shared input row');
 assert.match(themeCssSource, /\.terminal-input-row[\s\S]*width: 100% !important[\s\S]*flex: 0 0 auto/, 'the shared terminal input row must span the full terminal width');
