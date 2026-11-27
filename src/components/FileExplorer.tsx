@@ -280,7 +280,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   return (
     <div className="relative flex flex-col h-full bg-transparent text-[var(--ide-text)]">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--ide-border)] bg-[var(--ide-surface)] shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 bg-transparent shrink-0">
         <div className="min-w-0">
           {showHeaderTitle && (
             <h2 className="text-sm font-semibold text-[var(--ide-text)]">{t('files_title')}</h2>
