@@ -272,7 +272,7 @@ assert.match(pyodidePackagesSource, /const handleInstall = async/, 'the package 
 assert.match(pyodidePackagesSource, /const handleUninstall = async/, 'the package workspace must own its uninstall lifecycle');
 assert.match(pyodidePackagesSource, /aria-pressed={tierFilter === tier}/, 'package tier filters must expose selected state and use the transparent navigation primitive');
 assert.match(pyodidePackagesSource, /aria-pressed={active}/, 'package category filters must expose selected state and use the transparent navigation primitive');
-assert.match(pyodidePackagesSource, /dp-workspace-row min-h-\\[84px\\]/, 'package catalog entries must use flat divider-based workspace rows instead of framed cards');
+assert.ok(pyodidePackagesSource.includes('dp-workspace-row min-h-[84px]'), 'package catalog entries must use flat divider-based workspace rows instead of framed cards');
 assert.match(designTokensSource, /\.dp-switch\[aria-checked="true"\][\s\S]*?background: var\(--ide-accent\)/, 'selected switches must use the active theme accent');
 assert.match(designTokensSource, /\.dp-switch[\s\S]*?background: var\(--ide-surface-alt\)/, 'unselected switches must use the active theme surface');
 
