@@ -144,6 +144,17 @@ const STORAGE_TERMUX_CFG_KEY = 'droidpy_termux_cfg_v1';
 const STORAGE_CRAWLER_SESSION_KEY = 'droidpy_crawler_session_v1';
 const STORAGE_PY_PKGS_KEY = 'droidpy_sandbox_pkgs_v1';
 
+function hexToRgba(hex: string, alpha: number): string {
+  const normalized = hex.trim().replace(/^#/, '');
+  if (!/^[0-9a-f]{6}$/i.test(normalized)) {
+    return `rgba(24, 26, 51, ${Math.min(1, Math.max(0, alpha))})`;
+  }
+  const red = Number.parseInt(normalized.slice(0, 2), 16);
+  const green = Number.parseInt(normalized.slice(2, 4), 16);
+  const blue = Number.parseInt(normalized.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${Math.min(1, Math.max(0, alpha))})`;
+}
+
 const MAX_TERMINAL_ENTRIES = 250;
 const MAX_TERMINAL_ENTRY_CHARS = 100_000;
 let startupBootLoggedInModule = false;
@@ -3096,7 +3107,18 @@ export default function App() {
       <div
         style={{
           height: 'var(--droidpy-viewport-height, 100dvh)',
-          '--ide-sheet-bg': `color-mix(in srgb, var(--ide-surface) ${100 - Math.min(100, Math.max(0, settings.workspaceTransparency ?? 18))}%, transparent)`,
+          // Use a concrete rgba color instead of color-mix: older Android WebViews
+          // may not support color-mix(), which made the transparency control inert.
+          '--ide-workspace-surface': hexToRgba(
+            activeThemeMeta.swatchSurface,
+            is3dBgActive
+              ? 1 - Math.min(100, Math.max(0, settings.workspaceTransparency ?? 18)) / 100
+              : 0.34
+          ),
+          '--ide-sheet-bg': hexToRgba(
+            activeThemeMeta.swatchSurface,
+            1 - Math.min(100, Math.max(0, settings.workspaceTransparency ?? 18)) / 100
+          ),
         } as CSSProperties}
         className={`h-dvh droidpy-edge-safe flex flex-col ${
           is3dBgActive ? 'bg-transparent' : 'bg-[var(--ide-bg)]'
