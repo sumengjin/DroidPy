@@ -218,7 +218,10 @@ assert.equal((terminalSource.match(/type="submit"/g) || []).length, 1, 'the shar
 assert.doesNotMatch(terminalSource, /stdinValue|replValue|replInputRef|handleReplSubmit|handleTermuxStdinSubmit/, 'separate terminal input states and forms must be retired');
 assert.doesNotMatch(terminalSource, /bg-\[var\(--ide-surface\)\].*flex items-center gap-2 shrink-0/, 'terminal input bars must not add a second opaque surface');
 assert.match(settingsWorkspaceSource, /fixed inset-0 z-\[1000\][\s\S]*?backgroundColor: 'var\(--ide-surface\)'/, 'settings must be a fully opaque top-level workspace');
-assert.match(appSource, /<TabletSplitLayout split=\{tabletSplit\} orientation=\{isLandscape \? 'horizontal' : 'vertical'\}>/, 'tablet panes must use the adjustable workbench layout');
+assert.match(appSource, /const isPhoneLayout = deviceClass === 'phone' \|\| \(deviceClass === 'tablet' && !isLandscape\)/, 'portrait tablets must use the same single-workspace shell as phones');
+assert.match(appSource, /deviceClass === 'tablet' && isLandscape \? \([\s\S]*?<TabletSplitLayout split=\{tabletSplit\} orientation="horizontal">/, 'only landscape tablets may render the adjustable side-by-side workbench');
+assert.match(appSource, /\{isPhoneLayout && \([\s\S]*?<WorkspaceHeader[\s\S]*?variant="phone"/, 'portrait tablets must use the phone workspace header');
+assert.match(appSource, /\{isPhoneLayout && \([\s\S]*?<WorkspaceNavigation[\s\S]*?variant="phone"/, 'portrait tablets must use the phone bottom navigation');
 assert.match(tabletSplitSource, /setPrimaryPercent\(Math\.min\(75, Math\.max\(25, raw\)\)\)/, 'tablet workbench split must be user-adjustable within usable bounds');
 assert.match(tabletSplitSource, /onPointerDown=[\s\S]*?setPointerCapture[\s\S]*?onPointerMove=[\s\S]*?updateFromPointer/, 'tablet workbench divider must support touch and mouse dragging');
 assert.ok(tabletSplitSource.includes('role="separator"') && tabletSplitSource.includes('aria-valuemin={25}') && tabletSplitSource.includes('aria-valuemax={75}') && tabletSplitSource.includes('onKeyDown={handleKeyDown}'), 'tablet workbench divider must expose accessible keyboard resizing');
@@ -231,7 +234,6 @@ assert.match(themeCssSource, /\.tablet-divider-clear-core[\s\S]*background: tran
 assert.match(themeCssSource, /\.tablet-gel-handle-vertical[\s\S]*width: 1mm[\s\S]*height: 10mm/, 'the vertical divider gel handle must be 1 mm wide and 1 cm long');
 assert.match(themeCssSource, /\.tablet-gel-handle-horizontal[\s\S]*width: 10mm[\s\S]*height: 1mm/, 'the horizontal divider gel handle must be 1 cm long and 1 mm high');
 assert.match(tabletSplitSource, /top: '66\.6667%'[\s\S]*?transform: 'translate\(-50%, -50%\)'/, 'landscape tablet gel handle must sit two-thirds down the vertical divider');
-assert.match(tabletSplitSource, /left: '66\.6667%'[\s\S]*?transform: 'translate\(-50%, -50%\)'/, 'portrait tablet gel handle must sit two-thirds along the horizontal divider');
 assert.match(tabletSplitSource, /onPointerDown=[\s\S]*setPointerCapture[\s\S]*updateFromPointer\(event\)[\s\S]*onPointerMove=[\s\S]*updateFromPointer/, 'tablet divider must respond immediately and continuously to touch or mouse dragging');
 assert.match(themeCssSource, /\.tablet-split-layout \.terminal-console-surface[\s\S]*background: transparent !important[\s\S]*border: 0 !important/, 'tablet terminal must share the transparent workspace background and have no frame');
 assert.doesNotMatch(appSource, /w-\[56%\]|h-\[56%\]/, 'tablet split panes must not use the old fixed 56 percent layout');
