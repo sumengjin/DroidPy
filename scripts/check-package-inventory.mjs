@@ -168,7 +168,11 @@ assert.match(workspaceNavigationSource, /grid grid-cols-4/, 'phone navigation mu
 assert.match(workspaceNavigationSource, /w-full h-11 shrink-0 flex items-center justify-between/, 'tablet navigation must be a compact horizontal workspace switcher, not a permanent side rail');
 assert.match(workspaceNavigationSource, /flex-row min-h-\[36px\]/, 'tablet destinations must use a horizontal control layout');
 assert.match(appSource, /deviceClass === 'tablet' \? 'flex-col' : 'flex-row'/, 'tablet workspace navigation must sit above the workbench');
-assert.match(appSource, /flex-\[1\.15\]/, 'tablet landscape editor must receive a flexible weighted share of the workbench');
+const tabletSplitSource = await readFile(new URL('../src/components/TabletSplitLayout.tsx', import.meta.url), 'utf8');
+assert.match(appSource, /<TabletSplitLayout split={tabletSplit} orientation={isLandscape \? 'horizontal' : 'vertical'}>/, 'tablet panes must use the adjustable workbench layout');
+assert.match(tabletSplitSource, /setPrimaryPercent\(Math\.min\(75, Math\.max\(25, raw\)\)\)/, 'tablet workbench split must be user-adjustable within usable bounds');
+assert.match(tabletSplitSource, /onPointerDown=[\s\S]*?setPointerCapture[\s\S]*?onPointerMove=[\s\S]*?updateFromPointer/, 'tablet workbench divider must support touch and mouse dragging');
+assert.match(tabletSplitSource, /role="separator"[\s\S]*?aria-valuemin={25}[\s\S]*?aria-valuemax={75}[\s\S]*?onKeyDown={handleKeyDown}/, 'tablet workbench divider must expose accessible keyboard resizing');
 assert.doesNotMatch(appSource, /w-\[56%\]|h-\[56%\]/, 'tablet split panes must not use the old fixed 56 percent layout');
 assert.match(workspaceNavigationSource, /dp-nav-item/, 'phone and tablet navigation must use the shared interaction token');
 const fileTabsSource = await readFile(new URL('../src/components/WorkspaceFileTabs.tsx', import.meta.url), 'utf8');
