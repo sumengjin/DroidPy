@@ -3110,7 +3110,7 @@ export default function App() {
       <div
         aria-hidden="true"
         className={`pointer-events-none absolute inset-0 z-[1] ${
-          deviceClass === 'tablet' && isLandscape && tabletSplit ? 'tablet-landscape-split-paper' : ''
+          is3dBgActive && deviceClass === 'tablet' && isLandscape && tabletSplit ? 'tablet-landscape-split-paper' : ''
         }`}
         style={{ backgroundColor: is3dBgActive ? 'var(--ide-sheet-bg)' : 'var(--ide-surface)' }}
       />
