@@ -171,7 +171,10 @@ assert.match(workspaceHeaderSource, /minHeight:[\s\S]*?droidpy-statusbar-inset/,
 assert.match(executionControlsSource, /dp-execution-control/, 'execution controls must use the dedicated native-WebView border reset class');
 assert.match(themeCssSource, /button\.dp-execution-control[\s\S]*appearance: none !important[\s\S]*border: 0 !important/, 'execution control borders must be removed at the global CSS level');
 assert.equal((executionControlsSource.match(/dp-execution-control/g) || []).length, 5, 'run, stop, pause/resume, cancel and stopping controls must all use the borderless class');
-assert.match(executionControlsSource, /: '執行'/, 'phone and tablet run controls must use the concise 執行 label');
+assert.match(executionControlsSource, /labels\.run/, 'run control must render its explicit concise label');
+assert.match(executionControlsSource, /borderlessButtonStyle/, 'all execution buttons must receive inline native-WebView border resets');
+assert.match(appSource, /stop: '停止'/, 'tablet stop control must use the concise 停止 label');
+assert.match(appSource, /run: '執行'/, 'tablet run control must use the concise 執行 label');
 assert.doesNotMatch(executionControlsSource, /border-2 border-\[var\(--ide-accent\)\]/, 'pause/resume control must not retain an accent border');
 assert.match(codeEditorSource, /const editorBg = transparentBg \? 'transparent' : t\.bg/, 'editor canvas must not stack an opaque tint over the shared translucent paper');
 assert.match(codeEditorSource, /const gutterBg = transparentBg \? 'transparent' : t\.gutterBg/, 'line-number gutter must share the editor and terminal glass background');
@@ -187,7 +190,8 @@ assert.equal((terminalSource.match(/enterKeyHint="send"/g) || []).length, 3, 'An
 assert.match(terminalSource, /handleStdinKeyDown[\s\S]*e\.key === 'Enter'/, 'Python input() must submit from the Android keyboard Enter key');
 assert.match(terminalSource, /handleTermuxStdinKeyDown[\s\S]*e\.key === 'Enter'/, 'Termux stdin must submit from the Android keyboard Enter key');
 assert.match(terminalSource, /handleReplKeyDown[\s\S]*e\.key === 'Enter'[\s\S]*submitRepl\(\)/, 'interactive REPL must submit from the Android keyboard Enter key');
-assert.doesNotMatch(terminalSource, /t\('term_send'\)|t\('term_exec_btn'\)/, 'terminal send and execute buttons must be replaced by keyboard Enter');
+assert.equal((terminalSource.match(/className="terminal-submit-button/g) || []).length, 3, 'all terminal input modes must retain a visible in-row submit or execute button');
+assert.match(terminalSource, /<button[\\s\\S]*?type="submit"/, 'terminal submit controls must submit their containing form');
 assert.doesNotMatch(terminalSource, /bg-\[var\(--ide-surface\)\].*flex items-center gap-2 shrink-0/, 'terminal input bars must not add a second opaque surface');
 assert.match(settingsWorkspaceSource, /fixed inset-0 z-\[1000\][\s\S]*?backgroundColor: 'var\(--ide-surface\)'/, 'settings must be a fully opaque top-level workspace');
 assert.match(appSource, /<TabletSplitLayout split=\{tabletSplit\} orientation=\{isLandscape \? 'horizontal' : 'vertical'\}>/, 'tablet panes must use the adjustable workbench layout');
