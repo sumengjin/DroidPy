@@ -351,18 +351,18 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-[var(--ide-surface-alt)] text-[var(--ide-text)] overflow-hidden">
-      {/* Sub-header */}
-      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 px-2.5 sm:px-3 py-2 border-b border-[var(--ide-border)] bg-[var(--ide-surface)] shrink-0">
-        <div className="flex items-center gap-1.5 sm:gap-2 text-xs text-[var(--ide-text-muted)] min-w-0 flex-1 overflow-hidden">
-          <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-[var(--ide-surface-alt)] border border-[var(--ide-border)] shrink-0">
+      {/* Compact terminal controls: preserve output space, avoid decorative framing. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0 px-2 py-0.5 bg-transparent shrink-0">
+        <div className="flex items-center gap-1.5 text-[11px] text-[var(--ide-text-muted)] min-w-0 flex-1 overflow-hidden">
+          <div className="flex items-center gap-2 shrink-0">
             {(enableSandboxAddon || engine === 'pyodide') && (
               <button
                 type="button"
                 onClick={() => onChangeEngine('pyodide')}
                 disabled={executionBusy}
-                className={`min-h-[44px] px-2 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap disabled:opacity-40 ${
+                className={`min-h-[32px] px-1 text-[11px] font-medium transition-colors whitespace-nowrap disabled:opacity-40 ${
                   engine === 'pyodide'
-                    ? 'bg-[var(--ide-surface)] text-[var(--ide-text)] shadow-sm'
+                    ? 'text-[var(--ide-accent-text)]'
                     : 'text-[var(--ide-text-muted)]'
                 }`}
               >
@@ -375,7 +375,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
               disabled={executionBusy}
               className={`min-h-[44px] px-2 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap disabled:opacity-40 ${
                 engine === 'termux'
-                  ? 'bg-[var(--ide-accent)] text-white shadow-sm'
+                  ? 'text-[var(--ide-accent-text)]'
                   : 'text-[var(--ide-text-muted)]'
               }`}
             >
@@ -400,12 +400,12 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center gap-1 shrink-0">
+        <div className="flex flex-wrap items-center gap-0.5 shrink-0">
           {selectedText.length > 0 && (
             <button
               type="button"
               onClick={handleCopySelection}
-              className="min-h-[44px] px-2.5 flex items-center gap-1 rounded-xl bg-[var(--ide-accent)] text-white text-xs font-semibold transition-colors whitespace-nowrap"
+              className="min-h-[32px] px-1.5 flex items-center gap-1 text-[11px] font-semibold text-[var(--ide-accent-text)] transition-colors whitespace-nowrap"
             >
               {copiedSel ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
               <span>{copiedSel ? t('term_copied_selection') : t('term_copy_selection')}</span>
@@ -415,7 +415,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             <button
               type="button"
               onClick={onOpenLogs}
-              className="min-h-[44px] px-2.5 flex items-center gap-1 rounded-xl text-xs font-medium text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-accent-soft)] transition-colors whitespace-nowrap"
+              className="min-h-[32px] px-1.5 flex items-center gap-1 text-[11px] font-medium text-[var(--ide-text-muted)] hover:text-[var(--ide-accent-text)] transition-colors whitespace-nowrap"
             >
               <FileText className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
               <span>{t('logs_btn')}</span>
@@ -425,7 +425,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             type="button"
             onClick={handleCopyAll}
             disabled={entries.length === 0}
-            className="min-h-[44px] px-2.5 flex items-center gap-1 rounded-xl text-xs font-medium text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-accent-soft)] disabled:opacity-40 transition-colors whitespace-nowrap"
+            className="min-h-[32px] px-1.5 flex items-center gap-1 text-[11px] font-medium text-[var(--ide-text-muted)] hover:text-[var(--ide-accent-text)] disabled:opacity-40 transition-colors whitespace-nowrap"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-[var(--ide-accent)]" /> : <Copy className="w-3.5 h-3.5" />}
             <span>{copied ? t('term_copied') : t('term_copy')}</span>
