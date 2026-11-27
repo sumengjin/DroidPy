@@ -191,10 +191,11 @@ assert.match(themeCssSource, /\.terminal-console-surface[\s\S]*?border: 1px soli
 assert.match(themeCssSource, /\.terminal-console-surface \.terminal-input-row[\s\S]*?width: 100% !important[\s\S]*?border: 0 !important/, 'the terminal command row must fill the shared terminal surface without its own frame');
 assert.match(themeCssSource, /\.android-symbol-bar[\s\S]*?width: 100%[\s\S]*?border: 0 !important/, 'the editor symbol bar must follow the full editor width and remain borderless');
 assert.match(symbolBarSource, /android-symbol-bar/, 'the Android symbol bar must use the dedicated compact style');
-assert.match(symbolBarSource, /handleSymbolPointerDown[\s\S]*setPointerCapture\(e\.pointerId\)/, 'symbol selection must begin a captured pointer gesture instead of inserting immediately on touch-down');
-assert.match(symbolBarSource, /document\.elementFromPoint\(e\.clientX, e\.clientY\)[\s\S]*data-symbol-index/, 'horizontal symbol swipes must track the symbol currently under the finger');
-assert.match(symbolBarSource, /finishSymbolGesture[\s\S]*onInsert\(selected\.insert, selected\.offset \?\? 0\)/, 'the selected symbol must be inserted when the swipe ends');
-assert.match(symbolBarSource, /onPointerUp=\{finishSymbolGesture\}/, 'tap and swipe selection must commit on pointer release');
+assert.match(symbolBarSource, /onTouchStart=\{handleTouchStart\}[\s\S]*onTouchMove=\{handleTouchMove\}[\s\S]*onTouchEnd=\{finishTouchGesture\}/, 'the whole symbol strip must own one continuous Android touch gesture');
+assert.match(symbolBarSource, /e\.preventDefault\(\)[\s\S]*lastTouchAtRef\.current = Date\.now\(\)/, 'touch-down must suppress native long-press and keyboard behavior');
+assert.match(symbolBarSource, /document\.elementFromPoint\(x, y\)[\s\S]*data-symbol-index/, 'horizontal symbol swipes must track the symbol currently under the finger');
+assert.match(symbolBarSource, /finishTouchGesture[\s\S]*onInsert\(selected\.insert, selected\.offset \?\? 0\)/, 'the final selected symbol must be inserted only when the touch gesture ends');
+assert.doesNotMatch(symbolBarSource, /setPointerCapture|onPointerDown=\{handleSymbolPointerDown/, 'individual symbol buttons must not capture touch pointers');
 assert.doesNotMatch(symbolBarSource, /border border-\[var\(--ide-border\)\]|border-t border-\[var\(--ide-border\)\]/, 'symbol bar controls and strip must not draw borders');
 assert.equal((terminalSource.match(/terminal-input-row px-2 py-1 bg-transparent flex items-center gap-2 shrink-0/g) || []).length, 1, 'the terminal must render exactly one persistent shared input row');
 assert.match(themeCssSource, /\.terminal-input-row[\s\S]*width: 100% !important[\s\S]*flex: 0 0 auto/, 'the shared terminal input row must span the full terminal width');
