@@ -527,12 +527,13 @@ button.dp-execution-control::after {
 }
 
 .tablet-divider-clear-core {
-  background: rgba(255, 255, 255, 0.12) !important;
+  /* Clear optical glass: no white film over the 3D scene. */
+  background: transparent !important;
   border: 0 !important;
   outline: 0 !important;
   box-shadow: none !important;
-  -webkit-backdrop-filter: blur(1.5px) saturate(1.35);
-  backdrop-filter: blur(1.5px) saturate(1.35);
+  -webkit-backdrop-filter: blur(0.35px) saturate(1.65) contrast(1.08);
+  backdrop-filter: blur(0.35px) saturate(1.65) contrast(1.08);
 }
 
 .tablet-gel-handle {
