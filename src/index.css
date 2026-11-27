@@ -188,7 +188,7 @@
     --ide-accent-text: #FDA4AF;
   }
 
-  /* The workspace itself is one opaque sheet; only the surrounding chrome reveals the atmosphere. */
+  /* Theme canvas colors stay opaque; workspace glass is controlled separately by the 3D transparency slider. */
   html[data-theme] {
     /* One thin, full-screen paper layer over the live 3D glass environment. */
     --ide-sheet-bg: color-mix(in srgb, var(--ide-surface) 82%, transparent);
