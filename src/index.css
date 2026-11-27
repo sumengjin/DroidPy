@@ -512,7 +512,7 @@ button.dp-execution-control::after {
   box-shadow: none !important;
 }
 
-/* In landscape tablet split mode, remove a true 1 mm vertical strip from
+/* In landscape tablet split mode, remove a true 1.5 mm vertical strip from
    the full-screen paper so the 3D canvas below is visible through the divider.
    The center is published in viewport pixels by TabletSplitLayout as the user
    drags or resizes the workbench. */
@@ -520,9 +520,9 @@ button.dp-execution-control::after {
   -webkit-mask-image: linear-gradient(
     to right,
     #000 0,
-    #000 calc(var(--tablet-divider-center, 50vw) - 0.5mm),
+    #000 calc(var(--tablet-divider-center, 50vw) - 0.75mm),
     transparent calc(var(--tablet-divider-center, 50vw) - 0.5mm),
-    transparent calc(var(--tablet-divider-center, 50vw) + 0.5mm),
+    transparent calc(var(--tablet-divider-center, 50vw) + 0.75mm),
     #000 calc(var(--tablet-divider-center, 50vw) + 0.5mm),
     #000 100%
   );
