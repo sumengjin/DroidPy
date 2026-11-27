@@ -517,9 +517,10 @@ button.dp-execution-control::after {
    The center is published in viewport pixels by TabletSplitLayout as the user
    drags or resizes the workbench. */
 .tablet-landscape-split-paper {
-  /* Start with an opaque paper mask, then subtract the divider aperture.
-     The aperture mask is only 84% tall and centered, so the 3D reveal stops
-     short of both screen edges instead of reading as a full-height seam. */
+  /* The paper stays opaque except for one true capsule-shaped aperture.
+     Build the aperture from a narrow center segment plus two circular end caps,
+     then subtract their union from the paper mask. This keeps both ends round
+     in the actual 3D reveal, not just on the glass guide drawn above it. */
   -webkit-mask-image:
     linear-gradient(#000, #000),
     linear-gradient(
@@ -529,6 +530,16 @@ button.dp-execution-control::after {
       #000 calc(var(--tablet-divider-center, 50vw) - 0.75mm),
       #000 calc(var(--tablet-divider-center, 50vw) + 0.75mm),
       transparent calc(var(--tablet-divider-center, 50vw) + 0.75mm),
+      transparent 100%
+    ),
+    radial-gradient(
+      ellipse 0.75mm 0.75mm at var(--tablet-divider-center, 50vw) 8%,
+      #000 98%,
+      transparent 100%
+    ),
+    radial-gradient(
+      ellipse 0.75mm 0.75mm at var(--tablet-divider-center, 50vw) 92%,
+      #000 98%,
       transparent 100%
     );
   mask-image:
@@ -541,15 +552,26 @@ button.dp-execution-control::after {
       #000 calc(var(--tablet-divider-center, 50vw) + 0.75mm),
       transparent calc(var(--tablet-divider-center, 50vw) + 0.75mm),
       transparent 100%
+    ),
+    radial-gradient(
+      ellipse 0.75mm 0.75mm at var(--tablet-divider-center, 50vw) 8%,
+      #000 98%,
+      transparent 100%
+    ),
+    radial-gradient(
+      ellipse 0.75mm 0.75mm at var(--tablet-divider-center, 50vw) 92%,
+      #000 98%,
+      transparent 100%
     );
-  -webkit-mask-repeat: no-repeat, no-repeat;
-  mask-repeat: no-repeat, no-repeat;
-  -webkit-mask-size: 100% 100%, 100% 84%;
-  mask-size: 100% 100%, 100% 84%;
-  -webkit-mask-position: center, center;
-  mask-position: center, center;
-  -webkit-mask-composite: source-out;
-  mask-composite: subtract;
+  -webkit-mask-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
+  mask-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
+  -webkit-mask-size: 100% 100%, 100% calc(84% - 1.5mm), 100% 100%, 100% 100%;
+  mask-size: 100% 100%, 100% calc(84% - 1.5mm), 100% 100%, 100% 100%;
+  -webkit-mask-position: center, center, center, center;
+  mask-position: center, center, center, center;
+  /* Union the center segment and round caps, then cut that capsule from paper. */
+  -webkit-mask-composite: source-out, source-over, source-over;
+  mask-composite: subtract, add, add;
 }
 /* The 28 px interaction surface stays invisible and full-height for easy dragging.
    The visible 1.5 mm clear-glass capsule is centered at 84% length with fully
