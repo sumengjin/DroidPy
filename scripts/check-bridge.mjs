@@ -624,13 +624,13 @@ for (const [inputMode, input, expectedMode, expectedTarget] of cases) {
 const routeTestFile = path.join(os.tmpdir(), 'droidpy-package-route-test.py');
 const routeSourceFile = path.join(os.tmpdir(), 'droidpy-route-generated.py');
 const routeTest = [
-  'import ast, re, shlex, sys',
+  'import ast, os, re, shlex, sys, tempfile, threading, time',
   'source = open(sys.argv[1], encoding="utf-8").read()',
   'tree = ast.parse(source)',
-  'wanted = {"_compatibility_install_command", "_normalize_shell_command"}',
+  'wanted = {"_compatibility_install_command", "_normalize_shell_command", "_stage_workspace_files", "_reserve_process_start", "_set_active", "_clear_active"}',
   'nodes = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name in wanted]',
   'assert {node.name for node in nodes} == wanted',
-  'namespace = {"re": re, "shlex": shlex, "_build_pip_cmd": lambda args, trusted_host=False: ["pip", "install", *args]}',
+  'namespace = {"re": re, "shlex": shlex, "os": os, "tempfile": tempfile, "threading": threading, "time": time, "PROC_LOCK": threading.Lock(), "ACTIVE_PROC": {"pid": None, "pgid": None, "master_fd": None, "started_at": 0.0, "paused": False, "starting": False, "stop_requested": False}, "_build_pip_cmd": lambda args, trusted_host=False: ["pip", "install", *args]}',
   'exec(compile(ast.Module(body=nodes, type_ignores=[]), "<package-routes>", "exec"), namespace)',
   'expected = {"numpy": "python-numpy", "pandas": "python-pandas", "pillow": "python-pillow", "pil": "python-pillow", "lxml": "python-lxml", "cryptography": "python-cryptography", "matplotlib": "matplotlib", "apsw": "python-apsw", "bcrypt": "python-bcrypt", "brotli": "python-brotli", "grpcio": "python-grpcio", "msgpack": "python-msgpack", "psutil": "python-psutil", "pycryptodomex": "python-pycryptodomex", "tflite-runtime": "python-tflite-runtime", "torch": "python-torch", "torchaudio": "python-torchaudio", "torchvision": "python-torchvision", "yt-dlp": "python-yt-dlp", "scipy": "python-scipy"}',
   'for name, target in expected.items():',
@@ -640,6 +640,16 @@ const routeTest = [
   'assert namespace["_normalize_shell_command"]("pip install numpy==2.0.0") == "pip install numpy==2.0.0"',
   'assert namespace["_normalize_shell_command"]("pip install requests pandas") == "pip install requests pandas"',
   'assert namespace["_normalize_shell_command"]("pip install scikit-learn").startswith("echo ")',
+  'with tempfile.TemporaryDirectory() as workspace:',
+  '    namespace["WORKSPACE"] = workspace',
+  '    namespace["_stage_workspace_files"]([{"name": "../same.py", "content": "old"}, {"name": "same.py", "content": "active"}])',
+  '    with open(os.path.join(workspace, "same.py"), encoding="utf-8") as fp: assert fp.read() == "active"',
+  '    assert not any(name.endswith(".tmp") for name in os.listdir(workspace)), "atomic staging must clean temporary files"',
+  'assert namespace["_reserve_process_start"]() is True',
+  'with namespace["PROC_LOCK"]: namespace["ACTIVE_PROC"]["stop_requested"] = True',
+  'assert namespace["_set_active"](123, 123, None) is True, "a Stop arriving during startup must be retained"',
+  'namespace["_clear_active"]()',
+  'assert namespace["ACTIVE_PROC"]["starting"] is False and namespace["ACTIVE_PROC"]["pgid"] is None'
 ];
 await writeFile(routeTestFile, routeTest.join('\n'), 'utf8');
 await writeFile(routeSourceFile, generated, 'utf8');
