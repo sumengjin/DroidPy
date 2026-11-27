@@ -4071,16 +4071,23 @@ def clipboard_set(text):
                             }
                         }
                         val missingPkgsOnly = (needPkgs + nativeRestoreTargets).distinct().filter { it !in currentPkgs }
-                        if ("python-polars" in missingPkgsOnly) {
-                            // Polars is supplied by the optional, signed Termux User Repository (TUR).
-                            steps.add("pkg install -y tur-repo && pkg update -y")
+                        val needsTurPolars = "python-polars" in missingPkgsOnly
+                        if (needsTurPolars) {
+                            // Refresh the official Termux index before installing tur-repo.
+                            // TUR is optional: a TUR outage must not block unrelated package restoration.
+                            steps.add("(pkg update -y && pkg install -y tur-repo && pkg update -y) || echo '[DroidPy] TUR setup failed; continuing without blocking other packages.' >&2")
                         }
                         if (nativeRestoreTargets.isNotEmpty()) {
                             steps.add("echo '[DroidPy] Restoring native Termux packages: " + nativeRestoreTargets.joinToString(" ") + "'")
                         }
-                        if (missingPkgsOnly.isNotEmpty()) {
+                        val packagesWithoutTur = missingPkgsOnly.filter { it != "python-polars" }
+                        if (packagesWithoutTur.isNotEmpty()) {
                             steps.add("(pkg update -y || true)")
-                            steps.add("pkg install -y " + missingPkgsOnly.joinToString(" "))
+                            steps.add("pkg install -y " + packagesWithoutTur.joinToString(" "))
+                        }
+                        if (needsTurPolars) {
+                            // Install the optional TUR package independently so its failure cannot abort the rest.
+                            steps.add("if pkg install -y python-polars; then echo '[DroidPy] Restored optional TUR package: python-polars.'; else echo '[DroidPy] Could not restore optional TUR package python-polars; all other restore steps will continue.' >&2; fi")
                         }
                         if (!pipInventory.complete && arrP != null && arrP.length() > 0) {
                             // Python is not ready yet. Restore native packages first; retry pip restore after initialization.
