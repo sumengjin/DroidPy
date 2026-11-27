@@ -391,6 +391,19 @@ assert.ok(androidBuilder.includes('java.io.FileOutputStream(temp).use'));
 assert.ok(androidBuilder.includes('stream.fd.sync()'));
 assert.ok(androidBuilder.includes('android.system.Os.rename(temp.absolutePath, target.absolutePath)'), 'workspace scripts must use an API-21-compatible atomic replacement');
 assert.ok(androidBuilder.includes('Workspace file committed name=$name bytes='));
+const atomicWriterStart = androidBuilder.indexOf('private fun writeFileAtomically(target: File, bytes: ByteArray): ByteArray');
+const atomicWriterEnd = androidBuilder.indexOf('private fun resolveSdcardTarget', atomicWriterStart);
+assert.ok(atomicWriterStart >= 0 && atomicWriterEnd > atomicWriterStart);
+const atomicWriter = androidBuilder.slice(atomicWriterStart, atomicWriterEnd);
+assert.ok(atomicWriter.includes('atomicFileWriteLock') && atomicWriter.includes('stream.fd.sync()') && atomicWriter.includes('android.system.Os.rename'));
+assert.ok(atomicWriter.includes('committed.contentEquals(bytes)'), 'native atomic writer must verify persisted bytes');
+const storageWriteStart = androidBuilder.indexOf('method == "POST" && path == "/sdcard/write"');
+const storageWriteEnd = androidBuilder.indexOf('method == "POST" && path == "/sdcard/mkdir"', storageWriteStart);
+assert.ok(storageWriteStart >= 0 && storageWriteEnd > storageWriteStart);
+const storageWrite = androidBuilder.slice(storageWriteStart, storageWriteEnd);
+assert.ok(storageWrite.includes('writeFileAtomically(target, bytes)'));
+assert.ok(!storageWrite.includes('.writeText('), 'shared-storage writes must not truncate files in place');
+
 assert.ok(androidBuilder.includes('streamShellCommand(out, shellCmd, stageWorkspaceFiles)'), 'script staging must happen inside the reserved native operation');
 
 assert.ok(androidBuilder.includes('code = -1'), 'intentional Stop must not be reported as script failure');
