@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Fixed — Termux 串流退出碼誤判
+- 修正 NDJSON 串流解析器：以真正的換行字元切分事件，不再把反斜線加 n 當作分隔符。
+- 避免原生程序已回報 exitCode=0，但前端因未辨識 done 事件而錯誤回報 exitCode=1。
+
 ### Fixed — 每次啟動重置診斷日誌
 - 每次 DroidPy 啟動時清空上一輪應用程式日誌與 Android 原生日誌；不再從 localStorage 還原舊的應用日誌。
 - 重置範圍僅限診斷日誌，不觸碰使用者程式檔案、設定、Termux 環境、套件及備份。
