@@ -3751,6 +3751,7 @@ export default function App() {
 
       {/* Full Application & Native Android Execution Logs Modal */}
       <AppExecutionLogModal
+          executionEntries={entries}
         open={showLogsModal}
         onClose={() => setShowLogsModal(false)}
         termuxConfig={termuxConfig}
