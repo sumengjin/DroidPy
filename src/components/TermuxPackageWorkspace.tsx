@@ -34,6 +34,8 @@ interface TermuxPackageWorkspaceProps {
   upgradingTermux?: boolean;
   termuxRunning?: boolean;
   activeTermuxTask?: string | null;
+  busyAction: string | null;
+  onBusyActionChange: (action: string | null) => void;
 }
 
 export const TermuxPackageWorkspace: React.FC<TermuxPackageWorkspaceProps> = ({
@@ -45,9 +47,11 @@ export const TermuxPackageWorkspace: React.FC<TermuxPackageWorkspaceProps> = ({
   upgradingTermux = false,
   termuxRunning = false,
   activeTermuxTask = null,
+  busyAction,
+  onBusyActionChange,
 }) => {
   const { t } = useI18n();
-  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const setBusyAction = onBusyActionChange;
   const [installMode, setInstallMode] = useState<'pip' | 'pkg'>('pip');
   const [pkgTarget, setPkgTarget] = useState('');
   const [tierFilter, setTierFilter] = useState<'all' | PackageTier>('all');
