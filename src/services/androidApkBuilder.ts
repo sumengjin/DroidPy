@@ -1354,6 +1354,14 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         installCrashDiagnostics()
+        // A new Activity process session starts with an empty native diagnostic file.
+        // This does not touch user workspace, Termux prefix, or package backups.
+        try {
+            synchronized(logLock) {
+                File(filesDir, "droidpy_native.log").writeText("", Charsets.UTF_8)
+            }
+        } catch (_: Exception) {
+        }
         appendActivityLog("Startup", "MainActivity.onCreate entered")
 
         appendActivityLog("Startup", "Enabling edge-to-edge system bars")
