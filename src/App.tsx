@@ -3293,13 +3293,8 @@ export default function App() {
             {(tabletSplit || tabletPaneTab === 'editor') && (
             <section
               className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden"
-              style={{
-                // The split-paper mask intentionally opens the divider slit.
-                // Each pane therefore owns its adjustable theme-glass surface.
-                backgroundColor: is3dBgActive
-                  ? 'var(--ide-workspace-surface)'
-                  : 'var(--ide-bg)',
-              }}
+              // The full-screen paper layer is the sole transparency surface.
+              // Keep tablet panes transparent to avoid compositing alpha twice.
             >
               <div className="shrink-0 px-2 pt-1">
                 <WorkspaceFileTabs
@@ -3384,11 +3379,7 @@ export default function App() {
             {(tabletSplit || tabletPaneTab !== 'editor') && (
               <aside
                 className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden"
-                style={{
-                  backgroundColor: is3dBgActive
-                    ? 'var(--ide-workspace-surface)'
-                    : 'var(--ide-bg)',
-                }}
+                // The full-screen paper layer supplies the shared workspace surface.
               >
                 <div className="flex-1 min-h-0 overflow-hidden">
                   <div className={tabletPaneTab === 'terminal' ? 'h-full' : 'hidden'}>
