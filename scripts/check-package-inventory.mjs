@@ -14,7 +14,8 @@ const [source, bridgeSource, catalogSource, exportSource, panelSource, terminalS
   readFile(new URL('../src/utils/crawlerSession.ts', import.meta.url), 'utf8'),
   readFile(new URL('../android/app/src/main/assets/python/frostwork/__init__.py', import.meta.url), 'utf8'),
   readFile(new URL('../android/app/src/main/assets/python/frostwork-0.2.2.dist-info/METADATA', import.meta.url), 'utf8'),
-]);
+ ]);
+const themeCssSource = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
 
 const catalogItems = catalogSource.split(/\n  \{\n    id: '/).slice(1);
 assert.ok(catalogItems.length >= 70, 'package catalog should retain its complete inventory');
@@ -23,6 +24,33 @@ assert.ok(themeCardNamesBlock, 'theme selector must define compact card labels')
 const themeCardLabels = [...themeCardNamesBlock.matchAll(/'zh-TW': '([^']+)'/g)].map((match) => match[1]);
 assert.equal(themeCardLabels.length, 14, 'all 14 built-in themes must have a card label');
 assert.ok(themeCardLabels.every((label) => [...label].length === 4), 'Traditional Chinese theme card labels must be exactly four characters');
+
+// Verify readable foreground colors against every built-in theme background (WCAG AA).
+const themeBlocks = [...themeCssSource.matchAll(/(?:^|\n)\s*(?::root,\s*html\[data-theme="light"\]|html\[data-theme="[^"]+"\])\s*\{([^}]+)\}/g)];
+assert.equal(themeBlocks.length, 14, 'all 14 built-in themes must define a complete color token block');
+const readThemeColor = (block, token) => {
+  const match = block[1].match(new RegExp('--' + token + ':\\s*(#[0-9A-Fa-f]{6})'));
+  const themeName = block[0].match(/data-theme="([^"]+)"/)?.[1] ?? 'light';
+  assert.ok(match, 'theme ' + themeName + ' must define ' + token + ' as a solid hex color');
+  return match[1];
+};
+const relativeLuminance = (hex) => {
+  const channels = [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16) / 255)
+    .map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+};
+const contrastRatio = (first, second) => {
+  const a = relativeLuminance(first), b = relativeLuminance(second);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+};
+for (const block of themeBlocks) {
+  const themeName = block[0].match(/data-theme="([^"]+)"/)?.[1] ?? 'light';
+  const background = readThemeColor(block, 'ide-bg');
+  for (const token of ['ide-text', 'ide-text-muted', 'ide-accent-text']) {
+    const ratio = contrastRatio(readThemeColor(block, token), background);
+    assert.ok(ratio >= 4.5, themeName + ' ' + token + ' contrast must meet WCAG AA (4.5:1); got ' + ratio.toFixed(2) + ':1');
+  }
+}
 assert.match(frostworkSource, /def navigation\(/, 'pure-Python Frostwork navigation fallback must be bundled');
 assert.match(frostworkSource, /class Page:/, 'pure-Python multi-field extraction API must be bundled');
 assert.match(frostworkSource, /def _css_nodes\(/, 'CSS selector fallback must be bundled');
@@ -231,6 +259,10 @@ assert.ok(!settingsWorkspaceSource.includes('bg-black/35') && !settingsWorkspace
 assert.ok(settingsWorkspaceSource.includes('dp-nav-item'), 'Settings categories must use the shared theme-aware interaction primitive');
 const switchCount = (exportSource.match(/role="switch"/g) || []).length;
 assert.equal(switchCount, 5, 'all five settings switches must remain available');
+const switchControls = [...exportSource.matchAll(/<button\b(?:(?!<button\b)[\s\S])*?role="switch"(?:(?!<\/button>)[\s\S])*?<\/button>/g)].map((match) => match[0]);
+assert.equal(switchControls.length, switchCount, 'each switch must be independently identifiable for accessibility checks');
+assert.ok(switchControls.every((control) => /aria-label=\{t\('/.test(control)), 'every settings switch must expose a localized accessible name');
+assert.doesNotMatch(exportSource, /bg-white shadow-sm/, 'switch thumbs must not hard-code a white surface or shadow');
 assert.equal((exportSource.match(/className="dp-switch/g) || []).length, switchCount, 'all settings switches must use the shared theme-aware control');
 assert.doesNotMatch(exportSource, /bg-slate-300 dark:bg-slate-700/, 'settings switches must not hard-code light/dark track colors');
 assert.match(designTokensSource, /\.dp-switch\[aria-checked="true"\][\s\S]*?background: var\(--ide-accent\)/, 'selected switches must use the active theme accent');

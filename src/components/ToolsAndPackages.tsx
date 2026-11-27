@@ -1004,6 +1004,7 @@ python ${entryFile}
                 type="button"
                 role="switch"
                 aria-checked={Boolean(settings.enableSandboxAddon)}
+                aria-label={t('addon_sandbox_title')}
                 onClick={() => {
                   const nextVal = !settings.enableSandboxAddon;
                   onUpdateSettings({ enableSandboxAddon: nextVal });
@@ -1013,7 +1014,7 @@ python ${entryFile}
                 }}
                 className="dp-switch min-h-[36px] w-14 rounded-full p-1 flex items-center shrink-0"
               >
-                <span className="w-6 h-6 rounded-full bg-white shadow-sm" />
+                <span className="w-6 h-6 rounded-full" />
               </button>
             </div>
 
@@ -1200,12 +1201,13 @@ python ${entryFile}
                       type="button"
                       role="switch"
                       aria-checked={Boolean(settings.autoUpdatePackages)}
+                aria-label={t('pkg_auto_update_title')}
                       onClick={() =>
                         onUpdateSettings({ autoUpdatePackages: !settings.autoUpdatePackages })
                       }
                       className="dp-switch min-h-[36px] w-14 rounded-full p-1 flex items-center shrink-0"
                     >
-                      <span className="w-6 h-6 rounded-full bg-white shadow-sm" />
+                      <span className="w-6 h-6 rounded-full" />
                     </button>
                   </div>
 
@@ -1679,10 +1681,11 @@ python ${entryFile}
                   type="button"
                   role="switch"
                   aria-checked={settings.enable3dBg !== false}
+                aria-label={t('bg3d_enable_label')}
                   onClick={() => onUpdateSettings({ enable3dBg: !(settings.enable3dBg !== false) })}
                   className="dp-switch min-h-[36px] w-14 rounded-full p-1 flex items-center shrink-0"
                 >
-                  <span className="w-6 h-6 rounded-full bg-white shadow-sm" />
+                  <span className="w-6 h-6 rounded-full" />
                 </button>
               </div>
 
@@ -1836,10 +1839,11 @@ python ${entryFile}
                 type="button"
                 role="switch"
                 aria-checked={settings.wordWrap}
+                aria-label={t('ed_wrap_title')}
                 onClick={() => onUpdateSettings({ wordWrap: !settings.wordWrap })}
                 className="dp-switch min-h-[36px] w-14 rounded-full p-1 flex items-center shrink-0"
               >
-                <span className="w-6 h-6 rounded-full bg-white shadow-sm" />
+                <span className="w-6 h-6 rounded-full" />
               </button>
             </div>
 
@@ -1853,10 +1857,11 @@ python ${entryFile}
                 type="button"
                 role="switch"
                 aria-checked={settings.showSymbolBar}
+                aria-label={t('ed_sym_title')}
                 onClick={() => onUpdateSettings({ showSymbolBar: !settings.showSymbolBar })}
                 className="dp-switch min-h-[36px] w-14 rounded-full p-1 flex items-center shrink-0"
               >
-                <span className="w-6 h-6 rounded-full bg-white shadow-sm" />
+                <span className="w-6 h-6 rounded-full" />
               </button>
             </div>
 
