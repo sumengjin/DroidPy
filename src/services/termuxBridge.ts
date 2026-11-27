@@ -1604,6 +1604,28 @@ export async function fetchTermuxWorkspaceFiles(config: TermuxConfig): Promise<P
   }));
 }
 
+export function buildTermuxRunFiles(
+  activeFile: PythonFile,
+  allFiles: PythonFile[]
+): Array<{ name: string; content: string }> {
+  const activeName = activeFile.name.replace(/\\\\/g, '/').split('/').pop()?.trim() ?? '';
+  if (!activeName || activeName === '.' || activeName === '..') {
+    throw new Error('Python 檔案名稱無效，無法安全執行');
+  }
+
+  // The Termux workspace is flat. Resolve basename collisions deterministically
+  // and always stage the selected editor buffer last so a stale duplicate cannot
+  // overwrite the file that the user actually asked to run.
+  const staged = new Map<string, { name: string; content: string }>();
+  for (const file of allFiles) {
+    const name = file.name.replace(/\\\\/g, '/').split('/').pop()?.trim() ?? '';
+    if (!name || name === '.' || name === '..' || name === activeName) continue;
+    staged.set(name, { name, content: file.content });
+  }
+  staged.set(activeName, { name: activeName, content: activeFile.content });
+  return [...staged.values()];
+}
+
 export async function syncAndRunInTermux(
   config: TermuxConfig,
   activeFile: PythonFile,
@@ -1616,7 +1638,7 @@ export async function syncAndRunInTermux(
       method: 'POST',
       body: JSON.stringify({
         entry: activeFile.name,
-        files: allFiles.map((f) => ({ name: f.name, content: f.content })),
+        files: buildTermuxRunFiles(activeFile, allFiles),
       }),
     },
     125000
@@ -1634,7 +1656,7 @@ export async function streamRunInTermux(
     '/run-stream',
     {
       entry: activeFile.name,
-      files: allFiles.map((f) => ({ name: f.name, content: f.content })),
+      files: buildTermuxRunFiles(activeFile, allFiles),
     },
     callbacks
   );
