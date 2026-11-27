@@ -231,6 +231,10 @@ assert.match(tabletSplitSource, /tablet-gel-handle-vertical[\s\S]*tablet-gel-han
 assert.match(tabletSplitSource, /setIsDragging\(true\)[\s\S]*setIsDragging\(false\)/, 'tablet gel divider must visibly respond while being dragged');
 assert.match(themeCssSource, /\.tablet-gel-divider[\s\S]*background: transparent !important[\s\S]*box-shadow: none !important/, 'the full-height divider hit area must draw no line, edge or glow');
 assert.match(themeCssSource, /\.tablet-divider-clear-core[\s\S]*background: transparent !important[\s\S]*border: 0 !important[\s\S]*backdrop-filter: blur\(0\.35px\) saturate\(1\.65\) contrast\(1\.08\)/, 'the 1 mm full-height divider must have no white film and must reveal the 3D background through clear glass');
+assert.match(appSource, /deviceClass === 'tablet' && isLandscape && tabletSplit \? 'tablet-landscape-split-paper'/, 'only the active landscape tablet split may cut a transparent channel through the paper overlay');
+assert.match(tabletSplitSource, /setProperty\('--tablet-divider-center', `\$\{dividerCenter\}px`\)/, 'the paper channel must track the live divider center while the split is resized');
+assert.match(tabletSplitSource, /removeProperty\('--tablet-divider-center'\)/, 'the live divider position must be cleared when split mode is disabled or unmounted');
+assert.match(themeCssSource, /\.tablet-landscape-split-paper[\s\S]*mask-image: linear-gradient[\s\S]*transparent calc\(var\(--tablet-divider-center[\s\S]*\+ 0\.5mm\)/, 'the paper overlay must have a real 1 mm transparent slit aligned to the divider');
 assert.match(themeCssSource, /\.tablet-gel-handle-vertical[\s\S]*width: 1mm[\s\S]*height: 10mm/, 'the vertical divider gel handle must be 1 mm wide and 1 cm long');
 assert.match(themeCssSource, /\.tablet-gel-handle-horizontal[\s\S]*width: 10mm[\s\S]*height: 1mm/, 'the horizontal divider gel handle must be 1 cm long and 1 mm high');
 assert.match(tabletSplitSource, /top: '66\.6667%'[\s\S]*?transform: 'translate\(-50%, -50%\)'/, 'landscape tablet gel handle must sit two-thirds down the vertical divider');
