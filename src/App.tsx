@@ -3109,14 +3109,17 @@ export default function App() {
           height: 'var(--droidpy-viewport-height, 100dvh)',
           // Use a concrete rgba color instead of color-mix: older Android WebViews
           // may not support color-mix(), which made the transparency control inert.
+          // Transparency is applied to the theme's original canvas color, not
+          // its elevated card/surface tint. At 0% the workspace must exactly
+          // recover the opaque theme background; higher values reveal the 3D scene.
           '--ide-workspace-surface': hexToRgba(
-            activeThemeMeta.swatchSurface,
+            activeThemeMeta.swatchBg,
             is3dBgActive
               ? 1 - Math.min(100, Math.max(0, settings.workspaceTransparency ?? 18)) / 100
-              : 0.34
+              : 1
           ),
           '--ide-sheet-bg': hexToRgba(
-            activeThemeMeta.swatchSurface,
+            activeThemeMeta.swatchBg,
             1 - Math.min(100, Math.max(0, settings.workspaceTransparency ?? 18)) / 100
           ),
         } as CSSProperties}
