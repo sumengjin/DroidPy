@@ -172,7 +172,7 @@ const tabletSplitSource = await readFile(new URL('../src/components/TabletSplitL
 assert.match(appSource, /<TabletSplitLayout split={tabletSplit} orientation={isLandscape \? 'horizontal' : 'vertical'}>/, 'tablet panes must use the adjustable workbench layout');
 assert.match(tabletSplitSource, /setPrimaryPercent\(Math\.min\(75, Math\.max\(25, raw\)\)\)/, 'tablet workbench split must be user-adjustable within usable bounds');
 assert.match(tabletSplitSource, /onPointerDown=[\s\S]*?setPointerCapture[\s\S]*?onPointerMove=[\s\S]*?updateFromPointer/, 'tablet workbench divider must support touch and mouse dragging');
-assert.match(tabletSplitSource, /role="separator"[\s\S]*?aria-valuemin={25}[\s\S]*?aria-valuemax={75}[\s\S]*?onKeyDown={handleKeyDown}/, 'tablet workbench divider must expose accessible keyboard resizing');
+assert.match(tabletSplitSource, /role="separator"[\s\S]*?aria-valuemin=\\{25\\}[\s\S]*?aria-valuemax=\\{75\\}[\s\S]*?onKeyDown=\\{handleKeyDown\\}/, 'tablet workbench divider must expose accessible keyboard resizing');
 assert.doesNotMatch(appSource, /w-\[56%\]|h-\[56%\]/, 'tablet split panes must not use the old fixed 56 percent layout');
 assert.match(workspaceNavigationSource, /dp-nav-item/, 'phone and tablet navigation must use the shared interaction token');
 const fileTabsSource = await readFile(new URL('../src/components/WorkspaceFileTabs.tsx', import.meta.url), 'utf8');
