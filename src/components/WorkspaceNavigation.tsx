@@ -21,7 +21,7 @@ const DESTINATIONS = [
 
 /**
  * One navigation model, two deliberately different layouts.
- * Selection is communicated by an outline and accent foreground only;
+ * Selection is communicated by accent text color only;
  * idle destinations remain transparent and theme-muted.
  */
 export function WorkspaceNavigation({
