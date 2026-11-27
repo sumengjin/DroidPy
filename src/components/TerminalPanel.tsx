@@ -432,7 +432,8 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         </div>
       )}
 
-      {/* Output Scroll Area */}
+      {/* Output and command line are one continuous terminal surface. */}
+      <div className="terminal-console-surface flex-1 min-h-0 flex flex-col overflow-hidden">
       <div
         ref={scrollRef}
         onScroll={(event) => {
@@ -496,6 +497,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
                   ? t('term_repl_termux_placeholder')
                   : t('term_repl_py_placeholder'))
           }
+          style={{ border: 0, outline: 0, boxShadow: 'none', background: 'transparent', appearance: 'none', WebkitAppearance: 'none' }}
           className="flex-1 min-w-0 min-h-[44px] px-2 bg-transparent !border-0 !shadow-none text-sm font-mono text-[var(--ide-text)] placeholder:text-[var(--ide-text-muted)] focus:outline-none focus:ring-0"
         />
         <button
@@ -513,6 +515,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           <span>{inputSessionActive || pendingInputPrompt !== null || (engine === 'termux' && status === 'running') ? '送出' : '執行'}</span>
         </button>
       </form>
+      </div>
 
       {/* Plot Lightbox Modal */}
       {expandedPlot && (
