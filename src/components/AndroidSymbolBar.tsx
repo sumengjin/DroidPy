@@ -52,59 +52,79 @@ export const AndroidSymbolBar: React.FC<AndroidSymbolBarProps> = ({
   ];
 
   const swipeRef = React.useRef<SwipeSelection | null>(null);
+  const lastTouchAtRef = React.useRef(0);
   const [activeSymbolIndex, setActiveSymbolIndex] = React.useState<number | null>(null);
 
-  const handleTouchSafe = (fn: () => void) => (e: React.PointerEvent<HTMLButtonElement>) => {
-    e.preventDefault();
-    fn();
+  const getSymbolIndexAtPoint = (x: number, y: number): number | null => {
+    const target = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-symbol-index]');
+    if (!target) return null;
+    const index = Number(target.dataset.symbolIndex);
+    return Number.isInteger(index) && index >= 0 && index < symbols.length ? index : null;
   };
 
-  const handleSymbolPointerDown = (index: number) => (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
+  // Delegate the complete gesture to the strip so Android WebView cannot
+  // interrupt it when the finger leaves the starting button.
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    const index = getSymbolIndexAtPoint(touch.clientX, touch.clientY);
+    if (index === null) return;
     e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    swipeRef.current = {
-      pointerId: e.pointerId,
-      selectedIndex: index,
-      startX: e.clientX,
-      startY: e.clientY,
-      moved: false,
-    };
+    lastTouchAtRef.current = Date.now();
+    swipeRef.current = { selectedIndex: index, startX: touch.clientX, startY: touch.clientY, moved: false };
     setActiveSymbolIndex(index);
   };
 
-  const handleSymbolPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
     const swipe = swipeRef.current;
-    if (!swipe || swipe.pointerId !== e.pointerId) return;
-    if (Math.abs(e.clientX - swipe.startX) > 6 || Math.abs(e.clientY - swipe.startY) > 6) {
-      swipe.moved = true;
-    }
-    const target = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-symbol-index]');
-    const nextIndex = Number(target?.dataset.symbolIndex);
-    if (target && Number.isInteger(nextIndex) && nextIndex >= 0 && nextIndex < symbols.length) {
+    const touch = e.changedTouches[0];
+    if (!swipe || !touch) return;
+    e.preventDefault();
+    if (Math.abs(touch.clientX - swipe.startX) > 6 || Math.abs(touch.clientY - swipe.startY) > 6) swipe.moved = true;
+    const nextIndex = getSymbolIndexAtPoint(touch.clientX, touch.clientY);
+    if (nextIndex !== null && nextIndex !== swipe.selectedIndex) {
       swipe.selectedIndex = nextIndex;
       setActiveSymbolIndex(nextIndex);
     }
   };
 
-  const finishSymbolGesture = (e: React.PointerEvent<HTMLButtonElement>) => {
+  const finishTouchGesture = (e: React.TouchEvent<HTMLDivElement>) => {
     const swipe = swipeRef.current;
-    if (!swipe || swipe.pointerId !== e.pointerId) return;
+    if (!swipe) return;
+    e.preventDefault();
     const selected = symbols[swipe.selectedIndex];
     swipeRef.current = null;
     setActiveSymbolIndex(null);
     if (selected) onInsert(selected.insert, selected.offset ?? 0);
   };
 
-  const cancelSymbolGesture = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (swipeRef.current?.pointerId !== e.pointerId) return;
+  const cancelTouchGesture = () => {
     swipeRef.current = null;
     setActiveSymbolIndex(null);
   };
 
+  const handleSymbolClick = (index: number) => (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (Date.now() - lastTouchAtRef.current < 700) {
+      e.preventDefault();
+      return;
+    }
+    const selected = symbols[index];
+    if (selected) onInsert(selected.insert, selected.offset ?? 0);
+  };
+
+  const handleTouchSafe = (fn: () => void) => (e: React.PointerEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    if (e.pointerType !== 'touch') fn();
+  };
+
   return (
     <div
-      className="android-symbol-bar w-full self-stretch flex items-center gap-1.5 overflow-x-auto no-scrollbar px-2 py-1.5 bg-transparent select-none"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={finishTouchGesture}
+      onTouchCancel={cancelTouchGesture}
+      onContextMenu={(e) => e.preventDefault()}
+      className="android-symbol-bar w-full self-stretch flex items-center gap-1.5 overflow-x-auto no-scrollbar px-2 py-1.5 bg-transparent select-none [touch-action:pan-y] [-webkit-touch-callout:none] [-webkit-user-select:none]"
       role="toolbar"
       aria-label="Android 觸控符號列"
     >
@@ -147,13 +167,9 @@ export const AndroidSymbolBar: React.FC<AndroidSymbolBarProps> = ({
           type="button"
           data-symbol-index={index}
           data-swipe-active={activeSymbolIndex === index ? 'true' : 'false'}
-          onPointerDown={handleSymbolPointerDown(index)}
-          onPointerMove={handleSymbolPointerMove}
-          onPointerUp={finishSymbolGesture}
-          onPointerCancel={cancelSymbolGesture}
-          onLostPointerCapture={cancelSymbolGesture}
+          onClick={handleSymbolClick(index)}
           aria-label={sym.ariaLabel}
-          className="min-h-[40px] min-w-[42px] px-2.5 shrink-0 flex items-center justify-center font-mono text-xs font-medium bg-transparent text-[var(--ide-text)] border-0 shadow-none rounded-none hover:text-[var(--ide-accent-text)] data-[swipe-active=true]:text-[var(--ide-accent-text)] active:opacity-60 transition-opacity whitespace-nowrap touch-none"
+          className="min-h-[40px] min-w-[42px] px-2.5 shrink-0 flex items-center justify-center font-mono text-xs font-medium bg-transparent text-[var(--ide-text)] border-0 shadow-none rounded-none hover:text-[var(--ide-accent-text)] data-[swipe-active=true]:text-[var(--ide-accent-text)] active:opacity-60 transition-opacity whitespace-nowrap pointer-events-auto"
         >
           {sym.label}
         </button>
