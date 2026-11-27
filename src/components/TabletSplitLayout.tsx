@@ -107,7 +107,7 @@ export function TabletSplitLayout({ split, orientation, children }: TabletSplitL
         setIsDragging(false);
       }}
       onKeyDown={handleKeyDown}
-      className={`fixed z-[80] flex items-center justify-center touch-none outline-none select-none transition-[background,backdrop-filter,box-shadow] duration-150 ${isDragging ? 'tablet-gel-divider-active' : 'tablet-gel-divider'} ${horizontal ? 'cursor-col-resize' : 'cursor-row-resize'}`}
+      className={`fixed z-[80] flex items-center justify-center touch-none outline-none select-none transition-[background,backdrop-filter,box-shadow] duration-150 ${isDragging ? 'tablet-gel-divider-active' : 'tablet-gel-divider'} ${horizontal ? 'tablet-gel-divider-vertical cursor-col-resize' : 'tablet-gel-divider-horizontal cursor-row-resize'}`}
       style={horizontal
         ? { top: 0, bottom: 0, left: dividerCenter - 14, width: 28, touchAction: 'none' }
         : { left: 0, right: 0, top: dividerCenter - 14, height: 28, touchAction: 'none' }}
@@ -115,7 +115,7 @@ export function TabletSplitLayout({ split, orientation, children }: TabletSplitL
       <span
         aria-hidden="true"
         className="pointer-events-none block shrink-0"
-        className={`tablet-gel-divider-core ${isDragging ? 'tablet-gel-divider-core-active' : ''}`}
+        className={`tablet-gel-divider-core ${horizontal ? 'tablet-gel-divider-core-vertical' : 'tablet-gel-divider-core-horizontal'} ${isDragging ? 'tablet-gel-divider-core-active' : ''}`}
         style={horizontal
           ? { width: '1mm', height: '100%' }
           : { width: '100%', height: '1mm' }}
