@@ -82,6 +82,13 @@ assert.ok(generated.slice(explicitStopStart, explicitStopEnd).includes('os.killp
 assert.ok(generated.includes('os.killpg(pgid, signal.SIGSTOP if should_pause else signal.SIGCONT)'));
 assert.ok(generated.includes('def _normalize_shell_command(command):'));
 assert.ok(generated.includes('python-polars'));
+assert.ok(generated.includes('OPERATION_LOCK = threading.Lock()'), 'external Bridge must serialize all Termux operations');
+assert.ok(generated.includes('def _stage_workspace_files(files):'), 'external Bridge must stage workspace files through one safe writer');
+assert.ok(generated.includes('os.fsync(fp.fileno())') && generated.includes('os.replace(temp_path, target)'), 'external Bridge writes must be durable and atomic');
+assert.ok(generated.includes('before_start=lambda: _stage_workspace_files(files)'), 'streaming run must reserve the process before staging workspace files');
+assert.ok(generated.includes('ACTIVE_PROC["starting"]') && generated.includes('ACTIVE_PROC["stop_requested"]'), 'external Bridge must retain Stop requests during process startup');
+assert.ok(generated.includes('if not OPERATION_LOCK.acquire(blocking=False)'), 'overlapping external Termux operations must be rejected');
+
 const nativeInstalledPackages = ['python-numpy', 'python-polars', 'python-scipy'];
 assert.equal(
   buildTermuxUninstallCommand('pip', 'polars', nativeInstalledPackages),
@@ -243,6 +250,9 @@ assert.ok(streamShellStart >= 0 && streamShellEnd > streamShellStart);
 const nativeStreamShell = androidBuilder.slice(streamShellStart, streamShellEnd);
 assert.ok(nativeStreamShell.includes('Stream client disconnected; continuing process'));
 assert.ok(!nativeStreamShell.includes('proc.destroyForcibly()'), 'a dropped output socket must not kill the Python child');
+assert.ok(nativeStreamShell.indexOf('val reserved = synchronized(activeProcessLock)') < nativeStreamShell.indexOf('beforeStart?.invoke()'));
+assert.ok(nativeStreamShell.indexOf('out.write((') < nativeStreamShell.indexOf('beforeStart?.invoke()'), 'native stream readiness must be sent only after reserving the operation, but before staging');
+assert.ok(androidBuilder.includes('processSnapshot = synchronized(activeProcessLock)'), 'native Stop must read process and starting state atomically');
 const runLoggingSource = await readFile('src/App.tsx', 'utf8');
 assert.ok(runLoggingSource.includes('${entryFile.name} exited with code ${res.exitCode}'));
 assert.ok(runLoggingSource.includes('Finished ${entryFile.name}'));
