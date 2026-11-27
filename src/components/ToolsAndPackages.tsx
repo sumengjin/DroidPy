@@ -717,9 +717,9 @@ python ${entryFile}
             key={id}
             type="button"
             onClick={() => setActiveWindow(id)}
-            className="group w-full min-h-[76px] px-2 py-3 flex items-center gap-3 text-left border-b border-[var(--ide-border)] last:border-b-0 transition-colors hover:text-[var(--ide-accent-text)] min-w-0"
+            className="dp-workspace-row group w-full min-h-[76px] px-2 py-3 flex items-center gap-3 text-left min-w-0"
           >
-            <span className="w-10 h-10 flex items-center justify-center shrink-0 text-[var(--ide-text-muted)] group-hover:text-[var(--ide-accent-text)]">
+            <span className="dp-row-icon w-10 h-10 flex items-center justify-center shrink-0">
               <Icon className="w-5 h-5" />
             </span>
             <span className="min-w-0 flex-1">
@@ -2187,7 +2187,7 @@ python ${entryFile}
       ) : (
         <div
           className={`${
-            workspaceMode ? 'p-3.5 pb-6 space-y-4' : 'max-w-4xl mx-auto p-4 sm:p-6 space-y-6'
+            workspaceMode ? 'p-5 sm:p-7 pb-8 space-y-6' : 'max-w-4xl mx-auto p-4 sm:p-6 space-y-6'
           }`}
         >
           {renderHubHome()}

@@ -133,8 +133,12 @@ assert.match(mobileNavSource, /variant="phone"/, 'phone navigation must use the 
 assert.match(mobileNavSource, /setNegativeOpen\(false\);\s*setMobileTab\(destination === 'terminal' \? 'console' : destination\)/, 'switching workspaces must close the Settings workspace before showing the selected destination');
 const workspaceNavigationSource = await readFile(new URL('../src/components/WorkspaceNavigation.tsx', import.meta.url), 'utf8');
 assert.match(workspaceNavigationSource, /grid grid-cols-4/, 'phone navigation must expose four primary workspaces');
-assert.match(workspaceNavigationSource, /border-\[var\(--ide-accent\)\]\/75/, 'selected navigation destinations must have a theme-aware accent outline');
-assert.match(workspaceNavigationSource, /border-transparent bg-transparent text-\[var\(--ide-text-muted\)\]/, 'unselected navigation destinations must remain transparent and visually quieter');
+assert.match(workspaceNavigationSource, /dp-nav-item/, 'phone and tablet navigation must use the shared interaction token');
+const designTokensSource = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
+assert.match(designTokensSource, /\.dp-nav-item\[aria-current="page"\][\s\S]*?border-color: var\(--ide-accent\)[\s\S]*?color: var\(--ide-accent-text\)/, 'selected navigation destinations must use theme-aware accent outlines and text');
+assert.match(designTokensSource, /\.dp-nav-item:not\(\[aria-current="page"\]\)[\s\S]*?color: var\(--ide-text\)/, 'unselected navigation destinations must remain transparent and lower emphasis');
+assert.match(designTokensSource, /\.dp-nav-item:disabled[\s\S]*?opacity: 0\.38/, 'disabled navigation controls must be visibly distinct from unselected controls');
+assert.match(designTokensSource, /\.dp-workspace-row/, 'settings and package work rows must use the new surface-free row primitive');
 assert.doesNotMatch(workspaceNavigationSource, /id: 'packages'/, 'package management must not occupy a primary bottom-navigation destination');
 assert.match(drawerSource, /id: 'packages' as const, label: t\('neg_category_packages'\)/, 'package management must remain available as a translated dedicated Settings category');
 assert.match(exportSource, /activeSubView === 'packages'[\s\S]*?renderHubOptionList\(packageHubOptions/, 'package management must open directly without an intermediate folder screen');

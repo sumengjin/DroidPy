@@ -63,12 +63,8 @@ export function WorkspaceNavigation({
               aria-label={labels[id]}
               aria-current={active ? 'page' : undefined}
               title={labels[id]}
-              className={`min-w-0 flex flex-col items-center justify-center gap-1.5 border transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ide-accent)] ${
+              className={`dp-nav-item min-w-0 flex flex-col items-center justify-center gap-1.5 ${
                 isPhone ? 'min-h-[56px] rounded-xl px-1' : 'w-full min-h-[64px] rounded-xl px-1'
-              } ${
-                active
-                  ? 'border-[var(--ide-accent)]/75 text-[var(--ide-accent-text)]'
-                  : 'border-transparent bg-transparent text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
               }`}
             >
               <Icon className={isPhone ? 'w-[19px] h-[19px]' : 'w-5 h-5'} strokeWidth={active ? 2.3 : 1.8} />
@@ -84,7 +80,7 @@ export function WorkspaceNavigation({
           onClick={onOpenSettings}
           aria-label={settingsLabel}
           title={settingsLabel}
-          className="w-full min-h-[56px] rounded-xl border border-transparent bg-transparent flex flex-col items-center justify-center gap-1.5 text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ide-accent)]"
+          className="dp-nav-item w-full min-h-[56px] rounded-xl flex flex-col items-center justify-center gap-1.5"
         >
           <Settings className="w-5 h-5" strokeWidth={1.8} />
           <span className="text-[10px] font-semibold">{settingsLabel}</span>

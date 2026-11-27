@@ -214,11 +214,7 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
                     setShowCategories(window.matchMedia('(min-width: 768px)').matches);
                   }}
                   aria-current={section === id ? 'page' : undefined}
-                  className={`w-full min-h-[68px] px-3 py-2.5 flex items-center gap-3 text-left rounded-xl border transition-colors ${
-                    section === id
-                      ? 'border-[var(--ide-accent)]/75 text-[var(--ide-accent-text)]'
-                      : 'border-transparent bg-transparent text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
-                  }`}
+                  className="dp-nav-item w-full min-h-[68px] px-3 py-2.5 flex items-center gap-3 text-left rounded-xl"
                 >
                   <span className="w-10 h-10 flex items-center justify-center shrink-0 text-current">
                     <Icon className="w-5 h-5" />
