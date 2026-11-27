@@ -219,7 +219,7 @@ assert.doesNotMatch(terminalSource, /stdinValue|replValue|replInputRef|handleRep
 assert.doesNotMatch(terminalSource, /bg-\[var\(--ide-surface\)\].*flex items-center gap-2 shrink-0/, 'terminal input bars must not add a second opaque surface');
 assert.match(settingsWorkspaceSource, /fixed inset-0 z-\[1000\][\s\S]*?backgroundColor: 'var\(--ide-surface\)'/, 'settings must be a fully opaque top-level workspace');
 assert.match(appSource, /const isPhoneLayout = deviceClass === 'phone' \|\| \(deviceClass === 'tablet' && !isLandscape\)/, 'portrait tablets must use the same single-workspace shell as phones');
-assert.match(appSource, /is3dBgActive && deviceClass === 'tablet' && isLandscape \? \([\s\S]*?<TabletSplitLayout split=\{tabletSplit\} orientation="horizontal">/, 'only landscape tablets may render the adjustable side-by-side workbench');
+assert.match(appSource, /deviceClass === 'tablet' && isLandscape \? \([\s\S]*?<TabletSplitLayout split=\{tabletSplit\} orientation="horizontal">/, 'only landscape tablets may render the adjustable side-by-side workbench');
 assert.match(appSource, /\{isPhoneLayout && \([\s\S]*?<WorkspaceHeader[\s\S]*?variant="phone"/, 'portrait tablets must use the phone workspace header');
 assert.match(appSource, /\{isPhoneLayout && \([\s\S]*?<WorkspaceNavigation[\s\S]*?variant="phone"/, 'portrait tablets must use the phone bottom navigation');
 assert.match(tabletSplitSource, /setPrimaryPercent\(Math\.min\(75, Math\.max\(25, raw\)\)\)/, 'tablet workbench split must be user-adjustable within usable bounds');
@@ -231,7 +231,7 @@ assert.match(tabletSplitSource, /tablet-gel-handle-vertical[\s\S]*tablet-gel-han
 assert.match(tabletSplitSource, /setIsDragging\(true\)[\s\S]*setIsDragging\(false\)/, 'tablet gel divider must visibly respond while being dragged');
 assert.match(themeCssSource, /\.tablet-gel-divider[\s\S]*background: transparent !important[\s\S]*box-shadow: none !important/, 'the full-height divider hit area must draw no line, edge or glow');
 assert.match(themeCssSource, /\.tablet-divider-clear-core[\s\S]*background: transparent !important[\s\S]*border: 0 !important[\s\S]*backdrop-filter: blur\(0\.35px\) saturate\(1\.65\) contrast\(1\.08\)/, 'the 1 mm full-height divider must have no white film and must reveal the 3D background through clear glass');
-assert.match(appSource, /deviceClass === 'tablet' && isLandscape && tabletSplit \? 'tablet-landscape-split-paper'/, 'only the active landscape tablet split may cut a transparent channel through the paper overlay');
+assert.match(appSource, /is3dBgActive && deviceClass === 'tablet' && isLandscape && tabletSplit \? 'tablet-landscape-split-paper'/, 'only the active landscape tablet split may cut a transparent channel through the paper overlay');
 assert.match(tabletSplitSource, /setProperty\('--tablet-divider-center', `\$\{dividerCenter\}px`\)/, 'the paper channel must track the live divider center while the split is resized');
 assert.match(tabletSplitSource, /removeProperty\('--tablet-divider-center'\)/, 'the live divider position must be cleared when split mode is disabled or unmounted');
 assert.match(themeCssSource, /\.tablet-landscape-split-paper[\s\S]*mask-image: linear-gradient[\s\S]*transparent calc\(var\(--tablet-divider-center[\s\S]*\+ 0\.5mm\)/, 'the paper overlay must have a real 1 mm transparent slit aligned to the divider');
