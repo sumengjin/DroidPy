@@ -182,7 +182,7 @@ assert.match(themeCssSource, /--ide-sheet-bg: color-mix\(in srgb, var\(--ide-sur
 assert.doesNotMatch(themeCssSource, /--ide-surface:\s*rgba\(|--ide-surface-alt:\s*rgba\(/, '3D atmosphere must not make nested workspace surfaces translucent');
 assert.match(terminalSource, /<div className="flex flex-col h-full bg-transparent text-\[var\(--ide-text\)\] overflow-hidden">/, 'terminal output must not create a second opaque sheet');
 assert.equal((terminalSource.match(/terminal-input-row px-2 py-1 bg-transparent flex items-center gap-2 shrink-0/g) || []).length, 3, 'all phone/tablet terminal input rows, including their full action area, must use exactly two-thirds width');
-assert.match(themeCssSource, /\.terminal-input-row[\s\S]*width: 66\.6667% !important[\s\S]*flex: 0 0 66\.6667%/, 'terminal input row width must be fixed at two-thirds including the full row');
+assert.match(themeCssSource, /\.terminal-input-row[\s\S]*width: 66\.6667% !important[\s\S]*flex: 0 0 auto/, 'terminal input row width must be fixed at two-thirds including the full row');
 assert.equal((terminalSource.match(/enterKeyHint="send"/g) || []).length, 3, 'Android keyboard Enter must be configured as Send for all terminal input modes');
 assert.match(terminalSource, /handleStdinKeyDown[\s\S]*e\.key === 'Enter'/, 'Python input() must submit from the Android keyboard Enter key');
 assert.match(terminalSource, /handleTermuxStdinKeyDown[\s\S]*e\.key === 'Enter'/, 'Termux stdin must submit from the Android keyboard Enter key');
