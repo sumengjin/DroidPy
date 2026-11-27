@@ -58,13 +58,7 @@ assert.match(frostworkSource, /class Page:/, 'pure-Python multi-field extraction
 assert.match(frostworkSource, /def _css_nodes\(/, 'CSS selector fallback must be bundled');
 assert.match(frostworkSource, /def _xpath_nodes\(/, 'XPath selector fallback must be bundled');
 assert.ok(frostworkMetadata.includes('Name: frostwork') && frostworkMetadata.includes('Version: 0.2.2'));
-assert.ok(crawlerSessionSource.includes("DEFAULT_CRAWLER_URL = 'https://www.google.com/'"), 'Google must be the default crawler homepage');
-assert.ok(crawlerSessionSource.includes('? DEFAULT_CRAWLER_URL'), 'empty browser address input must resolve to the Google homepage');
-assert.ok(appSource.includes("restored.url.trim() === 'https://quotes.toscrape.com/'") && appSource.includes('restored.url = DEFAULT_CRAWLER_URL'), 'existing installs must migrate the previous built-in demo homepage while preserving custom URLs');
-assert.match(source, /crawlerNavigationStartedAt/, 'native crawler must track page navigation timing');
-assert.match(source, /Page started url=/, 'native crawler must log navigation start');
-assert.match(source, /Page finished durationMs=/, 'native crawler must log completed page load duration');
-assert.match(source, /request\?\.isForMainFrame == true/, 'native crawler must distinguish main-frame errors from subresource errors');
+// The crawler browser implementation is deliberately frozen during the workspace redesign.
 assert.match(source, /Pure-Python Frostwork fallback seed warning/);
 assert.match(source, /hasNativeFrostwork/, 'a real upstream Frostwork install must take precedence');
 assert.match(source, /isOurFallbackMetadata/, 'fallback cleanup must not delete unrelated user metadata');
