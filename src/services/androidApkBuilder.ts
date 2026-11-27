@@ -4438,13 +4438,6 @@ def clipboard_set(text):
                     val shellCmd = when (path) {
                         "/run-stream" -> {
                             val arr = bodyJson.optJSONArray("files") ?: JSONArray()
-                            for (i in 0 until arr.length()) {
-                                val f = arr.getJSONObject(i)
-                                val name = File(f.optString("name", "")).name
-                                if (name.isNotBlank()) {
-                                    File(workspaceDir, name).writeText(f.optString("content", ""))
-                                }
-                            }
                             val entry = File(bodyJson.optString("entry", "main.py")).name.ifBlank { "main.py" }
                             appendNativeLog("Exec", "Run script requested: $entry")
                             val safeEntrySh = entry.replace("'", "'\\\\''")
@@ -4473,7 +4466,35 @@ def clipboard_set(text):
                         }
                         else -> bodyJson.optString("command", "")
                     }
-                    streamShellCommand(out, shellCmd)
+                    val stageWorkspaceFiles: (() -> Unit)? = if (path == "/run-stream") {
+                        {
+                            for (i in 0 until arr.length()) {
+                                val f = arr.getJSONObject(i)
+                                val name = File(f.optString("name", "")).name
+                                if (name.isBlank()) continue
+                                val target = File(workspaceDir, name)
+                                val temp = File(workspaceDir, ".${name}.${System.nanoTime()}.tmp")
+                                val bytes = f.optString("content", "").toByteArray(Charsets.UTF_8)
+                                try {
+                                    java.io.FileOutputStream(temp).use { stream ->
+                                        stream.write(bytes)
+                                        stream.fd.sync()
+                                    }
+                                    if (!temp.renameTo(target)) {
+                                        throw java.io.IOException("Atomic workspace replace failed for $name")
+                                    }
+                                    val digest = java.security.MessageDigest.getInstance("SHA-256")
+                                        .digest(bytes).joinToString("") { "%02x".format(it) }
+                                    val firstLineHex = bytes.takeWhile { it != 10.toByte() }.take(12)
+                                        .joinToString("") { "%02x".format(it) }
+                                    appendNativeLog("Exec", "Workspace file committed name=$name bytes=${bytes.size} sha256=$digest firstLineHex=$firstLineHex")
+                                } finally {
+                                    if (temp.exists()) temp.delete()
+                                }
+                            }
+                        }
+                    } else null
+                    streamShellCommand(out, shellCmd, stageWorkspaceFiles)
                 }
 
                 method == "GET" && path == "/files" -> {
@@ -5023,7 +5044,7 @@ def clipboard_set(text):
             .put("durationMs", System.currentTimeMillis() - t0)
     }
 
-    private fun streamShellCommand(out: OutputStream, command: String) {
+    private fun streamShellCommand(out: OutputStream, command: String, beforeStart: (() -> Unit)? = null) {
         val t0 = System.currentTimeMillis()
         val normalizedCommand = normalizeShellCommand(command)
         val shFile = File(usrDir, "bin/sh")
@@ -5031,9 +5052,44 @@ def clipboard_set(text):
             .containsMatchIn(normalizedCommand)
         appendNativeLog("Exec", "Stream shell start: \${normalizedCommand.take(180)}")
 
-        synchronized(activeProcessLock) {
-            activeProcessStopRequested = false
-            activeProcessStarting = true
+        val reserved = synchronized(activeProcessLock) {
+            if (activeProcess != null || activeProcessStarting) {
+                false
+            } else {
+                activeProcessStopRequested = false
+                activeProcessStarting = true
+                true
+            }
+        }
+        if (!reserved) {
+            appendNativeLog("Exec", "Rejected overlapping streamed operation; active process is still reserved")
+            val headers = "HTTP/1.1 200 OK\\r\\n" +
+                corsHeaders() +
+                "Content-Type: application/x-ndjson; charset=utf-8\\r\\n" +
+                "Connection: close\\r\\n\\r\\n"
+            val output = JSONObject().put("type", "stdout")
+                .put("data", "[DroidPy] 另一個 Termux 工作仍在執行，已拒絕這次操作，避免覆寫正在使用的檔案。\\n")
+                .toString() + "\\n"
+            val done = JSONObject().put("type", "done").put("exitCode", 1).put("durationMs", 0).toString() + "\\n"
+            try {
+                out.write(headers.toByteArray())
+                out.write(output.toByteArray(Charsets.UTF_8))
+                out.write(done.toByteArray(Charsets.UTF_8))
+                out.flush()
+            } catch (_: Exception) {
+            }
+            return
+        }
+        try {
+            beforeStart?.invoke()
+        } catch (error: Exception) {
+            synchronized(activeProcessLock) {
+                activeProcessStarting = false
+                activeProcessStopRequested = false
+            }
+            appendNativeLog("Exec", "Workspace staging failed: ${error.javaClass.simpleName}: ${error.message}")
+            writeJson(out, 500, JSONObject().put("error", "Unable to safely stage workspace files"))
+            return
         }
         try {
             out.write((
