@@ -222,7 +222,10 @@ assert.match(appSource, /<TabletSplitLayout split=\{tabletSplit\} orientation=\{
 assert.match(tabletSplitSource, /setPrimaryPercent\(Math\.min\(75, Math\.max\(25, raw\)\)\)/, 'tablet workbench split must be user-adjustable within usable bounds');
 assert.match(tabletSplitSource, /onPointerDown=[\s\S]*?setPointerCapture[\s\S]*?onPointerMove=[\s\S]*?updateFromPointer/, 'tablet workbench divider must support touch and mouse dragging');
 assert.ok(tabletSplitSource.includes('role="separator"') && tabletSplitSource.includes('aria-valuemin={25}') && tabletSplitSource.includes('aria-valuemax={75}') && tabletSplitSource.includes('onKeyDown={handleKeyDown}'), 'tablet workbench divider must expose accessible keyboard resizing');
-assert.match(tabletSplitSource, /width: '1mm', height: '100%'[\s\S]*backgroundColor: 'color-mix\(in srgb, var\(--ide-border\) 52%, transparent\)'/, 'tablet splitter must show a subtle translucent 1 mm full-height divider');
+assert.match(tabletSplitSource, /width: '1mm', height: '100%'/, 'tablet splitter must retain a 1 mm full-height transparent divider core');
+assert.match(tabletSplitSource, /tablet-gel-divider[\s\S]*tablet-gel-divider-core/, 'tablet splitter must render a visible transparent gel-like drag surface');
+assert.match(tabletSplitSource, /setIsDragging\(true\)[\s\S]*setIsDragging\(false\)/, 'tablet gel divider must visibly respond while being dragged');
+assert.match(themeCssSource, /\.tablet-gel-divider[\s\S]*backdrop-filter: blur\(3px\) saturate\(1\.45\)/, 'tablet divider must use translucent gel optics instead of a solid line');
 assert.match(tabletSplitSource, /onPointerDown=[\s\S]*setPointerCapture[\s\S]*updateFromPointer\(event\)[\s\S]*onPointerMove=[\s\S]*updateFromPointer/, 'tablet divider must respond immediately and continuously to touch or mouse dragging');
 assert.match(themeCssSource, /\.tablet-split-layout \.terminal-console-surface[\s\S]*background: transparent !important[\s\S]*border: 0 !important/, 'tablet terminal must share the transparent workspace background and have no frame');
 assert.doesNotMatch(appSource, /w-\[56%\]|h-\[56%\]/, 'tablet split panes must not use the old fixed 56 percent layout');
