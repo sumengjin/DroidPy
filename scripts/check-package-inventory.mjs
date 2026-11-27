@@ -184,7 +184,7 @@ assert.match(panelSource, /disabled=\{!!busyAction \|\| termuxRunning/);
 assert.doesNotMatch(panelSource, /handleInitEmbedded/);
 assert.ok(drawerSource.includes('fixed inset-0 z-50 flex flex-col bg-[var(--ide-bg)]'), 'Settings must occupy an independent full-screen workspace');
 assert.ok(!drawerSource.includes('bg-black/35') && !drawerSource.includes('md:max-w-6xl'), 'Settings must not be rendered as a dimmed slide-over dialog');
-assert.ok(drawerSource.includes('border-[var(--ide-accent)]/75'), 'Settings categories must use the theme-aware selected outline');
+assert.ok(drawerSource.includes('dp-nav-item'), 'Settings categories must use the shared theme-aware interaction primitive');
 assert.ok(!drawerSource.includes('backdropTouchRef'), 'the full-screen Settings workspace must not depend on backdrop dismissal gestures');
 assert.match(drawerSource, /termuxActiveTask/);
 assert.match(i18nSource, /首次執行 Python 或安裝套件時，自動安裝 Python 3 與 pip/);
