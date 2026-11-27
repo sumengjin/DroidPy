@@ -37,7 +37,6 @@ import {
   PyodideStatus,
   PythonFile,
   ScriptBackupSnapshot,
-  TabletPaneTab,
   TerminalEntry,
   TermuxConfig,
   TermuxConnectionState,
