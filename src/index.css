@@ -196,26 +196,8 @@
     --ide-divider-glow: color-mix(in srgb, var(--ide-surface) 72%, transparent);
   }
 
-  /* Keep the outer canvas atmospheric without making nested workspace panes translucent. */
-  html.has-3d-bg[data-theme="light"],
-  html.has-3d-bg[data-theme="rose"],
-  html.has-3d-bg[data-theme="peony"],
-  html.has-3d-bg[data-theme="champagne"],
-  html.has-3d-bg[data-theme="lavender"],
-  html.has-3d-bg[data-theme="milktea"],
-  html.has-3d-bg[data-theme="matcha"],
-  html.has-3d-bg[data-theme="sky"] {
-    --ide-bg: rgba(255, 250, 252, 0.66);
-  }
-
-  html.has-3d-bg[data-theme="dark"],
-  html.has-3d-bg[data-theme="berry"],
-  html.has-3d-bg[data-theme="rosegold"],
-  html.has-3d-bg[data-theme="moonrose"],
-  html.has-3d-bg[data-theme="aurorapink"],
-  html.has-3d-bg[data-theme="starry"] {
-    --ide-bg: rgba(16, 12, 22, 0.64);
-  }
+  /* Keep --ide-bg as the theme's original opaque canvas color.
+     Adjustable 3D glass belongs only to --ide-workspace-surface. */
 
   html,
   body,
