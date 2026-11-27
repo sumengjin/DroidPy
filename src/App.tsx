@@ -17,9 +17,6 @@ import {
   Plus,
   X,
   Globe,
-  Maximize2,
-  Settings,
-  Columns2,
   Sparkles,
   Download,
 } from 'lucide-react';

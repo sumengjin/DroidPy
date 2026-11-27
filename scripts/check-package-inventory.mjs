@@ -171,6 +171,8 @@ assert.match(drawerSource, /id: 'packages' as const, label: t\('neg_category_pac
 assert.match(exportSource, /activeSubView === 'packages'[\s\S]*?renderHubOptionList\(packageHubOptions/, 'package management must open directly without an intermediate folder screen');
 assert.doesNotMatch(exportSource, /renderFolderList|renderFolderContents|setPackageFolder|setTermuxFolder|setStorageFolder|setSettingsFolder/, 'the Settings workspace must not retain nested folder navigation');
 assert.match(exportSource, /workspaceMode\?: boolean/, 'the system center must use workspace layout terminology rather than drawer terminology');
+assert.doesNotMatch(appSource, /negativeOpen|negativeSection|openNegativeDrawer|NegativeScreenSection/, 'legacy drawer state names must not return');
+assert.doesNotMatch(appSource, /--md-/, 'the main application shell must not use Material theme tokens');
 assert.match(i18nSource, /neg_category_packages:/, 'package management category label must be localized');
 assert.match(i18nSource, /neg_category_packages_desc:/, 'package management category description must be localized');
 const backHandlerStart = appSource.indexOf('window.__droidpyHandleBack = () => {');
