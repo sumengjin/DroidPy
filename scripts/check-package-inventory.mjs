@@ -194,7 +194,7 @@ assert.match(appSource, /<TabletSplitLayout split=\{tabletSplit\}/, 'the tablet 
 assert.match(tabletSplitSource, /className=\{\x60tablet-split-layout/, 'the split-only terminal style scope must wrap tablet panes');
 assert.match(tabletSplitSource, /createPortal\([\s\S]*?document\.body/, 'the tablet divider must be positioned across the viewport rather than only inside the content grid');
 assert.match(tabletSplitSource, /top: 0, bottom: 0, left: dividerCenter - 14, width: 28/, 'the landscape tablet divider hit area must span the full screen height');
-assert.match(tabletSplitSource, /width: '1mm', height: '100%'/, 'the visible landscape divider must be exactly 1 mm wide and fully transparent');
+assert.match(tabletSplitSource, /width: '1.5mm', height: '100%'/, 'the visible landscape divider must be exactly 1.5 mm wide and fully transparent');
 assert.match(tabletSplitSource, /setPointerCapture\(event\.pointerId\)[\s\S]*updateFromPointer\(event\)/, 'the full-height transparent tablet divider must retain pointer dragging');
 assert.match(themeCssSource, /\.terminal-console-surface \.terminal-input-row[\s\S]*?width: 100% !important[\s\S]*?border: 0 !important/, 'the terminal command row must fill the shared terminal surface without its own frame');
 assert.match(themeCssSource, /\.android-symbol-bar[\s\S]*?width: 100%[\s\S]*?border: 0 !important/, 'the editor symbol bar must follow the full editor width and remain borderless');
@@ -225,7 +225,7 @@ assert.match(appSource, /\{isPhoneLayout && \([\s\S]*?<WorkspaceNavigation[\s\S]
 assert.match(tabletSplitSource, /setPrimaryPercent\(Math\.min\(75, Math\.max\(25, raw\)\)\)/, 'tablet workbench split must be user-adjustable within usable bounds');
 assert.match(tabletSplitSource, /onPointerDown=[\s\S]*?setPointerCapture[\s\S]*?onPointerMove=[\s\S]*?updateFromPointer/, 'tablet workbench divider must support touch and mouse dragging');
 assert.ok(tabletSplitSource.includes('role="separator"') && tabletSplitSource.includes('aria-valuemin={25}') && tabletSplitSource.includes('aria-valuemax={75}') && tabletSplitSource.includes('onKeyDown={handleKeyDown}'), 'tablet workbench divider must expose accessible keyboard resizing');
-assert.match(tabletSplitSource, /width: '1mm', height: '100%'/, 'tablet splitter must retain a 1 mm full-height transparent divider core');
+assert.match(tabletSplitSource, /width: '1.5mm', height: '100%'/, 'tablet splitter must retain a 1.5 mm full-height transparent divider core');
 assert.match(tabletSplitSource, /tablet-divider-clear-core[\s\S]*tablet-gel-handle/, 'tablet splitter must separate its invisible full-height guide from the compact gel handle');
 assert.match(tabletSplitSource, /tablet-gel-handle-vertical[\s\S]*tablet-gel-handle-horizontal/, 'the compact gel handle must adapt to both divider orientations');
 assert.match(tabletSplitSource, /setIsDragging\(true\)[\s\S]*setIsDragging\(false\)/, 'tablet gel divider must visibly respond while being dragged');
@@ -234,7 +234,7 @@ assert.match(themeCssSource, /\.tablet-divider-clear-core[\s\S]*background: tran
 assert.match(appSource, /is3dBgActive && deviceClass === 'tablet' && isLandscape && tabletSplit \? 'tablet-landscape-split-paper'/, 'only the active landscape tablet split may cut a transparent channel through the paper overlay');
 assert.match(tabletSplitSource, /setProperty\('--tablet-divider-center', `\$\{dividerCenter\}px`\)/, 'the paper channel must track the live divider center while the split is resized');
 assert.match(tabletSplitSource, /removeProperty\('--tablet-divider-center'\)/, 'the live divider position must be cleared when split mode is disabled or unmounted');
-assert.match(themeCssSource, /\.tablet-landscape-split-paper[\s\S]*mask-image: linear-gradient[\s\S]*transparent calc\(var\(--tablet-divider-center[\s\S]*\+ 0\.5mm\)/, 'the paper overlay must have a real 1 mm transparent slit aligned to the divider');
+assert.match(themeCssSource, /\.tablet-landscape-split-paper[\s\S]*mask-image: linear-gradient[\s\S]*transparent calc\(var\(--tablet-divider-center[\s\S]*\+ 0\.5mm\)/, 'the paper overlay must have a real 1.5 mm transparent slit aligned to the divider');
 assert.match(themeCssSource, /\.tablet-gel-handle-vertical[\s\S]*width: 1mm[\s\S]*height: 10mm/, 'the vertical divider gel handle must be 1 mm wide and 1 cm long');
 assert.match(themeCssSource, /\.tablet-gel-handle-horizontal[\s\S]*width: 10mm[\s\S]*height: 1mm/, 'the horizontal divider gel handle must be 1 cm long and 1 mm high');
 assert.match(tabletSplitSource, /top: '66\.6667%'[\s\S]*?transform: 'translate\(-50%, -50%\)'/, 'landscape tablet gel handle must sit two-thirds down the vertical divider');
