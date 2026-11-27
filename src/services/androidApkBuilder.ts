@@ -3175,6 +3175,14 @@ def clipboard_set(text):
         }
     }
 
+    private fun fileWriteDiagnostic(bytes: ByteArray): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(bytes).joinToString("") { "%02x".format(it) }
+        val firstLineHex = bytes.takeWhile { it != 10.toByte() }.take(12)
+            .joinToString("") { "%02x".format(it) }
+        return "bytes=\${bytes.size} sha256=$digest firstLineHex=$firstLineHex"
+    }
+
     private fun resolveSdcardTarget(relPath: String): File? {
         val root = Environment.getExternalStorageDirectory()
         val rootCanonical = root.canonicalPath
@@ -4389,7 +4397,8 @@ def clipboard_set(text):
                                         if (name.isNotBlank() && name != "." && name != "..") {
                                             val target = File(destDir, name)
                                             val bytes = item.optString("content", "").toByteArray(Charsets.UTF_8)
-                                            writeFileAtomically(target, bytes)
+                                            val committed = writeFileAtomically(target, bytes)
+                                            appendNativeLog("Storage", "SD-card file committed name=$name ${fileWriteDiagnostic(committed)}")
                                             count++
                                         }
                                     }
@@ -4403,7 +4412,8 @@ def clipboard_set(text):
                                     writeJson(out, 400, JSONObject().put("error", "Invalid path"))
                                 } else {
                                     val bytes = bodyJson.optString("content", "").toByteArray(Charsets.UTF_8)
-                                    writeFileAtomically(target, bytes)
+                                    val committed = writeFileAtomically(target, bytes)
+                                    appendNativeLog("Storage", "SD-card file committed name=${target.name} ${fileWriteDiagnostic(committed)}")
                                     writeJson(out, 200, JSONObject().put("ok", true).put("path", target.absolutePath))
                                 }
                             }
@@ -4519,11 +4529,7 @@ def clipboard_set(text):
                                 val target = File(workspaceDir, name)
                                 val bytes = f.optString("content", "").toByteArray(Charsets.UTF_8)
                                 val committedBytes = writeFileAtomically(target, bytes)
-                                val digest = java.security.MessageDigest.getInstance("SHA-256")
-                                    .digest(committedBytes).joinToString("") { "%02x".format(it) }
-                                val firstLineHex = committedBytes.takeWhile { it != 10.toByte() }.take(12)
-                                    .joinToString("") { "%02x".format(it) }
-                                appendNativeLog("Exec", "Workspace file committed name=$name bytes=\${committedBytes.size} sha256=$digest firstLineHex=$firstLineHex")
+                                appendNativeLog("Exec", "Workspace file committed name=$name ${fileWriteDiagnostic(committedBytes)}")
                             }
                         }
                     } else null
