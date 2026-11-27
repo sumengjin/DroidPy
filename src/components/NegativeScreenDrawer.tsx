@@ -221,7 +221,7 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
         </div>
 
         <div className={`${showCategories ? 'flex' : 'hidden'} md:flex flex-1 min-h-0 overflow-y-auto ide-scroll px-3 py-3 pb-safe md:flex-none md:w-72 md:border-r md:border-[var(--ide-border)] md:bg-[var(--ide-surface)]`}>
-          <div className="flex-1 min-h-0 overflow-y-auto ide-scroll px-3 py-3 pb-safe">
+          
             <div className="mb-3 px-1">
               <h3 className="text-base font-semibold text-[var(--ide-text)]">{t('neg_category_heading')}</h3>
               <p className="mt-1 text-xs text-[var(--ide-text-muted)]">{t('neg_category_hint')}</p>
@@ -237,7 +237,8 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
                   key={id}
                   type="button"
                   onClick={() => { onChangeSection(id); setShowCategories(false); }}
-                  className="w-full min-h-[76px] px-3.5 py-3 flex items-center gap-3 text-left active:bg-[var(--ide-surface-alt)]"
+                  aria-current={section === id ? 'page' : undefined}
+                  className={`w-full min-h-[76px] px-3.5 py-3 flex items-center gap-3 text-left transition-colors active:bg-[var(--ide-surface-alt)] ${section === id ? 'bg-[var(--ide-accent-soft)]' : 'hover:bg-[var(--ide-surface-alt)]'}`}
                 >
                   <span className="w-11 h-11 rounded-2xl bg-[var(--ide-accent-soft)] text-[var(--ide-accent)] flex items-center justify-center shrink-0">
                     <Icon className="w-5 h-5" />
@@ -253,7 +254,6 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
                 </button>
               ))}
             </div>
-          </div>
           </div>
           <div className={`${showCategories ? 'hidden' : 'flex'} md:flex flex-1 min-w-0 min-h-0 overflow-hidden flex-col`}>
             <div className="px-3 py-2 border-b border-[var(--ide-border)] shrink-0 md:hidden">
