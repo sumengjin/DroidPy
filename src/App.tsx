@@ -3109,18 +3109,18 @@ export default function App() {
           height: 'var(--droidpy-viewport-height, 100dvh)',
           // Use a concrete rgba color instead of color-mix: older Android WebViews
           // may not support color-mix(), which made the transparency control inert.
-          // Transparency is applied to the theme's original canvas color, not
-          // its elevated card/surface tint. At 0% the workspace must exactly
-          // recover the opaque theme background; higher values reveal the 3D scene.
+          // Use the theme canvas color and retain a subtle 16% neutral glass veil
+          // at maximum transparency so editor and terminal text remain readable.
+          // At 0% the workspace recovers the opaque theme background.
           '--ide-workspace-surface': hexToRgba(
             activeThemeMeta.swatchBg,
             is3dBgActive
-              ? 1 - Math.min(100, Math.max(0, settings.workspaceTransparency ?? 18)) / 100
+              ? Math.max(0.16, 1 - Math.min(100, Math.max(0, settings.workspaceTransparency ?? 18)) / 100)
               : 1
           ),
           '--ide-sheet-bg': hexToRgba(
             activeThemeMeta.swatchBg,
-            1 - Math.min(100, Math.max(0, settings.workspaceTransparency ?? 18)) / 100
+            Math.max(0.16, 1 - Math.min(100, Math.max(0, settings.workspaceTransparency ?? 18)) / 100)
           ),
         } as CSSProperties}
         className={`h-dvh droidpy-edge-safe flex flex-col ${
