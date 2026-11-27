@@ -173,6 +173,7 @@ assert.match(themeCssSource, /button\.dp-execution-control[\s\S]*appearance: non
 assert.equal((executionControlsSource.match(/dp-execution-control/g) || []).length, 5, 'run, stop, pause/resume, cancel and stopping controls must all use the borderless class');
 assert.match(executionControlsSource, /labels\.run/, 'run control must render its explicit concise label');
 assert.match(executionControlsSource, /borderlessButtonStyle/, 'all execution buttons must receive inline native-WebView border resets');
+assert.doesNotMatch(executionControlsSource, /bg-red-600|bg-\[var\(--ide-accent\)\]|rounded-full|rounded-xl/, 'workspace execution controls must remain visually unboxed and borderless');
 assert.match(appSource, /stop: '停止'/, 'tablet stop control must use the concise 停止 label');
 assert.match(appSource, /run: '執行'/, 'tablet run control must use the concise 執行 label');
 assert.doesNotMatch(executionControlsSource, /border-2 border-\[var\(--ide-accent\)\]/, 'pause/resume control must not retain an accent border');
@@ -184,6 +185,8 @@ assert.match(appSource, /shrink-0 bg-transparent/, 'phone editor controls must n
 assert.match(themeCssSource, /--ide-sheet-bg: color-mix\(in srgb, var\(--ide-surface\) 82%, transparent\)/, 'the single paper surface must be slightly translucent so the 3D glass environment remains visible');
 assert.doesNotMatch(themeCssSource, /--ide-surface:\s*rgba\(|--ide-surface-alt:\s*rgba\(/, '3D atmosphere must not make nested workspace surfaces translucent');
 assert.match(terminalSource, /<div className="flex flex-col h-full bg-transparent text-\[var\(--ide-text\)\] overflow-hidden">/, 'terminal output must not create a second opaque sheet');
+assert.match(terminalSource, /className="terminal-console-surface flex-1 min-h-0 flex flex-col overflow-hidden"[\s\S]*?ref=\{scrollRef\}[\s\S]*?className="terminal-input-row/, 'terminal output and the single command line must be nested inside one continuous surface');
+assert.match(themeCssSource, /\.terminal-console-surface[\s\S]*?background: transparent !important[\s\S]*?border: 0 !important/, 'the unified terminal surface must not draw a separate input card or border');
 assert.equal((terminalSource.match(/terminal-input-row px-2 py-1 bg-transparent flex items-center gap-2 shrink-0/g) || []).length, 1, 'the terminal must render exactly one persistent shared input row');
 assert.match(themeCssSource, /\.terminal-input-row[\s\S]*width: 66\.6667% !important[\s\S]*flex: 0 0 auto/, 'the shared terminal input row width must be fixed at two-thirds including the full row');
 assert.equal((terminalSource.match(/enterKeyHint="send"/g) || []).length, 1, 'the shared Android terminal keyboard must use the Send action');
