@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Trash2, Copy, Check, AlertCircle, Download, Maximize2, X, FileText } from 'lucide-react';
+import { Trash2, Copy, Check, AlertCircle, Download, Maximize2, X, FileText, Send } from 'lucide-react';
 import { ExecutionEngine, PyodideStatus, TerminalEntry } from '../types/ide';
 import { renderAnsiText, stripAnsi } from '../utils/ansiParser';
 import { useI18n } from '../services/i18n';
@@ -508,6 +508,10 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             placeholder={pendingInputPrompt || t('term_input_placeholder')}
             className="flex-1 min-w-0 min-h-[40px] px-2 bg-transparent !border-0 !shadow-none text-sm font-mono text-[var(--ide-text)] focus:outline-none focus:ring-0"
           />
+          <button type="submit" className="terminal-submit-button shrink-0 min-h-[36px] px-2.5 rounded-lg inline-flex items-center justify-center gap-1 text-xs font-semibold text-white bg-[var(--ide-accent)]">
+            <Send className="w-3.5 h-3.5" />
+            <span>送出</span>
+          </button>
         </form>
       ) : engine === 'termux' && status === 'running' ? (
         <form
@@ -528,6 +532,10 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             placeholder={t('term_stdin_placeholder')}
             className="flex-1 min-w-0 min-h-[40px] px-2 bg-transparent !border-0 !shadow-none text-sm font-mono text-[var(--ide-text)] focus:outline-none focus:ring-0"
           />
+          <button type="submit" disabled={!onSendTermuxStdin} className="terminal-submit-button shrink-0 min-h-[36px] px-2.5 rounded-lg inline-flex items-center justify-center gap-1 text-xs font-semibold text-white bg-[var(--ide-accent)] disabled:opacity-40">
+            <Send className="w-3.5 h-3.5" />
+            <span>送出</span>
+          </button>
         </form>
       ) : (
         /* Persistent Interactive Python REPL Input */
@@ -554,6 +562,10 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             aria-label="REPL"
             className="flex-1 min-w-0 min-h-[44px] px-2 bg-transparent font-mono text-sm text-[var(--ide-text)] placeholder:text-[var(--ide-text-muted)] focus:outline-none"
           />
+          <button type="submit" disabled={!replValue.trim() || status === 'running' || (engine === 'pyodide' && status === 'loading')} className="terminal-submit-button shrink-0 min-h-[36px] px-2.5 rounded-lg inline-flex items-center justify-center gap-1 text-xs font-semibold text-white bg-[var(--ide-accent)] disabled:opacity-40">
+            <Send className="w-3.5 h-3.5" />
+            <span>執行</span>
+          </button>
         </form>
       )}
 
