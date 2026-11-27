@@ -27,21 +27,6 @@ type LogListener = (logs: AppExecutionLogEntry[]) => void;
 
 const listeners = new Set<LogListener>();
 let memoryLogs: AppExecutionLogEntry[] | null = null;
-
-// Each WebView boot is a new diagnostic session. Never restore a previous
-// session's application logs after close, force-stop, upgrade, or reinstall.
-function resetStoredLogsForNewSession(): void {
-  memoryLogs = [];
-  try {
-    localStorage.removeItem(STORAGE_APP_LOGS_KEY);
-  } catch {
-    // Ignore unavailable storage; the in-memory session still starts clean.
-  }
-}
-
-if (typeof window !== 'undefined') {
-  resetStoredLogsForNewSession();
-}
 let persistTimer: number | null = null;
 let lifecycleHooked = false;
 
