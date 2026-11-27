@@ -4413,7 +4413,7 @@ def clipboard_set(text):
                                 } else {
                                     val bytes = bodyJson.optString("content", "").toByteArray(Charsets.UTF_8)
                                     val committed = writeFileAtomically(target, bytes)
-                                    appendNativeLog("Storage", "SD-card file committed name=\${target.name} ${fileWriteDiagnostic(committed)}")
+                                    appendNativeLog("Storage", "SD-card file committed name=\${target.name} \${fileWriteDiagnostic(committed)}")
                                     writeJson(out, 200, JSONObject().put("ok", true).put("path", target.absolutePath))
                                 }
                             }
