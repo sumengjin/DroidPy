@@ -39,11 +39,11 @@ export function WorkspaceNavigation({
     <nav
       aria-label={ariaLabel}
       className={isPhone
-        ? 'relative z-[60] grid grid-cols-4 shrink-0 min-h-[64px] pb-safe px-2'
+        ? 'relative z-[60] flex w-full shrink-0 min-h-[68px] pb-safe px-1'
         : 'w-full h-11 shrink-0 flex items-center justify-between gap-3 px-3'}
     >
       <div className={isPhone
-        ? 'grid grid-cols-4 items-center gap-1 w-full'
+        ? 'grid grid-cols-4 items-stretch gap-1 w-full min-w-0'
         : 'flex items-center gap-3 min-w-0'}
       >
         {DESTINATIONS.map(({ id, Icon }) => {
@@ -57,11 +57,11 @@ export function WorkspaceNavigation({
               aria-current={active ? 'page' : undefined}
               title={labels[id]}
               className={`dp-nav-item min-w-0 flex items-center justify-center gap-1.5 ${
-                isPhone ? 'flex-col min-h-[48px] px-1' : 'flex-row min-h-[36px] px-2'
+                isPhone ? 'w-full flex-col min-h-[56px] px-1' : 'flex-row min-h-[36px] px-2'
               }`}
             >
-              <Icon className={isPhone ? 'w-[19px] h-[19px]' : 'w-4 h-4'} strokeWidth={active ? 2.3 : 1.8} />
-              <span className={isPhone ? 'text-[10px] font-semibold leading-tight truncate max-w-full' : 'text-xs font-medium whitespace-nowrap'}>{labels[id]}</span>
+              <Icon className={isPhone ? 'w-5 h-5' : 'w-4 h-4'} strokeWidth={active ? 2.3 : 1.8} />
+              <span className={isPhone ? 'text-[11px] font-semibold leading-tight whitespace-nowrap' : 'text-xs font-medium whitespace-nowrap'}>{labels[id]}</span>
             </button>
           );
         })}
