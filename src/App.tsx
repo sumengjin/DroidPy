@@ -3235,7 +3235,7 @@ export default function App() {
         )}
 
       {/* Main Content Area (Mobile & Tablet Only) */}
-      <main className="relative z-10 flex-1 min-h-0 flex overflow-hidden">
+      <main className={`relative z-10 flex-1 min-h-0 flex overflow-hidden ${deviceClass === 'tablet' ? 'flex-col' : 'flex-row'}`}>
         {deviceClass === 'tablet' && (
           <WorkspaceNavigation
             variant="tablet"
@@ -3259,15 +3259,13 @@ export default function App() {
               className={`${
                 tabletSplit
                   ? isLandscape
-                    ? 'w-[56%]'
-                    : 'h-[56%] border-b border-[var(--ide-border)]'
+                    ? 'flex-[1.15]'
+                    : 'flex-[1.05]'
                   : 'flex-1'
               } min-w-0 min-h-0 flex flex-col overflow-hidden bg-transparent`}
             >
               <div className="flex items-center justify-between gap-2 px-2 h-8 bg-transparent shrink-0">
                 <div className="flex items-center gap-2 text-xs text-[var(--ide-text-muted)] font-mono truncate">
-                  <span className="font-semibold text-[var(--ide-text)]">{activeFile.name}</span>
-                  <span aria-hidden="true">·</span>
                   <span className="tabular-nums">
                     {t('status_cursor', { line: cursorPos.line, col: cursorPos.col })}
                   </span>
@@ -3329,7 +3327,7 @@ export default function App() {
 
             {/* Tablet Secondary Output / Files / Browser Workspace */}
             {(tabletSplit || tabletPaneTab !== 'editor') && (
-              <aside className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-transparent">
+              <aside className={`${tabletSplit ? (isLandscape ? 'flex-[0.85]' : 'flex-[0.95]') : 'flex-1'} min-w-0 min-h-0 flex flex-col overflow-hidden bg-transparent`}>
                 <div className="flex items-center justify-between gap-2 px-2 h-8 bg-transparent shrink-0">
                   <div className="flex items-center gap-1">
                     {(
