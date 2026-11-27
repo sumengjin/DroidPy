@@ -18,12 +18,31 @@ const bundle = await build({
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`;
 const {
   buildTermuxBridgeScript,
+  buildTermuxRunFiles,
   resolveTermuxInstallTarget,
   buildTermuxUninstallCommand,
   buildTermuxPipUpgradeCommand,
   parseOutdatedPipJson,
   filterTermuxPipPackages,
 } = await import(moduleUrl);
+
+const activeRunFile = { name: 'same.py', content: 'print("active editor buffer")' };
+assert.deepEqual(
+  buildTermuxRunFiles(activeRunFile, [
+    { name: 'same.py', content: 'print("stale workspace copy")' },
+    { name: 'helper.py', content: 'VALUE = 1' },
+    { name: 'same.py', content: 'print("later stale duplicate")' },
+  ]),
+  [
+    { name: 'helper.py', content: 'VALUE = 1' },
+    activeRunFile,
+  ],
+  'the active editor buffer must be staged last and duplicate basenames must not overwrite it'
+);
+assert.throws(
+  () => buildTermuxRunFiles({ name: '..', content: '' }, []),
+  /檔案名稱無效/
+);
 
 const token = 'a'.repeat(64);
 const origin = 'https://droidpy-ci.example';
