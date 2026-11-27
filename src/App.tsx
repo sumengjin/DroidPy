@@ -45,6 +45,7 @@ import { WorkspaceFileTabs } from './components/WorkspaceFileTabs';
 import { TerminalPanel } from './components/TerminalPanel';
 import { FileExplorer } from './components/FileExplorer';
 import { WorkspaceNavigation } from './components/WorkspaceNavigation';
+import { TabletSplitLayout } from './components/TabletSplitLayout';
 import { WorkspaceHeader } from './components/WorkspaceHeader';
 import { SettingsWorkspace } from './components/SettingsWorkspace';
 import { CrawlerBrowserPanel } from './components/CrawlerBrowserPanel';
@@ -3252,17 +3253,11 @@ export default function App() {
           />
         )}
         {deviceClass === 'tablet' ? (
-          <div className={`flex-1 min-h-0 flex ${isLandscape ? 'flex-row' : 'flex-col'} overflow-hidden`}>
+          <TabletSplitLayout split={tabletSplit} orientation={isLandscape ? 'horizontal' : 'vertical'}>
             {/* Tablet Primary Editor Pane */}
             {(tabletSplit || tabletPaneTab === 'editor') && (
             <section
-              className={`${
-                tabletSplit
-                  ? isLandscape
-                    ? 'flex-[1.15]'
-                    : 'flex-[1.05]'
-                  : 'flex-1'
-              } min-w-0 min-h-0 flex flex-col overflow-hidden bg-transparent`}
+              className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-transparent"
             >
               <div className="flex items-center justify-between gap-2 px-2 h-8 bg-transparent shrink-0">
                 <div className="flex items-center gap-2 text-xs text-[var(--ide-text-muted)] font-mono truncate">
@@ -3334,7 +3329,7 @@ export default function App() {
 
             {/* Tablet Secondary Output / Files / Browser Workspace */}
             {(tabletSplit || tabletPaneTab !== 'editor') && (
-              <aside className={`${tabletSplit ? (isLandscape ? 'flex-[0.85]' : 'flex-[0.95]') : 'flex-1'} min-w-0 min-h-0 flex flex-col overflow-hidden bg-transparent`}>
+              <aside className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-transparent">
                 <div className="flex-1 min-h-0 overflow-hidden">
                   <div className={tabletPaneTab === 'terminal' ? 'h-full' : 'hidden'}>
                     <TerminalPanel
@@ -3393,7 +3388,7 @@ export default function App() {
                 </div>
               </aside>
             )}
-          </div>
+          </TabletSplitLayout>
         ) : (
           <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
             <div
