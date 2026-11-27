@@ -217,6 +217,12 @@
     --ide-bg: rgba(16, 12, 22, 0.64);
   }
 
+  /* With the 3D scene enabled, the single adjustable paper layer controls
+     workspace translucency; nested canvas surfaces must not add a second fog layer. */
+  html.has-3d-bg[data-theme] {
+    --ide-bg: transparent;
+  }
+
   html,
   body,
   #root {
