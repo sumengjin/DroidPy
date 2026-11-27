@@ -4435,9 +4435,11 @@ def clipboard_set(text):
                 }
 
                 method == "POST" && (path == "/run-stream" || path == "/install-stream" || path == "/shell-stream") -> {
+                    var runFiles: JSONArray? = null
                     val shellCmd = when (path) {
                         "/run-stream" -> {
                             val arr = bodyJson.optJSONArray("files") ?: JSONArray()
+                            runFiles = arr
                             val entry = File(bodyJson.optString("entry", "main.py")).name.ifBlank { "main.py" }
                             appendNativeLog("Exec", "Run script requested: $entry")
                             val safeEntrySh = entry.replace("'", "'\\\\''")
@@ -4468,8 +4470,9 @@ def clipboard_set(text):
                     }
                     val stageWorkspaceFiles: (() -> Unit)? = if (path == "/run-stream") {
                         {
-                            for (i in 0 until arr.length()) {
-                                val f = arr.getJSONObject(i)
+                            val filesToStage = runFiles ?: JSONArray()
+                            for (i in 0 until filesToStage.length()) {
+                                val f = filesToStage.getJSONObject(i)
                                 val name = File(f.optString("name", "")).name
                                 if (name.isBlank()) continue
                                 val target = File(workspaceDir, name)
