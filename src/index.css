@@ -464,3 +464,32 @@
   outline: 2px solid var(--ide-accent);
   outline-offset: 2px;
 }
+
+
+/* Native Android WebView buttons can retain platform chrome despite utility classes.
+   Force the workspace execution controls to render without any browser/theme border. */
+button.dp-execution-control,
+button.dp-execution-control:hover,
+button.dp-execution-control:active,
+button.dp-execution-control:focus,
+button.dp-execution-control:focus-visible,
+button.dp-execution-control:disabled {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  border: 0 !important;
+  border-width: 0 !important;
+  border-style: none !important;
+  border-color: transparent !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  background-image: none !important;
+}
+
+.terminal-input-row {
+  width: 66.6667% !important;
+  max-width: 66.6667%;
+  flex: 0 0 66.6667%;
+  min-width: 0;
+  box-sizing: border-box;
+  margin-inline: auto;
+}
