@@ -4476,7 +4476,7 @@ def clipboard_set(text):
                                 val name = File(f.optString("name", "")).name
                                 if (name.isBlank()) continue
                                 val target = File(workspaceDir, name)
-                                val temp = File(workspaceDir, ".${name}.${System.nanoTime()}.tmp")
+                                val temp = File(workspaceDir, ".\${name}.\${System.nanoTime()}.tmp")
                                 val bytes = f.optString("content", "").toByteArray(Charsets.UTF_8)
                                 try {
                                     java.io.FileOutputStream(temp).use { stream ->
@@ -4490,7 +4490,7 @@ def clipboard_set(text):
                                         .digest(bytes).joinToString("") { "%02x".format(it) }
                                     val firstLineHex = bytes.takeWhile { it != 10.toByte() }.take(12)
                                         .joinToString("") { "%02x".format(it) }
-                                    appendNativeLog("Exec", "Workspace file committed name=$name bytes=${bytes.size} sha256=$digest firstLineHex=$firstLineHex")
+                                    appendNativeLog("Exec", "Workspace file committed name=$name bytes=\${bytes.size} sha256=$digest firstLineHex=$firstLineHex")
                                 } finally {
                                     if (temp.exists()) temp.delete()
                                 }
@@ -5090,7 +5090,7 @@ def clipboard_set(text):
                 activeProcessStarting = false
                 activeProcessStopRequested = false
             }
-            appendNativeLog("Exec", "Workspace staging failed: ${error.javaClass.simpleName}: ${error.message}")
+            appendNativeLog("Exec", "Workspace staging failed: \${error.javaClass.simpleName}: \${error.message}")
             writeJson(out, 500, JSONObject().put("error", "Unable to safely stage workspace files"))
             return
         }
