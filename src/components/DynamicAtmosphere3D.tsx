@@ -379,7 +379,8 @@ const SKY_FRAGMENT_SHADER = `
     float sunDist = length(aspectDelta);
     float mieGlow = exp(-sunDist * sunDist * 6.5) * (0.45 + 0.55 * uTwilightFactor);
     float bodyDisc = smoothstep(0.068, 0.022, sunDist);
-    atmo += uSunColor * (mieGlow * 0.52 + bodyDisc * 0.42);
+    float sunCore = 1.0 - smoothstep(0.032, 0.044, sunDist);
+    atmo += uSunColor * (mieGlow * 0.52 + bodyDisc * 0.50 + sunCore * 0.34);
 
     // 3. Soft realistic FBM cloud deck moving in atmospheric perspective
     vec2 cloudUv = vec2(uv.x * 2.6 + uTime * 0.012, uv.y * 4.2 + 0.15);
