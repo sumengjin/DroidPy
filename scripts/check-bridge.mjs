@@ -376,7 +376,10 @@ assert.ok(terminalUi.includes('disabled={executionBusy}'), 'engine switching mus
 const appSource = await readFile('src/App.tsx', 'utf8');
 assert.ok(appSource.includes('pauseTermuxProcess(termuxConfig)'));
 assert.ok(appSource.includes('resumeTermuxProcess(termuxConfig)'));
-assert.ok(appSource.split('onClick={() => void handleToggleTermuxPause()}').length - 1 >= 2, 'phone and tablet headers must both expose pause/resume');
+assert.ok(appSource.split('onTogglePause={() => void handleToggleTermuxPause()}').length - 1 >= 2, 'phone and tablet headers must both connect to the shared pause/resume controller');
+const executionControls = await readFile('src/components/WorkspaceExecutionControls.tsx', 'utf8');
+assert.ok(executionControls.includes('termuxPaused ? labels.resume : labels.pause'), 'the shared execution controls must expose the correct pause/resume state');
+assert.ok(executionControls.includes('onStop') && executionControls.includes('onRun'), 'the shared execution controls must own Run and Stop presentation');
 assert.ok(appSource.includes('termuxStopping'), 'Run must remain locked until Stop cleanup completes');
 assert.ok(appSource.includes('termuxPauseBusy'), 'pause/resume requests must be serialized');
 assert.ok(appSource.includes('termuxStopRequestedRef.current = true'), 'Stop intent must be latched before a pending script can launch');
