@@ -26,7 +26,7 @@ export function TabletSplitLayout({ split, orientation, children }: TabletSplitL
   const [isDragging, setIsDragging] = useState(false);
   const [bounds, setBounds] = useState<ContainerBounds>({ left: 0, top: 0, width: 0, height: 0 });
   const horizontal = orientation === 'horizontal';
-  const dividerThicknessPx = 96 / 25.4;
+  const dividerThicknessPx = (96 * 1.5) / 25.4;
 
   useLayoutEffect(() => {
     if (!split) return;
@@ -91,8 +91,8 @@ export function TabletSplitLayout({ split, orientation, children }: TabletSplitL
   }
 
   const gridStyle = horizontal
-    ? { gridTemplateColumns: `minmax(0, ${primaryPercent}fr) 1mm minmax(0, ${100 - primaryPercent}fr)` }
-    : { gridTemplateRows: `minmax(0, ${primaryPercent}fr) 1mm minmax(0, ${100 - primaryPercent}fr)` };
+    ? { gridTemplateColumns: `minmax(0, ${primaryPercent}fr) 1.5mm minmax(0, ${100 - primaryPercent}fr)` }
+    : { gridTemplateRows: `minmax(0, ${primaryPercent}fr) 1.5mm minmax(0, ${100 - primaryPercent}fr)` };
 
   const fullViewportDivider = createPortal(
     <div
@@ -130,8 +130,8 @@ export function TabletSplitLayout({ split, orientation, children }: TabletSplitL
         aria-hidden="true"
         className="pointer-events-none absolute block shrink-0 tablet-divider-clear-core"
         style={horizontal
-          ? { width: '1mm', height: '100%' }
-          : { width: '100%', height: '1mm' }}
+          ? { width: '1.5mm', height: '100%' }
+          : { width: '100%', height: '1.5mm' }}
       />
       <span
         aria-hidden="true"
