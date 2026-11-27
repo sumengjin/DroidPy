@@ -187,7 +187,9 @@ assert.match(themeCssSource, /--ide-sheet-bg: color-mix\(in srgb, var\(--ide-sur
 assert.doesNotMatch(themeCssSource, /--ide-surface:\s*rgba\(|--ide-surface-alt:\s*rgba\(/, '3D atmosphere must not make nested workspace surfaces translucent');
 assert.match(terminalSource, /<div className="flex flex-col h-full bg-transparent text-\[var\(--ide-text\)\] overflow-hidden">/, 'terminal output must not create a second opaque sheet');
 assert.match(terminalSource, /className="terminal-console-surface flex-1 min-h-0 flex flex-col overflow-hidden"[\s\S]*?onClick=\{\(event\) => \{[\s\S]*?inputRef\.current\?\.focus\([\s\S]*?ref=\{scrollRef\}[\s\S]*?className="terminal-input-row/, 'the whole terminal surface must focus its shared input when tapped');
-assert.match(themeCssSource, /\.terminal-console-surface[\s\S]*?border: 1px solid[\s\S]*?border-radius: 10px/, 'the terminal output and input must share one visible outer frame');
+assert.match(themeCssSource, /\.terminal-console-surface[\s\S]*?border: 1px solid[\s\S]*?border-radius: 10px/, 'the phone and non-split terminal must retain their shared outer frame');
+assert.match(themeCssSource, /\.tablet-split-layout \.terminal-console-surface[\s\S]*?border: 0 !important[\s\S]*?border-radius: 0 !important/, 'only the tablet split terminal must lose its outer frame');
+assert.match(appSource, /<TabletSplitLayout split=\{tabletSplit\}/, 'the tablet split layout must remain isolated from phone layout');
 assert.match(themeCssSource, /\.terminal-console-surface \.terminal-input-row[\s\S]*?width: 100% !important[\s\S]*?border: 0 !important/, 'the terminal command row must fill the shared terminal surface without its own frame');
 assert.match(themeCssSource, /\.android-symbol-bar[\s\S]*?width: 100%[\s\S]*?border: 0 !important/, 'the editor symbol bar must follow the full editor width and remain borderless');
 assert.match(symbolBarSource, /android-symbol-bar/, 'the Android symbol bar must use the dedicated compact style');
