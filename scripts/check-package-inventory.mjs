@@ -194,7 +194,7 @@ assert.match(appSource, /<TabletSplitLayout split=\{tabletSplit\}/, 'the tablet 
 assert.match(tabletSplitSource, /className=\{\x60tablet-split-layout/, 'the split-only terminal style scope must wrap tablet panes');
 assert.match(tabletSplitSource, /createPortal\([\s\S]*?document\.body/, 'the tablet divider must be positioned across the viewport rather than only inside the content grid');
 assert.match(tabletSplitSource, /top: 0, bottom: 0, left: dividerCenter - 14, width: 28/, 'the landscape tablet divider hit area must span the full screen height');
-assert.match(tabletSplitSource, /width: '1.5mm', height: '84%', top: '8%', borderRadius: '9999px'/, 'the visible landscape divider must be a centered 84% rounded 1.5 mm capsule');
+assert.match(tabletSplitSource, /width: '1\.5mm'[\s\S]*?height: '84%'[\s\S]*?top: '8%'[\s\S]*?borderRadius: '9999px'/, 'the visible landscape divider must be a centered 84% rounded 1.5 mm capsule');
 assert.match(tabletSplitSource, /setPointerCapture\(event\.pointerId\)[\s\S]*updateFromPointer\(event\)/, 'the full-height transparent tablet divider must retain pointer dragging');
 assert.match(themeCssSource, /\.terminal-console-surface \.terminal-input-row[\s\S]*?width: 100% !important[\s\S]*?border: 0 !important/, 'the terminal command row must fill the shared terminal surface without its own frame');
 assert.match(themeCssSource, /\.android-symbol-bar[\s\S]*?width: 100%[\s\S]*?border: 0 !important/, 'the editor symbol bar must follow the full editor width and remain borderless');
