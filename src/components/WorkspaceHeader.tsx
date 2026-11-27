@@ -81,7 +81,7 @@ export function WorkspaceHeader({
           : labels.browser;
 
   return (
-    <header className={`relative z-10 flex items-center justify-between gap-2 pt-safe border-b border-[var(--ide-border)]/50 bg-transparent shrink-0 ${
+    <header className={`relative z-10 flex items-center justify-between gap-2 pt-safe bg-transparent shrink-0 ${
       isPhone ? 'h-13 px-2.5' : 'h-13 px-3 gap-3'
     }`}>
       {isPhone ? (
@@ -95,7 +95,6 @@ export function WorkspaceHeader({
           >
             <Settings className="w-5 h-5" />
           </button>
-          <img src="/icon.svg" alt="DroidPy" className="w-6 h-6 shrink-0" referrerPolicy="no-referrer" />
           <div className="flex flex-col min-w-0">
             <span className="text-sm font-semibold leading-tight truncate">{title}</span>
             {activeTab === 'editor' && (
