@@ -342,6 +342,23 @@ export default function App() {
   const [mobileTab, setMobileTab] = useState<MobileTab>('editor');
   const mobileTabRef = useRef<MobileTab>(mobileTab);
   mobileTabRef.current = mobileTab;
+  // Preserve the user's workspace navigation path so Android Back returns through
+  // the visited bottom destinations before it can offer to exit the app.
+  const mobileTabHistoryRef = useRef<MobileTab[]>([]);
+  const lastTrackedMobileTabRef = useRef<MobileTab>(mobileTab);
+  const suppressMobileTabHistoryRef = useRef(false);
+  useEffect(() => {
+    const previous = lastTrackedMobileTabRef.current;
+    if (previous !== mobileTab) {
+      if (suppressMobileTabHistoryRef.current) {
+        suppressMobileTabHistoryRef.current = false;
+      } else {
+        mobileTabHistoryRef.current.push(previous);
+        if (mobileTabHistoryRef.current.length > 12) mobileTabHistoryRef.current.shift();
+      }
+      lastTrackedMobileTabRef.current = mobileTab;
+    }
+  }, [mobileTab]);
   const packageReturnTabRef = useRef<MobileTab>('editor');
   const [negativeOpen, setNegativeOpen] = useState(false);
   const [negativeSection, setNegativeSection] = useState<NegativeScreenSection>('termux');
@@ -719,6 +736,20 @@ export default function App() {
       if (ov.mobileNewFileOpen) {
         setMobileNewFileOpen(false);
         return true;
+      }
+      if (deviceClass === 'phone') {
+        const previousTab = mobileTabHistoryRef.current.pop();
+        if (previousTab && previousTab !== mobileTabRef.current) {
+          suppressMobileTabHistoryRef.current = true;
+          setMobileTab(previousTab);
+          return true;
+        }
+        if (mobileTabRef.current !== 'editor') {
+          mobileTabHistoryRef.current = [];
+          suppressMobileTabHistoryRef.current = true;
+          setMobileTab('editor');
+          return true;
+        }
       }
       return false;
     };
