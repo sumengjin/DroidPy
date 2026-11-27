@@ -16,6 +16,8 @@ const [source, bridgeSource, catalogSource, exportSource, panelSource, terminalS
   readFile(new URL('../android/app/src/main/assets/python/frostwork-0.2.2.dist-info/METADATA', import.meta.url), 'utf8'),
  ]);
 const themeCssSource = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
+const workspaceHeaderSource = await readFile(new URL('../src/components/WorkspaceHeader.tsx', import.meta.url), 'utf8');
+const executionControlsSource = await readFile(new URL('../src/components/WorkspaceExecutionControls.tsx', import.meta.url), 'utf8');
 const codeEditorSource = await readFile(new URL('../src/components/CodeEditor.tsx', import.meta.url), 'utf8');
 const pyodidePackagesSource = await readFile(new URL('../src/components/PyodidePackageWorkspace.tsx', import.meta.url), 'utf8');
 const termuxPackagesSource = await readFile(new URL('../src/components/TermuxPackageWorkspace.tsx', import.meta.url), 'utf8');
@@ -150,7 +152,6 @@ assert.match(pyBulkUpgradeHandler, /pyodidePackageOperationLockRef\.current = tr
 assert.match(appSource, /if \(pyodideStatus === 'ready'\) \{\s*pyodidePackageOperationLockRef\.current = true/,'combined package upgrades must lock the Pyodide phase');
 const pyCombinedUpgrade = appSource.slice(appSource.indexOf('const handleUpgradeAllPackages'), appSource.indexOf('const handleCheckAppUpdates'));
 assert.match(pyCombinedUpgrade, /pyodidePackageOperationLockRef\.current = true[\s\S]*?pyodidePackageOperationLockRef\.current = false/, 'combined package upgrades must release the Pyodide lock before continuing');
-const workspaceHeaderSource = await readFile(new URL('../src/components/WorkspaceHeader.tsx', import.meta.url), 'utf8');
 const mobileNavStart = appSource.indexOf('<WorkspaceNavigation');
 const mobileNavEnd = appSource.indexOf('/>', mobileNavStart);
 assert.ok(mobileNavStart >= 0 && mobileNavEnd > mobileNavStart, 'phone workspace navigation must exist');
@@ -232,7 +233,6 @@ assert.match(appSource, /const packageReturnTabRef = useRef<MobileTab>\('editor'
 assert.match(backHandlerSource, /if \(ov\.settingsWorkspaceOpen\) \{[\s\S]*?if \(window\.__droidpySettingsBack\?\.\(\)\) return true;[\s\S]*?setSettingsWorkspaceOpen\(false\);\s*if \(mobileTabRef\.current === 'packages'\) setMobileTab\(packageReturnTabRef\.current\);\s*return true;/, 'Android back must first respect nested Settings navigation, then restore the originating workspace tab when closing the Settings workspace');
 assert.match(appSource, /if \(mobileTabRef\.current === 'packages'\) setMobileTab\(packageReturnTabRef\.current\);/, 'closing the package drawer must restore its originating workspace tab');
 
-const executionControlsSource = await readFile(new URL('../src/components/WorkspaceExecutionControls.tsx', import.meta.url), 'utf8');
 const tabletHeaderStart = appSource.indexOf('<WorkspaceHeader');
 const tabletHeaderEnd = appSource.indexOf('/>', tabletHeaderStart);
 assert.ok(tabletHeaderStart >= 0 && tabletHeaderEnd > tabletHeaderStart);
