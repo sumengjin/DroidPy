@@ -23,6 +23,7 @@ export function TabletSplitLayout({ split, orientation, children }: TabletSplitL
   const panes = Children.toArray(children).filter(Boolean);
   const containerRef = useRef<HTMLDivElement>(null);
   const [primaryPercent, setPrimaryPercent] = useState(58);
+  const [isDragging, setIsDragging] = useState(false);
   const [bounds, setBounds] = useState<ContainerBounds>({ left: 0, top: 0, width: 0, height: 0 });
   const horizontal = orientation === 'horizontal';
   const dividerThicknessPx = 96 / 25.4;
@@ -91,6 +92,7 @@ export function TabletSplitLayout({ split, orientation, children }: TabletSplitL
       onPointerDown={(event) => {
         event.preventDefault();
         event.currentTarget.setPointerCapture(event.pointerId);
+        setIsDragging(true);
         updateFromPointer(event);
       }}
       onPointerMove={(event) => {
@@ -98,12 +100,14 @@ export function TabletSplitLayout({ split, orientation, children }: TabletSplitL
       }}
       onPointerUp={(event) => {
         if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+        setIsDragging(false);
       }}
       onPointerCancel={(event) => {
         if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+        setIsDragging(false);
       }}
       onKeyDown={handleKeyDown}
-      className={`fixed z-[80] flex items-center justify-center touch-none outline-none select-none ${horizontal ? 'cursor-col-resize' : 'cursor-row-resize'}`}
+      className={`fixed z-[80] flex items-center justify-center touch-none outline-none select-none transition-[background,backdrop-filter,box-shadow] duration-150 ${isDragging ? 'tablet-gel-divider-active' : 'tablet-gel-divider'} ${horizontal ? 'cursor-col-resize' : 'cursor-row-resize'}`}
       style={horizontal
         ? { top: 0, bottom: 0, left: dividerCenter - 14, width: 28, touchAction: 'none' }
         : { left: 0, right: 0, top: dividerCenter - 14, height: 28, touchAction: 'none' }}
@@ -111,9 +115,10 @@ export function TabletSplitLayout({ split, orientation, children }: TabletSplitL
       <span
         aria-hidden="true"
         className="pointer-events-none block shrink-0"
+        className={`tablet-gel-divider-core ${isDragging ? 'tablet-gel-divider-core-active' : ''}`}
         style={horizontal
-          ? { width: '1mm', height: '100%', backgroundColor: 'color-mix(in srgb, var(--ide-border) 52%, transparent)', opacity: 0.9 }
-          : { width: '100%', height: '1mm', backgroundColor: 'color-mix(in srgb, var(--ide-border) 52%, transparent)', opacity: 0.9 }}
+          ? { width: '1mm', height: '100%' }
+          : { width: '100%', height: '1mm' }}
       />
     </div>,
     document.body
