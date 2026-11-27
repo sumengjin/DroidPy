@@ -765,13 +765,22 @@ python ${entryFile}
     folders: Array<{ id: T; title: string; desc: string }>,
     onSelect: (id: T) => void
   ) => (
-    <div className="divide-y divide-[var(--ide-border)]">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
       {folders.map((folder) => (
-        <button key={folder.id} type="button" onClick={() => onSelect(folder.id)}
-          className="w-full min-h-[76px] px-2.5 py-3 flex items-center gap-3 text-left hover:bg-[var(--ide-surface)] active:bg-[var(--ide-surface-alt)]">
-          <span className="w-10 h-10 rounded-xl bg-[var(--ide-accent-soft)] text-[var(--ide-accent)] flex items-center justify-center shrink-0"><Folder className="w-5 h-5" /></span>
-          <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-[var(--ide-text)]">{folder.title}</span><span className="block text-xs text-[var(--ide-text-muted)] mt-1">{folder.desc}</span></span>
-          <ChevronRight className="w-4 h-4 text-[var(--ide-text-muted)] shrink-0" />
+        <button
+          key={folder.id}
+          type="button"
+          onClick={() => onSelect(folder.id)}
+          className="group w-full min-h-[112px] p-4 rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] flex items-center gap-3 text-left transition-colors hover:border-[var(--ide-accent)] hover:bg-[var(--ide-surface-alt)] active:scale-[0.99]"
+        >
+          <span className="w-11 h-11 rounded-xl bg-[var(--ide-accent-soft)] text-[var(--ide-accent)] flex items-center justify-center shrink-0">
+            <Folder className="w-5 h-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold text-[var(--ide-text)]">{folder.title}</span>
+            <span className="block text-xs text-[var(--ide-text-muted)] mt-1 leading-relaxed">{folder.desc}</span>
+          </span>
+          <ChevronRight className="w-4 h-4 text-[var(--ide-text-muted)] shrink-0 transition-transform group-hover:translate-x-0.5" />
         </button>
       ))}
     </div>
