@@ -1502,6 +1502,8 @@ class MainActivity : AppCompatActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (crawlerOverlay.visibility == View.VISIBLE) {
+                    // A Back press consumed inside the browser must never count toward app exit.
+                    lastBackPressedAt = 0L
                     if (crawlerWebView.canGoBack()) {
                         crawlerWebView.goBack()
                     } else {
@@ -1512,8 +1514,13 @@ class MainActivity : AppCompatActivity() {
                 webView.evaluateJavascript(
                     "(function(){ return window.__droidpyHandleBack ? Boolean(window.__droidpyHandleBack()) : false; })()"
                 ) { handled ->
-                    if (handled == "true") return@evaluateJavascript
+                    if (handled == "true") {
+                        // Returning within the app resets the double-Back-to-exit timer.
+                        lastBackPressedAt = 0L
+                        return@evaluateJavascript
+                    }
                     if (webView.canGoBack()) {
+                        lastBackPressedAt = 0L
                         webView.goBack()
                         return@evaluateJavascript
                     }
