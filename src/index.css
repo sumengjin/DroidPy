@@ -520,8 +520,9 @@ button.dp-execution-control::after {
   /* The first mask is the opaque paper. The three lower masks form one
      continuous aperture: a narrow center segment plus its two round ends.
      Standard mask-composite unions those shapes, then subtracts them from paper. */
+  /* Build the rounded aperture first (center strip + two end caps), then
+     subtract that single capsule from the full paper mask. */
   mask-image:
-    linear-gradient(#000, #000),
     linear-gradient(
       to right,
       transparent 0,
@@ -540,11 +541,12 @@ button.dp-execution-control::after {
       ellipse 0.75mm 0.75mm at var(--tablet-divider-center, 50vw) 92%,
       #000 98%,
       transparent 100%
-    );
+    ),
+    linear-gradient(#000, #000);
   mask-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
-  mask-size: 100% 100%, 100% calc(84% - 1.5mm), 100% 100%, 100% 100%;
+  mask-size: 100% calc(84% - 1.5mm), 100% 100%, 100% 100%, 100% 100%;
   mask-position: center, center, center, center;
-  mask-composite: subtract, add, add;
+  mask-composite: add, add, subtract;
 }
 /* The 28 px interaction surface stays invisible and full-height for easy dragging.
    The visible 1.5 mm clear-glass guide stays centered at 84% length. */
