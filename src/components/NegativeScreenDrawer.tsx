@@ -220,7 +220,7 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
           </button>
         </div>
 
-        {showCategories ? (
+        <div className={`${showCategories ? 'flex' : 'hidden'} md:flex flex-1 min-h-0 overflow-y-auto ide-scroll px-3 py-3 pb-safe md:flex-none md:w-72 md:border-r md:border-[var(--ide-border)] md:bg-[var(--ide-surface)]`}>
           <div className="flex-1 min-h-0 overflow-y-auto ide-scroll px-3 py-3 pb-safe">
             <div className="mb-3 px-1">
               <h3 className="text-base font-semibold text-[var(--ide-text)]">{t('neg_category_heading')}</h3>
@@ -254,9 +254,9 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
               ))}
             </div>
           </div>
-        ) : (
-          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-            <div className="px-3 py-2 border-b border-[var(--ide-border)] shrink-0">
+          </div>
+          <div className={`${showCategories ? 'hidden' : 'flex'} md:flex flex-1 min-w-0 min-h-0 overflow-hidden flex-col`}>
+            <div className="px-3 py-2 border-b border-[var(--ide-border)] shrink-0 md:hidden">
               <button
                 type="button"
                 onClick={() => setShowCategories(true)}
@@ -360,7 +360,6 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
           />
             </div>
           </div>
-        )}
       </aside>
     </div>
   );
