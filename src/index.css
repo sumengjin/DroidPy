@@ -202,10 +202,7 @@
   html.has-3d-bg[data-theme="milktea"],
   html.has-3d-bg[data-theme="matcha"],
   html.has-3d-bg[data-theme="sky"] {
-    --ide-sheet-bg: rgba(255, 255, 255, 0.95);
     --ide-bg: rgba(255, 250, 252, 0.66);
-    --ide-surface: rgba(255, 255, 255, 0.76);
-    --ide-surface-alt: rgba(255, 244, 248, 0.74);
   }
 
   html.has-3d-bg[data-theme="dark"],
