@@ -29,6 +29,7 @@ import {
 } from '../types/ide';
 import {
   CORE_TERMUX_PIP_PACKAGES,
+  CORE_TERMUX_PKG_PACKAGES,
   TermuxOutdatedPipItem,
   buildTermuxBridgeScript,
   buildTermuxOneLineCommand,
