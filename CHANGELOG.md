@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+### Fixed — TUR 套件庫初始化順序與備份還原
+- 還原 Polars 前先更新官方 Termux 套件索引，再安裝 tur-repo 並更新索引，修正全新或索引過期環境找不到 tur-repo 的問題。
+- 將 TUR 專屬的 python-polars 與一般 Termux 套件分開安裝；即使 TUR 無法連線或 Polars 安裝失敗，也不會中止其他 106 個套件的還原。
+- 加入回歸檢查，確保 TUR 初始化失敗不會阻斷其他套件還原。
+
 ### Improved — 日誌分類與名稱
 - 將日誌入口明確命名為「日誌中心」，並將三個分類標示為「Python 執行日誌」、「DroidPy App 日誌」及「Android／Termux 日誌」。
 - 依目前選取的分類顯示簡短說明；保留「全部日誌／錯誤日誌」篩選，方便使用者判斷要匯出哪一類紀錄。
