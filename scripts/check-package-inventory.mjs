@@ -155,6 +155,12 @@ assert.match(appSource, /const packageReturnTabRef = useRef<MobileTab>\('editor'
 assert.match(backHandlerSource, /if \(ov\.negativeOpen\) \{[\s\S]*?if \(window\.__droidpySettingsBack\?\.\(\)\) return true;[\s\S]*?setNegativeOpen\(false\);\s*if \(mobileTabRef\.current === 'packages'\) setMobileTab\(packageReturnTabRef\.current\);\s*return true;/, 'Android back must first respect nested Settings navigation, then restore the originating workspace tab when closing the drawer');
 assert.match(appSource, /if \(mobileTabRef\.current === 'packages'\) setMobileTab\(packageReturnTabRef\.current\);/, 'closing the package drawer must restore its originating workspace tab');
 
+const executionControlsSource = await readFile(new URL('../src/components/WorkspaceExecutionControls.tsx', import.meta.url), 'utf8');
+assert.match(appSource, /<WorkspaceExecutionControls[\\s\\S]*variant="tablet"/, 'tablet execution controls must use the shared state component');
+assert.match(appSource, /<WorkspaceExecutionControls[\\s\\S]*variant="phone"/, 'phone execution controls must use the shared state component');
+assert.match(executionControlsSource, /termuxStopping \?[/\s\S]*termuxRunning \?/, 'execution controls must prioritize stopping and active Termux states');
+assert.match(executionControlsSource, /termuxPaused \? labels\.resume : labels\.pause/, 'pause control must expose the current process state');
+assert.match(executionControlsSource, /isRunning \|\| isCoreLoading/, 'Run must remain disabled while Python is busy');
 assert.match(appSource, /const handleToggleTermuxPause = useCallback\(async \(\) => \{\s*if \(!termuxScriptRunning \|\| termuxStopLockRef\.current \|\| termuxPauseToggleLockRef\.current\) return;/, 'pause and resume controls must only affect an active Python script and must serialize with Stop');
 assert.match(appSource, /cleaningProcesses \|\|\s*termuxRunning \|\|\s*termuxOperationLockRef\.current \|\|\s*termuxScriptStartLockRef\.current[\s\S]*?termuxOperationLockRef\.current = true;\s*setCleaningProcesses\(true\)/, 'the process watchdog must not kill an active Termux operation');
 

@@ -48,6 +48,7 @@ import { WorkspaceFileTabs } from './components/WorkspaceFileTabs';
 import { TerminalPanel } from './components/TerminalPanel';
 import { FileExplorer } from './components/FileExplorer';
 import { WorkspaceNavigation } from './components/WorkspaceNavigation';
+import { WorkspaceExecutionControls } from './components/WorkspaceExecutionControls';
 import { SettingsWorkspace } from './components/SettingsWorkspace';
 import { CrawlerBrowserPanel } from './components/CrawlerBrowserPanel';
 import { HelpTutorialModal } from './components/HelpTutorialModal';
@@ -3101,70 +3102,51 @@ export default function App() {
 
       {/* Tablet Top Bar: Negative Screen Trigger + File Tabs + Split Toggle + Primary CTA */}
       {deviceClass === 'tablet' && (
-      <header className="relative z-10 flex items-center justify-between gap-3 h-13 px-3 pt-safe border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] shrink-0">
+      <header className="relative z-10 flex items-center justify-between gap-3 h-13 px-3 pt-safe border-b border-[var(--ide-border)]/50 bg-transparent shrink-0">
         <div className="flex items-center gap-2 min-w-0 flex-1">
 
           <WorkspaceFileTabs files={files} activeFileId={activeFile.id} onSelect={setActiveFileId} onCreate={() => setMobileNewFileOpen((open) => !open)} createLabel={t('files_new_btn')} filesLabel={t('files_title')} variant="tablet" />
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={tabletWorkspace.toggleSplit}
-            className={`min-h-[40px] px-3 rounded-xl border text-xs font-medium inline-flex items-center gap-1.5 whitespace-nowrap transition-colors ${
-              tabletSplit
-                ? 'border-[var(--ide-accent)]/70 text-[var(--ide-accent-text)]'
-                : 'border-transparent bg-transparent text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
-            }`}
-          >
-            {tabletSplit ? <Maximize2 className="w-3.5 h-3.5" /> : <Columns2 className="w-3.5 h-3.5" />}
-            <span>{tabletSplit ? t('tab_focus_editor') : t('tab_split_view')}</span>
-          </button>
-
-          {pendingInputPrompt !== null && (
-            <button type="button" onClick={handleCancelInput} className="min-h-[40px] px-3 rounded-xl bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
-              <Square className="w-3.5 h-3.5 fill-current" />
-              <span>{t('cta_abort_input')}</span>
-            </button>
-          )}
-          {termuxStopping ? (
-            <button type="button" disabled aria-busy="true" className="min-h-[40px] px-3 rounded-xl bg-red-600/80 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              <span>停止中</span>
-            </button>
-          ) : termuxRunning ? (
-            <>
-              {termuxScriptRunning && (
-                <button type="button" onClick={() => void handleToggleTermuxPause()} disabled={termuxPauseBusy} aria-label={termuxPaused ? '繼續腳本' : '暫停腳本'} aria-pressed={termuxPaused} className="min-h-[40px] px-3 rounded-xl bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] disabled:opacity-50 text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
-                  {termuxPauseBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : termuxPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
-                  <span>{termuxPaused ? '繼續' : '暫停'}</span>
-                </button>
-              )}
-              <button type="button" onClick={() => void handleStopTermux('tablet-header')} className="min-h-[40px] px-3 rounded-xl bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
-                <Square className="w-3.5 h-3.5 fill-current" />
-                <span>{t('cta_stop_run')}</span>
-              </button>
-            </>
-          ) : pendingInputPrompt !== null ? null : (
-            <button type="button" onClick={handleRunCode} disabled={isRunning || isCoreLoading} className="min-h-[40px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-colors">
-              {isRunning || isCoreLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5 fill-current" />}
-              <span>{isCoreLoading ? t('cta_loading_core') : isRunning ? t('cta_running') : t('cta_run_program')}</span>
-            </button>
-          )}
-        </div>
+        <WorkspaceExecutionControls
+          variant="tablet"
+          showRun
+          pendingInput={pendingInputPrompt !== null}
+          termuxStopping={termuxStopping}
+          termuxRunning={termuxRunning}
+          termuxScriptRunning={termuxScriptRunning}
+          termuxPauseBusy={termuxPauseBusy}
+          termuxPaused={termuxPaused}
+          isRunning={isRunning}
+          isCoreLoading={isCoreLoading}
+          labels={{
+            cancelInput: t('cta_abort_input'),
+            stopping: '停止中',
+            pause: '暫停',
+            resume: '繼續',
+            stop: t('cta_stop_run'),
+            loading: t('cta_loading_core'),
+            running: t('cta_running'),
+            run: t('cta_run_program'),
+          }}
+          onCancelInput={handleCancelInput}
+          onTogglePause={() => void handleToggleTermuxPause()}
+          onStop={() => void handleStopTermux('tablet-header')}
+          onRun={() => void handleRunCode()}
+        />
       </header>
       )}
 
       {/* Phone workspace header: contextual title and only relevant primary actions */}
       {deviceClass === 'phone' && (
-      <header className="relative z-10 flex items-center justify-between gap-2 h-13 px-2.5 pt-safe border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] shrink-0">
+      <header className="relative z-10 flex items-center justify-between gap-2 h-13 px-2.5 pt-safe border-b border-[var(--ide-border)]/50 bg-transparent shrink-0">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <button
             type="button"
             onClick={() => setNegativeOpen(true)}
             aria-label={t('neg_open_aria')}
             title={t('neg_title')}
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full border border-[var(--ide-border)] bg-[var(--ide-bg)] text-[var(--ide-text)] active:scale-95 transition-transform shrink-0"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl border border-transparent bg-transparent text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] transition-colors shrink-0"
           >
             <Settings className="w-5 h-5" />
           </button>
@@ -3192,38 +3174,32 @@ export default function App() {
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
-          {pendingInputPrompt !== null && (
-            <button type="button" onClick={handleCancelInput} className="min-h-[44px] px-3 rounded-full bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
-              <Square className="w-3.5 h-3.5 fill-current" />
-              <span>{t('cta_abort_short')}</span>
-            </button>
-          )}
-          {termuxStopping ? (
-            <button type="button" disabled aria-busy="true" className="min-h-[44px] px-3 rounded-full bg-red-600/80 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              <span>停止中</span>
-            </button>
-          ) : termuxRunning ? (
-            <>
-              {termuxScriptRunning && (
-                <button type="button" onClick={() => void handleToggleTermuxPause()} disabled={termuxPauseBusy} aria-label={termuxPaused ? '繼續腳本' : '暫停腳本'} aria-pressed={termuxPaused} className="min-h-[44px] px-3 rounded-full bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] disabled:opacity-50 text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
-                  {termuxPauseBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : termuxPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
-                  <span>{termuxPaused ? '繼續' : '暫停'}</span>
-                </button>
-              )}
-              <button type="button" onClick={() => void handleStopTermux('phone-header')} className="min-h-[44px] px-3 rounded-full bg-red-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
-                <Square className="w-3.5 h-3.5 fill-current" />
-                <span>{t('cta_stop_short')}</span>
-              </button>
-            </>
-          ) : pendingInputPrompt !== null ? null : (mobileTab === 'editor' || mobileTab === 'console') ? (
-            <button type="button" onClick={handleRunCode} disabled={isRunning || isCoreLoading} className="min-h-[44px] px-3 rounded-full bg-[var(--ide-accent)] active:scale-[0.98] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-transform">
-              {isRunning || isCoreLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5 fill-current" />}
-              <span>{isCoreLoading ? t('cta_loading_short') : isRunning ? t('cta_running') : t('cta_run_short')}</span>
-            </button>
-          ) : null}
-        </div>
+        <WorkspaceExecutionControls
+          variant="phone"
+          showRun={mobileTab === 'editor' || mobileTab === 'console'}
+          pendingInput={pendingInputPrompt !== null}
+          termuxStopping={termuxStopping}
+          termuxRunning={termuxRunning}
+          termuxScriptRunning={termuxScriptRunning}
+          termuxPauseBusy={termuxPauseBusy}
+          termuxPaused={termuxPaused}
+          isRunning={isRunning}
+          isCoreLoading={isCoreLoading}
+          labels={{
+            cancelInput: t('cta_abort_short'),
+            stopping: '停止中',
+            pause: '暫停',
+            resume: '繼續',
+            stop: t('cta_stop_short'),
+            loading: t('cta_loading_short'),
+            running: t('cta_running'),
+            run: t('cta_run_short'),
+          }}
+          onCancelInput={handleCancelInput}
+          onTogglePause={() => void handleToggleTermuxPause()}
+          onStop={() => void handleStopTermux('phone-header')}
+          onRun={() => void handleRunCode()}
+        />
       </header>
       )}
 
@@ -3293,9 +3269,9 @@ export default function App() {
                     ? 'w-[56%] border-r border-[var(--ide-border)]'
                     : 'h-[56%] border-b border-[var(--ide-border)]'
                   : 'flex-1'
-              } min-w-0 min-h-0 flex flex-col overflow-hidden bg-[var(--ide-surface)]`}
+              } min-w-0 min-h-0 flex flex-col overflow-hidden bg-transparent`}
             >
-              <div className="flex items-center justify-between gap-2 px-3 h-10 border-b border-[var(--ide-border)] bg-[var(--ide-surface-alt)] shrink-0">
+              <div className="flex items-center justify-between gap-2 px-3 h-10 border-b border-[var(--ide-border)]/50 bg-transparent shrink-0">
                 <div className="flex items-center gap-2 text-xs text-[var(--ide-text-muted)] font-mono truncate">
                   <span className="font-semibold text-[var(--ide-text)]">{activeFile.name}</span>
                   <span aria-hidden="true">·</span>
@@ -3360,7 +3336,7 @@ export default function App() {
 
             {/* Tablet Secondary Output / Files / Browser Workspace */}
             {(tabletSplit || tabletPaneTab !== 'editor') && (
-              <aside className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-[var(--ide-bg)]">
+              <aside className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-transparent">
                 <div className="flex items-center justify-between gap-2 px-3 h-10 border-b border-[var(--ide-border)] bg-[var(--ide-surface-alt)] shrink-0">
                   <div className="flex items-center gap-1">
                     {(
@@ -3473,7 +3449,7 @@ export default function App() {
                         onClick={handleFormatActiveFile}
                         aria-label={t('toolbar_format_title')}
                         title={t('toolbar_format_title')}
-                        className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:bg-[var(--ide-surface)]"
+                        className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-accent-text)]"
                       >
                         <AlignLeft className="w-4 h-4" />
                       </button>
