@@ -16,6 +16,7 @@ const [source, bridgeSource, catalogSource, exportSource, panelSource, terminalS
   readFile(new URL('../android/app/src/main/assets/python/frostwork-0.2.2.dist-info/METADATA', import.meta.url), 'utf8'),
  ]);
 const themeCssSource = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
+const tabletSplitSource = await readFile(new URL('../src/components/TabletSplitLayout.tsx', import.meta.url), 'utf8');
 const workspaceHeaderSource = await readFile(new URL('../src/components/WorkspaceHeader.tsx', import.meta.url), 'utf8');
 const executionControlsSource = await readFile(new URL('../src/components/WorkspaceExecutionControls.tsx', import.meta.url), 'utf8');
 const codeEditorSource = await readFile(new URL('../src/components/CodeEditor.tsx', import.meta.url), 'utf8');
@@ -190,6 +191,11 @@ assert.match(terminalSource, /className="terminal-console-surface flex-1 min-h-0
 assert.match(themeCssSource, /\.terminal-console-surface[\s\S]*?border: 1px solid[\s\S]*?border-radius: 10px/, 'the phone and non-split terminal must retain their shared outer frame');
 assert.match(themeCssSource, /\.tablet-split-layout \.terminal-console-surface[\s\S]*?border: 0 !important[\s\S]*?border-radius: 0 !important/, 'only the tablet split terminal must lose its outer frame');
 assert.match(appSource, /<TabletSplitLayout split=\{tabletSplit\}/, 'the tablet split layout must remain isolated from phone layout');
+assert.match(tabletSplitSource, /className=\{\x60tablet-split-layout/, 'the split-only terminal style scope must wrap tablet panes');
+assert.match(tabletSplitSource, /createPortal\([\s\S]*?document\.body/, 'the tablet divider must be positioned across the viewport rather than only inside the content grid');
+assert.match(tabletSplitSource, /top: 0, bottom: 0, left: dividerCenter - 14, width: 28/, 'the landscape tablet divider hit area must span the full screen height');
+assert.match(tabletSplitSource, /width: '1mm', height: '100%'/, 'the visible landscape divider must be exactly 1 mm wide and fully transparent');
+assert.match(tabletSplitSource, /setPointerCapture\(event\.pointerId\)[\s\S]*updateFromPointer\(event\)/, 'the full-height transparent tablet divider must retain pointer dragging');
 assert.match(themeCssSource, /\.terminal-console-surface \.terminal-input-row[\s\S]*?width: 100% !important[\s\S]*?border: 0 !important/, 'the terminal command row must fill the shared terminal surface without its own frame');
 assert.match(themeCssSource, /\.android-symbol-bar[\s\S]*?width: 100%[\s\S]*?border: 0 !important/, 'the editor symbol bar must follow the full editor width and remain borderless');
 assert.match(symbolBarSource, /android-symbol-bar/, 'the Android symbol bar must use the dedicated compact style');
