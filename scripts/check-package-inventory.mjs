@@ -235,10 +235,10 @@ assert.match(themeCssSource, /\.tablet-landscape-split-paper[\s\S]*mask-size: 10
 assert.match(appSource, /is3dBgActive && deviceClass === 'tablet' && isLandscape && tabletSplit \? 'tablet-landscape-split-paper'/, 'only the active landscape tablet split may cut a transparent channel through the paper overlay');
 assert.match(tabletSplitSource, /setProperty\('--tablet-divider-center', `\$\{dividerCenter\}px`\)/, 'the paper channel must track the live divider center while the split is resized');
 assert.match(tabletSplitSource, /removeProperty\('--tablet-divider-center'\)/, 'the live divider position must be cleared when split mode is disabled or unmounted');
-assert.match(themeCssSource, /\.tablet-landscape-split-paper[\s\S]*mask-image: linear-gradient[\s\S]*transparent calc\(var\(--tablet-divider-center[\s\S]*\+ 0\.5mm\)/, 'the paper overlay must have a real 1.5 mm transparent slit aligned to the divider');
+assert.match(themeCssSource, /\.tablet-landscape-split-paper[\s\S]*mask-image:[\s\S]*transparent calc\(var\(--tablet-divider-center[\s\S]*\+ 0\.75mm\)[\s\S]*mask-size: 100% 100%, 100% 84%[\s\S]*mask-composite: subtract/, 'the paper overlay must have a real 1.5 mm transparent slit shortened to 84% and aligned to the divider');
 assert.match(themeCssSource, /\.tablet-gel-handle-vertical[\s\S]*width: 1mm[\s\S]*height: 10mm/, 'the vertical divider gel handle must be 1 mm wide and 1 cm long');
 assert.match(themeCssSource, /\.tablet-gel-handle-horizontal[\s\S]*width: 10mm[\s\S]*height: 1mm/, 'the horizontal divider gel handle must be 1 cm long and 1 mm high');
-assert.match(tabletSplitSource, /top: '66\.6667%'[\s\S]*?transform: 'translate\(-50%, -50%\)'/, 'landscape tablet gel handle must sit two-thirds down the vertical divider');
+assert.match(tabletSplitSource, /top: '64%'[\s\S]*?transform: 'translate\(-50%, -50%\)'/, 'landscape tablet gel handle must sit two-thirds down the shortened vertical divider');
 assert.match(tabletSplitSource, /onPointerDown=[\s\S]*setPointerCapture[\s\S]*updateFromPointer\(event\)[\s\S]*onPointerMove=[\s\S]*updateFromPointer/, 'tablet divider must respond immediately and continuously to touch or mouse dragging');
 assert.match(themeCssSource, /\.tablet-split-layout \.terminal-console-surface[\s\S]*background: transparent !important[\s\S]*border: 0 !important/, 'tablet terminal must share the transparent workspace background and have no frame');
 assert.doesNotMatch(appSource, /w-\[56%\]|h-\[56%\]/, 'tablet split panes must not use the old fixed 56 percent layout');
