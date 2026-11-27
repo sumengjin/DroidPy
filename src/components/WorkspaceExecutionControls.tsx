@@ -96,7 +96,7 @@ export function WorkspaceExecutionControls({
           type="button"
           onClick={onRun}
           disabled={isRunning || isCoreLoading}
-          className={`${buttonSize} border-2 border-[var(--ide-accent)] bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white ${compactText} transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ide-accent)]`}
+          className={`${buttonSize} border-0 bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white ${compactText} transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ide-accent)]`}
         >
           {isRunning || isCoreLoading ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
