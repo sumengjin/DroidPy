@@ -162,6 +162,7 @@ const DEFAULT_SETTINGS: EditorSettings = {
   pipTrustedHostEmergency: false,
   enable3dBg: true,
   atmosphere3dMode: 'auto',
+  workspaceTransparency: 18,
 };
 
 interface PersistedIdeSnapshot {
