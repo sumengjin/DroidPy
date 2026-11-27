@@ -3385,7 +3385,7 @@ export default function App() {
             <div
               className={
                 mobileTab === 'editor'
-                  ? 'flex-1 min-h-0 flex flex-col overflow-hidden bg-[var(--ide-surface)]'
+                  ? 'flex-1 min-h-0 flex flex-col overflow-hidden bg-transparent'
                   : 'hidden'
               }
             >
