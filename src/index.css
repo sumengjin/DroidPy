@@ -506,8 +506,10 @@ button.dp-execution-control::after {
 
 /* Tablet split workspace only: remove the terminal frame without changing phone UI. */
 .tablet-split-layout .terminal-console-surface {
+  background: transparent !important;
   border: 0 !important;
   border-radius: 0 !important;
+  box-shadow: none !important;
 }
 
 .terminal-console-surface .terminal-input-row {
