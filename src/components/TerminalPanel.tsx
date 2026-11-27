@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Trash2, Copy, Check, AlertCircle, CornerDownLeft, Download, Maximize2, X, FileText } from 'lucide-react';
+import { Trash2, Copy, Check, AlertCircle, Download, Maximize2, X, FileText } from 'lucide-react';
 import { ExecutionEngine, PyodideStatus, TerminalEntry } from '../types/ide';
 import { renderAnsiText, stripAnsi } from '../utils/ansiParser';
 import { useI18n } from '../services/i18n';
@@ -280,8 +280,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     }
   };
 
-  const handleReplSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitRepl = async () => {
     const trimmed = replValue.trim();
     if (!trimmed || status === 'running' || (engine === 'pyodide' && status === 'loading')) return;
     setReplHistory((prev) => [trimmed, ...prev.slice(0, 29)]);
@@ -289,6 +288,11 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     setReplValue('');
     await onRunRepl(trimmed);
     replInputRef.current?.focus();
+  };
+
+  const handleReplSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    void submitRepl();
   };
 
   const sendTermuxStdinValue = async () => {
@@ -316,7 +320,10 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   };
 
   const handleReplKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'ArrowUp') {
+    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      void submitRepl();
+    } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       const nextIdx = Math.min(historyIdx + 1, replHistory.length - 1);
       if (replHistory[nextIdx] !== undefined) {
@@ -485,7 +492,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       {(inputSessionActive || pendingInputPrompt !== null) ? (
         <form
           onSubmit={handleStdinSubmit}
-          className="w-2/3 max-w-full mx-auto px-2 py-1 bg-transparent flex items-center gap-2 shrink-0"
+          className="terminal-input-row px-2 py-1 bg-transparent flex items-center gap-2 shrink-0"
         >
           <span className="text-xs font-semibold text-amber-700 dark:text-amber-300 whitespace-nowrap shrink-0">
             {t('term_input_label')}
@@ -497,18 +504,10 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             onChange={(e) => setStdinValue(e.target.value)}
             onKeyDown={handleStdinKeyDown}
             enterKeyHint="send"
+            aria-label={t('term_input_label')}
             placeholder={pendingInputPrompt || t('term_input_placeholder')}
             className="flex-1 min-w-0 min-h-[40px] px-2 bg-transparent !border-0 !shadow-none text-sm font-mono text-[var(--ide-text)] focus:outline-none focus:ring-0"
           />
-          <button
-            type="submit"
-            disabled={pendingInputPrompt === null}
-            onMouseDown={(e) => e.preventDefault()}
-            className="min-h-[44px] px-4 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-colors"
-          >
-            <span>{t('term_send')}</span>
-            <CornerDownLeft className="w-3.5 h-3.5" />
-          </button>
         </form>
       ) : engine === 'termux' && status === 'running' ? (
         <form
@@ -522,19 +521,13 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             ref={inputRef}
             type="text"
             enterKeyHint="send"
+            aria-label={t('term_stdin_label')}
             value={stdinValue}
             onChange={(e) => setStdinValue(e.target.value)}
             onKeyDown={handleTermuxStdinKeyDown}
             placeholder={t('term_stdin_placeholder')}
             className="flex-1 min-w-0 min-h-[40px] px-2 bg-transparent !border-0 !shadow-none text-sm font-mono text-[var(--ide-text)] focus:outline-none focus:ring-0"
           />
-          <button
-            type="submit"
-            onMouseDown={(e) => e.preventDefault()}
-            className="min-h-[44px] px-3.5 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium whitespace-nowrap shrink-0"
-          >
-            {t('term_send')}
-          </button>
         </form>
       ) : (
         /* Persistent Interactive Python REPL Input */
@@ -548,6 +541,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           <input
             ref={replInputRef}
             type="text"
+            enterKeyHint="send"
             value={replValue}
             onChange={(e) => setReplValue(e.target.value)}
             onKeyDown={handleReplKeyDown}
@@ -560,17 +554,6 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             aria-label="REPL"
             className="flex-1 min-w-0 min-h-[44px] px-2 bg-transparent font-mono text-sm text-[var(--ide-text)] placeholder:text-[var(--ide-text-muted)] focus:outline-none"
           />
-          <button
-            type="submit"
-            disabled={
-              !replValue.trim() ||
-              status === 'running' ||
-              (engine === 'pyodide' && status === 'loading')
-            }
-            className="min-h-[44px] px-3.5 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium disabled:opacity-40 transition-colors whitespace-nowrap shrink-0"
-          >
-            {t('term_exec_btn')}
-          </button>
         </form>
       )}
 
