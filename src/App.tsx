@@ -42,8 +42,8 @@ import {
   TermuxConnectionState,
   TermuxHealthInfo,
 } from './types/ide';
-import { CodeEditor, CodeEditorHandle } from './components/CodeEditor';
-import { AndroidSymbolBar } from './components/AndroidSymbolBar';
+import type { CodeEditorHandle } from './components/CodeEditor';
+import { CodeEditorSurface } from './components/CodeEditorSurface';
 import { TerminalPanel } from './components/TerminalPanel';
 import { FileExplorer } from './components/FileExplorer';
 import { WorkspaceNavigationRail } from './components/WorkspaceNavigationRail';
@@ -3373,33 +3373,24 @@ export default function App() {
 
               {mobileNewFileOpen && renderInlineNewFileBar()}
 
-              <div className="flex-1 min-h-0 overflow-hidden">
-                <CodeEditor
-                  key={activeFile.id}
-                  ref={editorRef}
-                  value={activeFile.content}
-                  filename={activeFile.name}
-                  onChange={handleCodeChange}
-                  onRunShortcut={handleRunCode}
-                  onCursorChange={(line, col) => setCursorPos({ line, col })}
-                  fontSize={settings.fontSize}
-                  tabSize={settings.tabSize}
-                  wordWrap={settings.wordWrap}
-                  theme={settings.theme}
-                  pyodideReady={pyodideStatus === 'ready'}
-                  transparentBg={is3dBgActive}
-                />
-              </div>
-
-              {settings.showSymbolBar && (
-                <AndroidSymbolBar
-                  tabSize={settings.tabSize}
-                  onInsert={(txt, offset) => editorRef.current?.insertText(txt, offset)}
-                  onMoveCursor={(delta) => editorRef.current?.moveCursor(delta)}
-                  onUndo={() => editorRef.current?.undo()}
-                  onRedo={() => editorRef.current?.redo()}
-                />
-              )}
+              <CodeEditorSurface
+  file={activeFile}
+  editorRef={editorRef}
+  onChange={handleCodeChange}
+  onRunShortcut={handleRunCode}
+  onCursorChange={(line, col) => setCursorPos({ line, col })}
+  fontSize={settings.fontSize}
+  tabSize={settings.tabSize}
+  wordWrap={settings.wordWrap}
+  theme={settings.theme}
+  pyodideReady={pyodideStatus === 'ready'}
+  transparentBg={is3dBgActive}
+  showSymbolBar={settings.showSymbolBar}
+  onInsertSymbol={(txt, offset) => editorRef.current?.insertText(txt, offset)}
+  onMoveCursor={(delta) => editorRef.current?.moveCursor(delta)}
+  onUndo={() => editorRef.current?.undo()}
+  onRedo={() => editorRef.current?.redo()}
+/>
             </section>
             )}
 
@@ -3565,33 +3556,24 @@ export default function App() {
 
                 {mobileNewFileOpen && renderInlineNewFileBar()}
 
-                <div className="flex-1 min-h-0 overflow-hidden">
-                  <CodeEditor
-                    key={activeFile.id}
-                    ref={editorRef}
-                    value={activeFile.content}
-                    filename={activeFile.name}
-                    onChange={handleCodeChange}
-                    onRunShortcut={handleRunCode}
-                    onCursorChange={(line, col) => setCursorPos({ line, col })}
-                    fontSize={settings.fontSize}
-                    tabSize={settings.tabSize}
-                    wordWrap={settings.wordWrap}
-                    theme={settings.theme}
-                    pyodideReady={pyodideStatus === 'ready'}
-                    transparentBg={is3dBgActive}
-                  />
-                </div>
-
-                {settings.showSymbolBar && (
-                  <AndroidSymbolBar
-                    tabSize={settings.tabSize}
-                    onInsert={(txt, offset) => editorRef.current?.insertText(txt, offset)}
-                    onMoveCursor={(delta) => editorRef.current?.moveCursor(delta)}
-                    onUndo={() => editorRef.current?.undo()}
-                    onRedo={() => editorRef.current?.redo()}
-                  />
-                )}
+                <CodeEditorSurface
+  file={activeFile}
+  editorRef={editorRef}
+  onChange={handleCodeChange}
+  onRunShortcut={handleRunCode}
+  onCursorChange={(line, col) => setCursorPos({ line, col })}
+  fontSize={settings.fontSize}
+  tabSize={settings.tabSize}
+  wordWrap={settings.wordWrap}
+  theme={settings.theme}
+  pyodideReady={pyodideStatus === 'ready'}
+  transparentBg={is3dBgActive}
+  showSymbolBar={settings.showSymbolBar}
+  onInsertSymbol={(txt, offset) => editorRef.current?.insertText(txt, offset)}
+  onMoveCursor={(delta) => editorRef.current?.moveCursor(delta)}
+  onUndo={() => editorRef.current?.undo()}
+  onRedo={() => editorRef.current?.redo()}
+/>
             </div>
 
             {mobileTab === 'console' && (
