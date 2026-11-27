@@ -176,7 +176,8 @@ assert.match(fileTabsSource, /dp-nav-item/, 'file tabs must share the selected-s
 assert.match(fileTabsSource, /aria-selected={active}/, 'file tabs must expose their selected state accessibly');
 assert.ok(appSource.includes('tabletWorkspace.toggleSplit'), 'tablet split view must remain available');
 assert.ok(workspaceHeaderSource.includes('aria-pressed={tabletSplit}'), 'split layout toggle must expose its selected state');
-assert.match(appSource, /aria-current={active \? 'page' : undefined}/, 'secondary workspace tabs must expose their selected state');
+assert.match(workspaceNavigationSource, /aria-current={active \? 'page' : undefined}/, 'shared phone/tablet workspace navigation must expose its selected destination accessibly');
+assert.equal((appSource.match(/<WorkspaceNavigation/g) ?? []).length, 2, 'phone and tablet must each render one shared navigation instance; duplicate pane navigation must not return');
 const designTokensSource = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
 assert.match(designTokensSource, /\.dp-nav-item\[aria-current="page"\][\s\S]*?color: var\(--ide-accent-text\)/, 'selected navigation destinations must use theme-aware foreground color only');
 assert.match(designTokensSource, /\.dp-nav-item:not\(\[aria-current="page"\]\)[\s\S]*?color: var\(--ide-text\)/, 'unselected navigation destinations must remain transparent and lower emphasis');
