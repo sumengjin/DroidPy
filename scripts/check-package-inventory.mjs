@@ -16,6 +16,9 @@ const [source, bridgeSource, catalogSource, exportSource, panelSource, terminalS
   readFile(new URL('../android/app/src/main/assets/python/frostwork-0.2.2.dist-info/METADATA', import.meta.url), 'utf8'),
  ]);
 const themeCssSource = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
+const workspaceHeaderSource = await readFile(new URL('../src/components/WorkspaceHeader.tsx', import.meta.url), 'utf8');
+const executionControlsSource = await readFile(new URL('../src/components/WorkspaceExecutionControls.tsx', import.meta.url), 'utf8');
+const codeEditorSource = await readFile(new URL('../src/components/CodeEditor.tsx', import.meta.url), 'utf8');
 const pyodidePackagesSource = await readFile(new URL('../src/components/PyodidePackageWorkspace.tsx', import.meta.url), 'utf8');
 const termuxPackagesSource = await readFile(new URL('../src/components/TermuxPackageWorkspace.tsx', import.meta.url), 'utf8');
 
@@ -165,6 +168,9 @@ assert.match(appSource, /<WorkspaceFileTabs[\s\S]*?variant="tablet"/, 'tablet fi
 assert.match(appSource, /className="pointer-events-none absolute inset-0 z-\[1\]"/, 'one continuous paper layer must cover the entire viewport behind phone and tablet chrome');
 assert.match(appSource, /backgroundColor: is3dBgActive \? 'var\(--ide-sheet-bg\)' : 'var\(--ide-surface\)'/, 'the paper layer must remain translucent over active 3D scenery and solid when 3D is disabled');
 assert.match(appSource, /className="relative z-10 flex-1 min-h-0 min-w-0 w-full flex flex-col overflow-hidden bg-transparent"/, 'workspace content must share the full-screen paper instead of drawing a second sheet');
+assert.match(workspaceHeaderSource, /minHeight:[\s\S]*?droidpy-statusbar-inset/, 'workspace header must reserve Android status bar safe-area height');
+assert.match(executionControlsSource, /border-0 bg-\[var\(--ide-accent\)\]/, 'run button must not have a decorative border');
+assert.match(codeEditorSource, /const editorBg = transparentBg \? 'transparent' : t\.bg/, 'editor canvas must not stack an opaque tint over the shared translucent paper');
 assert.match(appSource, /mobileTab === 'editor'[\s\S]*?flex-1 min-h-0 flex flex-col overflow-hidden bg-transparent/, 'phone editor content must sit directly on the shared workspace sheet');
 assert.match(appSource, /shrink-0 bg-transparent/, 'phone editor controls must not create a second opaque paper layer');
 assert.match(themeCssSource, /--ide-sheet-bg: color-mix\(in srgb, var\(--ide-surface\) 82%, transparent\)/, 'the single paper surface must be slightly translucent so the 3D glass environment remains visible');
