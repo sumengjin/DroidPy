@@ -480,9 +480,20 @@ button.dp-execution-control:disabled {
   border-width: 0 !important;
   border-style: none !important;
   border-color: transparent !important;
+  border-image: none !important;
   outline: 0 !important;
   box-shadow: none !important;
   background-image: none !important;
+  filter: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+
+button.dp-execution-control::before,
+button.dp-execution-control::after {
+  content: none !important;
+  display: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
 }
 
 .terminal-input-row {
