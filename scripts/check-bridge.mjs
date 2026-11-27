@@ -247,6 +247,11 @@ assert.ok(androidBuilder.includes('Stop request: force stopping process tree pid
 assert.ok(androidBuilder.includes('Process output read ended after explicit Stop'));
 assert.ok(androidBuilder.includes('Run script requested: $entry'));
 assert.ok(androidBuilder.includes('SD-card write request received'));
+const sdcardReadStart = androidBuilder.indexOf('method == "POST" && path == "/sdcard/read"');
+const sdcardReadEnd = androidBuilder.indexOf('method == "POST" && path == "/sdcard/write"', sdcardReadStart);
+assert.ok(sdcardReadStart >= 0 && sdcardReadEnd > sdcardReadStart);
+const sdcardRead = androidBuilder.slice(sdcardReadStart, sdcardReadEnd);
+assert.ok(sdcardRead.includes('target.readBytes()') && sdcardRead.includes('fileWriteDiagnostic(sourceBytes)'), 'external file reads must record a content fingerprint before the editor receives them');
 const streamShellStart = androidBuilder.indexOf('private fun streamShellCommand(out: OutputStream, command: String, beforeStart: (() -> Unit)? = null) {');
 const streamShellEnd = androidBuilder.indexOf('private fun corsHeaders(', streamShellStart);
 assert.ok(streamShellStart >= 0 && streamShellEnd > streamShellStart);
