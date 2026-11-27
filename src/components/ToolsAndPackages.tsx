@@ -21,7 +21,6 @@ import {
   Palette,
   PlugZap,
   RefreshCw,
-  Search,
   ShieldCheck,
   Sliders,
   Smartphone,
@@ -53,7 +52,7 @@ import { InternalStoragePanel } from './InternalStoragePanel';
 import { getActiveAtmosphereState } from './DynamicAtmosphere3D';
 import { IDE_THEMES } from '../services/themes';
 import type { ThemeId } from '../services/themes';
-import { LOCALE_OPTIONS, getLocalizedThemeText, useI18n } from '../services/i18n';
+import { LOCALE_OPTIONS, TranslationKey, getLocalizedThemeText, useI18n } from '../services/i18n';
 import { generateGitHubApkProjectZip } from '../services/androidApkBuilder';
 import { downloadBlob } from '../utils/downloadBlob';
 import {
