@@ -485,7 +485,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       {(inputSessionActive || pendingInputPrompt !== null) ? (
         <form
           onSubmit={handleStdinSubmit}
-          className="p-2.5 border-t border-amber-300 dark:border-amber-700/70 bg-amber-50 dark:bg-amber-950/30 flex items-center gap-2 shrink-0"
+          className="w-2/3 max-w-full mx-auto px-2 py-1 bg-transparent flex items-center gap-2 shrink-0"
         >
           <span className="text-xs font-semibold text-amber-700 dark:text-amber-300 whitespace-nowrap shrink-0">
             {t('term_input_label')}
@@ -498,7 +498,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             onKeyDown={handleStdinKeyDown}
             enterKeyHint="send"
             placeholder={pendingInputPrompt || t('term_input_placeholder')}
-            className="flex-1 min-w-0 min-h-[44px] px-3 rounded-lg bg-[var(--ide-surface)] border border-amber-300 dark:border-amber-700 text-sm font-mono text-[var(--ide-text)] focus:outline-none focus:ring-2 focus:ring-amber-500"
+            className="flex-1 min-w-0 min-h-[40px] px-2 bg-transparent !border-0 !shadow-none text-sm font-mono text-[var(--ide-text)] focus:outline-none focus:ring-0"
           />
           <button
             type="submit"
@@ -513,7 +513,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       ) : engine === 'termux' && status === 'running' ? (
         <form
           onSubmit={handleTermuxStdinSubmit}
-          className="p-2 border-t border-[var(--ide-border)] bg-[var(--ide-surface)] flex items-center gap-2 shrink-0"
+          className="w-2/3 max-w-full mx-auto px-2 py-1 bg-transparent flex items-center gap-2 shrink-0"
         >
           <span className="text-xs font-semibold text-[var(--ide-accent-text)] pl-1.5 whitespace-nowrap shrink-0">
             {t('term_stdin_label')}
@@ -526,7 +526,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             onChange={(e) => setStdinValue(e.target.value)}
             onKeyDown={handleTermuxStdinKeyDown}
             placeholder={t('term_stdin_placeholder')}
-            className="flex-1 min-w-0 min-h-[44px] px-3 rounded-lg bg-[var(--ide-bg)] border border-[var(--ide-border)] text-sm font-mono text-[var(--ide-text)] focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
+            className="flex-1 min-w-0 min-h-[40px] px-2 bg-transparent !border-0 !shadow-none text-sm font-mono text-[var(--ide-text)] focus:outline-none focus:ring-0"
           />
           <button
             type="submit"
@@ -540,7 +540,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         /* Persistent Interactive Python REPL Input */
         <form
           onSubmit={handleReplSubmit}
-          className="p-2 border-t border-[var(--ide-border)] bg-[var(--ide-surface)] flex items-center gap-2 shrink-0"
+          className="w-2/3 max-w-full mx-auto px-2 py-1 bg-transparent flex items-center gap-2 shrink-0"
         >
           <span className="font-mono text-xs font-semibold text-[var(--ide-accent-text)] pl-2 shrink-0 select-none">
             {engine === 'termux' ? '$' : '>>>'}
