@@ -3149,9 +3149,8 @@ export default function App() {
       >
         {is3dBgActive && deviceClass === 'tablet' && isLandscape && tabletSplit && (
           <>
-            {/* Build the divider opening from four ordinary surfaces, not a multi-layer mask.
-                This keeps the adjustable paper visible in Android WebView while preserving
-                the centered 1.5 mm clear channel and its rounded 8% / 92% endpoints. */}
+            {/* Keep the alpha-matched side paper as ordinary surfaces; the center SVG
+                supplies a precisely rounded 1.5 mm transparent channel at 8% / 92%. */}
             <span
               className="absolute inset-y-0 left-0"
               style={{
