@@ -3119,6 +3119,8 @@ export default function App() {
           }}
           onSelectFile={setActiveFileId}
           onCreateFile={() => setMobileNewFileOpen((open) => !open)}
+          onNavigate={(destination) => tabletWorkspace.navigate(destination)}
+          onOpenSettings={() => setSettingsWorkspaceOpen(true)}
           tabletSplit={tabletSplit}
           onToggleSplit={tabletWorkspace.toggleSplit}
           execution={{
@@ -3169,7 +3171,6 @@ export default function App() {
           }}
           onSelectFile={setActiveFileId}
           onCreateFile={() => setMobileNewFileOpen((open) => !open)}
-          onOpenSettings={() => setSettingsWorkspaceOpen(true)}
           execution={{
             pendingInput: pendingInputPrompt !== null,
             termuxStopping,
@@ -3237,21 +3238,6 @@ export default function App() {
 
       {/* Main Content Area (Mobile & Tablet Only) */}
       <main className="relative z-10 flex-1 min-h-0 min-w-0 w-full flex flex-col overflow-hidden">
-        {deviceClass === 'tablet' && (
-          <WorkspaceNavigation
-            variant="tablet"
-            activeDestination={tabletPaneTab}
-            labels={{
-              editor: t('mob_editor'),
-              terminal: t('mob_console'),
-              files: t('mob_files'),
-              browser: t('mob_browser'),
-            }}
-            settingsLabel={t('neg_title')}
-            onNavigate={tabletWorkspace.navigate}
-            onOpenSettings={() => setSettingsWorkspaceOpen(true)}
-          />
-        )}
         {deviceClass === 'tablet' ? (
           <TabletSplitLayout split={tabletSplit} orientation={isLandscape ? 'horizontal' : 'vertical'}>
             {/* Tablet Primary Editor Pane */}
@@ -3259,6 +3245,17 @@ export default function App() {
             <section
               className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-transparent"
             >
+              <div className="shrink-0 px-2 pt-1">
+                <WorkspaceFileTabs
+                  files={files}
+                  activeFileId={activeFile.id}
+                  onSelect={setActiveFileId}
+                  onCreate={() => setMobileNewFileOpen((open) => !open)}
+                  createLabel={t('files_new_btn')}
+                  filesLabel={t('files_title')}
+                  variant="tablet"
+                />
+              </div>
               <div className="flex items-center justify-between gap-2 px-2 h-8 bg-transparent shrink-0">
                 <div className="flex items-center gap-2 text-xs text-[var(--ide-text-muted)] font-mono truncate">
                   <span className="tabular-nums">
