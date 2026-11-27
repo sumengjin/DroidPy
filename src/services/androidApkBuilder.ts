@@ -5084,17 +5084,6 @@ def clipboard_set(text):
             return
         }
         try {
-            beforeStart?.invoke()
-        } catch (error: Exception) {
-            synchronized(activeProcessLock) {
-                activeProcessStarting = false
-                activeProcessStopRequested = false
-            }
-            appendNativeLog("Exec", "Workspace staging failed: \${error.javaClass.simpleName}: \${error.message}")
-            writeJson(out, 500, JSONObject().put("error", "Unable to safely stage workspace files"))
-            return
-        }
-        try {
             out.write((
                 "HTTP/1.1 200 OK\\r\\n" +
                 corsHeaders() +
@@ -5114,6 +5103,24 @@ def clipboard_set(text):
             val line = JSONObject().put("type", "stdout").put("data", text).toString() + "\\n"
             out.write(line.toByteArray(Charsets.UTF_8))
             out.flush()
+        }
+
+        try {
+            beforeStart?.invoke()
+        } catch (error: Exception) {
+            appendNativeLog("Exec", "Workspace staging failed: \${error.javaClass.simpleName}: \${error.message}")
+            try {
+                sendStdout("[DroidPy] 無法安全寫入工作區檔案；原有檔案未被部分覆寫。\\n")
+                val done = JSONObject().put("type", "done").put("exitCode", 1).put("durationMs", System.currentTimeMillis() - t0).toString() + "\\n"
+                out.write(done.toByteArray(Charsets.UTF_8))
+                out.flush()
+            } catch (_: Exception) {
+            }
+            synchronized(activeProcessLock) {
+                activeProcessStarting = false
+                activeProcessStopRequested = false
+            }
+            return
         }
 
         if (!shFile.exists()) {
