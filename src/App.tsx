@@ -3141,10 +3141,56 @@ export default function App() {
         // relying on inherited CSS variables for the primary transparency effect.
         style={{
           backgroundColor: is3dBgActive
-            ? hexToRgba(activeThemeMeta.swatchBg, workspaceSurfaceAlpha)
+            ? (deviceClass === 'tablet' && isLandscape && tabletSplit
+                ? 'transparent'
+                : hexToRgba(activeThemeMeta.swatchBg, workspaceSurfaceAlpha))
             : 'var(--ide-surface)',
         }}
-      />
+      >
+        {is3dBgActive && deviceClass === 'tablet' && isLandscape && tabletSplit && (
+          <>
+            {/* Build the divider opening from four ordinary surfaces, not a multi-layer mask.
+                This keeps the adjustable paper visible in Android WebView while preserving
+                the centered 1.5 mm clear channel and its rounded 8% / 92% endpoints. */}
+            <span
+              className="absolute inset-y-0 left-0"
+              style={{
+                width: 'calc(var(--tablet-divider-center, 50vw) - 0.75mm)',
+                backgroundColor: hexToRgba(activeThemeMeta.swatchBg, workspaceSurfaceAlpha),
+              }}
+            />
+            <span
+              className="absolute inset-y-0 right-0"
+              style={{
+                left: 'calc(var(--tablet-divider-center, 50vw) + 0.75mm)',
+                backgroundColor: hexToRgba(activeThemeMeta.swatchBg, workspaceSurfaceAlpha),
+              }}
+            />
+            <span
+              className="absolute"
+              style={{
+                left: 'calc(var(--tablet-divider-center, 50vw) - 0.75mm)',
+                top: 0,
+                width: '1.5mm',
+                height: '8%',
+                borderRadius: '0 0 9999px 9999px',
+                backgroundColor: hexToRgba(activeThemeMeta.swatchBg, workspaceSurfaceAlpha),
+              }}
+            />
+            <span
+              className="absolute"
+              style={{
+                left: 'calc(var(--tablet-divider-center, 50vw) - 0.75mm)',
+                bottom: 0,
+                width: '1.5mm',
+                height: '8%',
+                borderRadius: '9999px 9999px 0 0',
+                backgroundColor: hexToRgba(activeThemeMeta.swatchBg, workspaceSurfaceAlpha),
+              }}
+            />
+          </>
+        )}
+      </div>
 
       {/* Tablet workspace header: file navigation, split layout and shared execution controls. */}
       {deviceClass === 'tablet' && isLandscape && (
