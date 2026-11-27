@@ -72,6 +72,7 @@ import ssl
 import subprocess
 import sys
 import threading
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -88,8 +89,21 @@ WORKSPACE = os.path.expanduser("~/droidpy_workspace")
 os.makedirs(WORKSPACE, exist_ok=True)
 
 PROC_LOCK = threading.Lock()
-ACTIVE_PROC = {"pid": None, "pgid": None, "master_fd": None, "started_at": 0.0, "paused": False}
+OPERATION_LOCK = threading.Lock()
+ACTIVE_PROC = {
+    "pid": None, "pgid": None, "master_fd": None,
+    "started_at": 0.0, "paused": False,
+    "starting": False, "stop_requested": False,
+}
 _LEGACY_CERTS_SUPPORTED = None
+
+def _reserve_process_start():
+    with PROC_LOCK:
+        if ACTIVE_PROC["starting"] or ACTIVE_PROC["pgid"] is not None:
+            return False
+        ACTIVE_PROC["starting"] = True
+        ACTIVE_PROC["stop_requested"] = False
+        return True
 
 def _set_active(pid, pgid, master_fd):
     with PROC_LOCK:
@@ -98,6 +112,8 @@ def _set_active(pid, pgid, master_fd):
         ACTIVE_PROC["master_fd"] = master_fd
         ACTIVE_PROC["started_at"] = time.time()
         ACTIVE_PROC["paused"] = False
+        ACTIVE_PROC["starting"] = False
+        return bool(ACTIVE_PROC["stop_requested"])
 
 def _clear_active():
     with PROC_LOCK:
@@ -106,6 +122,36 @@ def _clear_active():
         ACTIVE_PROC["master_fd"] = None
         ACTIVE_PROC["started_at"] = 0.0
         ACTIVE_PROC["paused"] = False
+        ACTIVE_PROC["starting"] = False
+        ACTIVE_PROC["stop_requested"] = False
+
+def _stage_workspace_files(files):
+    if not isinstance(files, list):
+        raise ValueError("Invalid workspace file list")
+    for item in files:
+        if not isinstance(item, dict):
+            continue
+        raw_name = str(item.get("name", ""))
+        name = os.path.basename(raw_name.replace("\\\\", "/"))
+        if not name or name in (".", "..") or "\\x00" in name:
+            continue
+        content = item.get("content", "")
+        if not isinstance(content, str):
+            content = str(content)
+        target = os.path.join(WORKSPACE, name)
+        fd, temp_path = tempfile.mkstemp(prefix="." + name + ".", suffix=".tmp", dir=WORKSPACE)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8", newline="") as fp:
+                fp.write(content)
+                fp.flush()
+                os.fsync(fp.fileno())
+            os.replace(temp_path, target)
+        finally:
+            try:
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+            except OSError:
+                pass
 
 def _find_certifi_source():
     for getter in (
