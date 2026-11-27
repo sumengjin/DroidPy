@@ -369,16 +369,16 @@ assert.match(source, /if \(crawlerOverlay\.visibility == View\.VISIBLE\) \{\s*\/
 
 
 // Regression checks for the reported phone/tablet UI defects.
-const settingsWorkspaceSource = await readFile(new URL('../src/components/SettingsWorkspace.tsx', import.meta.url), 'utf8');
-const executionControlsSource = await readFile(new URL('../src/components/WorkspaceExecutionControls.tsx', import.meta.url), 'utf8');
-assert.match(settingsWorkspaceSource, /backgroundColor: getThemeMeta\(settings\.theme\)\.swatchBg/, 'Settings must use an opaque theme base color so the previous workspace cannot show through');
-assert.match(settingsWorkspaceSource, /z-\[100\].*isolate/, 'Settings must sit above all workspace content in an isolated stacking context');
-assert.match(settingsWorkspaceSource, /aria-modal="true"/, 'Settings must be exposed as a modal full-screen workspace');
+const uiSettingsWorkspaceSource = await readFile(new URL('../src/components/SettingsWorkspace.tsx', import.meta.url), 'utf8');
+const uiExecutionControlsSource = await readFile(new URL('../src/components/WorkspaceExecutionControls.tsx', import.meta.url), 'utf8');
+assert.match(uiSettingsWorkspaceSource, /backgroundColor: getThemeMeta\(settings\.theme\)\.swatchBg/, 'Settings must use an opaque theme base color so the previous workspace cannot show through');
+assert.match(uiSettingsWorkspaceSource, /z-\[100\].*isolate/, 'Settings must sit above all workspace content in an isolated stacking context');
+assert.match(uiSettingsWorkspaceSource, /aria-modal="true"/, 'Settings must be exposed as a modal full-screen workspace');
 assert.match(workspaceHeaderSource, /relative z-30 isolate/, 'the workspace header must remain above the terminal pane when their bounds meet');
 const tabletSplitControl = workspaceHeaderSource.indexOf('onClick={onToggleSplit}');
 const tabletSettingsControl = workspaceHeaderSource.indexOf('onClick={onOpenSettings}', workspaceHeaderSource.indexOf('onClick={onToggleSplit}'));
 assert.ok(tabletSplitControl >= 0 && tabletSettingsControl > tabletSplitControl, 'tablet Settings must appear to the right of the Focus Editor / split control');
-assert.match(executionControlsSource, /border-2 border-\[var\(--ide-accent\)\]/, 'Run/Pause controls must retain a complete visible accent border');
+assert.match(uiExecutionControlsSource, /border-2 border-\[var\(--ide-accent\)\]/, 'Run/Pause controls must retain a complete visible accent border');
 assert.match(appSource, /const navigatePhoneWorkspace = useCallback\(\(destination: 'editor' \| 'terminal' \| 'files' \| 'browser'\)/, 'phone navigation must use one explicit destination handler');
 assert.match(appSource, /onNavigate=\{navigatePhoneWorkspace\}/, 'phone bottom navigation must call the explicit destination handler');
 assert.match(appSource, /data-active-workspace=\{deviceClass === 'phone' \? mobileTab : tabletPaneTab\}/, 'the active workspace must be observable on the rendered content root');
