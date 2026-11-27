@@ -171,7 +171,7 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full sm:max-w-3xl h-[88vh] sm:h-[82vh] md-sheet rounded-b-none sm:rounded-b-[1.75rem] text-[var(--ide-text)] flex flex-col overflow-hidden"
+        className="w-full sm:max-w-3xl h-[88vh] sm:h-[82vh] dp-sheet rounded-b-none sm:rounded-b-[1.75rem] text-[var(--ide-text)] flex flex-col overflow-hidden"
       >
         <div className="w-10 h-1 bg-[var(--ide-border)] rounded-full mx-auto mt-2.5 sm:hidden shrink-0" />
         {/* Header */}
@@ -320,7 +320,7 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
               <div className="py-12 text-center text-[var(--ide-text-muted)] font-sans text-xs">{t('logs_empty')}</div>
             ) : (
               filteredExecutionEntries.map((entry) => (
-                <div key={entry.id} className="md-card px-3 py-2.5 space-y-1">
+                <div key={entry.id} className="dp-panel px-3 py-2.5 space-y-1">
                   <div className="flex items-center justify-between gap-2 text-[11px] text-[var(--ide-text-muted)]">
                     <span className={entry.type === 'stderr' ? 'text-red-500 font-semibold' : 'uppercase'}>{entry.type === 'stderr' ? t('logs_error_label') : entry.type}</span>
                     <span className="tabular-nums">{entry.timestamp}</span>
@@ -339,7 +339,7 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
               filteredAppLogs.map((entry) => (
                 <div
                   key={entry.id}
-                  className="md-card px-3 py-2.5 space-y-1"
+                  className="dp-panel px-3 py-2.5 space-y-1"
                 >
                   <div className="flex items-center justify-between gap-2 text-[11px]">
                     <div className="flex items-center gap-1.5 min-w-0">

@@ -318,35 +318,27 @@
 }
 
 /* Material Design 3 Tonal Surfaces & Mobile Interaction Primitives */
-.md-card {
-  background-color: var(--md-surface-container-low);
+.dp-panel,
+.dp-panel-tonal {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.dp-callout {
+  background: transparent;
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-radius: 0;
+}
+
+.dp-sheet {
+  background-color: var(--ide-surface);
   border: 1px solid var(--ide-border);
-  border-radius: 1.25rem;
-}
-
-.md-card-tonal {
-  background-color: var(--md-surface-container);
-  border: 1px solid var(--ide-border);
-  border-radius: 1.25rem;
-}
-
-.md-sheet {
-  background-color: var(--ide-sheet-bg, var(--ide-surface));
-  border: 1px solid var(--ide-border);
-  border-radius: 1.75rem;
-  box-shadow: 0 20px 44px -12px rgba(15, 23, 42, 0.28);
-}
-
-.md-nav-pill {
-  background-color: var(--ide-accent-soft);
-  color: var(--ide-accent-text);
-}
-
-.md-fab {
-  background-color: var(--md-fab-bg);
-  color: var(--md-fab-fg);
-  border-radius: 1.125rem;
-  box-shadow: 0 6px 18px -4px rgba(15, 23, 42, 0.28), 0 2px 6px -1px rgba(15, 23, 42, 0.16);
+  border-radius: 1rem;
+  box-shadow: none;
 }
 
 .selectable-text,

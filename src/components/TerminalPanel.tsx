@@ -71,7 +71,7 @@ const TerminalEntryRow = React.memo<TerminalEntryRowProps>(
 
     if (entry.type === 'plot' && entry.imageDataUrl) {
       return (
-        <div className="my-2 md-card p-3 font-sans">
+        <div className="my-2 dp-panel p-3 font-sans">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
             <span className="text-xs font-medium text-[var(--ide-text-muted)]">
               {plotTitle}
@@ -581,7 +581,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           onClick={() => setExpandedPlot(null)}
         >
           <div
-            className="relative max-w-3xl w-full md-sheet p-4"
+            className="relative max-w-3xl w-full dp-sheet p-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-3">

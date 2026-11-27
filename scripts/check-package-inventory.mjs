@@ -148,6 +148,21 @@ assert.match(designTokensSource, /\.dp-workspace-row/, 'settings and package wor
 assert.match(designTokensSource, /\.dp-nav-item\[aria-selected="true"\]/, 'file tabs must share the same selected visual state');
 assert.match(designTokensSource, /\.dp-nav-item\[aria-pressed="true"\]/, 'selected layout toggles must share the same selected visual state');
 assert.match(designTokensSource, /\.dp-icon-button/, 'transparent icon-only actions must use a shared focus and disabled-state primitive');
+const legacySurfaceSources = await Promise.all([
+  readFile(new URL('../src/components/FileExplorer.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../src/components/CrawlerBrowserPanel.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../src/components/InternalStoragePanel.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../src/components/AppUpdateModal.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../src/components/HelpTutorialModal.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../src/components/AppExecutionLogModal.tsx', import.meta.url), 'utf8'),
+]);
+for (const surfaceSource of [exportSource, panelSource, terminalSource, ...legacySurfaceSources]) {
+  assert.doesNotMatch(surfaceSource, /md-card|md-sheet/, 'legacy Material card and sheet classes must not return');
+}
+assert.match(designTokensSource, /\.dp-panel,[\s\S]*?\.dp-panel-tonal[\s\S]*?background: transparent[\s\S]*?border: 0/, 'DroidPy panels must be transparent and surface-free');
+assert.match(designTokensSource, /\.dp-sheet[\s\S]*?box-shadow: none/, 'DroidPy sheets must not use the old Material shadow treatment');
+assert.doesNotMatch(designTokensSource, /\.md-card\s*\{|\.md-sheet\s*\{|\.md-nav-pill\s*\{|\.md-fab\s*\{/, 'old Material visual primitives must be retired');
+
 assert.doesNotMatch(workspaceNavigationSource, /id: 'packages'/, 'package management must not occupy a primary bottom-navigation destination');
 assert.match(drawerSource, /id: 'packages' as const, label: t\('neg_category_packages'\)/, 'package management must remain available as a translated dedicated Settings category');
 assert.match(exportSource, /activeSubView === 'packages'[\s\S]*?renderHubOptionList\(packageHubOptions/, 'package management must open directly without an intermediate folder screen');

@@ -548,7 +548,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
               if (next) setBackups(listScriptBackups());
               setShowBackups(next);
             }}
-            className="w-full min-h-[44px] px-3.5 flex items-center justify-between md-card text-xs font-semibold text-[var(--ide-text)] hover:border-[var(--ide-accent)] transition-colors"
+            className="w-full min-h-[44px] px-3.5 flex items-center justify-between dp-panel text-xs font-semibold text-[var(--ide-text)] hover:border-[var(--ide-accent)] transition-colors"
           >
             <span className="flex items-center gap-2">
               <History className="w-4 h-4 text-[var(--ide-accent)]" />
@@ -560,7 +560,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           </button>
 
           {showBackups && (
-            <div className="mt-2.5 md-card p-3 space-y-3">
+            <div className="mt-2.5 dp-panel p-3 space-y-3">
               <form onSubmit={handleCreateSnapshot} className="flex items-center gap-1.5">
                 <input
                   type="text"
@@ -675,7 +675,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           <button
             type="button"
             onClick={() => setShowTemplates((v) => !v)}
-            className="w-full min-h-[44px] px-3.5 flex items-center justify-between md-card text-xs font-medium text-[var(--ide-text)] hover:border-[var(--ide-accent)] transition-colors"
+            className="w-full min-h-[44px] px-3.5 flex items-center justify-between dp-panel text-xs font-medium text-[var(--ide-text)] hover:border-[var(--ide-accent)] transition-colors"
           >
             <span className="flex items-center gap-2">
               <BookOpen className="w-4 h-4 text-[var(--ide-accent)]" />
@@ -723,7 +723,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                       onCreateFile(targetName, tpl.code);
                       onNotify(t('files_template_added', { name: targetName }));
                     }}
-                    className="w-full text-left p-3.5 md-card hover:border-[var(--ide-accent)] transition-colors"
+                    className="w-full text-left p-3.5 dp-panel hover:border-[var(--ide-accent)] transition-colors"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs font-semibold text-[var(--ide-text)] truncate">{tpl.title}</span>

@@ -699,7 +699,7 @@ export const CrawlerBrowserPanel: React.FC<CrawlerBrowserPanelProps> = ({
           </form>
 
           {/* Chrome Bookmarklet Helper */}
-          <div className="md-card p-4 space-y-2.5">
+          <div className="dp-panel p-4 space-y-2.5">
             <div className="flex items-center gap-2 text-xs font-semibold text-[var(--ide-text)]">
               <Bookmark className="w-4 h-4 text-[var(--ide-accent)]" />
               <span>{t('brw_bookmarklet_title')}</span>

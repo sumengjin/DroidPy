@@ -276,7 +276,7 @@ if __name__ == "__main__":
   const showCache = mode === 'all' || mode === 'cache';
 
   return (
-    <div className={fullScreen ? "md-card p-3.5 sm:p-5 space-y-4 min-w-0 h-full flex flex-col overflow-hidden" : "md-card p-3.5 sm:p-5 space-y-4 min-w-0"}>
+    <div className={fullScreen ? "dp-panel p-3.5 sm:p-5 space-y-4 min-w-0 h-full flex flex-col overflow-hidden" : "dp-panel p-3.5 sm:p-5 space-y-4 min-w-0"}>
       {/* Header & Permission Status */}
       {showSdcard && (
         <>

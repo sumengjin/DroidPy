@@ -830,7 +830,7 @@ python ${entryFile}
       case 'pkg_native':
         return (
           <div className="space-y-4">
-            <section className="md-card p-3.5 sm:p-5 space-y-4 min-w-0">
+            <section className="dp-panel p-3.5 sm:p-5 space-y-4 min-w-0">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <h2 className="text-base font-semibold flex items-center gap-2">
@@ -993,7 +993,7 @@ python ${entryFile}
         return (
           <div className="space-y-4">
             {/* Sandbox Add-on Enable / Disable Switch */}
-            <div className="md-card p-3.5 sm:p-4 flex items-center justify-between gap-3 min-w-0">
+            <div className="dp-panel p-3.5 sm:p-4 flex items-center justify-between gap-3 min-w-0">
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-semibold">{t('addon_sandbox_title')}</div>
                 <div className="text-xs text-[var(--ide-text-muted)] mt-0.5 leading-relaxed">
@@ -1191,7 +1191,7 @@ python ${entryFile}
 
                 {/* Auto-update Packages on Startup Toggle + C/C++ Note */}
                 <div className="grid grid-cols-1 gap-3">
-                  <div className="md-card p-4 flex items-center justify-between gap-3">
+                  <div className="dp-panel p-4 flex items-center justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="text-xs font-semibold text-[var(--ide-text)]">
                         {t('pkg_auto_update_title')}
@@ -1217,7 +1217,7 @@ python ${entryFile}
                     </button>
                   </div>
 
-                  <div className="md-card p-4 text-xs text-[var(--ide-text-muted)] space-y-1">
+                  <div className="dp-panel p-4 text-xs text-[var(--ide-text-muted)] space-y-1">
                     <div className="font-semibold text-[var(--ide-text)]">{t('pkg_cpp_title')}</div>
                     <p className="leading-relaxed">{t('pkg_cpp_desc')}</p>
                   </div>
@@ -1280,7 +1280,7 @@ python ${entryFile}
                       return (
                         <div
                           key={item.id}
-                          className="md-card flex items-center justify-between gap-3 p-3.5"
+                          className="dp-panel flex items-center justify-between gap-3 p-3.5"
                         >
                           <div className="min-w-0">
                             <div className="font-mono text-sm font-semibold text-[var(--ide-text)] truncate flex items-center gap-1.5">
@@ -1345,7 +1345,7 @@ python ${entryFile}
                 </div>
 
                 {/* Installed Packages Table */}
-                <div className="md-card overflow-hidden">
+                <div className="dp-panel overflow-hidden">
                   <div className="px-4 py-3 border-b border-[var(--ide-border)] flex items-center justify-between text-xs font-medium text-[var(--ide-text-muted)]">
                     <span>{t('pkg_loaded_title')}</span>
                     <span className="tabular-nums">
@@ -1435,7 +1435,7 @@ python ${entryFile}
             onNotify={onNotify}
           />
         ) : (
-          <div className="md-card p-4 space-y-3 min-w-0">
+          <div className="dp-panel p-4 space-y-3 min-w-0">
             <h3 className="text-sm font-semibold flex items-center gap-2">
               <HardDrive className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
               <span>{t('sd_title')}</span>
@@ -1457,7 +1457,7 @@ python ${entryFile}
       case 'st_cache':
         return (
           <div className="space-y-4">
-            <div className="md-card p-3.5 sm:p-4 space-y-4 min-w-0">
+            <div className="dp-panel p-3.5 sm:p-4 space-y-4 min-w-0">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <h3 className="text-sm font-semibold flex items-center gap-2">
@@ -1533,7 +1533,7 @@ python ${entryFile}
 
       case 'st_dir':
         return (
-          <div className="md-card p-3.5 sm:p-5 space-y-4 min-w-0">
+          <div className="dp-panel p-3.5 sm:p-5 space-y-4 min-w-0">
             <div>
               <h3 className="text-sm font-semibold flex items-center gap-2">
                 <FolderSync className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
@@ -1664,7 +1664,7 @@ python ${entryFile}
         return (
           <div className="space-y-4">
             {/* Live Season + Time-of-day indicator */}
-            <div className="md-card p-3.5 flex flex-wrap items-center justify-between gap-2">
+            <div className="dp-panel p-3.5 flex flex-wrap items-center justify-between gap-2">
               <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--ide-accent-text)]">
                 <Flower2 className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
                 <span>{t(atmoState.seasonKey)}</span>
@@ -1675,7 +1675,7 @@ python ${entryFile}
               </div>
             </div>
 
-            <div className="md-card divide-y divide-[var(--ide-border)] overflow-hidden">
+            <div className="dp-panel divide-y divide-[var(--ide-border)] overflow-hidden">
               <div className="flex items-center justify-between gap-4 p-4">
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium">{t('bg3d_enable_label')}</div>
@@ -1780,7 +1780,7 @@ python ${entryFile}
 
       case 'set_editor':
         return (
-          <div className="md-card divide-y divide-[var(--ide-border)] overflow-hidden">
+          <div className="dp-panel divide-y divide-[var(--ide-border)] overflow-hidden">
             {/* Font Size */}
             <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 p-4">
               <div className="min-w-0 flex-1">
@@ -1923,7 +1923,7 @@ python ${entryFile}
         return (
           <div className="space-y-4">
             {onOpenUpdateModal && (
-              <div className="md-card p-4 space-y-3">
+              <div className="dp-panel p-4 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-semibold flex flex-wrap items-center gap-2">
@@ -1958,7 +1958,7 @@ python ${entryFile}
             )}
 
             {(onOpenLogs || onOpenHelp) && (
-              <div className="md-card p-4 space-y-3">
+              <div className="dp-panel p-4 space-y-3">
                 <div>
                   <div className="text-sm font-semibold flex items-center gap-2">
                     <BookOpen className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
@@ -1997,7 +1997,7 @@ python ${entryFile}
         return (
           <div className="space-y-4">
             {/* PWA Install Card */}
-            <div className="md-card p-4 flex flex-col justify-between gap-3">
+            <div className="dp-panel p-4 flex flex-col justify-between gap-3">
               <div>
                 <h3 className="text-sm font-semibold">{t('and_pwa_title')}</h3>
                 <p className="text-xs text-[var(--ide-text-muted)] mt-1 leading-relaxed">
@@ -2010,7 +2010,7 @@ python ${entryFile}
             </div>
 
             {/* Buildozer APK & Termux Export Card */}
-            <div className="md-card p-4 space-y-4">
+            <div className="dp-panel p-4 space-y-4">
               <div>
                 <h3 className="text-sm font-semibold">{t('and_export_title')}</h3>
                 <p className="text-xs text-[var(--ide-text-muted)] mt-1">{t('and_export_desc')}</p>
@@ -2041,7 +2041,7 @@ python ${entryFile}
                 </div>
               </div>
 
-              <div className="md-card-tonal flex items-start gap-3 p-3.5">
+              <div className="dp-callout border-l-2 flex items-start gap-3 p-3.5">
                 <ShieldCheck className="w-4 h-4 text-[var(--ide-accent)] shrink-0 mt-0.5" />
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-semibold text-[var(--ide-text)]">
@@ -2085,7 +2085,7 @@ python ${entryFile}
             </div>
 
             {/* Built-in droid module reference */}
-            <div className="md-card p-4 space-y-3">
+            <div className="dp-panel p-4 space-y-3">
               <div className="flex items-center gap-2">
                 <Cpu className="w-4 h-4 text-[var(--ide-accent)]" />
                 <h3 className="text-sm font-semibold">{t('and_droid_title')}</h3>

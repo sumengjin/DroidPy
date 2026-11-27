@@ -303,7 +303,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
         ((backupStatus.missingPipPackages?.length ?? 0) > 0 ||
           (backupStatus.missingPkgPackages?.length ?? 0) > 0) &&
         onRestoreBackedUpPackages && (
-          <div className="md-card-tonal border-amber-400/70 p-3.5 flex flex-wrap items-center justify-between gap-2.5">
+          <div className="dp-callout border-l-2 border-amber-400/70 p-3.5 flex flex-wrap items-center justify-between gap-2.5">
             <div className="min-w-0 flex-1 space-y-1">
               <div className="text-sm font-semibold text-amber-900 dark:text-amber-200 flex flex-wrap items-center gap-2">
                 <PackagePlus className="w-4 h-4 shrink-0" />
@@ -348,7 +348,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
       {(showConn || showBridge) && (
       <div className={`grid grid-cols-1 ${isAll ? 'lg:grid-cols-2' : ''} gap-4`}>
         {showConn && (
-        <div className="md-card p-3.5 sm:p-5 space-y-4 min-w-0">
+        <div className="dp-panel p-3.5 sm:p-5 space-y-4 min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-semibold flex items-center gap-2 min-w-0">
               <PlugZap className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
@@ -570,7 +570,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
 
         {/* One-line Bootstrap Setup Card */}
         {showBridge && (
-        <div className="md-card p-3.5 sm:p-5 space-y-4 min-w-0">
+        <div className="dp-panel p-3.5 sm:p-5 space-y-4 min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-semibold">{t('tmx_bootstrap_title')}</h3>
             <a
@@ -617,7 +617,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
 
       {/* One-Tap Embedded APK Python + Crawler Initialization Card */}
       {showInit && (
-      <div className="md-card p-3.5 sm:p-5 space-y-4 min-w-0">
+      <div className="dp-panel p-3.5 sm:p-5 space-y-4 min-w-0">
         <div className="space-y-1">
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <Cpu className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
@@ -634,7 +634,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
       {/* 30-Min Python Watchdog & pip SSL (certifi / truststore) Maintenance Grid */}
       {showMaintenance && (
       <div className={`grid grid-cols-1 ${isAll ? 'lg:grid-cols-2' : ''} gap-4`}>
-        <div className="md-card p-3.5 sm:p-5 space-y-3 min-w-0">
+        <div className="dp-panel p-3.5 sm:p-5 space-y-3 min-w-0">
           <div className="space-y-1">
             <h3 className="text-sm font-semibold flex items-center gap-2">
               <Activity className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
@@ -670,7 +670,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
           </button>
         </div>
 
-        <div className="md-card p-3.5 sm:p-5 space-y-3 min-w-0">
+        <div className="dp-panel p-3.5 sm:p-5 space-y-3 min-w-0">
           <div className="space-y-1">
             <h3 className="text-sm font-semibold flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
@@ -734,7 +734,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
 
       {/* Termux Remote Package & Tool Installer */}
       {(showPackages || showShell) && (
-      <div className="md-card p-3.5 sm:p-5 space-y-4 min-w-0">
+      <div className="dp-panel p-3.5 sm:p-5 space-y-4 min-w-0">
         {showPackages && (
         <>
         <div className="flex flex-wrap items-center justify-between gap-3">
