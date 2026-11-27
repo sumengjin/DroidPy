@@ -1011,11 +1011,7 @@ python ${entryFile}
                     onChangeEngine('termux');
                   }
                 }}
-                className={`min-h-[36px] w-14 rounded-full p-1 transition-colors flex items-center shrink-0 ${
-                  settings.enableSandboxAddon
-                    ? 'bg-[var(--ide-accent)] justify-end'
-                    : 'bg-slate-300 dark:bg-slate-700 justify-start'
-                }`}
+                className="dp-switch min-h-[36px] w-14 rounded-full p-1 flex items-center shrink-0"
               >
                 <span className="w-6 h-6 rounded-full bg-white shadow-sm" />
               </button>
@@ -1207,11 +1203,7 @@ python ${entryFile}
                       onClick={() =>
                         onUpdateSettings({ autoUpdatePackages: !settings.autoUpdatePackages })
                       }
-                      className={`min-h-[36px] w-14 rounded-full p-1 transition-colors flex items-center shrink-0 ${
-                        settings.autoUpdatePackages
-                          ? 'bg-[var(--ide-accent)] justify-end'
-                          : 'bg-slate-300 dark:bg-slate-700 justify-start'
-                      }`}
+                      className="dp-switch min-h-[36px] w-14 rounded-full p-1 flex items-center shrink-0"
                     >
                       <span className="w-6 h-6 rounded-full bg-white shadow-sm" />
                     </button>
@@ -1688,11 +1680,7 @@ python ${entryFile}
                   role="switch"
                   aria-checked={settings.enable3dBg !== false}
                   onClick={() => onUpdateSettings({ enable3dBg: !(settings.enable3dBg !== false) })}
-                  className={`min-h-[36px] w-14 rounded-full p-1 transition-colors flex items-center shrink-0 ${
-                    settings.enable3dBg !== false
-                      ? 'bg-[var(--ide-accent)] justify-end'
-                      : 'bg-slate-300 dark:bg-slate-700 justify-start'
-                  }`}
+                  className="dp-switch min-h-[36px] w-14 rounded-full p-1 flex items-center shrink-0"
                 >
                   <span className="w-6 h-6 rounded-full bg-white shadow-sm" />
                 </button>
@@ -1849,11 +1837,7 @@ python ${entryFile}
                 role="switch"
                 aria-checked={settings.wordWrap}
                 onClick={() => onUpdateSettings({ wordWrap: !settings.wordWrap })}
-                className={`min-h-[36px] w-14 rounded-full p-1 transition-colors flex items-center shrink-0 ${
-                  settings.wordWrap
-                    ? 'bg-[var(--ide-accent)] justify-end'
-                    : 'bg-slate-300 dark:bg-slate-700 justify-start'
-                }`}
+                className="dp-switch min-h-[36px] w-14 rounded-full p-1 flex items-center shrink-0"
               >
                 <span className="w-6 h-6 rounded-full bg-white shadow-sm" />
               </button>
@@ -1870,11 +1854,7 @@ python ${entryFile}
                 role="switch"
                 aria-checked={settings.showSymbolBar}
                 onClick={() => onUpdateSettings({ showSymbolBar: !settings.showSymbolBar })}
-                className={`min-h-[36px] w-14 rounded-full p-1 transition-colors flex items-center shrink-0 ${
-                  settings.showSymbolBar
-                    ? 'bg-[var(--ide-accent)] justify-end'
-                    : 'bg-slate-300 dark:bg-slate-700 justify-start'
-                }`}
+                className="dp-switch min-h-[36px] w-14 rounded-full p-1 flex items-center shrink-0"
               >
                 <span className="w-6 h-6 rounded-full bg-white shadow-sm" />
               </button>

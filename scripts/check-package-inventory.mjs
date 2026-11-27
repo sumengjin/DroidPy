@@ -229,6 +229,13 @@ assert.doesNotMatch(panelSource, /handleInitEmbedded/);
 assert.ok(settingsWorkspaceSource.includes('fixed inset-0 z-50 flex flex-col bg-[var(--ide-bg)]'), 'Settings must occupy an independent full-screen workspace');
 assert.ok(!settingsWorkspaceSource.includes('bg-black/35') && !settingsWorkspaceSource.includes('md:max-w-6xl'), 'Settings must not be rendered as a dimmed slide-over dialog');
 assert.ok(settingsWorkspaceSource.includes('dp-nav-item'), 'Settings categories must use the shared theme-aware interaction primitive');
+const switchCount = (exportSource.match(/role="switch"/g) || []).length;
+assert.equal(switchCount, 5, 'all five settings switches must remain available');
+assert.equal((exportSource.match(/className="dp-switch/g) || []).length, switchCount, 'all settings switches must use the shared theme-aware control');
+assert.doesNotMatch(exportSource, /bg-slate-300 dark:bg-slate-700/, 'settings switches must not hard-code light/dark track colors');
+assert.match(designTokensSource, /\.dp-switch\[aria-checked="true"\][\s\S]*?background: var\(--ide-accent\)/, 'selected switches must use the active theme accent');
+assert.match(designTokensSource, /\.dp-switch[\s\S]*?background: var\(--ide-surface-alt\)/, 'unselected switches must use the active theme surface');
+
 assert.ok(!settingsWorkspaceSource.includes('backdropTouchRef'), 'the full-screen Settings workspace must not depend on backdrop dismissal gestures');
 assert.match(settingsWorkspaceSource, /termuxActiveTask/);
 assert.match(i18nSource, /首次執行 Python 或安裝套件時，自動安裝 Python 3 與 pip/);

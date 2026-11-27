@@ -429,3 +429,37 @@
   outline: 2px solid var(--ide-accent);
   outline-offset: 2px;
 }
+
+
+/* Theme-aware switches: the same selected state works across every DroidPy theme. */
+.dp-switch {
+  justify-content: flex-start;
+  border: 1px solid var(--ide-border);
+  background: var(--ide-surface-alt);
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.dp-switch[aria-checked="true"] {
+  justify-content: flex-end;
+  border-color: var(--ide-accent);
+  background: var(--ide-accent);
+}
+
+.dp-switch > span {
+  display: block;
+  flex: 0 0 auto;
+  border: 1px solid var(--ide-border);
+  background: var(--ide-surface);
+  border-radius: 9999px;
+  transition: transform 160ms ease, background-color 160ms ease;
+}
+
+.dp-switch:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.dp-switch:focus-visible {
+  outline: 2px solid var(--ide-accent);
+  outline-offset: 2px;
+}
