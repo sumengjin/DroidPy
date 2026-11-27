@@ -50,6 +50,22 @@ export function TabletSplitLayout({ split, orientation, children }: TabletSplitL
     };
   }, [split, orientation]);
 
+  const dividerCenter = horizontal
+    ? bounds.left + Math.max(0, bounds.width - dividerThicknessPx) * primaryPercent / 100 + dividerThicknessPx / 2
+    : bounds.top + Math.max(0, bounds.height - dividerThicknessPx) * primaryPercent / 100 + dividerThicknessPx / 2;
+
+  // The paper overlay sits above the 3D canvas. Publish the live viewport X
+  // coordinate so the landscape split can cut a true transparent channel in it.
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    if (!split || !horizontal || bounds.width <= 0) {
+      root.style.removeProperty('--tablet-divider-center');
+      return;
+    }
+    root.style.setProperty('--tablet-divider-center', `${dividerCenter}px`);
+    return () => root.style.removeProperty('--tablet-divider-center');
+  }, [split, horizontal, bounds.width, dividerCenter]);
+
   const updateFromPointer = (event: PointerEvent<HTMLDivElement>) => {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -75,10 +91,6 @@ export function TabletSplitLayout({ split, orientation, children }: TabletSplitL
   const gridStyle = horizontal
     ? { gridTemplateColumns: `minmax(0, ${primaryPercent}fr) 1mm minmax(0, ${100 - primaryPercent}fr)` }
     : { gridTemplateRows: `minmax(0, ${primaryPercent}fr) 1mm minmax(0, ${100 - primaryPercent}fr)` };
-
-  const dividerCenter = horizontal
-    ? bounds.left + Math.max(0, bounds.width - dividerThicknessPx) * primaryPercent / 100 + dividerThicknessPx / 2
-    : bounds.top + Math.max(0, bounds.height - dividerThicknessPx) * primaryPercent / 100 + dividerThicknessPx / 2;
 
   const fullViewportDivider = createPortal(
     <div
