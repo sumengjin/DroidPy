@@ -21,7 +21,7 @@ import {
   clearTermuxNativeLogs,
   fetchTermuxNativeLogs,
 } from '../services/termuxBridge';
-import { TermuxConfig } from '../types/ide';
+import { TermuxConfig, TerminalEntry } from '../types/ide';
 import { useI18n } from '../services/i18n';
 import { copyTextReliable } from '../utils/clipboard';
 import { downloadBlob } from '../utils/downloadBlob';
@@ -29,23 +29,25 @@ import { downloadBlob } from '../utils/downloadBlob';
 interface AppExecutionLogModalProps {
   open: boolean;
   onClose: () => void;
+  executionEntries: TerminalEntry[];
   termuxConfig: TermuxConfig;
   termuxConnected: boolean;
   onNotify: (msg: string) => void;
 }
 
-type LogViewTab = 'app' | 'native';
+type LogViewTab = 'execution' | 'app' | 'native';
 
 export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
   open,
   onClose,
+  executionEntries,
   termuxConfig,
   termuxConnected,
   onNotify,
 }) => {
   const { t } = useI18n();
   const [logs, setLogs] = useState<AppExecutionLogEntry[]>([]);
-  const [activeTab, setActiveTab] = useState<LogViewTab>('app');
+  const [activeTab, setActiveTab] = useState<LogViewTab>('execution');
   const [onlyErrors, setOnlyErrors] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [nativeLogs, setNativeLogs] = useState<TermuxNativeLogsResponse | null>(null);
@@ -95,6 +97,14 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
       });
   }, [logs, onlyErrors, searchQuery]);
 
+  const filteredExecutionEntries = useMemo(() => {
+    return [...executionEntries].reverse().filter((entry) => {
+      if (onlyErrors && entry.type !== 'stderr' && !/\\b(error|exception|traceback|failed|failure|fatal)\\b/i.test(entry.content)) return false;
+      const q = searchQuery.trim().toLowerCase();
+      return !q || entry.content.toLowerCase().includes(q) || entry.type.toLowerCase().includes(q);
+    });
+  }, [executionEntries, onlyErrors, searchQuery]);
+
   const filteredNativeLines = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const combined = [
@@ -104,9 +114,9 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
         : []),
     ];
     return combined
-      .filter((line) => !q || line.toLowerCase().includes(q))
+      .filter((line) => (!onlyErrors || /\\b(error|err|warn|warning|fatal|exception|traceback)\\b/i.test(line)) && (!q || line.toLowerCase().includes(q)))
       .slice(-300);
-  }, [nativeLogs, searchQuery]);
+  }, [nativeLogs, searchQuery, onlyErrors]);
 
   if (!open) return null;
 
@@ -122,7 +132,7 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
   };
 
   const handleCopyAll = async () => {
-    const text = formatAppLogsAsText(logs, nativeLogs);
+    const text = `--- Execution Logs ---\n${executionEntries.map((entry) => `[${entry.timestamp}] [${entry.type}] ${entry.content}`).join('\n')}\n\n${formatAppLogsAsText(logs, nativeLogs)}`;
     const ok = await copyTextReliable(text);
     if (ok) {
       setCopied(true);
@@ -188,7 +198,16 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
         {/* Tabs & Action Bar */}
         <div className="px-4 py-2.5 border-b border-[var(--ide-border)] bg-[var(--ide-surface-alt)] space-y-2.5 shrink-0">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-1 p-0.5 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)]">
+            <div className="flex flex-wrap items-center gap-1 p-0.5 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)]">
+              <button
+                type="button"
+                onClick={() => setActiveTab('execution')}
+                className={`min-h-[34px] px-3 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+                  activeTab === 'execution' ? 'bg-[var(--ide-accent)] text-white font-semibold' : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
+                }`}
+              >
+                {t('logs_tab_execution')} ({executionEntries.length})
+              </button>
               <button
                 type="button"
                 onClick={() => setActiveTab('app')}
@@ -241,14 +260,14 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
                 <Download className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
                 <span>{t('logs_export')}</span>
               </button>
-              <button
+              {activeTab !== 'execution' && <button
                 type="button"
                 onClick={() => void handleClear()}
                 className="min-h-[34px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium text-red-500 inline-flex items-center gap-1.5 whitespace-nowrap"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>{t('logs_clear')}</span>
-              </button>
+              </button>}
             </div>
           </div>
 
@@ -263,7 +282,7 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
                 className="w-full min-h-[36px] pl-8 pr-3 rounded-lg bg-[var(--ide-bg)] border border-[var(--ide-border)] text-xs focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
               />
             </div>
-            {activeTab === 'app' && (
+            {activeTab !== 'native' && (
               <div className="flex items-center gap-1 p-0.5 rounded-lg bg-[var(--ide-bg)] border border-[var(--ide-border)]">
                 <button
                   type="button"
@@ -294,7 +313,22 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
 
         {/* Body */}
         <div className="flex-1 min-h-0 overflow-y-auto ide-scroll p-3 sm:p-4 font-mono text-xs space-y-2 bg-[var(--ide-bg)]">
-          {activeTab === 'app' ? (
+          {activeTab === 'execution' ? (
+            filteredExecutionEntries.length === 0 ? (
+              <div className="py-12 text-center text-[var(--ide-text-muted)] font-sans text-xs">{t('logs_empty')}</div>
+            ) : (
+              filteredExecutionEntries.map((entry) => (
+                <div key={entry.id} className="md-card px-3 py-2.5 space-y-1">
+                  <div className="flex items-center justify-between gap-2 text-[11px] text-[var(--ide-text-muted)]">
+                    <span className={entry.type === 'stderr' ? 'text-red-500 font-semibold' : 'uppercase'}>{entry.type === 'stderr' ? t('logs_error_label') : entry.type}</span>
+                    <span className="tabular-nums">{entry.timestamp}</span>
+                  </div>
+                  <pre className="selectable-text whitespace-pre-wrap break-words text-[var(--ide-text)]">{entry.content}</pre>
+                  {entry.imageDataUrl && <img src={entry.imageDataUrl} alt={t('log_plot_output')} className="max-w-full rounded-lg" />}
+                </div>
+              ))
+            )
+          ) : activeTab === 'app' ? (
             filteredAppLogs.length === 0 ? (
               <div className="py-12 text-center text-[var(--ide-text-muted)] font-sans text-xs">
                 {t('logs_empty')}
