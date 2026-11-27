@@ -390,7 +390,9 @@ assert.ok(androidBuilder.includes('另一個 Termux 工作仍在執行，已拒�
 assert.ok(androidBuilder.includes('java.io.FileOutputStream(temp).use'));
 assert.ok(androidBuilder.includes('stream.fd.sync()'));
 assert.ok(androidBuilder.includes('android.system.Os.rename(temp.absolutePath, target.absolutePath)'), 'workspace scripts must use an API-21-compatible atomic replacement');
-assert.ok(androidBuilder.includes('Workspace file committed name=$name bytes='));
+assert.ok(androidBuilder.includes('Workspace file committed name=$name') && androidBuilder.includes('fileWriteDiagnostic(committedBytes)'));
+assert.ok(androidBuilder.includes('private fun fileWriteDiagnostic(bytes: ByteArray): String'));
+assert.ok(androidBuilder.includes('SD-card file committed name=$name') && androidBuilder.includes('SD-card file committed name=\\${target.name}'));
 const atomicWriterStart = androidBuilder.indexOf('private fun writeFileAtomically(target: File, bytes: ByteArray): ByteArray');
 const atomicWriterEnd = androidBuilder.indexOf('private fun resolveSdcardTarget', atomicWriterStart);
 assert.ok(atomicWriterStart >= 0 && atomicWriterEnd > atomicWriterStart);
