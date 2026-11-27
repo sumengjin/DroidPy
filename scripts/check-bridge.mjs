@@ -464,7 +464,7 @@ for (const key of [
 
 // A second streamed action must never cancel the currently running Python job.
 // Only the explicit Stop control is allowed to abort its AbortController.
-const termuxBridgeSource = await readFile('src/services/termuxBridge.ts', 'utf8');
+
 assert.ok(termuxBridgeSource.includes('已有 Termux 工作正在執行'));
 assert.ok(termuxBridgeSource.includes('def _compatibility_install_command(package_name, trusted_host=False):'));
 assert.ok(termuxBridgeSource.includes('package == "parsel"'));
