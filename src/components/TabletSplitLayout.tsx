@@ -120,7 +120,7 @@ export function TabletSplitLayout({ split, orientation, children }: TabletSplitL
     <>
       <div
         ref={containerRef}
-        className={`relative flex-1 min-h-0 min-w-0 grid overflow-hidden ${horizontal ? 'grid-rows-1' : 'grid-cols-1'}`}
+        className={`tablet-split-layout relative flex-1 min-h-0 min-w-0 grid overflow-hidden ${horizontal ? 'grid-rows-1' : 'grid-cols-1'}`}
         style={gridStyle}
       >
         {panes[0]}
