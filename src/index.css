@@ -488,7 +488,7 @@ button.dp-execution-control:disabled {
 .terminal-input-row {
   width: 66.6667% !important;
   max-width: 66.6667%;
-  flex: 0 0 66.6667%;
+  flex: 0 0 auto;
   min-width: 0;
   box-sizing: border-box;
   margin-inline: auto;
