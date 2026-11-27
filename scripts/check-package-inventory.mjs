@@ -399,7 +399,9 @@ assert.match(workspaceHeaderSource, /relative z-30 isolate/, 'the workspace head
 const tabletSplitControl = workspaceHeaderSource.indexOf('onClick={onToggleSplit}');
 const tabletSettingsControl = workspaceHeaderSource.indexOf('onClick={onOpenSettings}', workspaceHeaderSource.indexOf('onClick={onToggleSplit}'));
 assert.ok(tabletSplitControl >= 0 && tabletSettingsControl > tabletSplitControl, 'tablet Settings must appear to the right of the Focus Editor / split control');
-assert.match(uiExecutionControlsSource, /border-2 border-\[var\(--ide-accent\)\]/, 'Run/Pause controls must retain a complete visible accent border');
+assert.doesNotMatch(uiExecutionControlsSource, /border-2 border-\[var\(--ide-accent\)\]/, 'Run/Pause controls must not retain a decorative accent border');
+assert.match(uiExecutionControlsSource, /!border-0 !shadow-none/, 'all execution controls must suppress inherited borders and shadows');
+assert.match(uiExecutionControlsSource, /: '執行'/, 'the phone and tablet Run control must use the concise 執行 label');
 assert.match(appSource, /const navigatePhoneWorkspace = useCallback\(\(destination: 'editor' \| 'terminal' \| 'files' \| 'browser'\)/, 'phone navigation must use one explicit destination handler');
 assert.match(appSource, /onNavigate=\{navigatePhoneWorkspace\}/, 'phone bottom navigation must call the explicit destination handler');
 assert.match(appSource, /data-active-workspace=\{deviceClass === 'phone' \? mobileTab : tabletPaneTab\}/, 'the active workspace must be observable on the rendered content root');
