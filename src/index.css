@@ -496,12 +496,18 @@ button.dp-execution-control::after {
   box-shadow: none !important;
 }
 
-/* One terminal frame encloses both the scrolling output and the command line. */
+/* Phone and non-split terminal retain their shared frame. */
 .terminal-console-surface {
   background: color-mix(in srgb, var(--ide-surface) 34%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--ide-border) 72%, transparent) !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+}
+
+/* Tablet split workspace only: remove the terminal frame without changing phone UI. */
+.tablet-split-layout .terminal-console-surface {
   border: 0 !important;
   border-radius: 0 !important;
-  box-shadow: none !important;
 }
 
 .terminal-console-surface .terminal-input-row {
