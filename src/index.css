@@ -360,18 +360,17 @@
 }
 
 
-/* DroidPy's own interaction language: transparent by default, outlined only when selected. */
+/* Minimal workspace interaction: selected state is communicated by text color only. */
 .dp-nav-item {
-  border: 1px solid transparent;
+  border: 0;
   color: var(--ide-text-muted);
   background: transparent;
-  transition: color 160ms ease, border-color 160ms ease;
+  transition: color 120ms ease;
 }
 
 .dp-nav-item[aria-current="page"],
 .dp-nav-item[aria-selected="true"],
 .dp-nav-item[aria-pressed="true"] {
-  border-color: var(--ide-accent);
   color: var(--ide-accent-text);
 }
 
@@ -390,7 +389,7 @@
 }
 
 .dp-workspace-row {
-  border-bottom: 1px solid var(--ide-border);
+  border-bottom: 0;
   background: transparent;
   color: var(--ide-text);
   transition: color 160ms ease;
