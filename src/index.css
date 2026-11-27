@@ -547,13 +547,13 @@ button.dp-execution-control::after {
 }
 
 .tablet-gel-handle-vertical {
-  width: 10mm;
-  height: 3mm;
+  width: 3mm;
+  height: 10mm;
 }
 
 .tablet-gel-handle-horizontal {
-  width: 3mm;
-  height: 10mm;
+  width: 10mm;
+  height: 3mm;
 }
 
 .tablet-gel-handle-active {
