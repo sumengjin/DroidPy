@@ -191,7 +191,7 @@ assert.match(terminalSource, /handleStdinKeyDown[\s\S]*e\.key === 'Enter'/, 'Pyt
 assert.match(terminalSource, /handleTermuxStdinKeyDown[\s\S]*e\.key === 'Enter'/, 'Termux stdin must submit from the Android keyboard Enter key');
 assert.match(terminalSource, /handleReplKeyDown[\s\S]*e\.key === 'Enter'[\s\S]*submitRepl\(\)/, 'interactive REPL must submit from the Android keyboard Enter key');
 assert.equal((terminalSource.match(/className="terminal-submit-button/g) || []).length, 3, 'all terminal input modes must retain a visible in-row submit or execute button');
-assert.match(terminalSource, /<button[\\s\\S]*?type="submit"/, 'terminal submit controls must submit their containing form');
+assert.equal((terminalSource.match(/type="submit"/g) || []).length, 3, 'all three terminal input forms must expose a submit button');
 assert.doesNotMatch(terminalSource, /bg-\[var\(--ide-surface\)\].*flex items-center gap-2 shrink-0/, 'terminal input bars must not add a second opaque surface');
 assert.match(settingsWorkspaceSource, /fixed inset-0 z-\[1000\][\s\S]*?backgroundColor: 'var\(--ide-surface\)'/, 'settings must be a fully opaque top-level workspace');
 assert.match(appSource, /<TabletSplitLayout split=\{tabletSplit\} orientation=\{isLandscape \? 'horizontal' : 'vertical'\}>/, 'tablet panes must use the adjustable workbench layout');
