@@ -3166,28 +3166,51 @@ export default function App() {
                 backgroundColor: hexToRgba(activeThemeMeta.swatchBg, workspaceSurfaceAlpha),
               }}
             />
-            <span
-              className="absolute"
+            {/* A single SVG luminance mask cuts a true capsule-shaped opening from
+                the center paper strip. Its 0.75 mm radii keep both ends circular
+                instead of producing crescent-shaped joins between paper pieces. */}
+            <svg
+              aria-hidden="true"
+              className="pointer-events-none absolute"
               style={{
                 left: 'calc(var(--tablet-divider-center, 50vw) - 0.75mm)',
                 top: 0,
                 width: '1.5mm',
-                height: '8%',
-                borderRadius: '0 0 9999px 9999px',
-                backgroundColor: hexToRgba(activeThemeMeta.swatchBg, workspaceSurfaceAlpha),
+                height: '100%',
+                overflow: 'visible',
               }}
-            />
-            <span
-              className="absolute"
-              style={{
-                left: 'calc(var(--tablet-divider-center, 50vw) - 0.75mm)',
-                bottom: 0,
-                width: '1.5mm',
-                height: '8%',
-                borderRadius: '9999px 9999px 0 0',
-                backgroundColor: hexToRgba(activeThemeMeta.swatchBg, workspaceSurfaceAlpha),
-              }}
-            />
+            >
+              <defs>
+                <mask
+                  id="tablet-divider-rounded-aperture"
+                  maskUnits="userSpaceOnUse"
+                  maskContentUnits="userSpaceOnUse"
+                  x="0"
+                  y="0"
+                  width="100%"
+                  height="100%"
+                >
+                  <rect x="0" y="0" width="100%" height="100%" fill="white" />
+                  <rect
+                    x="0"
+                    y="8%"
+                    width="100%"
+                    height="84%"
+                    rx="0.75mm"
+                    ry="0.75mm"
+                    fill="black"
+                  />
+                </mask>
+              </defs>
+              <rect
+                x="0"
+                y="0"
+                width="100%"
+                height="100%"
+                fill={hexToRgba(activeThemeMeta.swatchBg, workspaceSurfaceAlpha)}
+                mask="url(#tablet-divider-rounded-aperture)"
+              />
+            </svg>
           </>
         )}
       </div>
