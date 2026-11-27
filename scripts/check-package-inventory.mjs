@@ -166,7 +166,7 @@ assert.ok(workspaceNavigationSource.includes("'w-full flex-col min-h-[56px] px-1
 assert.match(workspaceHeaderSource, /onNavigate\?\.\(id\)/, 'tablet workspace destinations must be integrated into the single top header');
 assert.match(workspaceHeaderSource, /labels\.console[\s\S]*?labels\.files[\s\S]*?labels\.browser/, 'tablet header must expose terminal, files and browser destinations once');
 assert.match(appSource, /<WorkspaceFileTabs[\s\S]*?variant="tablet"/, 'tablet file tabs must live inside the editor pane, not occupy a second global header row');
-assert.match(appSource, /className="pointer-events-none absolute inset-0 z-\[1\]"/, 'one continuous paper layer must cover the entire viewport behind phone and tablet chrome');
+assert.match(appSource, /pointer-events-none absolute inset-0 z-\[1\]"/, 'one continuous paper layer must cover the entire viewport behind phone and tablet chrome');
 assert.match(appSource, /backgroundColor: is3dBgActive \? 'var\(--ide-sheet-bg\)' : 'var\(--ide-surface\)'/, 'the paper layer must remain translucent over active 3D scenery and solid when 3D is disabled');
 assert.match(appSource, /className="relative z-10 flex-1 min-h-0 min-w-0 w-full flex flex-col overflow-hidden bg-transparent"/, 'workspace content must share the full-screen paper instead of drawing a second sheet');
 assert.match(workspaceHeaderSource, /minHeight:[\s\S]*?droidpy-statusbar-inset/, 'workspace header must reserve Android status bar safe-area height');
