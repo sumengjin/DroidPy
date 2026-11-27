@@ -237,7 +237,11 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
                 <button
                   key={id}
                   type="button"
-                  onClick={() => { onChangeSection(id); setShowCategories(false); }}
+                  onClick={() => {
+                    onChangeSection(id);
+                    // Keep the category rail logically open on wide layouts; it remains visible beside the detail pane.
+                    setShowCategories(window.matchMedia('(min-width: 768px)').matches);
+                  }}
                   aria-current={section === id ? 'page' : undefined}
                   className={`w-full min-h-[76px] px-3.5 py-3 flex items-center gap-3 text-left transition-colors active:bg-[var(--ide-surface-alt)] ${section === id ? 'bg-[var(--ide-accent-soft)]' : 'hover:bg-[var(--ide-surface-alt)]'}`}
                 >
