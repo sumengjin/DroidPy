@@ -16,6 +16,7 @@ const [source, bridgeSource, catalogSource, exportSource, panelSource, terminalS
   readFile(new URL('../android/app/src/main/assets/python/frostwork-0.2.2.dist-info/METADATA', import.meta.url), 'utf8'),
  ]);
 const themeCssSource = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
+const pyodidePackagesSource = await readFile(new URL('../src/components/PyodidePackageWorkspace.tsx', import.meta.url), 'utf8');
 
 const catalogItems = catalogSource.split(/\n  \{\n    id: '/).slice(1);
 assert.ok(catalogItems.length >= 70, 'package catalog should retain its complete inventory');
@@ -247,24 +248,28 @@ assert.match(appSource, /if \(termuxRunning \|\| termuxOperationLockRef\.current
 assert.match(appSource, /termuxOperationLockRef\.current = true[\s\S]*?streamShellInTermux/, 'native shell operations must acquire the shared Termux operation lock');
 assert.match(appSource, /termuxOperationLockRef\.current = false/, 'native Termux operation lock must be released after completion');
 assert.match(appSource, /setTermuxActiveTask\(\`install:\$\{target\.trim\(\)\}\`\)/);
-assert.match(exportSource, /activePyodidePackage/);
-assert.match(exportSource, /installingPkg \|\| activePyodidePackage/, 'the package search action must retain its spinner after the drawer remounts');
-assert.match(exportSource, /disabled=\{!!installingPkg \|\| !!activePyodidePackage/, 'package actions must remain disabled while an app-level Pyodide install is active');
-assert.match(exportSource, /overscroll-x-contain touch-pan-x/, 'horizontal package category gestures must stay within their scroller');
+assert.match(pyodidePackagesSource, /activePyodidePackage/);
+assert.match(pyodidePackagesSource, /installingPkg \|\| activePyodidePackage/, 'the package search action must retain its spinner after the workspace remounts');
+assert.match(pyodidePackagesSource, /disabled=\{!!installingPkg \|\| !!activePyodidePackage/, 'package actions must remain disabled while an app-level Pyodide install is active');
+assert.match(pyodidePackagesSource, /overscroll-x-contain touch-pan-x/, 'horizontal package category gestures must stay within their scroller');
 assert.match(panelSource, /activeTermuxTask === \`install:\$\{tmx\.targetName\}\`/);
 assert.match(panelSource, /disabled=\{!!busyAction \|\| termuxRunning/);
 assert.doesNotMatch(panelSource, /handleInitEmbedded/);
 assert.ok(settingsWorkspaceSource.includes('fixed inset-0 z-50 flex flex-col bg-[var(--ide-bg)]'), 'Settings must occupy an independent full-screen workspace');
 assert.ok(!settingsWorkspaceSource.includes('bg-black/35') && !settingsWorkspaceSource.includes('md:max-w-6xl'), 'Settings must not be rendered as a dimmed slide-over dialog');
 assert.ok(settingsWorkspaceSource.includes('dp-nav-item'), 'Settings categories must use the shared theme-aware interaction primitive');
-const switchCount = (exportSource.match(/role="switch"/g) || []).length;
+const allSettingsSwitchSource = exportSource + pyodidePackagesSource;
+const switchCount = (allSettingsSwitchSource.match(/role="switch"/g) || []).length;
 assert.equal(switchCount, 5, 'all five settings switches must remain available');
-const switchControls = [...exportSource.matchAll(/<button\b(?:(?!<button\b)[\s\S])*?role="switch"(?:(?!<\/button>)[\s\S])*?<\/button>/g)].map((match) => match[0]);
+const switchControls = [...allSettingsSwitchSource.matchAll(/<button\b(?:(?!<button\b)[\s\S])*?role="switch"(?:(?!<\/button>)[\s\S])*?<\/button>/g)].map((match) => match[0]);
 assert.equal(switchControls.length, switchCount, 'each switch must be independently identifiable for accessibility checks');
 assert.ok(switchControls.every((control) => /aria-label=\{t\('/.test(control)), 'every settings switch must expose a localized accessible name');
-assert.doesNotMatch(exportSource, /bg-white shadow-sm/, 'switch thumbs must not hard-code a white surface or shadow');
-assert.equal((exportSource.match(/className="dp-switch/g) || []).length, switchCount, 'all settings switches must use the shared theme-aware control');
-assert.doesNotMatch(exportSource, /bg-slate-300 dark:bg-slate-700/, 'settings switches must not hard-code light/dark track colors');
+assert.doesNotMatch(allSettingsSwitchSource, /bg-white shadow-sm/, 'switch thumbs must not hard-code a white surface or shadow');
+assert.equal((allSettingsSwitchSource.match(/className="dp-switch/g) || []).length, switchCount, 'all settings switches must use the shared theme-aware control');
+assert.doesNotMatch(allSettingsSwitchSource, /bg-slate-300 dark:bg-slate-700/, 'settings switches must not hard-code light/dark track colors');
+assert.match(exportSource, /<PyodidePackageWorkspace/, 'the settings hub must delegate sandbox package management to its own workspace component');
+assert.match(pyodidePackagesSource, /const handleInstall = async/, 'the package workspace must own its install lifecycle');
+assert.match(pyodidePackagesSource, /const handleUninstall = async/, 'the package workspace must own its uninstall lifecycle');
 assert.match(designTokensSource, /\.dp-switch\[aria-checked="true"\][\s\S]*?background: var\(--ide-accent\)/, 'selected switches must use the active theme accent');
 assert.match(designTokensSource, /\.dp-switch[\s\S]*?background: var\(--ide-surface-alt\)/, 'unselected switches must use the active theme surface');
 
