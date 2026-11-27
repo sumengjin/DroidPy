@@ -79,9 +79,16 @@ export function WorkspaceHeader({
           : labels.browser;
 
   return (
-    <header className={`relative z-30 isolate flex items-center justify-between gap-2 pt-safe bg-transparent shrink-0 overflow-visible ${
-      isPhone ? 'h-11 px-2' : 'h-12 px-3 gap-3'
-    }`}>
+    <header
+      className={`relative z-30 isolate flex h-auto items-center justify-between gap-2 pt-safe pb-1 bg-transparent shrink-0 overflow-visible ${
+        isPhone ? 'px-2' : 'px-3 gap-3'
+      }`}
+      style={{
+        minHeight: isPhone
+          ? 'calc(44px + max(env(safe-area-inset-top, 0px), var(--droidpy-statusbar-inset, 0px)))'
+          : 'calc(48px + max(env(safe-area-inset-top, 0px), var(--droidpy-statusbar-inset, 0px)))',
+      }}
+    >
       {isPhone ? (
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <button
