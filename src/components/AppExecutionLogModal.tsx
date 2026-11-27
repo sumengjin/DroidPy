@@ -99,7 +99,7 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
 
   const filteredExecutionEntries = useMemo(() => {
     return [...executionEntries].reverse().filter((entry) => {
-      if (onlyErrors && entry.type !== 'stderr' && !/\\b(error|exception|traceback|failed|failure|fatal)\\b/i.test(entry.content)) return false;
+      if (onlyErrors && entry.type !== 'stderr' && !/\b(error|exception|traceback|failed|failure|fatal)\b/i.test(entry.content)) return false;
       const q = searchQuery.trim().toLowerCase();
       return !q || entry.content.toLowerCase().includes(q) || entry.type.toLowerCase().includes(q);
     });
@@ -114,7 +114,7 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
         : []),
     ];
     return combined
-      .filter((line) => (!onlyErrors || /\\b(error|err|warn|warning|fatal|exception|traceback)\\b/i.test(line)) && (!q || line.toLowerCase().includes(q)))
+      .filter((line) => (!onlyErrors || /\b(error|err|warn|warning|fatal|exception|traceback)\b/i.test(line)) && (!q || line.toLowerCase().includes(q)))
       .slice(-300);
   }, [nativeLogs, searchQuery, onlyErrors]);
 
@@ -142,7 +142,7 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
   };
 
   const handleExportLogFile = async () => {
-    const text = formatAppLogsAsText(logs, nativeLogs);
+    const text = `--- Execution Logs ---\n${executionEntries.map((entry) => `[${entry.timestamp}] [${entry.type}] ${entry.content}`).join('\n')}\n\n${formatAppLogsAsText(logs, nativeLogs)}`;
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 16);
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
     await downloadBlob(blob, `droidpy-logs-${stamp}.log`);
@@ -282,8 +282,7 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
                 className="w-full min-h-[36px] pl-8 pr-3 rounded-lg bg-[var(--ide-bg)] border border-[var(--ide-border)] text-xs focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
               />
             </div>
-            {activeTab !== 'native' && (
-              <div className="flex items-center gap-1 p-0.5 rounded-lg bg-[var(--ide-bg)] border border-[var(--ide-border)]">
+            <div className="flex items-center gap-1 p-0.5 rounded-lg bg-[var(--ide-bg)] border border-[var(--ide-border)]">
                 <button
                   type="button"
                   onClick={() => setOnlyErrors(false)}
@@ -307,7 +306,6 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
                   {t('logs_filter_errors')}
                 </button>
               </div>
-            )}
           </div>
         </div>
 
