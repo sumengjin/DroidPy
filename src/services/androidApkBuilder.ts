@@ -4496,9 +4496,12 @@ def clipboard_set(text):
                                         stream.write(bytes)
                                         stream.fd.sync()
                                     }
-                                    if (!temp.renameTo(target)) {
-                                        throw java.io.IOException("Atomic workspace replace failed for $name")
-                                    }
+                                    java.nio.file.Files.move(
+                                        temp.toPath(),
+                                        target.toPath(),
+                                        java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                                        java.nio.file.StandardCopyOption.REPLACE_EXISTING
+                                    )
                                     val committedBytes = target.readBytes()
                                     if (!committedBytes.contentEquals(bytes)) {
                                         throw java.io.IOException("Workspace read-back verification failed for $name")
