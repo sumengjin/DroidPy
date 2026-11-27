@@ -820,6 +820,10 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
     const targetZenith = new THREE.Color();
     const targetHorizon = new THREE.Color();
     const targetSun = new THREE.Color();
+    const targetHemiSky = new THREE.Color();
+    const targetHemiGround = new THREE.Color();
+    const targetKeyLight = new THREE.Color();
+    const targetRimLight = new THREE.Color();
     const targetSunUv = new THREE.Vector2(0.75, 0.78);
 
     let wSakura = 0;
@@ -961,12 +965,16 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
       }
 
       // Smoothly transition the 3D objects' real material lighting as well as the sky.
-      hemiLight.color.lerp(new THREE.Color(hemiSky), Math.min(1, dt * 1.8));
-      hemiLight.groundColor.lerp(new THREE.Color(hemiGround), Math.min(1, dt * 1.8));
+      targetHemiSky.set(hemiSky);
+      targetHemiGround.set(hemiGround);
+      targetKeyLight.set(keyLightColor);
+      targetRimLight.set(rimLightColor);
+      hemiLight.color.lerp(targetHemiSky, Math.min(1, dt * 1.8));
+      hemiLight.groundColor.lerp(targetHemiGround, Math.min(1, dt * 1.8));
       hemiLight.intensity = THREE.MathUtils.damp(hemiLight.intensity, hemiIntensity, 1.8, dt);
-      keyLight.color.lerp(new THREE.Color(keyLightColor), Math.min(1, dt * 1.8));
+      keyLight.color.lerp(targetKeyLight, Math.min(1, dt * 1.8));
       keyLight.intensity = THREE.MathUtils.damp(keyLight.intensity, keyIntensity, 1.8, dt);
-      rimLight.color.lerp(new THREE.Color(rimLightColor), Math.min(1, dt * 1.8));
+      rimLight.color.lerp(targetRimLight, Math.min(1, dt * 1.8));
       rimLight.intensity = THREE.MathUtils.damp(rimLight.intensity, rimIntensity, 1.8, dt);
 
       targetBg.set(curBg);
