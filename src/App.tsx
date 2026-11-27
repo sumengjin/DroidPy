@@ -3102,21 +3102,7 @@ export default function App() {
       {deviceClass === 'tablet' && (
       <header className="relative z-10 flex items-center justify-between gap-3 h-13 px-3 pt-safe border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] shrink-0">
         <div className="flex items-center gap-2 min-w-0 flex-1">
-          <button
-            type="button"
-            onClick={() => setNegativeOpen(true)}
-            aria-label={t('neg_open_aria')}
-            className="min-h-[40px] px-2.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-[var(--ide-text)] hover:border-[var(--ide-accent)] inline-flex items-center gap-1.5 text-xs font-medium whitespace-nowrap shrink-0"
-          >
-            <Settings className="w-4 h-4 text-[var(--ide-accent)]" />
-            <span>{t('neg_title')}</span>
-          </button>
-          <img
-            src="/icon.svg"
-            alt="DroidPy"
-            className="w-6 h-6 rounded-md shrink-0"
-            referrerPolicy="no-referrer"
-          />
+
           <div className="flex items-center gap-1 overflow-x-auto no-scrollbar min-w-0">
             {files.map((file) => {
               const isActive = file.id === activeFile.id;
@@ -3315,7 +3301,9 @@ export default function App() {
               files: t('mob_files'),
               browser: t('mob_browser'),
             }}
+            settingsLabel={t('neg_title')}
             onNavigate={tabletWorkspace.navigate}
+            onOpenSettings={() => setNegativeOpen(true)}
           />
         )}
         {deviceClass === 'tablet' ? (
@@ -3494,25 +3482,36 @@ export default function App() {
                   : 'hidden'
               }
             >
-                {/* Mobile editor controls: one compact file picker and reachable 44px actions */}
-                <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-[var(--ide-border)] bg-[var(--ide-surface-alt)] shrink-0">
-                  <select
-                    aria-label={t('files_title')}
-                    value={activeFile.id}
-                    onChange={(event) => setActiveFileId(event.target.value)}
-                    className="flex-1 min-w-0 min-h-[44px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] text-[var(--ide-text)] text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
-                  >
-                    {files.map((file) => (
-                      <option key={file.id} value={file.id}>{file.name}</option>
-                    ))}
-                  </select>
-                  <div className="flex items-center gap-0.5 shrink-0">
+                {/* Mobile file strip and compact editor actions */}
+                <div className="shrink-0 border-b border-[var(--ide-border)] bg-[var(--ide-surface-alt)]">
+                  <div className="flex items-center gap-1.5 px-2 pt-2 pb-1">
+                    <div className="flex-1 min-w-0 flex items-center gap-1 overflow-x-auto no-scrollbar" role="tablist" aria-label={t('files_title')}>
+                      {files.map((file) => {
+                        const active = file.id === activeFile.id;
+                        return (
+                          <button
+                            key={file.id}
+                            type="button"
+                            role="tab"
+                            aria-selected={active}
+                            onClick={() => setActiveFileId(file.id)}
+                            className={`min-h-[36px] max-w-[180px] shrink-0 px-3 rounded-t-xl border-b-2 text-xs font-mono truncate transition-colors ${
+                              active
+                                ? 'border-[var(--ide-accent)] bg-[var(--ide-surface)] text-[var(--ide-accent-text)] font-semibold'
+                                : 'border-transparent text-[var(--ide-text-muted)] hover:bg-[var(--ide-surface)]'
+                            }`}
+                          >
+                            {file.name}
+                          </button>
+                        );
+                      })}
+                    </div>
                     <button
                       type="button"
                       onClick={() => setMobileNewFileOpen((v) => !v)}
                       aria-label={t('files_new_btn')}
                       title={t('files_new_btn')}
-                      className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl ${
+                      className={`min-h-[40px] min-w-[40px] shrink-0 flex items-center justify-center rounded-xl ${
                         mobileNewFileOpen
                           ? 'text-[var(--ide-accent-text)] bg-[var(--ide-accent-soft)]'
                           : 'text-[var(--ide-text-muted)]'
@@ -3520,41 +3519,46 @@ export default function App() {
                     >
                       <Plus className="w-4 h-4" />
                     </button>
-                    <button
-                      type="button"
-                      onClick={handleFormatActiveFile}
-                      aria-label={t('toolbar_format_title')}
-                      title={t('toolbar_format_title')}
-                      className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-[var(--ide-text-muted)]"
-                    >
-                      <AlignLeft className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => editorRef.current?.openSearch()}
-                      aria-label={t('toolbar_search_title')}
-                      title={t('toolbar_search_title')}
-                      className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-[var(--ide-text-muted)]"
-                    >
-                      <Search className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleUpdateSettings({ showSymbolBar: !settings.showSymbolBar })}
-                      aria-label={t('toolbar_symbol_bar_title')}
-                      title={t('toolbar_symbol_bar_title')}
-                      className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl ${
-                        settings.showSymbolBar
-                          ? 'text-[var(--ide-accent-text)] bg-[var(--ide-accent-soft)]'
-                          : 'text-[var(--ide-text-muted)]'
-                      }`}
-                    >
-                      <Keyboard className="w-4 h-4" />
-                    </button>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 px-2 pb-1.5">
+                    <span className="min-w-0 truncate px-1 font-mono text-[10px] text-[var(--ide-text-muted)]">
+                      {activeFile.name}
+                    </span>
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={handleFormatActiveFile}
+                        aria-label={t('toolbar_format_title')}
+                        title={t('toolbar_format_title')}
+                        className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:bg-[var(--ide-surface)]"
+                      >
+                        <AlignLeft className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => editorRef.current?.openSearch()}
+                        aria-label={t('toolbar_search_title')}
+                        title={t('toolbar_search_title')}
+                        className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:bg-[var(--ide-surface)]"
+                      >
+                        <Search className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateSettings({ showSymbolBar: !settings.showSymbolBar })}
+                        aria-label={t('toolbar_symbol_bar_title')}
+                        title={t('toolbar_symbol_bar_title')}
+                        className={`min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg ${
+                          settings.showSymbolBar
+                            ? 'text-[var(--ide-accent-text)] bg-[var(--ide-accent-soft)]'
+                            : 'text-[var(--ide-text-muted)] hover:bg-[var(--ide-surface)]'
+                        }`}
+                      >
+                        <Keyboard className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-
-                {mobileNewFileOpen && renderInlineNewFileBar()}
 
                 <CodeEditorSurface
   file={activeFile}
