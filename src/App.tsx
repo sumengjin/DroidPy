@@ -3238,7 +3238,7 @@ export default function App() {
         )}
 
       {/* Main Content Area (Mobile & Tablet Only) */}
-      <main data-active-workspace={deviceClass === 'phone' ? mobileTab : tabletPaneTab} className="relative z-10 flex-1 min-h-0 min-w-0 w-full flex flex-col overflow-hidden bg-[var(--ide-sheet-bg)]">
+      <main data-active-workspace={deviceClass === 'phone' ? mobileTab : tabletPaneTab} className="relative z-10 flex-1 min-h-0 min-w-0 w-full flex flex-col overflow-hidden bg-transparent">
         {deviceClass === 'tablet' ? (
           <TabletSplitLayout split={tabletSplit} orientation={isLandscape ? 'horizontal' : 'vertical'}>
             {/* Tablet Primary Editor Pane */}
