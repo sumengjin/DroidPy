@@ -44,6 +44,7 @@ import {
 } from './types/ide';
 import type { CodeEditorHandle } from './components/CodeEditor';
 import { CodeEditorSurface } from './components/CodeEditorSurface';
+import { WorkspaceFileTabs } from './components/WorkspaceFileTabs';
 import { TerminalPanel } from './components/TerminalPanel';
 import { FileExplorer } from './components/FileExplorer';
 import { WorkspaceNavigationRail } from './components/WorkspaceNavigationRail';
@@ -3103,33 +3104,7 @@ export default function App() {
       <header className="relative z-10 flex items-center justify-between gap-3 h-13 px-3 pt-safe border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] shrink-0">
         <div className="flex items-center gap-2 min-w-0 flex-1">
 
-          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar min-w-0">
-            {files.map((file) => {
-              const isActive = file.id === activeFile.id;
-              return (
-                <button
-                  key={file.id}
-                  type="button"
-                  onClick={() => setActiveFileId(file.id)}
-                  className={`min-h-[34px] px-2.5 rounded-lg font-mono text-xs transition-colors whitespace-nowrap shrink-0 ${
-                    isActive
-                      ? 'bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] font-semibold border border-[var(--ide-accent)]/30'
-                      : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
-                  }`}
-                >
-                  {file.name}
-                </button>
-              );
-            })}
-            <button
-              type="button"
-              onClick={() => setMobileNewFileOpen((v) => !v)}
-              aria-label={t('files_new_btn')}
-              className="min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-accent)] shrink-0"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-          </div>
+          <WorkspaceFileTabs files={files} activeFileId={activeFile.id} onSelect={setActiveFileId} onCreate={() => setMobileNewFileOpen((open) => !open)} createLabel={t('files_new_btn')} variant="tablet" />
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
@@ -3485,41 +3460,8 @@ export default function App() {
                 {/* Mobile file strip and compact editor actions */}
                 <div className="shrink-0 border-b border-[var(--ide-border)] bg-[var(--ide-surface-alt)]">
                   <div className="flex items-center gap-1.5 px-2 pt-2 pb-1">
-                    <div className="flex-1 min-w-0 flex items-center gap-1 overflow-x-auto no-scrollbar" role="tablist" aria-label={t('files_title')}>
-                      {files.map((file) => {
-                        const active = file.id === activeFile.id;
-                        return (
-                          <button
-                            key={file.id}
-                            type="button"
-                            role="tab"
-                            aria-selected={active}
-                            onClick={() => setActiveFileId(file.id)}
-                            className={`min-h-[36px] max-w-[180px] shrink-0 px-3 rounded-t-xl border-b-2 text-xs font-mono truncate transition-colors ${
-                              active
-                                ? 'border-[var(--ide-accent)] bg-[var(--ide-surface)] text-[var(--ide-accent-text)] font-semibold'
-                                : 'border-transparent text-[var(--ide-text-muted)] hover:bg-[var(--ide-surface)]'
-                            }`}
-                          >
-                            {file.name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setMobileNewFileOpen((v) => !v)}
-                      aria-label={t('files_new_btn')}
-                      title={t('files_new_btn')}
-                      className={`min-h-[40px] min-w-[40px] shrink-0 flex items-center justify-center rounded-xl ${
-                        mobileNewFileOpen
-                          ? 'text-[var(--ide-accent-text)] bg-[var(--ide-accent-soft)]'
-                          : 'text-[var(--ide-text-muted)]'
-                      }`}
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                  </div>
+                    <WorkspaceFileTabs files={files} activeFileId={activeFile.id} onSelect={setActiveFileId} onCreate={() => setMobileNewFileOpen((open) => !open)} createLabel={t('files_new_btn')} variant="phone" />
+
                   <div className="flex items-center justify-between gap-2 px-2 pb-1.5">
                     <span className="min-w-0 truncate px-1 font-mono text-[10px] text-[var(--ide-text-muted)]">
                       {activeFile.name}
