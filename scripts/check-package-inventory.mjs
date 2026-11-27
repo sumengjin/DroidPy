@@ -156,8 +156,14 @@ assert.match(backHandlerSource, /if \(ov\.negativeOpen\) \{[\s\S]*?if \(window\.
 assert.match(appSource, /if \(mobileTabRef\.current === 'packages'\) setMobileTab\(packageReturnTabRef\.current\);/, 'closing the package drawer must restore its originating workspace tab');
 
 const executionControlsSource = await readFile(new URL('../src/components/WorkspaceExecutionControls.tsx', import.meta.url), 'utf8');
-assert.match(appSource, /<WorkspaceExecutionControls[\\s\\S]*variant="tablet"/, 'tablet execution controls must use the shared state component');
-assert.match(appSource, /<WorkspaceExecutionControls[\\s\\S]*variant="phone"/, 'phone execution controls must use the shared state component');
+const tabletExecutionStart = appSource.indexOf('<WorkspaceExecutionControls');
+const tabletExecutionEnd = appSource.indexOf('/>', tabletExecutionStart);
+assert.ok(tabletExecutionStart >= 0 && tabletExecutionEnd > tabletExecutionStart);
+assert.ok(appSource.slice(tabletExecutionStart, tabletExecutionEnd).includes('variant="tablet"'), 'tablet execution controls must use the shared state component');
+const phoneExecutionStart = appSource.indexOf('<WorkspaceExecutionControls', tabletExecutionEnd);
+const phoneExecutionEnd = appSource.indexOf('/>', phoneExecutionStart);
+assert.ok(phoneExecutionStart > tabletExecutionEnd && phoneExecutionEnd > phoneExecutionStart);
+assert.ok(appSource.slice(phoneExecutionStart, phoneExecutionEnd).includes('variant="phone"'), 'phone execution controls must use the shared state component');
 assert.match(executionControlsSource, /termuxStopping \?[/\s\S]*termuxRunning \?/, 'execution controls must prioritize stopping and active Termux states');
 assert.match(executionControlsSource, /termuxPaused \? labels\.resume : labels\.pause/, 'pause control must expose the current process state');
 assert.match(executionControlsSource, /isRunning \|\| isCoreLoading/, 'Run must remain disabled while Python is busy');
