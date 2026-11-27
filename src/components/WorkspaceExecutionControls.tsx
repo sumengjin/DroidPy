@@ -1,6 +1,21 @@
+import type { CSSProperties } from 'react';
 import { Loader2, Pause, Play, Square } from 'lucide-react';
 
 type WorkspaceExecutionVariant = 'phone' | 'tablet';
+
+const borderlessButtonStyle: CSSProperties = {
+  border: 'none',
+  borderWidth: 0,
+  borderStyle: 'none',
+  borderColor: 'transparent',
+  borderImage: 'none',
+  outline: 'none',
+  boxShadow: 'none',
+  appearance: 'none',
+  WebkitAppearance: 'none',
+  backgroundImage: 'none',
+  WebkitTapHighlightColor: 'transparent',
+};
 
 interface WorkspaceExecutionControlsProps {
   variant: WorkspaceExecutionVariant;
@@ -54,21 +69,21 @@ export function WorkspaceExecutionControls({
   return (
     <div className="relative z-30 flex items-center gap-1.5 shrink-0 overflow-visible">
       {pendingInput && (
-        <button type="button" onClick={onCancelInput} className={`dp-execution-control ${buttonSize} bg-red-600 text-white ${compactText}`}>
+        <button style={borderlessButtonStyle} type="button" onClick={onCancelInput} className={`dp-execution-control ${buttonSize} bg-red-600 text-white ${compactText}`}>
           <Square className="w-3.5 h-3.5 fill-current" />
           <span>{labels.cancelInput}</span>
         </button>
       )}
 
       {termuxStopping ? (
-        <button type="button" disabled aria-busy="true" className={`dp-execution-control ${buttonSize} bg-red-600/80 text-white ${compactText}`}>
+        <button style={borderlessButtonStyle} type="button" disabled aria-busy="true" className={`dp-execution-control ${buttonSize} bg-red-600/80 text-white ${compactText}`}>
           <Loader2 className="w-3.5 h-3.5 animate-spin" />
           <span>{labels.stopping}</span>
         </button>
       ) : termuxRunning ? (
         <>
           {termuxScriptRunning && (
-            <button
+            <button style={borderlessButtonStyle}
               type="button"
               onClick={onTogglePause}
               disabled={termuxPauseBusy}
@@ -86,13 +101,13 @@ export function WorkspaceExecutionControls({
               <span>{termuxPaused ? labels.resume : labels.pause}</span>
             </button>
           )}
-          <button type="button" onClick={onStop} className={`dp-execution-control ${buttonSize} bg-red-600 text-white ${compactText}`}>
+          <button style={borderlessButtonStyle} type="button" onClick={onStop} className={`dp-execution-control ${buttonSize} bg-red-600 text-white ${compactText}`}>
             <Square className="w-3.5 h-3.5 fill-current" />
             <span>{labels.stop}</span>
           </button>
         </>
       ) : !pendingInput && showRun ? (
-        <button
+        <button style={borderlessButtonStyle}
           type="button"
           onClick={onRun}
           disabled={isRunning || isCoreLoading}
@@ -103,7 +118,7 @@ export function WorkspaceExecutionControls({
           ) : (
             <Play className="w-3.5 h-3.5 fill-current" />
           )}
-          <span>{isCoreLoading ? labels.loading : isRunning ? labels.running : '執行'}</span>
+          <span>{isCoreLoading ? labels.loading : isRunning ? labels.running : labels.run}</span>
         </button>
       ) : null}
     </div>
