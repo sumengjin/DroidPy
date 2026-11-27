@@ -512,8 +512,9 @@ button.dp-execution-control::after {
   box-shadow: none !important;
 }
 
-/* The full-height divider is an invisible 1 mm guide. Only the small
-   centered capsule is visible and draggable; the hit target stays 28 px. */
+/* The 28 px interaction surface stays invisible. The 1 mm core is a
+   borderless clear-glass separator: the live 3D atmosphere remains visible
+   through it instead of being covered by an opaque divider or a drawn edge. */
 .tablet-gel-divider,
 .tablet-gel-divider-active,
 .tablet-gel-divider-horizontal,
@@ -526,9 +527,12 @@ button.dp-execution-control::after {
 }
 
 .tablet-divider-clear-core {
-  background: transparent !important;
+  background: rgba(255, 255, 255, 0.12) !important;
   border: 0 !important;
+  outline: 0 !important;
   box-shadow: none !important;
+  -webkit-backdrop-filter: blur(1.5px) saturate(1.35);
+  backdrop-filter: blur(1.5px) saturate(1.35);
 }
 
 .tablet-gel-handle {
