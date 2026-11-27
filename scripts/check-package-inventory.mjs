@@ -81,6 +81,9 @@ assert.match(source, /if \("python-polars" in missingPkgsOnly\)[\s\S]*?pkg updat
 assert.match(source, /val packagesWithoutTur = missingPkgsOnly\.filter \{ it != "python-polars" \}/, 'TUR-only packages must not block restoration of official Termux packages');
 assert.match(source, /if pkg install -y python-polars; then[\s\S]*?all other restore steps will continue/, 'optional Polars failure must not abort the remaining restore process');
 assert.match(source, /"python-polars" in missingPkgsOnly/);
+assert.match(source, /it\.isFile && it\.canExecute\(\)/, 'Python readiness must require an executable interpreter');
+assert.match(source, /it\.name\.startsWith\("python3\."\)[\s\S]*?it\.canExecute\(\)/, 'Python readiness must support versioned Termux interpreter binaries');
+assert.match(source, /if \(pythonCmd == null\)[\s\S]*?pip restore was skipped/, 'missing Python must skip only pip restoration instead of aborting native package restoration');
 assert.match(source, /val safePkgName = Regex\("""\^\[A-Za-z0-9\]\[A-Za-z0-9\+\.\-\]\*\$"""\)/, 'APT package names from backup manifests must be validated before shell use');
 assert.match(source, /if \(!safePkgName\.matches\(v\)\)/, 'invalid APT backup entries must be skipped');
 assert.match(source, /Skipped invalid APT package names in backup manifest/);
