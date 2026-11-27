@@ -517,11 +517,8 @@ button.dp-execution-control::after {
    The center is published in viewport pixels by TabletSplitLayout as the user
    drags or resizes the workbench. */
 .tablet-landscape-split-paper {
-  /* The first mask is the opaque paper. The three lower masks form one
-     continuous aperture: a narrow center segment plus its two round ends.
-     Standard mask-composite unions those shapes, then subtracts them from paper. */
-  /* Build the rounded aperture first (center strip + two end caps), then
-     subtract that single capsule from the full paper mask. */
+  /* The first three masks union into one rounded capsule aperture;
+     the final full-screen mask is the paper that the aperture is subtracted from. */
   mask-image:
     linear-gradient(
       to right,
