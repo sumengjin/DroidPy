@@ -363,7 +363,7 @@ const stopHandlerStart = appSource.indexOf('const handleStopTermux = useCallback
 const stopHandlerEnd = appSource.indexOf('const handleBackupToSdcard', stopHandlerStart);
 assert.ok(stopHandlerStart >= 0 && stopHandlerEnd > stopHandlerStart);
 const stopHandler = appSource.slice(stopHandlerStart, stopHandlerEnd);
-assert.ok(stopHandler.indexOf('await stopTermuxProcess(termuxConfig)') < stopHandler.indexOf('await waitForActiveTermuxStream()'), 'native process must be stopped before waiting for its output stream');
+assert.ok(stopHandler.indexOf('await stopTermuxProcess(termuxConfig, { source, operation })') < stopHandler.indexOf('await waitForActiveTermuxStream()'), 'native process must be stopped before waiting for its output stream');
 assert.ok(!stopHandler.includes('setTermuxRunning(false)'), 'failed Stop must not unlock a still-running process');
 assert.ok(appSource.includes('termuxScriptStartLockRef.current = true'));
 assert.ok(appSource.includes('termuxScriptStartLockRef.current = false'));
@@ -374,7 +374,7 @@ assert.ok(termuxBridgeUi.includes('activeStreamReady'));
 assert.ok(termuxBridgeUi.includes('waitForActiveTermuxStreamReady'));
 assert.ok(termuxBridgeUi.includes('await completion'), 'Stop must wait for the old stream slot to be released');
 assert.ok(androidBuilder.includes('activeProcess === proc'));
-assert.ok(androidBuilder.includes('stopped = !proc.isAlive && activeProcess !== proc'));
+assert.ok(androidBuilder.includes('!proc.isAlive && activeProcess !== proc && !activeProcessStarting'));
 assert.ok(androidBuilder.includes('activeProcessStarting'));
 assert.ok(androidBuilder.includes('Stop arrived during process launch'));
 const streamReservation = androidBuilder.indexOf('activeProcessStarting = true', streamShellStart);
