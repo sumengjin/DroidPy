@@ -2184,29 +2184,44 @@ export default function App() {
 
   const handleOpenExternalPythonFile = useCallback(
     (file: { name: string; content: string; path: string }) => {
-      const existing = filesRef.current.find((item) => item.externalPath === file.path);
-      if (existing) {
-        setFiles((prev) =>
-          prev.map((item) =>
-            item.id === existing.id
-              ? { ...item, name: file.name, content: file.content, updatedAt: Date.now() }
-              : item
-          )
-        );
-        setActiveFileId(existing.id);
-      } else {
-        const imported: PythonFile = {
+      const existing =
+        filesRef.current.find((item) => item.externalPath === file.path) ??
+        filesRef.current.find((item) => item.name.toLowerCase() === file.name.toLowerCase());
+      const hadNameCollision = filesRef.current.some(
+        (item) =>
+          item.name.toLowerCase() === file.name.toLowerCase() &&
+          item.externalPath !== file.path
+      );
+      const imported: PythonFile = {
+        ...(existing ?? {
           id: makeId(),
           name: file.name,
           content: file.content,
           updatedAt: Date.now(),
-          externalPath: file.path,
-        };
-        setFiles((prev) => [...prev, imported]);
-        setActiveFileId(imported.id);
-      }
+        }),
+        name: file.name,
+        content: file.content,
+        updatedAt: Date.now(),
+        externalPath: file.path,
+      };
+      setFiles((prev) => {
+        const existingIndex = existing ? prev.findIndex((item) => item.id === existing.id) : prev.length;
+        const next = prev.filter(
+          (item) =>
+            item.id !== existing?.id &&
+            item.externalPath !== file.path &&
+            item.name.toLowerCase() !== file.name.toLowerCase()
+        );
+        next.splice(Math.min(Math.max(existingIndex, 0), next.length), 0, imported);
+        return next;
+      });
+      setActiveFileId(imported.id);
       setMobileTab('editor');
-      showToast(`已開啟 ${file.name}；執行時會先同步回原資料夾`);
+      showToast(
+        hadNameCollision
+          ? `工作區已有同名檔案，已改用裝置檔案：${file.name}`
+          : `已開啟 ${file.name}；執行時會先同步回原資料夾`
+      );
     },
     [showToast]
   );
