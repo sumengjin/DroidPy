@@ -505,12 +505,12 @@ button.dp-execution-control::after {
 }
 
 .terminal-console-surface .terminal-input-row {
-  width: 66.6667% !important;
-  max-width: 66.6667%;
+  width: 100% !important;
+  max-width: none !important;
   flex: 0 0 auto;
   min-width: 0;
   box-sizing: border-box;
-  margin-inline: auto;
+  margin-inline: 0;
   background: transparent !important;
   border: 0 !important;
   border-radius: 0 !important;
@@ -528,10 +528,10 @@ button.dp-execution-control::after {
 }
 
 .android-symbol-bar {
-  width: 66.6667%;
-  max-width: 100%;
+  width: 100%;
+  max-width: none;
   box-sizing: border-box;
-  margin-inline: auto;
+  margin-inline: 0;
   border: 0 !important;
   border-top: 0 !important;
   border-bottom: 0 !important;

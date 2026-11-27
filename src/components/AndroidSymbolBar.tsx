@@ -50,7 +50,7 @@ export const AndroidSymbolBar: React.FC<AndroidSymbolBarProps> = ({
 
   return (
     <div
-      className="android-symbol-bar flex items-center gap-1.5 overflow-x-auto no-scrollbar px-2 py-1.5 bg-transparent select-none"
+      className="android-symbol-bar w-full self-stretch flex items-center gap-1.5 overflow-x-auto no-scrollbar px-2 py-1.5 bg-transparent select-none"
       role="toolbar"
       aria-label="Android 觸控符號列"
     >
@@ -86,8 +86,6 @@ export const AndroidSymbolBar: React.FC<AndroidSymbolBarProps> = ({
       >
         <ChevronRight className="w-4 h-4" />
       </button>
-
-      <div className="h-5 w-px bg-[var(--ide-text-muted)]/25 shrink-0 mx-0.5" aria-hidden="true" />
 
       {symbols.map((sym) => (
         <button

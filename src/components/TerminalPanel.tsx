@@ -433,7 +433,15 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       )}
 
       {/* Output and command line are one continuous terminal surface. */}
-      <div className="terminal-console-surface flex-1 min-h-0 flex flex-col overflow-hidden">
+      <div
+        className="terminal-console-surface flex-1 min-h-0 flex flex-col overflow-hidden"
+        onClick={(event) => {
+          // Like Termux, the whole terminal surface is an input target.
+          // Keep toolbar/action buttons usable without stealing their clicks.
+          if (event.target instanceof Element && event.target.closest('button, a')) return;
+          inputRef.current?.focus({ preventScroll: true });
+        }}
+      >
       <div
         ref={scrollRef}
         onScroll={(event) => {
@@ -476,17 +484,14 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         <input
           ref={inputRef}
           type="text"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
           value={terminalValue}
           onChange={(event) => setTerminalValue(event.target.value)}
           onKeyDown={handleTerminalKeyDown}
           enterKeyHint="send"
           aria-label={inputSessionActive || pendingInputPrompt !== null ? t('term_input_label') : 'Terminal command'}
-          disabled={
-            !inputSessionActive &&
-            pendingInputPrompt === null &&
-            (status === 'running' || (engine === 'pyodide' && status === 'loading')) &&
-            !(engine === 'termux' && status === 'running' && onSendTermuxStdin)
-          }
           placeholder={
             pendingInputPrompt ||
             (inputSessionActive
