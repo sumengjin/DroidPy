@@ -71,7 +71,7 @@ export function WorkspaceHeader({
 }: WorkspaceHeaderProps) {
   const isPhone = variant === 'phone';
   const title = activeTab === 'editor'
-    ? labels.editor
+    ? activeFile.name
     : activeTab === 'console'
       ? labels.console
       : activeTab === 'files'
@@ -95,9 +95,7 @@ export function WorkspaceHeader({
           >
             <Settings className="w-5 h-5" />
           </button>
-          {activeTab !== 'editor' && (
-            <span className="text-sm font-semibold leading-tight truncate">{title}</span>
-          )}
+          <span className="text-sm font-semibold leading-tight truncate">{title}</span>
         </div>
       ) : (
         <div className="flex items-center gap-2 min-w-0 flex-1">
