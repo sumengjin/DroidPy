@@ -3178,9 +3178,11 @@ def clipboard_set(text):
     private fun fileWriteDiagnostic(bytes: ByteArray): String {
         val digest = java.security.MessageDigest.getInstance("SHA-256")
             .digest(bytes).joinToString("") { "%02x".format(it) }
-        val firstLineHex = bytes.takeWhile { it != 10.toByte() }.take(12)
-            .joinToString("") { "%02x".format(it) }
-        return "bytes=\${bytes.size} sha256=$digest firstLineHex=$firstLineHex"
+        val firstCodeByte = bytes.firstOrNull {
+            it != 32.toByte() && it != 9.toByte() && it != 10.toByte() && it != 13.toByte()
+        }
+        val firstCodeByteHex = firstCodeByte?.let { "%02x".format(it) } ?: "none"
+        return "bytes=\${bytes.size} sha256=$digest firstNonWhitespaceByteHex=$firstCodeByteHex"
     }
 
     private fun resolveSdcardTarget(relPath: String): File? {
