@@ -180,7 +180,7 @@ interface ToolsAndPackagesProps {
   onRunShellInTermux: (cmd: string) => Promise<boolean | void>;
   onGenerateRequirements: () => void;
   onInstallRequirements: () => Promise<void>;
-  onSaveWorkspaceFile: (filename: string, content: string, openInEditor?: boolean) => void;
+  onSaveWorkspaceFile: (filename: string, content: string, openInEditor?: boolean, externalPath?: string) => void;
   onOpenHelp?: () => void;
   onOpenLogs?: () => void;
   backupStatus?: PackageBackupStatus | null;
