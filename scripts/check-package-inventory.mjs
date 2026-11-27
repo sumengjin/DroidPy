@@ -228,8 +228,8 @@ assert.match(tabletSplitSource, /tablet-gel-handle-vertical[\s\S]*tablet-gel-han
 assert.match(tabletSplitSource, /setIsDragging\(true\)[\s\S]*setIsDragging\(false\)/, 'tablet gel divider must visibly respond while being dragged');
 assert.match(themeCssSource, /\.tablet-gel-divider[\s\S]*background: transparent !important[\s\S]*box-shadow: none !important/, 'the full-height divider hit area must draw no line, edge or glow');
 assert.match(themeCssSource, /\.tablet-divider-clear-core[\s\S]*background: transparent !important[\s\S]*box-shadow: none !important/, 'the 1 mm full-height divider core must be completely invisible');
-assert.match(themeCssSource, /\.tablet-gel-handle-vertical[\s\S]*width: 10mm[\s\S]*height: 3mm/, 'the vertical divider must show a 1 cm long, narrow horizontal gel handle');
-assert.match(themeCssSource, /\.tablet-gel-handle-horizontal[\s\S]*width: 3mm[\s\S]*height: 10mm/, 'the horizontal divider must show a 1 cm long, narrow vertical gel handle');
+assert.match(themeCssSource, /\.tablet-gel-handle-vertical[\s\S]*width: 3mm[\s\S]*height: 10mm/, 'the vertical divider must show a 1 cm long, narrow vertical gel handle');
+assert.match(themeCssSource, /\.tablet-gel-handle-horizontal[\s\S]*width: 10mm[\s\S]*height: 3mm/, 'the horizontal divider must show a 1 cm long, narrow horizontal gel handle');
 assert.match(tabletSplitSource, /onPointerDown=[\s\S]*setPointerCapture[\s\S]*updateFromPointer\(event\)[\s\S]*onPointerMove=[\s\S]*updateFromPointer/, 'tablet divider must respond immediately and continuously to touch or mouse dragging');
 assert.match(themeCssSource, /\.tablet-split-layout \.terminal-console-surface[\s\S]*background: transparent !important[\s\S]*border: 0 !important/, 'tablet terminal must share the transparent workspace background and have no frame');
 assert.doesNotMatch(appSource, /w-\[56%\]|h-\[56%\]/, 'tablet split panes must not use the old fixed 56 percent layout');
