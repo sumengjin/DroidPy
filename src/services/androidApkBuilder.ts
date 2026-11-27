@@ -2074,6 +2074,7 @@ class EmbeddedTermuxBridge(
     @Volatile private var activeProcess: Process? = null
     @Volatile private var activeProcessStarting: Boolean = false
     private val activeProcessLock = Any()
+    private val atomicFileWriteLock = Any()
     @Volatile private var activeProcessPaused: Boolean = false
     @Volatile private var activeProcessStopRequested: Boolean = false
     private val activeProcessStartedAt = AtomicLong(0L)
@@ -3146,6 +3147,31 @@ def clipboard_set(text):
                 appContext,
                 Manifest.permission.WRITE_EXTERNAL_STORAGE
             ) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    private fun writeFileAtomically(target: File, bytes: ByteArray): ByteArray {
+        val parent = target.parentFile ?: throw java.io.IOException("Target has no parent directory")
+        if (!parent.exists() && !parent.mkdirs()) {
+            throw java.io.IOException("Cannot create target directory: \${parent.absolutePath}")
+        }
+        synchronized(atomicFileWriteLock) {
+            val temp = File(parent, ".\${target.name}.\${System.nanoTime()}.tmp")
+            try {
+                java.io.FileOutputStream(temp).use { stream ->
+                    stream.write(bytes)
+                    stream.fd.sync()
+                }
+                // POSIX rename is atomic on the same filesystem and replaces an existing file.
+                android.system.Os.rename(temp.absolutePath, target.absolutePath)
+                val committed = target.readBytes()
+                if (!committed.contentEquals(bytes)) {
+                    throw java.io.IOException("Atomic write read-back verification failed: \${target.name}")
+                }
+                return committed
+            } finally {
+                if (temp.exists()) temp.delete()
+            }
         }
     }
 
@@ -4489,26 +4515,13 @@ def clipboard_set(text):
                                 val name = File(f.optString("name", "")).name
                                 if (name.isBlank()) continue
                                 val target = File(workspaceDir, name)
-                                val temp = File(workspaceDir, ".\${name}.\${System.nanoTime()}.tmp")
                                 val bytes = f.optString("content", "").toByteArray(Charsets.UTF_8)
-                                try {
-                                    java.io.FileOutputStream(temp).use { stream ->
-                                        stream.write(bytes)
-                                        stream.fd.sync()
-                                    }
-                                    android.system.Os.rename(temp.absolutePath, target.absolutePath)
-                                    val committedBytes = target.readBytes()
-                                    if (!committedBytes.contentEquals(bytes)) {
-                                        throw java.io.IOException("Workspace read-back verification failed for $name")
-                                    }
-                                    val digest = java.security.MessageDigest.getInstance("SHA-256")
-                                        .digest(committedBytes).joinToString("") { "%02x".format(it) }
-                                    val firstLineHex = committedBytes.takeWhile { it != 10.toByte() }.take(12)
-                                        .joinToString("") { "%02x".format(it) }
-                                    appendNativeLog("Exec", "Workspace file committed name=$name bytes=\${committedBytes.size} sha256=$digest firstLineHex=$firstLineHex")
-                                } finally {
-                                    if (temp.exists()) temp.delete()
-                                }
+                                val committedBytes = writeFileAtomically(target, bytes)
+                                val digest = java.security.MessageDigest.getInstance("SHA-256")
+                                    .digest(committedBytes).joinToString("") { "%02x".format(it) }
+                                val firstLineHex = committedBytes.takeWhile { it != 10.toByte() }.take(12)
+                                    .joinToString("") { "%02x".format(it) }
+                                appendNativeLog("Exec", "Workspace file committed name=$name bytes=\${committedBytes.size} sha256=$digest firstLineHex=$firstLineHex")
                             }
                         }
                     } else null
