@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [source, bridgeSource, catalogSource, exportSource, panelSource, terminalSource, appSource, drawerSource, i18nSource, crawlerSessionSource, frostworkSource, frostworkMetadata] = await Promise.all([
+const [source, bridgeSource, catalogSource, exportSource, panelSource, terminalSource, appSource, settingsWorkspaceSource, i18nSource, crawlerSessionSource, frostworkSource, frostworkMetadata] = await Promise.all([
   readFile(new URL('../src/services/androidApkBuilder.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/services/termuxBridge.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/data/packageCatalog.ts', import.meta.url), 'utf8'),
@@ -163,11 +163,11 @@ for (const surfaceSource of [exportSource, panelSource, terminalSource, ...legac
 }
 assert.match(designTokensSource, /\.dp-panel,[\s\S]*?\.dp-panel-tonal[\s\S]*?background: transparent[\s\S]*?border: 0/, 'DroidPy panels must be transparent and surface-free');
 assert.match(designTokensSource, /\.dp-sheet[\s\S]*?box-shadow: none/, 'DroidPy sheets must not use the old Material shadow treatment');
-assert.doesNotMatch(designTokensSource, /--md-[\\w-]+\\s*:/, 'unused Material theme variables must be retired from the new design system');
+assert.doesNotMatch(designTokensSource, /--md-[\w-]+\s*:/, 'unused Material theme variables must be retired from the new design system');
 assert.doesNotMatch(designTokensSource, /\.md-card\s*\{|\.md-sheet\s*\{|\.md-nav-pill\s*\{|\.md-fab\s*\{/, 'old Material visual primitives must be retired');
 
 assert.doesNotMatch(workspaceNavigationSource, /id: 'packages'/, 'package management must not occupy a primary bottom-navigation destination');
-assert.match(drawerSource, /id: 'packages' as const, label: t\('neg_category_packages'\)/, 'package management must remain available as a translated dedicated Settings category');
+assert.match(settingsWorkspaceSource, /id: 'packages' as const, label: t\('neg_category_packages'\)/, 'package management must remain available as a translated dedicated Settings category');
 assert.match(exportSource, /activeSubView === 'packages'[\s\S]*?renderHubOptionList\(packageHubOptions/, 'package management must open directly without an intermediate folder screen');
 assert.doesNotMatch(exportSource, /renderFolderList|renderFolderContents|setPackageFolder|setTermuxFolder|setStorageFolder|setSettingsFolder/, 'the Settings workspace must not retain nested folder navigation');
 assert.match(exportSource, /workspaceMode\?: boolean/, 'the system center must use workspace layout terminology rather than drawer terminology');
@@ -226,11 +226,11 @@ assert.match(exportSource, /overscroll-x-contain touch-pan-x/, 'horizontal packa
 assert.match(panelSource, /activeTermuxTask === \`install:\$\{tmx\.targetName\}\`/);
 assert.match(panelSource, /disabled=\{!!busyAction \|\| termuxRunning/);
 assert.doesNotMatch(panelSource, /handleInitEmbedded/);
-assert.ok(drawerSource.includes('fixed inset-0 z-50 flex flex-col bg-[var(--ide-bg)]'), 'Settings must occupy an independent full-screen workspace');
-assert.ok(!drawerSource.includes('bg-black/35') && !drawerSource.includes('md:max-w-6xl'), 'Settings must not be rendered as a dimmed slide-over dialog');
-assert.ok(drawerSource.includes('dp-nav-item'), 'Settings categories must use the shared theme-aware interaction primitive');
-assert.ok(!drawerSource.includes('backdropTouchRef'), 'the full-screen Settings workspace must not depend on backdrop dismissal gestures');
-assert.match(drawerSource, /termuxActiveTask/);
+assert.ok(settingsWorkspaceSource.includes('fixed inset-0 z-50 flex flex-col bg-[var(--ide-bg)]'), 'Settings must occupy an independent full-screen workspace');
+assert.ok(!settingsWorkspaceSource.includes('bg-black/35') && !settingsWorkspaceSource.includes('md:max-w-6xl'), 'Settings must not be rendered as a dimmed slide-over dialog');
+assert.ok(settingsWorkspaceSource.includes('dp-nav-item'), 'Settings categories must use the shared theme-aware interaction primitive');
+assert.ok(!settingsWorkspaceSource.includes('backdropTouchRef'), 'the full-screen Settings workspace must not depend on backdrop dismissal gestures');
+assert.match(settingsWorkspaceSource, /termuxActiveTask/);
 assert.match(i18nSource, /首次執行 Python 或安裝套件時，自動安裝 Python 3 與 pip/);
 assert.match(exportSource, /matplotlib:\s*'matplotlib'/);
 

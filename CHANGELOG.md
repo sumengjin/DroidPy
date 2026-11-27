@@ -3,6 +3,7 @@
 All notable changes to **DroidPy** are documented in this file.
 
 ## [Unreleased]
+- **清理工作區測試與主畫面匯入**：回歸測試統一使用 Settings Workspace 命名，並讓 Material token 檢查真正匹配 CSS 變數定義；移除主畫面不再使用的圖示匯入。
 - **建立工作區設計規範文件**：記錄手機／平板資訊架構、透明導覽選取規則、主題 token、浮層邊界及共用執行控制器責任，作為後續全面重建的介面基準。
 - **移除未使用的 Material 主題變數**：清除所有舊 `--md-*` 色彩與 FAB token，主題表面、選取、焦點與禁用狀態完全改由 DroidPy 自有的 `--ide-*` 與 `dp-*` 設計系統控制。
 - **統一設定工作區命名**：將主畫面與型別中的舊抽屜／負頁命名改為 Settings Workspace，讓程式結構與新的獨立全螢幕設定中心一致；同步移除主畫面最後一處 Material 表面背景。
