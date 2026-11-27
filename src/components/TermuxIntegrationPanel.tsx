@@ -28,6 +28,7 @@ import {
   TermuxHealthInfo,
 } from '../types/ide';
 import {
+  CORE_TERMUX_PIP_PACKAGES,
   TermuxOutdatedPipItem,
   buildTermuxBridgeScript,
   buildTermuxOneLineCommand,
@@ -37,8 +38,6 @@ import { useI18n } from '../services/i18n';
 import { downloadBlob } from '../utils/downloadBlob';
 import { copyTextReliable } from '../utils/clipboard';
 import { TermuxPackageWorkspace } from './TermuxPackageWorkspace';
-import {
-} from '../data/packageCatalog';
 
 export type TermuxVisibleSection =
   | 'all'
@@ -136,6 +135,17 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
     }
     return map;
   }, [outdatedTermuxPips]);
+
+  const handleUninstallTarget = async (mode: 'pkg' | 'pip', target: string) => {
+    const clean = target.trim();
+    if (!clean || !onUninstallInTermux || busyAction || termuxRunning || upgradingTermux) return;
+    setBusyAction(`uninstall:${clean}`);
+    try {
+      await onUninstallInTermux(mode, clean);
+    } finally {
+      setBusyAction(null);
+    }
+  };
 
   const handleCopyBootstrap = async () => {
     const ok = await copyTextReliable(oneLineCmd);
