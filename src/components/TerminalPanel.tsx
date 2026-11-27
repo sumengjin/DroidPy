@@ -512,7 +512,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       ) : engine === 'termux' && status === 'running' ? (
         <form
           onSubmit={handleTermuxStdinSubmit}
-          className="w-2/3 max-w-full mx-auto px-2 py-1 bg-transparent flex items-center gap-2 shrink-0"
+          className="terminal-input-row px-2 py-1 bg-transparent flex items-center gap-2 shrink-0"
         >
           <span className="text-xs font-semibold text-[var(--ide-accent-text)] pl-1.5 whitespace-nowrap shrink-0">
             {t('term_stdin_label')}
@@ -533,7 +533,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         /* Persistent Interactive Python REPL Input */
         <form
           onSubmit={handleReplSubmit}
-          className="w-2/3 max-w-full mx-auto px-2 py-1 bg-transparent flex items-center gap-2 shrink-0"
+          className="terminal-input-row px-2 py-1 bg-transparent flex items-center gap-2 shrink-0"
         >
           <span className="font-mono text-xs font-semibold text-[var(--ide-accent-text)] pl-2 shrink-0 select-none">
             {engine === 'termux' ? '$' : '>>>'}
