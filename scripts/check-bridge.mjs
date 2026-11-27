@@ -389,7 +389,7 @@ assert.ok(androidBuilder.includes('Rejected overlapping streamed operation'));
 assert.ok(androidBuilder.includes('另一個 Termux 工作仍在執行，已拒絕這次操作'));
 assert.ok(androidBuilder.includes('java.io.FileOutputStream(temp).use'));
 assert.ok(androidBuilder.includes('stream.fd.sync()'));
-assert.ok(androidBuilder.includes('temp.renameTo(target)'), 'workspace scripts must be replaced atomically');
+assert.ok(androidBuilder.includes('java.nio.file.Files.move(') && androidBuilder.includes('StandardCopyOption.ATOMIC_MOVE') && androidBuilder.includes('StandardCopyOption.REPLACE_EXISTING'), 'workspace scripts must use an explicit atomic replacement');
 assert.ok(androidBuilder.includes('Workspace file committed name=$name bytes='));
 assert.ok(androidBuilder.includes('streamShellCommand(out, shellCmd, stageWorkspaceFiles)'), 'script staging must happen inside the reserved native operation');
 
