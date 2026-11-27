@@ -434,7 +434,7 @@ assert.ok(androidBuilder.includes('code = -1'), 'intentional Stop must not be re
 assert.ok(androidBuilder.includes('Requesting shared-storage permission on first launch'));
 assert.ok(!androidBuilder.includes('private val executor = Executors.newCachedThreadPool()'));
 
-// The tool center uses real folder -> document navigation and preserves parent folders on Back.
+// The Settings workspace opens its main tools directly; nested folder landing pages are retired.
 const toolsHubSource = await readFile('src/components/ToolsAndPackages.tsx', 'utf8');
 assert.ok(toolsHubSource.includes('onOpenSdcardFile={(filename, content, path) => onSaveWorkspaceFile(filename, content, true, path)}'), 'settings storage imports must preserve the source path');
 assert.ok(toolsHubSource.includes('onSaveWorkspaceFile(filename, content, true, path)'), 'all SD-card file import callbacks must forward their original path');
@@ -446,21 +446,10 @@ assert.ok(externalFileSave.includes('externalPath?: string'));
 assert.ok(externalFileSave.includes('file.externalPath === externalPath'), 'external files must be matched by their original path, not basename alone');
 assert.ok(externalFileSave.includes('{ externalPath }'), 'opening an external file must retain its original path for save-before-run');
 assert.ok(toolsHubSource.includes("const [activeWindow, setActiveWindow] = useState<ToolWindowId | null>(null)"));
-assert.ok(toolsHubSource.includes('const renderFolderList = <T extends string,>'));
-assert.ok(toolsHubSource.includes('const renderFolderContents ='));
-assert.ok(toolsHubSource.includes("setTermuxFolder(null)"));
-assert.ok(toolsHubSource.includes("setPackageFolder(null)"));
-assert.ok(toolsHubSource.includes("setStorageFolder(null)"));
-assert.ok(toolsHubSource.includes("setSettingsFolder(null)"));
-assert.ok(toolsHubSource.includes('activeFolderLabel &&'));
-const toolFolderTranslations = await readFile('src/services/i18n.tsx', 'utf8');
-for (const key of [
-  'hub_py_folder_runtime', 'hub_py_folder_maintenance',
-  'hub_pkg_folder_termux', 'hub_pkg_folder_sandbox',
-  'hub_storage_folder_device', 'hub_storage_folder_workspace',
-]) {
-  assert.ok(toolFolderTranslations.includes(key + ':'), 'missing localized folder key: ' + key);
-}
+assert.ok(toolsHubSource.includes('const renderHubOptionList ='));
+assert.ok(toolsHubSource.includes("if (activeSubView === 'packages')"));
+assert.ok(toolsHubSource.includes('renderHubOptionList(packageHubOptions'), 'the package center must open native and sandbox package destinations directly');
+assert.ok(!/renderFolderList|renderFolderContents|setTermuxFolder|setPackageFolder|setStorageFolder|setSettingsFolder|activeFolderLabel/.test(toolsHubSource), 'nested folder landing pages and folder-specific back states must be removed');
 
 // A second streamed action must never cancel the currently running Python job.
 // Only the explicit Stop control is allowed to abort its AbortController.
