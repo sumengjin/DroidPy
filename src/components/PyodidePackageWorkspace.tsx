@@ -227,8 +227,8 @@ export const PyodidePackageWorkspace: React.FC<PyodidePackageWorkspaceProps> = (
                   </form>
 
                   {pkgQuery.trim().length > 0 && fuzzyPyResults.length > 0 && (
-                    <div className="rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] overflow-hidden divide-y divide-[var(--ide-border)]">
-                      <div className="px-3.5 py-2 bg-[var(--ide-surface-alt)] text-[11px] font-medium text-[var(--ide-text-muted)]">
+                    <div className="divide-y divide-[var(--ide-border)]">
+                      <div className="px-1 py-2 text-xs font-medium text-[var(--ide-text-muted)]">
                         {t('pkg_fuzzy_header')}
                       </div>
                       {fuzzyPyResults.map(({ item, matchedAlias }) => {
@@ -340,17 +340,14 @@ export const PyodidePackageWorkspace: React.FC<PyodidePackageWorkspaceProps> = (
                 {/* Categorized Popular & Niche Packages Catalog */}
                 <div className="space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--ide-surface-alt)] border border-[var(--ide-border)]">
+                    <div className="flex items-center gap-1 flex-wrap">
                       {(['all', 'popular', 'niche'] as const).map((tier) => (
                         <button
                           key={tier}
                           type="button"
                           onClick={() => setTierFilter(tier)}
-                          className={`min-h-[34px] px-3 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-                            tierFilter === tier
-                              ? 'bg-[var(--ide-surface)] text-[var(--ide-accent-text)] font-semibold shadow-xs'
-                              : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
-                          }`}
+                          aria-pressed={tierFilter === tier}
+                          className="dp-nav-item min-h-[36px] px-3 rounded-lg text-xs font-medium whitespace-nowrap"
                         >
                           {t(`pkg_tier_${tier}` as TranslationKey)}
                         </button>
@@ -369,11 +366,8 @@ export const PyodidePackageWorkspace: React.FC<PyodidePackageWorkspaceProps> = (
                           key={cat.id}
                           type="button"
                           onClick={() => setCatFilter(cat.id)}
-                          className={`min-h-[36px] px-3 rounded-xl border text-xs font-medium whitespace-nowrap shrink-0 transition-colors ${
-                            active
-                              ? 'border-[var(--ide-accent)] bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] font-semibold'
-                              : 'border-[var(--ide-border)] bg-[var(--ide-surface)] text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
-                          }`}
+                          aria-pressed={active}
+                          className="dp-nav-item min-h-[36px] px-3 rounded-lg text-xs font-medium whitespace-nowrap shrink-0"
                         >
                           {t(cat.labelKey as TranslationKey)}
                         </button>
@@ -381,7 +375,7 @@ export const PyodidePackageWorkspace: React.FC<PyodidePackageWorkspaceProps> = (
                     })}
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pr-0.5">
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-x-8 pr-0.5">
                     {filteredPyCatalog.map((item) => {
                       const targetName = item.pyodide?.packageName ?? item.name;
                       const normTarget = normalizePyPkgName(targetName);
@@ -394,7 +388,7 @@ export const PyodidePackageWorkspace: React.FC<PyodidePackageWorkspaceProps> = (
                       return (
                         <div
                           key={item.id}
-                          className="dp-panel flex items-center justify-between gap-3 p-3.5"
+                          className="dp-workspace-row min-h-[84px] flex items-center justify-between gap-3 py-3"
                         >
                           <div className="min-w-0">
                             <div className="font-mono text-sm font-semibold text-[var(--ide-text)] truncate flex items-center gap-1.5">

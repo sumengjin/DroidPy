@@ -270,6 +270,9 @@ assert.doesNotMatch(allSettingsSwitchSource, /bg-slate-300 dark:bg-slate-700/, '
 assert.match(exportSource, /<PyodidePackageWorkspace/, 'the settings hub must delegate sandbox package management to its own workspace component');
 assert.match(pyodidePackagesSource, /const handleInstall = async/, 'the package workspace must own its install lifecycle');
 assert.match(pyodidePackagesSource, /const handleUninstall = async/, 'the package workspace must own its uninstall lifecycle');
+assert.match(pyodidePackagesSource, /aria-pressed={tierFilter === tier}/, 'package tier filters must expose selected state and use the transparent navigation primitive');
+assert.match(pyodidePackagesSource, /aria-pressed={active}/, 'package category filters must expose selected state and use the transparent navigation primitive');
+assert.match(pyodidePackagesSource, /dp-workspace-row min-h-\\[84px\\]/, 'package catalog entries must use flat divider-based workspace rows instead of framed cards');
 assert.match(designTokensSource, /\.dp-switch\[aria-checked="true"\][\s\S]*?background: var\(--ide-accent\)/, 'selected switches must use the active theme accent');
 assert.match(designTokensSource, /\.dp-switch[\s\S]*?background: var\(--ide-surface-alt\)/, 'unselected switches must use the active theme surface');
 
