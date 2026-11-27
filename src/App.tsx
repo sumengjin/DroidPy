@@ -2236,21 +2236,39 @@ export default function App() {
   );
 
   const handleSaveWorkspaceFile = useCallback(
-    (filename: string, content: string, openInEditor = false) => {
+    (filename: string, content: string, openInEditor = false, externalPath?: string) => {
       const cleanName = sanitizeFileName(filename);
       if (!cleanName) return;
-      const existing = filesRef.current.find(
-        (f) => f.name.toLowerCase() === cleanName.toLowerCase()
+      const existing = filesRef.current.find((file) =>
+        externalPath
+          ? file.externalPath === externalPath
+          : file.name.toLowerCase() === cleanName.toLowerCase()
       );
       const targetId = existing?.id ?? makeId();
       setFiles((prev) => {
-        const idx = prev.findIndex((f) => f.name.toLowerCase() === cleanName.toLowerCase());
+        const idx = prev.findIndex((file) =>
+          externalPath
+            ? file.externalPath === externalPath
+            : file.name.toLowerCase() === cleanName.toLowerCase()
+        );
         if (idx >= 0) {
-          const next = [...prev];
-          next[idx] = { ...next[idx], content, updatedAt: Date.now() };
-          return next;
+          const updated = [...prev];
+          updated[idx] = {
+            ...updated[idx],
+            name: cleanName,
+            content,
+            updatedAt: Date.now(),
+            ...(externalPath ? { externalPath } : {}),
+          };
+          return updated;
         }
-        return [...prev, { id: targetId, name: cleanName, content, updatedAt: Date.now() }];
+        return [...prev, {
+          id: targetId,
+          name: cleanName,
+          content,
+          updatedAt: Date.now(),
+          ...(externalPath ? { externalPath } : {}),
+        }];
       });
       if (openInEditor) {
         setActiveFileId(targetId);
