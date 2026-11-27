@@ -494,38 +494,12 @@ button.dp-execution-control::after {
   box-shadow: none !important;
 }
 
-/* In landscape tablet split mode, remove a true 1.5 mm vertical strip from
-   the full-screen paper so the 3D canvas below is visible through the divider.
-   The center is published in viewport pixels by TabletSplitLayout as the user
-   drags or resizes the workbench. */
+/* Tablet landscape divider aperture is assembled from four alpha-matched
+   paper pieces in App.tsx. Avoid CSS mask-composite here: Android WebView can
+   composite the multi-layer mask as an empty surface, hiding the transparency
+   slider's entire paper layer. */
 .tablet-landscape-split-paper {
-  /* The first three masks union into one rounded capsule aperture;
-     the final full-screen mask is the paper that the aperture is subtracted from. */
-  mask-image:
-    linear-gradient(
-      to right,
-      transparent 0,
-      transparent calc(var(--tablet-divider-center, 50vw) - 0.75mm),
-      #000 calc(var(--tablet-divider-center, 50vw) - 0.75mm),
-      #000 calc(var(--tablet-divider-center, 50vw) + 0.75mm),
-      transparent calc(var(--tablet-divider-center, 50vw) + 0.75mm),
-      transparent 100%
-    ),
-    radial-gradient(
-      ellipse 0.75mm 0.75mm at var(--tablet-divider-center, 50vw) 8%,
-      #000 98%,
-      transparent 100%
-    ),
-    radial-gradient(
-      ellipse 0.75mm 0.75mm at var(--tablet-divider-center, 50vw) 92%,
-      #000 98%,
-      transparent 100%
-    ),
-    linear-gradient(#000, #000);
-  mask-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
-  mask-size: 100% calc(84% - 1.5mm), 100% 100%, 100% 100%, 100% 100%;
-  mask-position: center, center, center, center;
-  mask-composite: add, add, subtract;
+  background: transparent !important;
 }
 /* The 28 px interaction surface stays invisible and full-height for easy dragging.
    The visible 1.5 mm clear-glass guide stays centered at 84% length. */
