@@ -3098,6 +3098,10 @@ export default function App() {
 
   const activeThemeMeta = getThemeMeta(settings.theme);
   const is3dBgActive = settings.enable3dBg !== false;
+  // Keep the slider's 0–100 value as the actual alpha mapping:
+  // 0 = opaque theme canvas, 100 = fully transparent.
+  const workspaceSurfaceAlpha =
+    1 - Math.min(100, Math.max(0, settings.workspaceTransparency ?? 18)) / 100;
 
   return (
     <I18nProvider
@@ -3107,21 +3111,12 @@ export default function App() {
       <div
         style={{
           height: 'var(--droidpy-viewport-height, 100dvh)',
-          // Use a concrete rgba color instead of color-mix: older Android WebViews
-          // may not support color-mix(), which made the transparency control inert.
-          // Use the theme canvas color and retain a subtle 16% neutral glass veil
-          // at maximum transparency so editor and terminal text remain readable.
-          // At 0% the workspace recovers the opaque theme background.
+          // Concrete rgba keeps the slider compatible with older Android WebViews.
           '--ide-workspace-surface': hexToRgba(
             activeThemeMeta.swatchBg,
-            is3dBgActive
-              ? Math.max(0.16, 1 - Math.min(100, Math.max(0, settings.workspaceTransparency ?? 18)) / 100)
-              : 1
+            is3dBgActive ? workspaceSurfaceAlpha : 1
           ),
-          '--ide-sheet-bg': hexToRgba(
-            activeThemeMeta.swatchBg,
-            Math.max(0.16, 1 - Math.min(100, Math.max(0, settings.workspaceTransparency ?? 18)) / 100)
-          ),
+          '--ide-sheet-bg': hexToRgba(activeThemeMeta.swatchBg, workspaceSurfaceAlpha),
         } as CSSProperties}
         className={`h-dvh droidpy-edge-safe flex flex-col ${
           is3dBgActive ? 'bg-transparent' : 'bg-[var(--ide-bg)]'
@@ -3142,7 +3137,13 @@ export default function App() {
         className={`pointer-events-none absolute inset-0 z-[1] ${
           is3dBgActive && deviceClass === 'tablet' && isLandscape && tabletSplit ? 'tablet-landscape-split-paper' : ''
         }`}
-        style={{ backgroundColor: is3dBgActive ? 'var(--ide-sheet-bg)' : 'var(--ide-surface)' }}
+        // Apply the current alpha directly to the visible paper layer instead of
+        // relying on inherited CSS variables for the primary transparency effect.
+        style={{
+          backgroundColor: is3dBgActive
+            ? hexToRgba(activeThemeMeta.swatchBg, workspaceSurfaceAlpha)
+            : 'var(--ide-surface)',
+        }}
       />
 
       {/* Tablet workspace header: file navigation, split layout and shared execution controls. */}
