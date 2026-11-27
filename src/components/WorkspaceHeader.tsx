@@ -82,7 +82,7 @@ export function WorkspaceHeader({
 
   return (
     <header className={`relative z-10 flex items-center justify-between gap-2 pt-safe bg-transparent shrink-0 ${
-      isPhone ? 'h-13 px-2.5' : 'h-13 px-3 gap-3'
+      isPhone ? 'h-11 px-2' : 'h-12 px-3 gap-3'
     }`}>
       {isPhone ? (
         <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -91,18 +91,13 @@ export function WorkspaceHeader({
             onClick={onOpenSettings}
             aria-label={labels.openSettings}
             title={labels.settings}
-            className="dp-icon-button min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl shrink-0"
+            className="dp-icon-button min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl shrink-0"
           >
             <Settings className="w-5 h-5" />
           </button>
-          <div className="flex flex-col min-w-0">
+          {activeTab !== 'editor' && (
             <span className="text-sm font-semibold leading-tight truncate">{title}</span>
-            {activeTab === 'editor' && (
-              <span className="font-mono text-[11px] text-[var(--ide-text-muted)] truncate leading-tight">
-                {activeFile.name}
-              </span>
-            )}
-          </div>
+          )}
         </div>
       ) : (
         <div className="flex items-center gap-2 min-w-0 flex-1">
