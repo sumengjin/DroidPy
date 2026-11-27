@@ -3091,6 +3091,13 @@ export default function App() {
         bgHex={activeThemeMeta.swatchBg}
       />
 
+      {/* One continuous translucent paper surface covers the full viewport, including both headers and navigation. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-[1]"
+        style={{ backgroundColor: is3dBgActive ? 'var(--ide-sheet-bg)' : 'var(--ide-surface)' }}
+      />
+
       {/* Tablet workspace header: file navigation, split layout and shared execution controls. */}
       {deviceClass === 'tablet' && (
         <WorkspaceHeader
