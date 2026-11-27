@@ -169,7 +169,7 @@ assert.match(appSource, /backgroundColor: is3dBgActive \? 'var\(--ide-sheet-bg\)
 assert.match(appSource, /className="relative z-10 flex-1 min-h-0 min-w-0 w-full flex flex-col overflow-hidden bg-transparent"/, 'workspace content must share the full-screen paper instead of drawing a second sheet');
 assert.match(workspaceHeaderSource, /minHeight:[\s\S]*?droidpy-statusbar-inset/, 'workspace header must reserve Android status bar safe-area height');
 assert.match(executionControlsSource, /dp-execution-control/, 'execution controls must use the dedicated native-WebView border reset class');
-assert.match(indexCssSource, /button\\.dp-execution-control[\\s\\S]*border: 0 !important[\\s\\S]*appearance: none !important/, 'execution control borders must be removed at the global CSS level');
+assert.match(themeCssSource, /button\\.dp-execution-control[\\s\\S]*border: 0 !important[\\s\\S]*appearance: none !important/, 'execution control borders must be removed at the global CSS level');
 assert.equal((executionControlsSource.match(/dp-execution-control/g) || []).length, 5, 'run, stop, pause/resume, cancel and stopping controls must all use the borderless class');
 assert.match(executionControlsSource, /: '執行'/, 'phone and tablet run controls must use the concise 執行 label');
 assert.doesNotMatch(executionControlsSource, /border-2 border-\[var\(--ide-accent\)\]/, 'pause/resume control must not retain an accent border');
@@ -182,6 +182,7 @@ assert.match(themeCssSource, /--ide-sheet-bg: color-mix\(in srgb, var\(--ide-sur
 assert.doesNotMatch(themeCssSource, /--ide-surface:\s*rgba\(|--ide-surface-alt:\s*rgba\(/, '3D atmosphere must not make nested workspace surfaces translucent');
 assert.match(terminalSource, /<div className="flex flex-col h-full bg-transparent text-\[var\(--ide-text\)\] overflow-hidden">/, 'terminal output must not create a second opaque sheet');
 assert.equal((terminalSource.match(/terminal-input-row px-2 py-1 bg-transparent flex items-center gap-2 shrink-0/g) || []).length, 3, 'all phone/tablet terminal input rows, including their full action area, must use exactly two-thirds width');
+assert.match(themeCssSource, /\\.terminal-input-row[\\s\\S]*width: 66\.6667% !important[\\s\\S]*flex: 0 0 66\.6667%/, 'terminal input row width must be fixed at two-thirds including the full row');
 assert.equal((terminalSource.match(/enterKeyHint="send"/g) || []).length, 3, 'Android keyboard Enter must be configured as Send for all terminal input modes');
 assert.match(terminalSource, /handleStdinKeyDown[\\s\\S]*e\.key === 'Enter'/, 'Python input() must submit from the Android keyboard Enter key');
 assert.match(terminalSource, /handleTermuxStdinKeyDown[\\s\\S]*e\.key === 'Enter'/, 'Termux stdin must submit from the Android keyboard Enter key');
