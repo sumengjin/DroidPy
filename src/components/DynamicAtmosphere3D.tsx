@@ -75,7 +75,7 @@ export function getActiveAtmosphereState(
         : 'petals';
   } else if (hour >= 16 && hour < 19) {
     phaseKey = 'bg3d_phase_sunset';
-    phaseTintHex = season === 'winter' ? '#f5d0fe' : '#fb923c';
+    phaseTintHex = '#e9a8d8';
     naturalEffect = season === 'winter' ? 'snow' : 'petals';
   } else if (hour >= 19 && hour < 22) {
     phaseKey = 'bg3d_phase_evening';
@@ -403,7 +403,8 @@ const SKY_FRAGMENT_SHADER = `
     // 5. Harmonize gently with active IDE theme canvas so code contrast stays high
     float themeAnchor = uIsDark > 0.5 ? 0.42 : 0.36;
     vec3 col = mix(atmo, uBgColor, themeAnchor);
-    col = mix(col, mix(col, uAccentColor, 0.12), 0.35);
+    // Keep theme accents out of the full-screen atmosphere; the theme base
+    // is already blended above, without washing every scene in its accent hue.
 
     gl_FragColor = vec4(col, 1.0);
   }
@@ -900,9 +901,9 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
         dayFactor = 0.55;
         twilightFactor = 1.0;
         targetSunUv.set(0.28, 0.46);
-        targetZenith.set(st.season === 'autumn' ? '#7c2d12' : '#6d28d9');
-        targetHorizon.set(st.season === 'winter' ? '#e879f9' : '#fb923c');
-        targetSun.set('#fde68a');
+        targetZenith.set(st.season === 'autumn' ? '#62456f' : '#6d28d9');
+        targetHorizon.set('#f0a6cf');
+        targetSun.set('#fce7f3');
       } else if (st.phaseKey === 'bg3d_phase_evening') {
         dayFactor = 0.2;
         twilightFactor = 0.55;
