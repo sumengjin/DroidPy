@@ -7,14 +7,15 @@ interface WorkspaceFileTabsProps {
   onSelect: (id: string) => void;
   onCreate: () => void;
   createLabel: string;
+  filesLabel: string;
   variant: 'phone' | 'tablet';
 }
 
 /** Shared file navigation and creation entry point with form-factor-specific presentation. */
-export function WorkspaceFileTabs({ files, activeFileId, onSelect, onCreate, createLabel, variant }: WorkspaceFileTabsProps) {
+export function WorkspaceFileTabs({ files, activeFileId, onSelect, onCreate, createLabel, filesLabel, variant }: WorkspaceFileTabsProps) {
   const isPhone = variant === 'phone';
   return (
-    <div className={isPhone ? 'flex-1 min-w-0 flex items-center gap-1 overflow-x-auto no-scrollbar' : 'flex items-center gap-1 overflow-x-auto no-scrollbar min-w-0'} role="tablist" aria-label="檔案">
+    <div className={isPhone ? 'flex-1 min-w-0 flex items-center gap-1 overflow-x-auto no-scrollbar' : 'flex items-center gap-1 overflow-x-auto no-scrollbar min-w-0'} role="tablist" aria-label={filesLabel}>
       {files.map((file) => {
         const active = file.id === activeFileId;
         return (
