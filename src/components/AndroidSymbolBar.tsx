@@ -50,7 +50,7 @@ export const AndroidSymbolBar: React.FC<AndroidSymbolBarProps> = ({
 
   return (
     <div
-      className="flex items-center gap-1.5 overflow-x-auto no-scrollbar px-2 py-1.5 bg-[var(--ide-surface-alt)] border-t border-[var(--ide-border)] select-none"
+      className="android-symbol-bar flex items-center gap-1.5 overflow-x-auto no-scrollbar px-2 py-1.5 bg-transparent select-none"
       role="toolbar"
       aria-label="Android 觸控符號列"
     >
@@ -58,7 +58,7 @@ export const AndroidSymbolBar: React.FC<AndroidSymbolBarProps> = ({
         type="button"
         onPointerDown={handleTouchSafe(onUndo)}
         aria-label="復原"
-        className="min-h-[40px] min-w-[40px] shrink-0 flex items-center justify-center rounded-lg bg-[var(--ide-surface)] text-[var(--ide-text)] border border-[var(--ide-border)] active:scale-95 transition-transform"
+        className="min-h-[40px] min-w-[40px] shrink-0 flex items-center justify-center bg-transparent text-[var(--ide-text)] border-0 shadow-none rounded-none active:opacity-60 transition-opacity"
       >
         <Undo2 className="w-4 h-4" />
       </button>
@@ -66,7 +66,7 @@ export const AndroidSymbolBar: React.FC<AndroidSymbolBarProps> = ({
         type="button"
         onPointerDown={handleTouchSafe(onRedo)}
         aria-label="重做"
-        className="min-h-[40px] min-w-[40px] shrink-0 flex items-center justify-center rounded-lg bg-[var(--ide-surface)] text-[var(--ide-text)] border border-[var(--ide-border)] active:scale-95 transition-transform"
+        className="min-h-[40px] min-w-[40px] shrink-0 flex items-center justify-center bg-transparent text-[var(--ide-text)] border-0 shadow-none rounded-none active:opacity-60 transition-opacity"
       >
         <Redo2 className="w-4 h-4" />
       </button>
@@ -74,7 +74,7 @@ export const AndroidSymbolBar: React.FC<AndroidSymbolBarProps> = ({
         type="button"
         onPointerDown={handleTouchSafe(() => onMoveCursor(-1))}
         aria-label="游標左移"
-        className="min-h-[40px] min-w-[40px] shrink-0 flex items-center justify-center rounded-lg bg-[var(--ide-surface)] text-[var(--ide-text)] border border-[var(--ide-border)] active:scale-95 transition-transform"
+        className="min-h-[40px] min-w-[40px] shrink-0 flex items-center justify-center bg-transparent text-[var(--ide-text)] border-0 shadow-none rounded-none active:opacity-60 transition-opacity"
       >
         <ChevronLeft className="w-4 h-4" />
       </button>
@@ -82,12 +82,12 @@ export const AndroidSymbolBar: React.FC<AndroidSymbolBarProps> = ({
         type="button"
         onPointerDown={handleTouchSafe(() => onMoveCursor(1))}
         aria-label="游標右移"
-        className="min-h-[40px] min-w-[40px] shrink-0 flex items-center justify-center rounded-lg bg-[var(--ide-surface)] text-[var(--ide-text)] border border-[var(--ide-border)] active:scale-95 transition-transform"
+        className="min-h-[40px] min-w-[40px] shrink-0 flex items-center justify-center bg-transparent text-[var(--ide-text)] border-0 shadow-none rounded-none active:opacity-60 transition-opacity"
       >
         <ChevronRight className="w-4 h-4" />
       </button>
 
-      <div className="h-5 w-px bg-[var(--ide-border)] shrink-0 mx-0.5" aria-hidden="true" />
+      <div className="h-5 w-px bg-[var(--ide-text-muted)]/25 shrink-0 mx-0.5" aria-hidden="true" />
 
       {symbols.map((sym) => (
         <button
@@ -95,7 +95,7 @@ export const AndroidSymbolBar: React.FC<AndroidSymbolBarProps> = ({
           type="button"
           onPointerDown={handleTouchSafe(() => onInsert(sym.insert, sym.offset ?? 0))}
           aria-label={sym.ariaLabel}
-          className="min-h-[40px] min-w-[42px] px-2.5 shrink-0 flex items-center justify-center rounded-lg font-mono text-xs font-medium bg-[var(--ide-surface)] text-[var(--ide-text)] border border-[var(--ide-border)] hover:border-[var(--ide-accent)] active:scale-95 transition-transform whitespace-nowrap"
+          className="min-h-[40px] min-w-[42px] px-2.5 shrink-0 flex items-center justify-center font-mono text-xs font-medium bg-transparent text-[var(--ide-text)] border-0 shadow-none rounded-none hover:text-[var(--ide-accent-text)] active:opacity-60 transition-opacity whitespace-nowrap"
         >
           {sym.label}
         </button>
