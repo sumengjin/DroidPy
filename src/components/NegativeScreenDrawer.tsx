@@ -221,7 +221,7 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
         </div>
 
         <div className="flex-1 min-h-0 overflow-hidden flex flex-col md:flex-row">
-        <div className={`${showCategories ? 'flex' : 'hidden'} md:flex flex-1 min-h-0 overflow-y-auto ide-scroll px-3 py-3 pb-safe md:flex-none md:w-72 md:border-r md:border-[var(--ide-border)] md:bg-[var(--ide-surface)]`}>
+        <div className={`${showCategories ? 'flex' : 'hidden'} md:flex flex-1 min-h-0 overflow-y-auto ide-scroll px-3 py-3 pb-safe md:flex-none md:w-72 md:border-r md:border-[var(--ide-border)] md:bg-[var(--ide-surface)] flex-col gap-3`}>
           
             <div className="mb-3 px-1">
               <h3 className="text-base font-semibold text-[var(--ide-text)]">{t('neg_category_heading')}</h3>
