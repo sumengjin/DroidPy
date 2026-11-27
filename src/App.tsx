@@ -3104,7 +3104,7 @@ export default function App() {
       <header className="relative z-10 flex items-center justify-between gap-3 h-13 px-3 pt-safe border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] shrink-0">
         <div className="flex items-center gap-2 min-w-0 flex-1">
 
-          <WorkspaceFileTabs files={files} activeFileId={activeFile.id} onSelect={setActiveFileId} onCreate={() => setMobileNewFileOpen((open) => !open)} createLabel={t('files_new_btn')} variant="tablet" />
+          <WorkspaceFileTabs files={files} activeFileId={activeFile.id} onSelect={setActiveFileId} onCreate={() => setMobileNewFileOpen((open) => !open)} createLabel={t('files_new_btn')} filesLabel={t('files_title')} variant="tablet" />
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
@@ -3460,7 +3460,7 @@ export default function App() {
                 {/* Mobile file strip and compact editor actions */}
                 <div className="shrink-0 border-b border-[var(--ide-border)] bg-[var(--ide-surface-alt)]">
                   <div className="flex items-center gap-1.5 px-2 pt-2 pb-1">
-                    <WorkspaceFileTabs files={files} activeFileId={activeFile.id} onSelect={setActiveFileId} onCreate={() => setMobileNewFileOpen((open) => !open)} createLabel={t('files_new_btn')} variant="phone" />
+                    <WorkspaceFileTabs files={files} activeFileId={activeFile.id} onSelect={setActiveFileId} onCreate={() => setMobileNewFileOpen((open) => !open)} createLabel={t('files_new_btn')} filesLabel={t('files_title')} variant="phone" />
                   </div>
                   <div className="flex items-center justify-between gap-2 px-2 pb-1.5">
                     <span className="min-w-0 truncate px-1 font-mono text-[10px] text-[var(--ide-text-muted)]">
