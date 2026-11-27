@@ -120,7 +120,8 @@ export const AndroidSymbolBar: React.FC<AndroidSymbolBarProps> = ({
     swipeRef.current = null;
     setActiveSymbolIndex(null);
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-    if (selected) onInsert(selected.insert, selected.offset ?? 0);
+    // A tap inserts; a drag is navigation/selection only and must never type on release.
+    if (selected && !swipe.moved) onInsert(selected.insert, selected.offset ?? 0);
   };
 
   const cancelStripPointer = (e: React.PointerEvent<HTMLDivElement>) => {
