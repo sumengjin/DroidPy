@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import {
   Play,
   Pause,
@@ -3092,7 +3093,10 @@ export default function App() {
       onChangeLocale={(loc) => handleUpdateSettings({ locale: loc })}
     >
       <div
-        style={{ height: 'var(--droidpy-viewport-height, 100dvh)' }}
+        style={{
+          height: 'var(--droidpy-viewport-height, 100dvh)',
+          '--ide-sheet-bg': `color-mix(in srgb, var(--ide-surface) ${100 - Math.min(100, Math.max(0, settings.workspaceTransparency ?? 18))}%, transparent)`,
+        } as CSSProperties}
         className={`h-dvh droidpy-edge-safe flex flex-col ${
           is3dBgActive ? 'bg-transparent' : 'bg-[var(--ide-bg)]'
         } text-[var(--ide-text)] overflow-hidden relative`}
