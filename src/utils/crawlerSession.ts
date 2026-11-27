@@ -6,10 +6,8 @@ export const DESKTOP_CHROME_UA =
 export const MOBILE_ANDROID_UA =
   'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
 
-export const DEFAULT_CRAWLER_URL = 'https://www.google.com/';
-
 export const DEFAULT_CRAWLER_SESSION: CrawlerSessionData = {
-  url: DEFAULT_CRAWLER_URL,
+  url: 'https://quotes.toscrape.com/',
   userAgent: MOBILE_ANDROID_UA,
   cookies: [],
   extraHeaders: {},
@@ -19,7 +17,7 @@ export const DEFAULT_CRAWLER_SESSION: CrawlerSessionData = {
 export function normalizeUrlInput(raw: string): string {
   const trimmed = raw.trim();
   const candidate = !trimmed
-    ? DEFAULT_CRAWLER_URL
+    ? 'https://quotes.toscrape.com/'
     : /^https?:\/\//i.test(trimmed)
     ? trimmed
     : `https://${trimmed}`;
