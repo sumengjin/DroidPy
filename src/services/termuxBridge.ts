@@ -1272,96 +1272,136 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
 
         if self.path == "/stop":
             with PROC_LOCK:
-                pgid = ACTIVE_PROC.get("pgid")
-            if pgid is None:
+                starting = bool(ACTIVE_PROC["starting"])
+                pgid = ACTIVE_PROC["pgid"]
+                if starting or pgid is not None:
+                    ACTIVE_PROC["stop_requested"] = True
+            if not starting and pgid is None:
                 return self._send_json(200, {"ok": True, "stopped": False})
+
+            deadline = time.monotonic() + 3.5
+            while pgid is None and starting and time.monotonic() < deadline:
+                time.sleep(0.02)
+                with PROC_LOCK:
+                    starting = bool(ACTIVE_PROC["starting"])
+                    pgid = ACTIVE_PROC["pgid"]
+            if pgid is None:
+                if starting:
+                    return self._send_json(409, {"ok": False, "error": "停止逾時：程序仍在啟動"})
+                return self._send_json(200, {"ok": True, "stopped": True})
             try:
                 os.killpg(pgid, signal.SIGKILL)
+                return self._send_json(200, {"ok": True, "stopped": True})
+            except ProcessLookupError:
                 return self._send_json(200, {"ok": True, "stopped": True})
             except OSError as exc:
                 return self._send_json(500, {"error": str(exc)})
 
         if self.path in ("/run", "/run-stream"):
-            files = data.get("files", [])
-            entry = os.path.basename(data.get("entry", "main.py")) or "main.py"
-            for f in files:
-                name = os.path.basename(f.get("name", ""))
-                if not name:
-                    continue
-                target = os.path.join(WORKSPACE, name)
-                with open(target, "w", encoding="utf-8") as fp:
-                    fp.write(f.get("content", ""))
+            if not OPERATION_LOCK.acquire(blocking=False):
+                return self._send_json(409, {"error": "另一個 Termux 工作仍在執行，已拒絕這次操作"})
+            try:
+                files = data.get("files", [])
+                entry = os.path.basename(str(data.get("entry", "main.py"))) or "main.py"
+                if entry in (".", ".."):
+                    return self._send_json(400, {"error": "Invalid Python entry filename"})
+                if not isinstance(files, list):
+                    return self._send_json(400, {"error": "Invalid workspace file list"})
 
-            if self.path == "/run-stream":
-                return self._stream_pty_command(["python", "-u", entry], shell=False)
+                if self.path == "/run-stream":
+                    return self._stream_pty_command(
+                        ["python", "-u", entry],
+                        shell=False,
+                        before_start=lambda: _stage_workspace_files(files),
+                    )
 
-            t0 = time.perf_counter()
-            proc = subprocess.run(
-                ["python", "-u", entry],
-                cwd=WORKSPACE,
-                env=_resolve_certifi_env(os.environ.copy()),
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-            return self._send_json(200, {
-                "exitCode": proc.returncode,
-                "stdout": proc.stdout,
-                "stderr": proc.stderr,
-                "durationMs": int((time.perf_counter() - t0) * 1000),
-            })
+                _stage_workspace_files(files)
+                t0 = time.perf_counter()
+                proc = subprocess.run(
+                    ["python", "-u", entry],
+                    cwd=WORKSPACE,
+                    env=_resolve_certifi_env(os.environ.copy()),
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                return self._send_json(200, {
+                    "exitCode": proc.returncode,
+                    "stdout": proc.stdout,
+                    "stderr": proc.stderr,
+                    "durationMs": int((time.perf_counter() - t0) * 1000),
+                })
+            finally:
+                OPERATION_LOCK.release()
 
         if self.path in ("/install", "/install-stream"):
-            mode = data.get("mode", "pip")
-            target = str(data.get("target", "")).strip()
-            trusted_host = bool(data.get("trustedHost", False))
-            if not target:
-                return self._send_json(400, {"error": "Missing package target"})
-            pkgs = shlex.split(target)
-            if not pkgs:
-                return self._send_json(400, {"error": "Missing package target"})
-            compatibility_cmd = _compatibility_install_command(pkgs[0], trusted_host=trusted_host) if len(pkgs) == 1 else None
-            if mode == "pkg":
-                cmd = ["pkg", "install", "-y"] + pkgs
-            elif compatibility_cmd:
-                cmd = ["sh", "-c", compatibility_cmd]
-            else:
-                cmd = _build_pip_cmd(pkgs, trusted_host=trusted_host)
-            if self.path == "/install-stream":
-                return self._stream_pty_command(cmd, shell=False)
+            if not OPERATION_LOCK.acquire(blocking=False):
+                return self._send_json(409, {"error": "另一個 Termux 工作仍在執行，已拒絕這次操作"})
+            try:
+                mode = data.get("mode", "pip")
+                target = str(data.get("target", "")).strip()
+                trusted_host = bool(data.get("trustedHost", False))
+                if not target:
+                    return self._send_json(400, {"error": "Missing package target"})
+                pkgs = shlex.split(target)
+                if not pkgs:
+                    return self._send_json(400, {"error": "Missing package target"})
+                compatibility_cmd = _compatibility_install_command(pkgs[0], trusted_host=trusted_host) if len(pkgs) == 1 else None
+                if mode == "pkg":
+                    cmd = ["pkg", "install", "-y"] + pkgs
+                elif compatibility_cmd:
+                    cmd = ["sh", "-c", compatibility_cmd]
+                else:
+                    cmd = _build_pip_cmd(pkgs, trusted_host=trusted_host)
+                if self.path == "/install-stream":
+                    return self._stream_pty_command(cmd, shell=False)
 
-            t0 = time.perf_counter()
-            proc = subprocess.run(
-                cmd,
-                cwd=WORKSPACE,
-                env=_resolve_certifi_env(os.environ.copy()),
-                capture_output=True,
-                text=True,
-                timeout=300,
-            )
-            return self._send_json(200, {
-                "exitCode": proc.returncode,
-                "stdout": proc.stdout,
-                "stderr": proc.stderr,
-                "durationMs": int((time.perf_counter() - t0) * 1000),
-            })
+                t0 = time.perf_counter()
+                proc = subprocess.run(
+                    cmd,
+                    cwd=WORKSPACE,
+                    env=_resolve_certifi_env(os.environ.copy()),
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
+                return self._send_json(200, {
+                    "exitCode": proc.returncode,
+                    "stdout": proc.stdout,
+                    "stderr": proc.stderr,
+                    "durationMs": int((time.perf_counter() - t0) * 1000),
+                })
+            finally:
+                OPERATION_LOCK.release()
 
         if self.path in ("/shell", "/shell-stream"):
-            cmd_str = str(data.get("command", "")).strip()
-            if not cmd_str:
-                return self._send_json(400, {"error": "Empty command"})
-            normalized_cmd = _normalize_shell_command(cmd_str)
-            if self.path == "/shell-stream":
-                return self._stream_pty_command(normalized_cmd, shell=True)
+            if not OPERATION_LOCK.acquire(blocking=False):
+                return self._send_json(409, {"error": "另一個 Termux 工作仍在執行，已拒絕這次操作"})
+            try:
+                cmd_str = str(data.get("command", "")).strip()
+                if not cmd_str:
+                    return self._send_json(400, {"error": "Empty command"})
+                normalized_cmd = _normalize_shell_command(cmd_str)
+                if self.path == "/shell-stream":
+                    return self._stream_pty_command(normalized_cmd, shell=True)
 
-            t0 = time.perf_counter()
-            proc = subprocess.run(normalized_cmd, shell=True, cwd=WORKSPACE, capture_output=True, text=True, timeout=180)
-            return self._send_json(200, {
-                "exitCode": proc.returncode,
-                "stdout": proc.stdout,
-                "stderr": proc.stderr,
-                "durationMs": int((time.perf_counter() - t0) * 1000),
-            })
+                t0 = time.perf_counter()
+                proc = subprocess.run(
+                    normalized_cmd,
+                    shell=True,
+                    cwd=WORKSPACE,
+                    capture_output=True,
+                    text=True,
+                    timeout=180,
+                )
+                return self._send_json(200, {
+                    "exitCode": proc.returncode,
+                    "stdout": proc.stdout,
+                    "stderr": proc.stderr,
+                    "durationMs": int((time.perf_counter() - t0) * 1000),
+                })
+            finally:
+                OPERATION_LOCK.release()
 
         if self.path == "/probe-url":
             target_url = str(data.get("url", "")).strip()
