@@ -21,8 +21,8 @@ export function WorkspaceFileTabs({ files, activeFileId, onSelect, onCreate, cre
         return (
           <button key={file.id} type="button" role="tab" aria-selected={active} onClick={() => onSelect(file.id)} title={file.name}
             className={isPhone
-              ? `min-h-[36px] max-w-[180px] shrink-0 px-3 rounded-t-xl border-b-2 text-xs font-mono truncate transition-colors ${active ? 'border-[var(--ide-accent)] bg-[var(--ide-surface)] text-[var(--ide-accent-text)] font-semibold' : 'border-transparent text-[var(--ide-text-muted)] hover:bg-[var(--ide-surface)]'}`
-              : `min-h-[34px] px-2.5 rounded-lg font-mono text-xs transition-colors whitespace-nowrap shrink-0 ${active ? 'bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] font-semibold border border-[var(--ide-accent)]/30' : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'}`}>
+              ? `min-h-[40px] max-w-[180px] shrink-0 px-3 rounded-xl border text-xs font-mono truncate transition-colors ${active ? 'border-[var(--ide-accent)]/70 text-[var(--ide-accent-text)] font-semibold' : 'border-transparent bg-transparent text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'}`
+              : `min-h-[34px] px-2.5 rounded-lg border font-mono text-xs transition-colors whitespace-nowrap shrink-0 ${active ? 'border-[var(--ide-accent)]/70 text-[var(--ide-accent-text)] font-semibold' : 'border-transparent bg-transparent text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'}`}>
             {file.name}
           </button>
         );
