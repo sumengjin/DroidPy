@@ -512,53 +512,60 @@ button.dp-execution-control::after {
   box-shadow: none !important;
 }
 
-/* Tablet divider: clear gel-like optical strip, never an opaque rule. */
-.tablet-gel-divider {
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--ide-accent) 2%, transparent),
-    color-mix(in srgb, var(--ide-accent) 9%, transparent) 48%,
-    color-mix(in srgb, var(--ide-accent) 3%, transparent)
-  );
-  -webkit-backdrop-filter: blur(3px) saturate(1.45);
-  backdrop-filter: blur(3px) saturate(1.45);
-  box-shadow: inset 1px 0 0 color-mix(in srgb, white 22%, transparent),
-    inset -1px 0 0 color-mix(in srgb, var(--ide-accent) 18%, transparent),
-    0 0 12px color-mix(in srgb, var(--ide-accent) 9%, transparent);
+/* The full-height divider is an invisible 1 mm guide. Only the small
+   centered capsule is visible and draggable; the hit target stays 28 px. */
+.tablet-gel-divider,
+.tablet-gel-divider-active,
+.tablet-gel-divider-horizontal,
+.tablet-gel-divider-active.tablet-gel-divider-horizontal {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
 }
 
-.tablet-gel-divider-active {
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--ide-accent) 5%, transparent),
-    color-mix(in srgb, var(--ide-accent) 18%, transparent) 48%,
-    color-mix(in srgb, var(--ide-accent) 6%, transparent)
-  );
-  -webkit-backdrop-filter: blur(5px) saturate(1.8);
-  backdrop-filter: blur(5px) saturate(1.8);
-  box-shadow: inset 1px 0 0 color-mix(in srgb, white 34%, transparent),
-    inset -1px 0 0 color-mix(in srgb, var(--ide-accent) 28%, transparent),
-    0 0 18px color-mix(in srgb, var(--ide-accent) 16%, transparent);
+.tablet-divider-clear-core {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
 }
 
-.tablet-gel-divider-core {
+.tablet-gel-handle {
   background: linear-gradient(
-    90deg,
-    color-mix(in srgb, white 30%, transparent),
-    color-mix(in srgb, var(--ide-accent) 12%, transparent),
-    color-mix(in srgb, white 24%, transparent)
+    135deg,
+    color-mix(in srgb, white 17%, transparent),
+    color-mix(in srgb, var(--ide-accent) 12%, transparent) 52%,
+    color-mix(in srgb, white 10%, transparent)
   );
-  box-shadow: 0 0 5px color-mix(in srgb, var(--ide-accent) 18%, transparent);
+  -webkit-backdrop-filter: blur(4px) saturate(1.35);
+  backdrop-filter: blur(4px) saturate(1.35);
+  border: 0;
+  box-shadow: none;
+  opacity: 0.82;
+  transition: opacity 150ms ease, background 150ms ease, backdrop-filter 150ms ease;
 }
 
-.tablet-gel-divider-core-active {
+.tablet-gel-handle-vertical {
+  width: 10mm;
+  height: 3mm;
+}
+
+.tablet-gel-handle-horizontal {
+  width: 3mm;
+  height: 10mm;
+}
+
+.tablet-gel-handle-active {
+  opacity: 1;
   background: linear-gradient(
-    90deg,
-    color-mix(in srgb, white 48%, transparent),
-    color-mix(in srgb, var(--ide-accent) 24%, transparent),
-    color-mix(in srgb, white 42%, transparent)
+    135deg,
+    color-mix(in srgb, white 25%, transparent),
+    color-mix(in srgb, var(--ide-accent) 18%, transparent) 52%,
+    color-mix(in srgb, white 16%, transparent)
   );
-  box-shadow: 0 0 8px color-mix(in srgb, var(--ide-accent) 28%, transparent);
+  -webkit-backdrop-filter: blur(5px) saturate(1.55);
+  backdrop-filter: blur(5px) saturate(1.55);
 }
 
 .terminal-console-surface .terminal-input-row {
