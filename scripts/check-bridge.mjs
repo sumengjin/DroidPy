@@ -414,6 +414,15 @@ assert.ok(!androidBuilder.includes('private val executor = Executors.newCachedTh
 
 // The tool center uses real folder -> document navigation and preserves parent folders on Back.
 const toolsHubSource = await readFile('src/components/ToolsAndPackages.tsx', 'utf8');
+assert.ok(toolsHubSource.includes('onOpenSdcardFile={(filename, content, path) => onSaveWorkspaceFile(filename, content, true, path)}'), 'settings storage imports must preserve the source path');
+assert.ok(toolsHubSource.includes('onSaveWorkspaceFile(filename, content, true, path)'), 'all SD-card file import callbacks must forward their original path');
+const externalFileSaveStart = appSource.indexOf('const handleSaveWorkspaceFile = useCallback');
+const externalFileSaveEnd = appSource.indexOf('const handleUpdateSettings', externalFileSaveStart);
+assert.ok(externalFileSaveStart >= 0 && externalFileSaveEnd > externalFileSaveStart);
+const externalFileSave = appSource.slice(externalFileSaveStart, externalFileSaveEnd);
+assert.ok(externalFileSave.includes('externalPath?: string'));
+assert.ok(externalFileSave.includes('file.externalPath === externalPath'), 'external files must be matched by their original path, not basename alone');
+assert.ok(externalFileSave.includes('{ externalPath }'), 'opening an external file must retain its original path for save-before-run');
 assert.ok(toolsHubSource.includes("const [activeWindow, setActiveWindow] = useState<ToolWindowId | null>(null)"));
 assert.ok(toolsHubSource.includes('const renderFolderList = <T extends string,>'));
 assert.ok(toolsHubSource.includes('const renderFolderContents ='));
