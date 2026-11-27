@@ -210,7 +210,7 @@ const appLoggerSource = await readFile('src/services/appLogger.ts', 'utf8');
 assert.ok(appLoggerSource.includes('resetStoredLogsForNewSession()'));
 assert.ok(appLoggerSource.includes('localStorage.removeItem(STORAGE_APP_LOGS_KEY)'));
 const appLifecycleSource = await readFile('src/App.tsx', 'utf8');
-assert.ok(appLifecycleSource.includes('clearAppLogs();'), 'the app must explicitly begin with an empty app-log session');
+assert.ok(appLoggerSource.includes('resetStoredLogsForNewSession();'), 'app logger must clear persisted logs when a fresh WebView session loads');
 const nativeSessionReset = androidBuilder.indexOf('File(filesDir, "droidpy_native.log").writeText("", Charsets.UTF_8)');
 const nativeSessionStart = androidBuilder.indexOf('appendActivityLog("Startup", "MainActivity.onCreate entered")');
 assert.ok(nativeSessionReset >= 0 && nativeSessionStart > nativeSessionReset, 'native logs must be cleared before the first startup record');
