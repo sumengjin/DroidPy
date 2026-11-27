@@ -450,7 +450,7 @@ assert.match(uiExecutionControlsSource, /dp-execution-control/, 'all execution c
 assert.match(uiExecutionControlsSource, /labels\.run/, 'the phone and tablet Run control must render the shared concise run label');
 assert.match(appSource, /const navigatePhoneWorkspace = useCallback\(\(destination: 'editor' \| 'terminal' \| 'files' \| 'browser'\)/, 'phone navigation must use one explicit destination handler');
 assert.match(appSource, /onNavigate=\{navigatePhoneWorkspace\}/, 'phone bottom navigation must call the explicit destination handler');
-assert.match(appSource, /data-active-workspace=\{deviceClass === 'phone' \? mobileTab : tabletPaneTab\}/, 'the active workspace must be observable on the rendered content root');
+assert.match(appSource, /data-active-workspace=\{isPhoneLayout \? mobileTab : tabletPaneTab\}/, 'the active workspace must be observable on the rendered content root for phones and portrait tablets');
 assert.match(appSource, /mobileTab === 'console' && \(/, 'the phone terminal page must render from the selected navigation state');
 assert.match(appSource, /mobileTab === 'files' && \(/, 'the phone files page must render from the selected navigation state');
 assert.match(appSource, /mobileTab === 'browser' \? 'flex-1 min-h-0 overflow-hidden' : 'hidden'/, 'the phone browser page must render from the selected navigation state');
