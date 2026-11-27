@@ -3113,8 +3113,8 @@ export default function App() {
             onClick={tabletWorkspace.toggleSplit}
             className={`min-h-[40px] px-3 rounded-xl border text-xs font-medium inline-flex items-center gap-1.5 whitespace-nowrap transition-colors ${
               tabletSplit
-                ? 'border-[var(--ide-accent)]/50 bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)]'
-                : 'border-[var(--ide-border)] bg-[var(--ide-bg)] text-[var(--ide-text-muted)]'
+                ? 'border-[var(--ide-accent)]/70 text-[var(--ide-accent-text)]'
+                : 'border-transparent bg-transparent text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
             }`}
           >
             {tabletSplit ? <Maximize2 className="w-3.5 h-3.5" /> : <Columns2 className="w-3.5 h-3.5" />}
@@ -3361,7 +3361,7 @@ export default function App() {
             {(tabletSplit || tabletPaneTab !== 'editor') && (
               <aside className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-[var(--ide-bg)]">
                 <div className="flex items-center justify-between gap-2 px-3 h-10 border-b border-[var(--ide-border)] bg-[var(--ide-surface-alt)] shrink-0">
-                  <div className="flex items-center gap-1 p-0.5 rounded-lg bg-[var(--ide-bg)] border border-[var(--ide-border)]">
+                  <div className="flex items-center gap-1">
                     {(
                       [
                         { id: 'terminal', label: t('mob_console'), Icon: TerminalIcon },
@@ -3375,10 +3375,10 @@ export default function App() {
                           key={id}
                           type="button"
                           onClick={() => setTabletPaneTab(id)}
-                          className={`min-h-[30px] px-3 rounded-md text-xs font-medium inline-flex items-center gap-1.5 whitespace-nowrap transition-colors ${
+                          className={`min-h-[34px] px-3 rounded-lg border text-xs font-medium inline-flex items-center gap-1.5 whitespace-nowrap transition-colors ${
                             active
-                              ? 'bg-[var(--ide-surface)] text-[var(--ide-accent-text)] font-semibold shadow-xs'
-                              : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
+                              ? 'border-[var(--ide-accent)]/70 text-[var(--ide-accent-text)] font-semibold'
+                              : 'border-transparent bg-transparent text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
                           }`}
                         >
                           <Icon className="w-3.5 h-3.5" />
