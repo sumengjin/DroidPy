@@ -4499,11 +4499,15 @@ def clipboard_set(text):
                                     if (!temp.renameTo(target)) {
                                         throw java.io.IOException("Atomic workspace replace failed for $name")
                                     }
+                                    val committedBytes = target.readBytes()
+                                    if (!committedBytes.contentEquals(bytes)) {
+                                        throw java.io.IOException("Workspace read-back verification failed for $name")
+                                    }
                                     val digest = java.security.MessageDigest.getInstance("SHA-256")
-                                        .digest(bytes).joinToString("") { "%02x".format(it) }
-                                    val firstLineHex = bytes.takeWhile { it != 10.toByte() }.take(12)
+                                        .digest(committedBytes).joinToString("") { "%02x".format(it) }
+                                    val firstLineHex = committedBytes.takeWhile { it != 10.toByte() }.take(12)
                                         .joinToString("") { "%02x".format(it) }
-                                    appendNativeLog("Exec", "Workspace file committed name=$name bytes=\${bytes.size} sha256=$digest firstLineHex=$firstLineHex")
+                                    appendNativeLog("Exec", "Workspace file committed name=$name bytes=\${committedBytes.size} sha256=$digest firstLineHex=$firstLineHex")
                                 } finally {
                                     if (temp.exists()) temp.delete()
                                 }
