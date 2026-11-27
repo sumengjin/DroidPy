@@ -378,8 +378,8 @@ assert.match(source, /if \(crawlerOverlay\.visibility == View\.VISIBLE\) \{\s*\/
 // Regression checks for the reported phone/tablet UI defects.
 const uiSettingsWorkspaceSource = await readFile(new URL('../src/components/SettingsWorkspace.tsx', import.meta.url), 'utf8');
 const uiExecutionControlsSource = await readFile(new URL('../src/components/WorkspaceExecutionControls.tsx', import.meta.url), 'utf8');
-assert.match(uiSettingsWorkspaceSource, /backgroundColor: getThemeMeta\(settings\.theme\)\.swatchBg/, 'Settings must use an opaque theme base color so the previous workspace cannot show through');
-assert.match(uiSettingsWorkspaceSource, /z-\[100\].*isolate/, 'Settings must sit above all workspace content in an isolated stacking context');
+assert.match(uiSettingsWorkspaceSource, /backgroundColor: 'var\(--ide-surface\)'/, 'Settings must use an opaque theme surface so the previous workspace cannot show through');
+assert.match(uiSettingsWorkspaceSource, /z-\[1000\].*isolate/, 'Settings must sit above all workspace content in an isolated stacking context');
 assert.match(uiSettingsWorkspaceSource, /aria-modal="true"/, 'Settings must be exposed as a modal full-screen workspace');
 assert.match(workspaceHeaderSource, /relative z-30 isolate/, 'the workspace header must remain above the terminal pane when their bounds meet');
 const tabletSplitControl = workspaceHeaderSource.indexOf('onClick={onToggleSplit}');
