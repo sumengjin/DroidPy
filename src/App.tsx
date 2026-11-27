@@ -64,7 +64,6 @@ import { AppUpdateCheckResult, checkForAppUpdates } from './services/appUpdater'
 import { createScriptBackup, exportScriptBackupJson } from './services/scriptBackup';
 import {
   DEFAULT_CRAWLER_SESSION,
-  DEFAULT_CRAWLER_URL,
   buildCookiesJsonContent,
   mergeCookieLists,
   parseCookieHeaderPairs,
@@ -368,25 +367,14 @@ export default function App() {
   const tabletPaneTab = tabletWorkspace.activePane;
   const setTabletPaneTab = tabletWorkspace.setActivePane;
   const [crawlerSession, setCrawlerSession] = useState<CrawlerSessionData>(() => {
-    const restoreSession = (saved?: Partial<CrawlerSessionData> | null): CrawlerSessionData => {
-      const restored = { ...DEFAULT_CRAWLER_SESSION, ...saved };
-      // Migrate the previous built-in demo homepage, but preserve any user-entered URL.
-      if (
-        restored.url.trim() === 'https://quotes.toscrape.com/' ||
-        restored.url.trim() === 'https://quotes.toscrape.com'
-      ) {
-        restored.url = DEFAULT_CRAWLER_URL;
-      }
-      return restored;
-    };
     const nativeSnap = getInitialNativeSnapshot();
     if (nativeSnap?.crawlerSession) {
-      return restoreSession(nativeSnap.crawlerSession);
+      return { ...DEFAULT_CRAWLER_SESSION, ...nativeSnap.crawlerSession };
     }
     try {
       const saved = localStorage.getItem(STORAGE_CRAWLER_SESSION_KEY);
       if (saved) {
-        return restoreSession(JSON.parse(saved) as Partial<CrawlerSessionData>);
+        return { ...DEFAULT_CRAWLER_SESSION, ...(JSON.parse(saved) as Partial<CrawlerSessionData>) };
       }
     } catch {
       // ignore
