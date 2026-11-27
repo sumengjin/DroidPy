@@ -236,7 +236,10 @@ assert.ok(phoneHeaderStart > tabletHeaderEnd && phoneHeaderEnd > phoneHeaderStar
 assert.ok(appSource.slice(phoneHeaderStart, phoneHeaderEnd).includes('variant="phone"'), 'phone must use the shared workspace header');
 assert.match(workspaceHeaderSource, /WorkspaceExecutionControls/, 'the shared header must compose the execution controls');
 assert.doesNotMatch(workspaceHeaderSource, /WorkspaceFileTabs/, 'the global tablet header must not duplicate the editor file strip');
-assert.match(appSource, /<WorkspaceFileTabs[\\s\\S]*?variant="tablet"/, 'tablet file tabs must remain available inside the editor pane');
+const tabletFileTabsStart = appSource.indexOf('<WorkspaceFileTabs');
+const tabletFileTabsEnd = appSource.indexOf('/>', tabletFileTabsStart);
+assert.ok(tabletFileTabsStart >= 0 && tabletFileTabsEnd > tabletFileTabsStart, 'tablet file tabs must remain available inside the editor pane');
+assert.match(appSource.slice(tabletFileTabsStart, tabletFileTabsEnd), /variant="tablet"/, 'tablet file tabs must remain inside the editor pane');
 assert.match(workspaceHeaderSource, /tabletSplit/, 'the tablet split-view control must remain in the header');
 assert.match(executionControlsSource, /termuxStopping \?[/\s\S]*termuxRunning \?/, 'execution controls must prioritize stopping and active Termux states');
 assert.match(executionControlsSource, /termuxPaused \? labels\.resume : labels\.pause/, 'pause control must expose the current process state');
