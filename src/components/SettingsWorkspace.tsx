@@ -17,6 +17,7 @@ import { ToolsAndPackages } from './ToolsAndPackages';
 import { useI18n } from '../services/i18n';
 import { OutdatedPackageInfo } from '../services/pyodideRuntime';
 import { TermuxOutdatedPipItem } from '../services/termuxBridge';
+import { getThemeMeta } from '../services/themes';
 
 declare global {
   interface Window { __droidpySettingsBack?: () => boolean; __droidpyToolsBack?: () => boolean; }
@@ -167,8 +168,10 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-[var(--ide-bg)] text-[var(--ide-text)]"
-      role="region"
+      className="fixed inset-0 z-[100] isolate flex flex-col text-[var(--ide-text)]"
+      style={{ backgroundColor: getThemeMeta(settings.theme).swatchBg }}
+      role="dialog"
+      aria-modal="true"
       aria-label={t('neg_title')}
     >
       <aside
