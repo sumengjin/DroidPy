@@ -122,6 +122,9 @@ export function TabletSplitLayout({ split, orientation, children }: TabletSplitL
       <span
         aria-hidden="true"
         className={`pointer-events-none absolute block rounded-full tablet-gel-handle ${horizontal ? 'tablet-gel-handle-vertical' : 'tablet-gel-handle-horizontal'} ${isDragging ? 'tablet-gel-handle-active' : ''}`}
+        style={horizontal
+          ? { left: '50%', top: '66.6667%', transform: 'translate(-50%, -50%)' }
+          : { left: '66.6667%', top: '50%', transform: 'translate(-50%, -50%)' }}
       />
     </div>,
     document.body
