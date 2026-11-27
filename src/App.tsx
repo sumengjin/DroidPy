@@ -366,7 +366,6 @@ export default function App() {
   const tabletWorkspace = useTabletWorkspace();
   const tabletSplit = tabletWorkspace.split;
   const tabletPaneTab = tabletWorkspace.activePane;
-  const setTabletSplit = tabletWorkspace.setSplit;
   const setTabletPaneTab = tabletWorkspace.setActivePane;
   const [crawlerSession, setCrawlerSession] = useState<CrawlerSessionData>(() => {
     const restoreSession = (saved?: Partial<CrawlerSessionData> | null): CrawlerSessionData => {
@@ -3787,8 +3786,7 @@ export default function App() {
         onClose={() => setShowHelpModal(false)}
         onInsertSampleFile={(filename, content) => handleSaveWorkspaceFile(filename, content, true)}
         onNavigateBrowser={() => {
-          setTabletSplit(true);
-          setTabletPaneTab('browser');
+          tabletWorkspace.focusOutput('browser');
           setMobileTab('browser');
         }}
         onNavigateAndroid={() => {
