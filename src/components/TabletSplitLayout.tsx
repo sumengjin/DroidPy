@@ -91,6 +91,7 @@ export function TabletSplitLayout({ split, orientation, children }: TabletSplitL
       onPointerDown={(event) => {
         event.preventDefault();
         event.currentTarget.setPointerCapture(event.pointerId);
+        updateFromPointer(event);
       }}
       onPointerMove={(event) => {
         if (event.currentTarget.hasPointerCapture(event.pointerId)) updateFromPointer(event);
@@ -110,7 +111,9 @@ export function TabletSplitLayout({ split, orientation, children }: TabletSplitL
       <span
         aria-hidden="true"
         className="pointer-events-none block shrink-0"
-        style={horizontal ? { width: '1mm', height: '100%' } : { width: '100%', height: '1mm' }}
+        style={horizontal
+          ? { width: '1mm', height: '100%', backgroundColor: 'color-mix(in srgb, var(--ide-border) 52%, transparent)', opacity: 0.9 }
+          : { width: '100%', height: '1mm', backgroundColor: 'color-mix(in srgb, var(--ide-border) 52%, transparent)', opacity: 0.9 }}
       />
     </div>,
     document.body
