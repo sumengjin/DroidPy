@@ -77,7 +77,7 @@ assert.match(panelSource, /item\.id === 'polars' \? 'python-polars' : tmx\.targe
 assert.match(catalogSource, /Termux User Repository（TUR）預編譯套件提供/);
 assert.match(source, /"polars" to "python-polars"/);
 assert.match(source, /"scipy" to "python-scipy"/, 'backup restore must use the official native SciPy package');
-assert.match(source, /if \("python-polars" in missingPkgsOnly\)[\s\S]*?pkg update -y && pkg install -y tur-repo && pkg update -y/, 'Polars restore must refresh official package metadata before enabling TUR');
+assert.match(source, /val needsTurPolars = "python-polars" in missingPkgsOnly[\s\S]*?pkg update -y && pkg install -y tur-repo && pkg update -y/, 'Polars restore must refresh official package metadata before enabling TUR');
 assert.match(source, /val packagesWithoutTur = missingPkgsOnly\.filter \{ it != "python-polars" \}/, 'TUR-only packages must not block restoration of official Termux packages');
 assert.match(source, /if pkg install -y python-polars; then[\s\S]*?all other restore steps will continue/, 'optional Polars failure must not abort the remaining restore process');
 assert.match(source, /"python-polars" in missingPkgsOnly/);
