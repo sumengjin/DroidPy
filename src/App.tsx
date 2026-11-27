@@ -362,6 +362,11 @@ export default function App() {
   const packageReturnTabRef = useRef<MobileTab>('editor');
   const [settingsWorkspaceOpen, setSettingsWorkspaceOpen] = useState(false);
   const [settingsWorkspaceSection, setSettingsWorkspaceSection] = useState<SettingsWorkspaceSection>('termux');
+  const navigatePhoneWorkspace = useCallback((destination: 'editor' | 'terminal' | 'files' | 'browser') => {
+    setSettingsWorkspaceOpen(false);
+    setMobileNewFileOpen(false);
+    setMobileTab(destination === 'terminal' ? 'console' : destination);
+  }, []);
   const tabletWorkspace = useTabletWorkspace();
   const tabletSplit = tabletWorkspace.split;
   const tabletPaneTab = tabletWorkspace.activePane;
@@ -3226,7 +3231,7 @@ export default function App() {
         )}
 
       {/* Main Content Area (Mobile & Tablet Only) */}
-      <main className="relative z-10 flex-1 min-h-0 min-w-0 w-full flex flex-col overflow-hidden">
+      <main data-active-workspace={deviceClass === 'phone' ? mobileTab : tabletPaneTab} className="relative z-10 flex-1 min-h-0 min-w-0 w-full flex flex-col overflow-hidden">
         {deviceClass === 'tablet' ? (
           <TabletSplitLayout split={tabletSplit} orientation={isLandscape ? 'horizontal' : 'vertical'}>
             {/* Tablet Primary Editor Pane */}
@@ -3532,10 +3537,7 @@ export default function App() {
             files: t('mob_files'),
             browser: t('mob_browser'),
           }}
-          onNavigate={(destination) => {
-            setSettingsWorkspaceOpen(false);
-            setMobileTab(destination === 'terminal' ? 'console' : destination);
-          }}
+          onNavigate={navigatePhoneWorkspace}
           ariaLabel={t('nav_workspace')}
         />
       )}
