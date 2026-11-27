@@ -17,7 +17,6 @@ interface SymbolAction {
 }
 
 interface SwipeSelection {
-  pointerId: number;
   selectedIndex: number;
   startX: number;
   startY: number;
