@@ -86,7 +86,7 @@ export function WorkspaceExecutionControls({
               <span>{termuxPaused ? labels.resume : labels.pause}</span>
             </button>
           )}
-          <button type="button" onClick={onStop} className={`${buttonSize} !border-0 !shadow-none bg-red-600 text-white ${compactText}`}>
+          <button type="button" onClick={onStop} className={`dp-execution-control ${buttonSize} bg-red-600 text-white ${compactText}`}>
             <Square className="w-3.5 h-3.5 fill-current" />
             <span>{labels.stop}</span>
           </button>
