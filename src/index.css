@@ -188,7 +188,12 @@
     --ide-accent-text: #FDA4AF;
   }
 
-  /* Translucent glass surfaces when dynamic 3D atmosphere canvas is active (zero backdrop-blur) */
+  /* The workspace itself is one opaque sheet; only the surrounding chrome reveals the atmosphere. */
+  html[data-theme] {
+    --ide-sheet-bg: var(--ide-surface);
+  }
+
+  /* Keep the outer canvas atmospheric without making nested workspace panes translucent. */
   html.has-3d-bg[data-theme="light"],
   html.has-3d-bg[data-theme="rose"],
   html.has-3d-bg[data-theme="peony"],
