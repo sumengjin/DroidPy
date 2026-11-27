@@ -65,7 +65,7 @@ assert.ok(generated.includes('threading.BoundedSemaphore(8)'));
 assert.ok(generated.includes('self.send_header("Connection", "close")'));
 assert.ok(generated.includes('self.close_connection = True'));
 assert.ok(generated.includes('if self.path in ("/pause", "/resume"):'));
-const pythonStreamStart = generated.indexOf('    def _stream_pty_command(self, cmd, shell=False):');
+const pythonStreamStart = generated.indexOf('    def _stream_pty_command(self, cmd, shell=False, before_start=None):');
 const pythonStreamEnd = generated.indexOf('    def _read_json_body(self):', pythonStreamStart);
 assert.ok(pythonStreamStart >= 0 && pythonStreamEnd > pythonStreamStart);
 const pythonStream = generated.slice(pythonStreamStart, pythonStreamEnd);
