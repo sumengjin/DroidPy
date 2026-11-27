@@ -48,7 +48,7 @@ import { WorkspaceFileTabs } from './components/WorkspaceFileTabs';
 import { TerminalPanel } from './components/TerminalPanel';
 import { FileExplorer } from './components/FileExplorer';
 import { WorkspaceNavigation } from './components/WorkspaceNavigation';
-import { NegativeScreenDrawer } from './components/NegativeScreenDrawer';
+import { SettingsWorkspace } from './components/SettingsWorkspace';
 import { CrawlerBrowserPanel } from './components/CrawlerBrowserPanel';
 import { HelpTutorialModal } from './components/HelpTutorialModal';
 import { AppExecutionLogModal } from './components/AppExecutionLogModal';
@@ -3610,8 +3610,8 @@ export default function App() {
         />
       )}
 
-      {/* Negative Screen Slide-Over Drawer for Phone & Tablet (Termux, Packages, Storage, System & Export) */}
-      <NegativeScreenDrawer
+      {/* Full-screen Settings workspace, independent of the editor navigation shell. */}
+      <SettingsWorkspace
         open={negativeOpen}
         section={negativeSection}
         onChangeSection={setNegativeSection}

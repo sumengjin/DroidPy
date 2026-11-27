@@ -23,7 +23,7 @@ declare global {
 }
 import { AppUpdateCheckResult } from '../services/appUpdater';
 
-interface NegativeScreenDrawerProps {
+interface SettingsWorkspaceProps {
   open: boolean;
   section: NegativeScreenSection;
   onChangeSection: (section: NegativeScreenSection) => void;
@@ -87,7 +87,7 @@ interface NegativeScreenDrawerProps {
   onNotify: (msg: string) => void;
 }
 
-export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
+export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
   open,
   section,
   onChangeSection,
@@ -151,7 +151,6 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
   onNotify,
 }) => {
   const { t } = useI18n();
-  const backdropTouchRef = React.useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const [showCategories, setShowCategories] = React.useState(true);
   React.useEffect(() => {
     window.__droidpySettingsBack = () => {
@@ -168,66 +167,38 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex justify-center bg-black/35 md:p-5"
-      onTouchStart={(e) => {
-        const touch = e.touches[0];
-        if (!touch) return;
-        backdropTouchRef.current = { x: touch.clientX, y: touch.clientY, moved: false };
-      }}
-      onTouchMove={(e) => {
-        const start = backdropTouchRef.current;
-        const touch = e.touches[0];
-        if (!start || !touch) return;
-        if (Math.abs(touch.clientX - start.x) > 12 || Math.abs(touch.clientY - start.y) > 12) {
-          start.moved = true;
-        }
-      }}
-      onClick={(e) => {
-        const touch = backdropTouchRef.current;
-        backdropTouchRef.current = null;
-        if (touch?.moved || e.target !== e.currentTarget) return;
-        onClose();
-      }}
-      role="dialog"
-      aria-modal="true"
+      className="fixed inset-0 z-50 flex flex-col bg-[var(--ide-bg)] text-[var(--ide-text)]"
+      role="region"
       aria-label={t('neg_title')}
     >
       <aside
         onClick={(e) => e.stopPropagation()}
-        className="w-full h-full rounded-none bg-[var(--ide-bg)] text-[var(--ide-text)] flex flex-col overflow-hidden md:max-w-6xl md:rounded-3xl md:border md:border-[var(--ide-border)] md:shadow-2xl"
+        className="w-full h-full flex flex-col overflow-hidden"
       >
-        {/* Drawer Header */}
-        <div className="px-4 py-3.5 pt-safe border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] flex items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <img
-              src="/icon.svg"
-              alt="DroidPy"
-              className="w-9 h-9 rounded-xl shrink-0"
-              referrerPolicy="no-referrer"
-            />
-            <div className="min-w-0">
-              <h2 className="text-base font-bold truncate">{t('neg_title')}</h2>
-              <p className="text-xs text-[var(--ide-text-muted)] truncate mt-0.5">{t('neg_subtitle')}</p>
-            </div>
+        {/* Independent settings workspace header */}
+        <header className="px-5 py-3 pt-safe flex items-center justify-between gap-3 shrink-0">
+          <div className="min-w-0">
+            <h1 className="text-lg font-semibold tracking-tight truncate">{t('neg_title')}</h1>
+            <p className="text-xs text-[var(--ide-text-muted)] truncate mt-0.5">{t('neg_subtitle')}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label={t('btn_done')}
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full border border-[var(--ide-border)] bg-[var(--ide-bg)] text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] shrink-0"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl border border-transparent bg-transparent text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] shrink-0 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
-        </div>
+        </header>
 
         <div className="flex-1 min-h-0 overflow-hidden flex flex-col md:flex-row">
-        <div className={`${showCategories ? 'flex' : 'hidden'} md:flex flex-1 min-h-0 overflow-y-auto ide-scroll px-3 py-3 pb-safe md:flex-none md:w-72 md:border-r md:border-[var(--ide-border)] md:bg-[var(--ide-surface)] flex-col gap-3`}>
+        <div className={`${showCategories ? 'flex' : 'hidden'} md:flex flex-1 min-h-0 overflow-y-auto ide-scroll px-3 py-3 pb-safe md:flex-none md:w-64 md:border-r md:border-[var(--ide-border)] flex-col gap-2`}>
           
             <div className="mb-3 px-1">
               <h3 className="text-base font-semibold text-[var(--ide-text)]">{t('neg_category_heading')}</h3>
               <p className="mt-1 text-xs text-[var(--ide-text-muted)]">{t('neg_category_hint')}</p>
             </div>
-            <div className="divide-y divide-[var(--ide-border)] rounded-2xl border border-[var(--ide-border)] bg-[var(--ide-surface)] overflow-hidden">
+            <div className="flex flex-col gap-1">
               {[
                 { id: 'termux' as const, label: t('neg_category_termux'), Icon: Terminal, desc: t('neg_category_termux_desc') },
                 { id: 'packages' as const, label: t('neg_category_packages'), Icon: Package, desc: t('neg_category_packages_desc') },
@@ -243,13 +214,17 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
                     setShowCategories(window.matchMedia('(min-width: 768px)').matches);
                   }}
                   aria-current={section === id ? 'page' : undefined}
-                  className={`w-full min-h-[76px] px-3.5 py-3 flex items-center gap-3 text-left transition-colors active:bg-[var(--ide-surface-alt)] ${section === id ? 'bg-[var(--ide-accent-soft)]' : 'hover:bg-[var(--ide-surface-alt)]'}`}
+                  className={`w-full min-h-[68px] px-3 py-2.5 flex items-center gap-3 text-left rounded-xl border transition-colors ${
+                    section === id
+                      ? 'border-[var(--ide-accent)]/75 text-[var(--ide-accent-text)]'
+                      : 'border-transparent bg-transparent text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
+                  }`}
                 >
-                  <span className="w-11 h-11 rounded-2xl bg-[var(--ide-accent-soft)] text-[var(--ide-accent)] flex items-center justify-center shrink-0">
+                  <span className="w-10 h-10 flex items-center justify-center shrink-0 text-current">
                     <Icon className="w-5 h-5" />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-semibold text-[var(--ide-text)]">{label}</span>
+                    <span className="block text-sm font-semibold text-current">{label}</span>
                     <span className="block text-xs text-[var(--ide-text-muted)] mt-1">{desc}</span>
                   </span>
                   <span className="relative shrink-0">

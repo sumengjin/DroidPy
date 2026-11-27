@@ -9,7 +9,7 @@ const [source, bridgeSource, catalogSource, exportSource, panelSource, terminalS
   readFile(new URL('../src/components/TermuxIntegrationPanel.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/TerminalPanel.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/App.tsx', import.meta.url), 'utf8'),
-  readFile(new URL('../src/components/NegativeScreenDrawer.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../src/components/SettingsWorkspace.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/services/i18n.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/utils/crawlerSession.ts', import.meta.url), 'utf8'),
   readFile(new URL('../android/app/src/main/assets/python/frostwork/__init__.py', import.meta.url), 'utf8'),
@@ -125,13 +125,17 @@ assert.match(pyBulkUpgradeHandler, /pyodidePackageOperationLockRef\.current = tr
 assert.match(appSource, /if \(pyodideStatus === 'ready'\) \{\s*pyodidePackageOperationLockRef\.current = true/,'combined package upgrades must lock the Pyodide phase');
 const pyCombinedUpgrade = appSource.slice(appSource.indexOf('const handleUpgradeAllPackages'), appSource.indexOf('const handleCheckAppUpdates'));
 assert.match(pyCombinedUpgrade, /pyodidePackageOperationLockRef\.current = true[\s\S]*?pyodidePackageOperationLockRef\.current = false/, 'combined package upgrades must release the Pyodide lock before continuing');
-const mobileNavStart = appSource.indexOf('Mobile workspace navigation');
-const mobileNavEnd = appSource.indexOf('</nav>', mobileNavStart);
+const mobileNavStart = appSource.indexOf('Phone navigation is the compact presentation');
+const mobileNavEnd = appSource.indexOf('/>', mobileNavStart);
 assert.ok(mobileNavStart >= 0 && mobileNavEnd > mobileNavStart, 'mobile workspace navigation must exist');
 const mobileNavSource = appSource.slice(mobileNavStart, mobileNavEnd);
-assert.match(mobileNavSource, /grid-cols-4/, 'mobile navigation must expose four primary workspaces');
-assert.match(mobileNavSource, /setNegativeOpen\(false\);\s*setMobileTab\(id\)/, 'switching workspaces must close the settings drawer before showing the selected destination');
-assert.doesNotMatch(mobileNavSource, /id: 'packages'/, 'package management must not occupy a primary bottom-navigation destination');
+assert.match(mobileNavSource, /variant="phone"/, 'phone navigation must use the shared responsive workspace navigation');
+assert.match(mobileNavSource, /setNegativeOpen\(false\);\s*setMobileTab\(destination === 'terminal' \? 'console' : destination\)/, 'switching workspaces must close the Settings workspace before showing the selected destination');
+const workspaceNavigationSource = await readFile(new URL('../src/components/WorkspaceNavigation.tsx', import.meta.url), 'utf8');
+assert.match(workspaceNavigationSource, /grid grid-cols-4/, 'phone navigation must expose four primary workspaces');
+assert.match(workspaceNavigationSource, /border-\[var\(--ide-accent\)\]\/75/, 'selected navigation destinations must have a theme-aware accent outline');
+assert.match(workspaceNavigationSource, /border-transparent bg-transparent text-\[var\(--ide-text-muted\)\]/, 'unselected navigation destinations must remain transparent and visually quieter');
+assert.doesNotMatch(workspaceNavigationSource, /id: 'packages'/, 'package management must not occupy a primary bottom-navigation destination');
 assert.match(drawerSource, /id: 'packages' as const, label: t\('neg_category_packages'\)/, 'package management must remain available as a translated dedicated Settings category');
 assert.match(i18nSource, /neg_category_packages:/, 'package management category label must be localized');
 assert.match(i18nSource, /neg_category_packages_desc:/, 'package management category description must be localized');
