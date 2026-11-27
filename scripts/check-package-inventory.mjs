@@ -175,10 +175,10 @@ assert.match(exportSource, /overscroll-x-contain touch-pan-x/, 'horizontal packa
 assert.match(panelSource, /activeTermuxTask === \`install:\$\{tmx\.targetName\}\`/);
 assert.match(panelSource, /disabled=\{!!busyAction \|\| termuxRunning/);
 assert.doesNotMatch(panelSource, /handleInitEmbedded/);
-assert.match(drawerSource, /backdropTouchRef/);
-assert.match(drawerSource, /Math\.abs\(touch\.clientX - start\.x\) > 12/);
-assert.match(drawerSource, /touch\?\.moved \|\| e\.target !== e\.currentTarget/, 'drag gestures and clicks inside the drawer must not dismiss the backdrop');
-assert.doesNotMatch(drawerSource, /Swipe left on drawer to dismiss/);
+assert.ok(drawerSource.includes('fixed inset-0 z-50 flex flex-col bg-[var(--ide-bg)]'), 'Settings must occupy an independent full-screen workspace');
+assert.ok(!drawerSource.includes('bg-black/35') && !drawerSource.includes('md:max-w-6xl'), 'Settings must not be rendered as a dimmed slide-over dialog');
+assert.ok(drawerSource.includes('border-[var(--ide-accent)]/75'), 'Settings categories must use the theme-aware selected outline');
+assert.ok(!drawerSource.includes('backdropTouchRef'), 'the full-screen Settings workspace must not depend on backdrop dismissal gestures');
 assert.match(drawerSource, /termuxActiveTask/);
 assert.match(i18nSource, /首次執行 Python 或安裝套件時，自動安裝 Python 3 與 pip/);
 assert.match(exportSource, /matplotlib:\s*'matplotlib'/);
