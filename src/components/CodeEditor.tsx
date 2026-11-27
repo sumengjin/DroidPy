@@ -415,15 +415,6 @@ const EDITOR_SURFACE_TOKENS: Record<
   },
 };
 
-function hexToRgba(hex: string, alpha: number): string {
-  const clean = hex.replace('#', '').trim();
-  if (clean.length !== 6) return hex;
-  const r = parseInt(clean.slice(0, 2), 16);
-  const g = parseInt(clean.slice(2, 4), 16);
-  const b = parseInt(clean.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
 function createEditorTheme(themeId: ThemeId, fontSize: number, transparentBg = false) {
   const meta = getThemeMeta(themeId);
   const t = EDITOR_SURFACE_TOKENS[themeId] ?? EDITOR_SURFACE_TOKENS.rose;
