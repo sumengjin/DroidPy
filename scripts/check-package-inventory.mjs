@@ -246,4 +246,14 @@ assert.match(bridgeSource, /no verified Termux ARM64 \/ Python 3\.14 prebuilt sc
 assert.match(source, /no verified Termux ARM64 \/ Python 3\.14 prebuilt scikit-learn package is available/);
 assert.doesNotMatch(bridgeSource, /def _scikit_learn_source_install_command/);
 
-console.log('Package inventory safety checks passed: dual-source discovery, bounded private output, cleanup and non-shrinking manifest.');
+// Android Back must unwind app navigation before the native double-press exit guard.
+assert.match(appSource, /mobileTabHistoryRef = useRef<MobileTab\[\]>\(\[\]\)/, 'mobile workspace navigation must retain a Back stack');
+assert.match(appSource, /mobileTabHistoryRef\.current\.push\(previous\)/, 'workspace changes must be recorded for Back navigation');
+assert.match(appSource, /mobileTabHistoryRef\.current\.pop\(\)/, 'Back must return to the previously visited workspace');
+assert.match(appSource, /mobileTabRef\.current !== 'editor'/, 'non-home workspaces must return to the editor before app exit');
+assert.match(appSource, /suppressMobileTabHistoryRef/, 'Back navigation must not re-add the destination to its own history');
+assert.match(source, /if \(handled == "true"\) \{[\s\S]*?lastBackPressedAt = 0L/, 'an in-app Back action must reset the native double-press exit timer');
+assert.match(source, /if \(webView\.canGoBack\(\)\) \{\s*lastBackPressedAt = 0L/, 'WebView history navigation must reset the native exit timer');
+assert.match(source, /if \(crawlerOverlay\.visibility == View\.VISIBLE\) \{\s*\/\/ A Back press consumed inside the browser must never count toward app exit\.\s*lastBackPressedAt = 0L/, 'crawler browser navigation must not count toward app exit');
+
+console.log('Package inventory and navigation safety checks passed: dual-source discovery, bounded private output, cleanup, non-shrinking manifest and Back-stack exit guard.');
