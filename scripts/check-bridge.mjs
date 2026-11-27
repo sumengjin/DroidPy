@@ -200,6 +200,16 @@ const systemBarCss = await readFile('src/index.css', 'utf8');
 assert.ok(systemBarCss.includes('var(--droidpy-statusbar-inset, 0px)'));
 assert.ok(systemBarCss.includes('var(--droidpy-navigationbar-inset, 0px)'));
 
+// Every fresh app launch must discard the previous application/native diagnostic session.
+const appLoggerSource = await readFile('src/services/appLogger.ts', 'utf8');
+assert.ok(appLoggerSource.includes('resetStoredLogsForNewSession()'));
+assert.ok(appLoggerSource.includes('localStorage.removeItem(STORAGE_APP_LOGS_KEY)'));
+const appLifecycleSource = await readFile('src/App.tsx', 'utf8');
+assert.ok(appLifecycleSource.includes('clearAppLogs();'), 'the app must explicitly begin with an empty app-log session');
+const nativeSessionReset = androidBuilder.indexOf('File(filesDir, "droidpy_native.log").writeText("", Charsets.UTF_8)');
+const nativeSessionStart = androidBuilder.indexOf('appendActivityLog("Startup", "MainActivity.onCreate entered")');
+assert.ok(nativeSessionReset >= 0 && nativeSessionStart > nativeSessionReset, 'native logs must be cleared before the first startup record');
+
 // Native Bridge limits are checked against the actual generated Android source.
 const androidBuilder = await readFile('src/services/androidApkBuilder.ts', 'utf8');
 assert.ok(androidBuilder.includes('ThreadPoolExecutor('));
