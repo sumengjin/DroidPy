@@ -168,7 +168,7 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex bg-[var(--ide-bg)]"
+      className="fixed inset-0 z-50 flex justify-center bg-black/35 md:p-5"
       onTouchStart={(e) => {
         const touch = e.touches[0];
         if (!touch) return;
@@ -194,7 +194,7 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
     >
       <aside
         onClick={(e) => e.stopPropagation()}
-        className="w-full h-full rounded-none bg-[var(--ide-bg)] text-[var(--ide-text)] flex flex-col overflow-hidden"
+        className="w-full h-full rounded-none bg-[var(--ide-bg)] text-[var(--ide-text)] flex flex-col overflow-hidden md:max-w-6xl md:rounded-3xl md:border md:border-[var(--ide-border)] md:shadow-2xl"
       >
         {/* Drawer Header */}
         <div className="px-4 py-3.5 pt-safe border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] flex items-center justify-between gap-3 shrink-0">
