@@ -3109,7 +3109,9 @@ export default function App() {
       {/* One continuous translucent paper surface covers the full viewport, including both headers and navigation. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 z-[1]"
+        className={`pointer-events-none absolute inset-0 z-[1] ${
+          deviceClass === 'tablet' && isLandscape && tabletSplit ? 'tablet-landscape-split-paper' : ''
+        }`}
         style={{ backgroundColor: is3dBgActive ? 'var(--ide-sheet-bg)' : 'var(--ide-surface)' }}
       />
 
