@@ -496,6 +496,30 @@ button.dp-execution-control::after {
   box-shadow: none !important;
 }
 
+/* The terminal output and its command line share one surface, without a second input card. */
+.terminal-console-surface {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.terminal-console-surface .terminal-input-row {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.terminal-console-surface input {
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+}
+
 .terminal-input-row {
   width: 66.6667% !important;
   max-width: 66.6667%;
