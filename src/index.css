@@ -190,7 +190,10 @@
 
   /* The workspace itself is one opaque sheet; only the surrounding chrome reveals the atmosphere. */
   html[data-theme] {
-    --ide-sheet-bg: var(--ide-surface);
+    /* One thin, full-screen paper layer over the live 3D glass environment. */
+    --ide-sheet-bg: color-mix(in srgb, var(--ide-surface) 82%, transparent);
+    --ide-divider-glass: color-mix(in srgb, var(--ide-text) 30%, transparent);
+    --ide-divider-glow: color-mix(in srgb, var(--ide-surface) 72%, transparent);
   }
 
   /* Keep the outer canvas atmospheric without making nested workspace panes translucent. */
