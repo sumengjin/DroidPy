@@ -200,6 +200,9 @@ const systemBarCss = await readFile('src/index.css', 'utf8');
 assert.ok(systemBarCss.includes('var(--droidpy-statusbar-inset, 0px)'));
 assert.ok(systemBarCss.includes('var(--droidpy-navigationbar-inset, 0px)'));
 
+const termuxBridgeSource = await readFile('src/services/termuxBridge.ts', 'utf8');
+const androidBuilder = await readFile('src/services/androidApkBuilder.ts', 'utf8');
+
 // Native and external Termux bridges emit NDJSON records terminated by real LF bytes.
 // The client must split on an actual newline, not the two-character backslash+n sequence.
 assert.ok(termuxBridgeSource.includes("buffer.split('\\n')"), 'NDJSON parser must split on real newline characters');
@@ -216,7 +219,6 @@ const nativeSessionStart = androidBuilder.indexOf('appendActivityLog("Startup", 
 assert.ok(nativeSessionReset >= 0 && nativeSessionStart > nativeSessionReset, 'native logs must be cleared before the first startup record');
 
 // Native Bridge limits are checked against the actual generated Android source.
-const androidBuilder = await readFile('src/services/androidApkBuilder.ts', 'utf8');
 assert.ok(androidBuilder.includes('ThreadPoolExecutor('));
 assert.ok(androidBuilder.includes('4, 8, 60L, TimeUnit.SECONDS, ArrayBlockingQueue<Runnable>(16)'));
 assert.ok(androidBuilder.includes('RejectedExecutionException'));
