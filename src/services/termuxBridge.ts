@@ -146,6 +146,9 @@ def _stage_workspace_files(files):
                 fp.flush()
                 os.fsync(fp.fileno())
             os.replace(temp_path, target)
+            with open(target, "rb") as committed:
+                if committed.read() != content.encode("utf-8"):
+                    raise OSError("Workspace read-back verification failed for " + name)
         finally:
             try:
                 if os.path.exists(temp_path):
