@@ -3236,7 +3236,7 @@ export default function App() {
         )}
 
       {/* Main Content Area (Mobile & Tablet Only) */}
-      <main className={`relative z-10 flex-1 min-h-0 flex overflow-hidden ${deviceClass === 'tablet' ? 'flex-col' : 'flex-row'}`}>
+      <main className="relative z-10 flex-1 min-h-0 min-w-0 w-full flex flex-col overflow-hidden">
         {deviceClass === 'tablet' && (
           <WorkspaceNavigation
             variant="tablet"
