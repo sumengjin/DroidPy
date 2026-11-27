@@ -162,7 +162,14 @@ assert.ok(workspaceNavigationSource.includes("'w-full flex-col min-h-[56px] px-1
 assert.match(workspaceHeaderSource, /onNavigate\?\.\(id\)/, 'tablet workspace destinations must be integrated into the single top header');
 assert.match(workspaceHeaderSource, /labels\.console[\s\S]*?labels\.files[\s\S]*?labels\.browser/, 'tablet header must expose terminal, files and browser destinations once');
 assert.match(appSource, /<WorkspaceFileTabs[\s\S]*?variant="tablet"/, 'tablet file tabs must live inside the editor pane, not occupy a second global header row');
-assert.match(appSource, /className="relative z-10 flex-1 min-h-0 min-w-0 w-full flex flex-col overflow-hidden"/, 'phone and tablet workspaces must use a full-width single-column content shell');
+assert.match(appSource, /className="relative z-10 flex-1 min-h-0 min-w-0 w-full flex flex-col overflow-hidden bg-\[var\(--ide-sheet-bg\)\]"/, 'the middle workspace must own one opaque sheet while the top and bottom chrome remain transparent');
+assert.match(appSource, /mobileTab === 'editor'[\s\S]*?flex-1 min-h-0 flex flex-col overflow-hidden bg-transparent/, 'phone editor content must sit directly on the shared workspace sheet');
+assert.match(appSource, /shrink-0 bg-transparent/, 'phone editor controls must not create a second opaque paper layer');
+assert.match(themeCssSource, /html\[data-theme\] \{\s*--ide-sheet-bg: var\(--ide-surface\);/, 'every theme must provide an opaque workspace sheet color');
+assert.doesNotMatch(themeCssSource, /--ide-surface:\s*rgba\(|--ide-surface-alt:\s*rgba\(/, '3D atmosphere must not make nested workspace surfaces translucent');
+assert.match(terminalSource, /<div className="flex flex-col h-full bg-transparent text-\[var\(--ide-text\)\] overflow-hidden">/, 'terminal output must not create a second opaque sheet');
+assert.match(settingsWorkspaceSource, /fixed inset-0 z-\[1000\][\s\S]*?backgroundColor: 'var\(--ide-surface\)'/, 'settings must be a fully opaque top-level workspace');
+assert.match(appSource, /<TabletSplitLayout split=\{tabletSplit\} orientation=\{isLandscape \? 'horizontal' : 'vertical'\}>/, 'tablet panes must use the adjustable workbench layout');
 const tabletSplitSource = await readFile(new URL('../src/components/TabletSplitLayout.tsx', import.meta.url), 'utf8');
 assert.match(appSource, /<TabletSplitLayout split={tabletSplit} orientation={isLandscape \? 'horizontal' : 'vertical'}>/, 'tablet panes must use the adjustable workbench layout');
 assert.match(tabletSplitSource, /setPrimaryPercent\(Math\.min\(75, Math\.max\(25, raw\)\)\)/, 'tablet workbench split must be user-adjustable within usable bounds');
