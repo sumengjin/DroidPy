@@ -3461,7 +3461,7 @@ export default function App() {
                 <div className="shrink-0 border-b border-[var(--ide-border)] bg-[var(--ide-surface-alt)]">
                   <div className="flex items-center gap-1.5 px-2 pt-2 pb-1">
                     <WorkspaceFileTabs files={files} activeFileId={activeFile.id} onSelect={setActiveFileId} onCreate={() => setMobileNewFileOpen((open) => !open)} createLabel={t('files_new_btn')} variant="phone" />
-
+                  </div>
                   <div className="flex items-center justify-between gap-2 px-2 pb-1.5">
                     <span className="min-w-0 truncate px-1 font-mono text-[10px] text-[var(--ide-text-muted)]">
                       {activeFile.name}
