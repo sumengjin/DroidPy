@@ -52,16 +52,16 @@ export function WorkspaceExecutionControls({
   const compactText = 'text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap';
 
   return (
-    <div className="flex items-center gap-1.5 shrink-0">
+    <div className="relative z-30 flex items-center gap-1.5 shrink-0 overflow-visible">
       {pendingInput && (
-        <button type="button" onClick={onCancelInput} className={`${buttonSize} bg-red-600 text-white ${compactText}`}>
+        <button type="button" onClick={onCancelInput} className={`${buttonSize} border-2 border-red-700 bg-red-600 text-white ${compactText}`}>
           <Square className="w-3.5 h-3.5 fill-current" />
           <span>{labels.cancelInput}</span>
         </button>
       )}
 
       {termuxStopping ? (
-        <button type="button" disabled aria-busy="true" className={`${buttonSize} bg-red-600/80 text-white ${compactText}`}>
+        <button type="button" disabled aria-busy="true" className={`${buttonSize} border-2 border-red-700 bg-red-600/80 text-white ${compactText}`}>
           <Loader2 className="w-3.5 h-3.5 animate-spin" />
           <span>{labels.stopping}</span>
         </button>
@@ -74,7 +74,7 @@ export function WorkspaceExecutionControls({
               disabled={termuxPauseBusy}
               aria-label={termuxPaused ? labels.resume : labels.pause}
               aria-pressed={termuxPaused}
-              className={`${buttonSize} bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] disabled:opacity-50 ${compactText}`}
+              className={`${buttonSize} border-2 border-[var(--ide-accent)] bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] disabled:opacity-50 ${compactText}`}
             >
               {termuxPauseBusy ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -96,7 +96,7 @@ export function WorkspaceExecutionControls({
           type="button"
           onClick={onRun}
           disabled={isRunning || isCoreLoading}
-          className={`${buttonSize} bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white ${compactText} transition-colors`}
+          className={`${buttonSize} border-2 border-[var(--ide-accent)] bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white ${compactText} transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ide-accent)]`}
         >
           {isRunning || isCoreLoading ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
