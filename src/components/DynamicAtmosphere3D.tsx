@@ -401,7 +401,7 @@ const SKY_FRAGMENT_SHADER = `
     atmo = mix(atmo, nearHillCol, m2 * 0.72);
 
     // 5. Harmonize gently with active IDE theme canvas so code contrast stays high
-    float themeAnchor = uIsDark > 0.5 ? 0.42 : 0.36;
+    float themeAnchor = uIsDark > 0.5 ? 0.10 : 0.08;
     vec3 col = mix(atmo, uBgColor, themeAnchor);
     // Keep theme accents out of the full-screen atmosphere; the theme base
     // is already blended above, without washing every scene in its accent hue.
@@ -505,12 +505,14 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
     scene.environmentIntensity = 0.65;
     roomEnv.dispose();
 
-    const hemiLight = new THREE.HemisphereLight(0xfff1f6, 0x6d28d9, 0.95);
+    // Outdoor lighting starts neutral; the animation loop shifts it with the
+    // actual time phase and season instead of permanently tinting every scene pink.
+    const hemiLight = new THREE.HemisphereLight(0xe8f2ff, 0x596579, 0.9);
     scene.add(hemiLight);
-    const keyLight = new THREE.DirectionalLight(0xfff7ed, 1.45);
+    const keyLight = new THREE.DirectionalLight(0xfff8e8, 1.35);
     keyLight.position.set(4, 6, 7);
     scene.add(keyLight);
-    const rimLight = new THREE.DirectionalLight(0xf9a8d4, 0.58);
+    const rimLight = new THREE.DirectionalLight(0xd8e4ff, 0.22);
     rimLight.position.set(-5, -2, 4);
     scene.add(rimLight);
 
@@ -868,12 +870,26 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
 
       const st = getActiveAtmosphereState(curMode);
 
-      // Compute realistic sky scattering colors based on time phase & season
+      // Compute outdoor sky and scene lighting from local time and season.
+      // Keep the light rig neutral at noon and progressively cooler/dimmer at night.
       let dayFactor = 0.5;
       let twilightFactor = 0.4;
+      let hemiIntensity = 0.7;
+      let keyIntensity = 0.9;
+      let rimIntensity = 0.18;
+      let hemiSky = '#dcecff';
+      let hemiGround = st.season === 'autumn' ? '#665345' : st.season === 'winter' ? '#536477' : '#596579';
+      let keyLightColor = '#fff4df';
+      let rimLightColor = '#b8c9e8';
       if (st.phaseKey === 'bg3d_phase_dawn') {
         dayFactor = 0.65;
         twilightFactor = 0.9;
+        hemiIntensity = 0.72;
+        keyIntensity = 0.92;
+        rimIntensity = 0.24;
+        hemiSky = '#f1e8ff';
+        keyLightColor = '#ffd8b0';
+        rimLightColor = '#b9c9ee';
         targetSunUv.set(0.72, 0.58);
         targetZenith.set(st.season === 'winter' ? '#64748b' : '#6366f1');
         targetHorizon.set(st.season === 'autumn' ? '#fdba74' : '#fbcfe8');
@@ -881,6 +897,12 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
       } else if (st.phaseKey === 'bg3d_phase_noon') {
         dayFactor = 1.0;
         twilightFactor = 0.2;
+        hemiIntensity = 1.05;
+        keyIntensity = 1.55;
+        rimIntensity = 0.2;
+        hemiSky = st.season === 'winter' ? '#e4f2ff' : '#eaf5ff';
+        keyLightColor = '#fff8e9';
+        rimLightColor = '#d8e7ff';
         targetSunUv.set(0.68, 0.84);
         targetZenith.set(
           st.season === 'winter'
@@ -900,6 +922,12 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
       } else if (st.phaseKey === 'bg3d_phase_sunset') {
         dayFactor = 0.55;
         twilightFactor = 1.0;
+        hemiIntensity = 0.68;
+        keyIntensity = 1.02;
+        rimIntensity = 0.3;
+        hemiSky = '#e8d9f0';
+        keyLightColor = st.season === 'autumn' ? '#ffd0a1' : '#f4c9d9';
+        rimLightColor = '#aaa9df';
         targetSunUv.set(0.28, 0.46);
         targetZenith.set(st.season === 'autumn' ? '#62456f' : '#6d28d9');
         targetHorizon.set('#f0a6cf');
@@ -907,6 +935,12 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
       } else if (st.phaseKey === 'bg3d_phase_evening') {
         dayFactor = 0.2;
         twilightFactor = 0.55;
+        hemiIntensity = 0.42;
+        keyIntensity = 0.34;
+        rimIntensity = 0.16;
+        hemiSky = '#aebde0';
+        keyLightColor = '#bdcafa';
+        rimLightColor = '#747fb8';
         targetSunUv.set(0.74, 0.72);
         targetZenith.set('#1e1b4b');
         targetHorizon.set(st.season === 'autumn' ? '#881337' : '#581c87');
@@ -914,11 +948,26 @@ export const DynamicAtmosphere3D: React.FC<DynamicAtmosphere3DProps> = ({
       } else {
         dayFactor = 0.05;
         twilightFactor = 0.25;
+        hemiIntensity = 0.24;
+        keyIntensity = 0.12;
+        rimIntensity = 0.09;
+        hemiSky = '#8795c3';
+        keyLightColor = '#9eadd8';
+        rimLightColor = '#626f9e';
         targetSunUv.set(0.76, 0.78);
         targetZenith.set('#090d1f');
         targetHorizon.set(st.season === 'winter' ? '#1e3a5f' : '#2e1065');
         targetSun.set('#e0e7ff');
       }
+
+      // Smoothly transition the 3D objects' real material lighting as well as the sky.
+      hemiLight.color.lerp(new THREE.Color(hemiSky), Math.min(1, dt * 1.8));
+      hemiLight.groundColor.lerp(new THREE.Color(hemiGround), Math.min(1, dt * 1.8));
+      hemiLight.intensity = THREE.MathUtils.damp(hemiLight.intensity, hemiIntensity, 1.8, dt);
+      keyLight.color.lerp(new THREE.Color(keyLightColor), Math.min(1, dt * 1.8));
+      keyLight.intensity = THREE.MathUtils.damp(keyLight.intensity, keyIntensity, 1.8, dt);
+      rimLight.color.lerp(new THREE.Color(rimLightColor), Math.min(1, dt * 1.8));
+      rimLight.intensity = THREE.MathUtils.damp(rimLight.intensity, rimIntensity, 1.8, dt);
 
       targetBg.set(curBg);
       targetAccent.set(curAccent);
