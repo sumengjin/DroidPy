@@ -168,8 +168,8 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[100] isolate flex flex-col text-[var(--ide-text)]"
-      style={{ backgroundColor: getThemeMeta(settings.theme).swatchBg }}
+      className="fixed inset-0 z-[1000] isolate flex flex-col text-[var(--ide-text)]"
+      style={{ backgroundColor: 'var(--ide-surface)' }}
       role="dialog"
       aria-modal="true"
       aria-label={t('neg_title')}
