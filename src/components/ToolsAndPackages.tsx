@@ -1219,6 +1219,36 @@ python ${entryFile}
                 </button>
               </div>
 
+              <div className="p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <label htmlFor="workspace-transparency" className="text-sm font-medium">工作區透明度</label>
+                    <p className="text-xs text-[var(--ide-text-muted)] mt-0.5 leading-relaxed">
+                      調整編輯區與終端背景透光程度；數值越高，越能看見完整的 3D 四季景色。
+                    </p>
+                  </div>
+                  <output htmlFor="workspace-transparency" className="text-sm font-semibold tabular-nums text-[var(--ide-accent-text)] shrink-0">
+                    {Math.min(100, Math.max(0, settings.workspaceTransparency ?? 18))}%
+                  </output>
+                </div>
+                <input
+                  id="workspace-transparency"
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={Math.min(100, Math.max(0, settings.workspaceTransparency ?? 18))}
+                  disabled={settings.enable3dBg === false}
+                  onChange={(event) => onUpdateSettings({ workspaceTransparency: Number(event.target.value) })}
+                  aria-label="工作區透明度"
+                  className="w-full h-2 rounded-full accent-[var(--ide-accent)] cursor-pointer disabled:opacity-40"
+                />
+                <div className="flex justify-between text-[11px] text-[var(--ide-text-muted)]">
+                  <span>清晰工作區</span>
+                  <span>完整呈現 3D 背景</span>
+                </div>
+              </div>
+
               <div className="p-4 space-y-2.5">
                 <div className="text-sm font-medium">{t('bg3d_mode_label')}</div>
                 <div className="grid grid-cols-2 gap-2">
