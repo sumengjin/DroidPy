@@ -226,7 +226,7 @@ assert.match(tabletSplitSource, /setPrimaryPercent\(Math\.min\(75, Math\.max\(25
 assert.match(tabletSplitSource, /onPointerDown=[\s\S]*?setPointerCapture[\s\S]*?onPointerMove=[\s\S]*?updateFromPointer/, 'tablet workbench divider must support touch and mouse dragging');
 assert.ok(tabletSplitSource.includes('role="separator"') && tabletSplitSource.includes('aria-valuemin={25}') && tabletSplitSource.includes('aria-valuemax={75}') && tabletSplitSource.includes('onKeyDown={handleKeyDown}'), 'tablet workbench divider must expose accessible keyboard resizing');
 assert.match(tabletSplitSource, /width: '1.5mm', height: '84%', top: '8%', borderRadius: '9999px'/, 'tablet splitter must retain a centered 84% rounded transparent divider core');
-assert.match(tabletSplitSource, /tablet-divider-clear-core[\s\S]*top: '64%'[\s\S]*tablet-gel-handle/, 'tablet splitter must keep the compact gel handle at two-thirds of the shortened guide');
+assert.match(tabletSplitSource, /tablet-gel-handle[\s\S]*top: '64%'[\s\S]*transform: 'translate\(-50%, -50%\)'/, 'tablet splitter must keep the compact gel handle at two-thirds of the shortened guide');
 assert.match(tabletSplitSource, /tablet-gel-handle-vertical[\s\S]*tablet-gel-handle-horizontal/, 'the compact gel handle must adapt to both divider orientations');
 assert.match(tabletSplitSource, /setIsDragging\(true\)[\s\S]*setIsDragging\(false\)/, 'tablet gel divider must visibly respond while being dragged');
 assert.match(themeCssSource, /\.tablet-gel-divider[\s\S]*background: transparent !important[\s\S]*box-shadow: none !important/, 'the full-height divider hit area must draw no line, edge or glow');
