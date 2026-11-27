@@ -47,7 +47,7 @@ import { CodeEditorSurface } from './components/CodeEditorSurface';
 import { WorkspaceFileTabs } from './components/WorkspaceFileTabs';
 import { TerminalPanel } from './components/TerminalPanel';
 import { FileExplorer } from './components/FileExplorer';
-import { WorkspaceNavigationRail } from './components/WorkspaceNavigationRail';
+import { WorkspaceNavigation } from './components/WorkspaceNavigation';
 import { NegativeScreenDrawer } from './components/NegativeScreenDrawer';
 import { CrawlerBrowserPanel } from './components/CrawlerBrowserPanel';
 import { HelpTutorialModal } from './components/HelpTutorialModal';
@@ -3268,7 +3268,8 @@ export default function App() {
       {/* Main Content Area (Mobile & Tablet Only) */}
       <main className="relative z-10 flex-1 min-h-0 flex overflow-hidden">
         {deviceClass === 'tablet' && (
-          <WorkspaceNavigationRail
+          <WorkspaceNavigation
+            variant="tablet"
             activeDestination={tabletPaneTab}
             labels={{
               editor: t('mob_editor'),
@@ -3590,49 +3591,23 @@ export default function App() {
         )}
       </main>
 
-      {/* Mobile workspace navigation: direct access to the four everyday destinations */}
+      {/* Phone navigation is the compact presentation of the same workspace model used on tablets. */}
       {deviceClass === 'phone' && (
-      <nav
-        aria-label={t('nav_workspace')}
-        className="relative z-[60] shrink-0 h-[70px] pb-safe bg-[var(--md-surface-container-low)] border-t border-[var(--ide-border)] grid grid-cols-4"
-      >
-        {(
-          [
-            { id: 'editor', label: t('mob_editor'), Icon: Code2 },
-            { id: 'console', label: t('mob_console'), Icon: TerminalIcon },
-            { id: 'files', label: t('mob_files'), Icon: FolderOpen },
-            { id: 'browser', label: t('mob_browser'), Icon: Globe },
-          ] as const
-        ).map(({ id, label, Icon }) => {
-          const active = mobileTab === id;
-          return (
-            <button
-              key={id}
-              type="button"
-              onClick={() => {
-                // The bottom bar is reserved for everyday workspaces. Packages and
-                // maintenance tools live behind the workspace menu in the app header.
-                setNegativeOpen(false);
-                setMobileTab(id);
-              }}
-              aria-label={label}
-              aria-current={active ? 'page' : undefined}
-              className={`min-h-[52px] min-w-0 flex flex-col items-center justify-center gap-1 transition-colors active:scale-[0.97] ${
-                active ? 'text-[var(--ide-accent-text)]' : 'text-[var(--ide-text-muted)]'
-              }`}
-            >
-              <span
-                className={`w-12 h-7 rounded-full flex items-center justify-center transition-colors ${
-                  active ? 'md-nav-pill' : ''
-                }`}
-              >
-                <Icon className="w-5 h-5" />
-              </span>
-              <span className="text-[10px] font-semibold tracking-tight truncate max-w-full px-0.5">{label}</span>
-            </button>
-          );
-        })}
-      </nav>
+        <WorkspaceNavigation
+          variant="phone"
+          activeDestination={mobileTab === 'console' ? 'terminal' : mobileTab === 'files' ? 'files' : mobileTab === 'browser' ? 'browser' : 'editor'}
+          labels={{
+            editor: t('mob_editor'),
+            terminal: t('mob_console'),
+            files: t('mob_files'),
+            browser: t('mob_browser'),
+          }}
+          onNavigate={(destination) => {
+            setNegativeOpen(false);
+            setMobileTab(destination === 'terminal' ? 'console' : destination);
+          }}
+          ariaLabel={t('nav_workspace')}
+        />
       )}
 
       {/* Negative Screen Slide-Over Drawer for Phone & Tablet (Termux, Packages, Storage, System & Export) */}
