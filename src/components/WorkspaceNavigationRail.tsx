@@ -53,10 +53,10 @@ export function WorkspaceNavigationRail({
                 aria-label={labels[id]}
                 aria-current={active ? 'page' : undefined}
                 title={labels[id]}
-                className={`w-full min-h-[68px] rounded-2xl flex flex-col items-center justify-center gap-2 transition-colors ${
+                className={`w-full min-h-[68px] rounded-2xl border flex flex-col items-center justify-center gap-2 transition-colors ${
                   active
-                    ? 'bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)]'
-                    : 'text-[var(--ide-text-muted)] hover:bg-[var(--ide-surface-alt)] hover:text-[var(--ide-text)]'
+                    ? 'border-[var(--ide-accent)]/70 text-[var(--ide-accent-text)]'
+                    : 'border-transparent bg-transparent text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
                 }`}
               >
                 <Icon className="w-5 h-5" />
@@ -72,7 +72,7 @@ export function WorkspaceNavigationRail({
         onClick={onOpenSettings}
         aria-label={settingsLabel}
         title={settingsLabel}
-        className="w-14 min-h-[56px] rounded-2xl flex flex-col items-center justify-center gap-1.5 text-[var(--ide-text-muted)] hover:bg-[var(--ide-surface-alt)] hover:text-[var(--ide-text)] transition-colors"
+        className="w-14 min-h-[56px] rounded-2xl border border-transparent bg-transparent flex flex-col items-center justify-center gap-1.5 text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] transition-colors"
       >
         <Settings className="w-5 h-5" />
         <span className="text-[10px] font-semibold">{settingsLabel}</span>
