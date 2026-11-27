@@ -211,10 +211,7 @@
   html.has-3d-bg[data-theme="moonrose"],
   html.has-3d-bg[data-theme="aurorapink"],
   html.has-3d-bg[data-theme="starry"] {
-    --ide-sheet-bg: rgba(22, 16, 28, 0.96);
     --ide-bg: rgba(16, 12, 22, 0.64);
-    --ide-surface: rgba(24, 18, 32, 0.74);
-    --ide-surface-alt: rgba(20, 15, 28, 0.72);
   }
 
   html,
