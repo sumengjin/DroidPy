@@ -3108,7 +3108,17 @@ export default function App() {
           <WorkspaceFileTabs files={files} activeFileId={activeFile.id} onSelect={setActiveFileId} onCreate={() => setMobileNewFileOpen((open) => !open)} createLabel={t('files_new_btn')} filesLabel={t('files_title')} variant="tablet" />
         </div>
 
-        <WorkspaceExecutionControls
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={tabletWorkspace.toggleSplit}
+            aria-pressed={tabletSplit}
+            className="dp-nav-item min-h-[40px] px-3 rounded-xl text-xs font-medium inline-flex items-center gap-1.5 whitespace-nowrap"
+          >
+            {tabletSplit ? <Maximize2 className="w-3.5 h-3.5" /> : <Columns2 className="w-3.5 h-3.5" />}
+            <span>{tabletSplit ? t('tab_focus_editor') : t('tab_split_view')}</span>
+          </button>
+          <WorkspaceExecutionControls
           variant="tablet"
           showRun
           pendingInput={pendingInputPrompt !== null}
@@ -3134,6 +3144,7 @@ export default function App() {
           onStop={() => void handleStopTermux('tablet-header')}
           onRun={() => void handleRunCode()}
         />
+        </div>
       </header>
       )}
 
@@ -3352,11 +3363,8 @@ export default function App() {
                           key={id}
                           type="button"
                           onClick={() => setTabletPaneTab(id)}
-                          className={`min-h-[34px] px-3 rounded-lg border text-xs font-medium inline-flex items-center gap-1.5 whitespace-nowrap transition-colors ${
-                            active
-                              ? 'border-[var(--ide-accent)]/70 text-[var(--ide-accent-text)] font-semibold'
-                              : 'border-transparent bg-transparent text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
-                          }`}
+                          aria-current={active ? 'page' : undefined}
+                          className="dp-nav-item min-h-[34px] px-3 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 whitespace-nowrap"
                         >
                           <Icon className="w-3.5 h-3.5" />
                           <span>{label}</span>

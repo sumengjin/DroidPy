@@ -19,16 +19,16 @@ export function WorkspaceFileTabs({ files, activeFileId, onSelect, onCreate, cre
       {files.map((file) => {
         const active = file.id === activeFileId;
         return (
-          <button key={file.id} type="button" role="tab" aria-selected={active} onClick={() => onSelect(file.id)} title={file.name}
-            className={isPhone
-              ? `min-h-[40px] max-w-[180px] shrink-0 px-3 rounded-xl border text-xs font-mono truncate transition-colors ${active ? 'border-[var(--ide-accent)]/70 text-[var(--ide-accent-text)] font-semibold' : 'border-transparent bg-transparent text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'}`
-              : `min-h-[34px] px-2.5 rounded-lg border font-mono text-xs transition-colors whitespace-nowrap shrink-0 ${active ? 'border-[var(--ide-accent)]/70 text-[var(--ide-accent-text)] font-semibold' : 'border-transparent bg-transparent text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'}`}>
+          <button key={file.id} type="button" role="tab" aria-selected={active} aria-current={active ? 'page' : undefined} onClick={() => onSelect(file.id)} title={file.name}
+            className={`dp-nav-item font-mono text-xs truncate transition-colors shrink-0 ${
+              isPhone ? 'min-h-[40px] max-w-[180px] px-3 rounded-xl' : 'min-h-[34px] px-2.5 rounded-lg whitespace-nowrap'
+            }`}>
             {file.name}
           </button>
         );
       })}
       <button type="button" onClick={onCreate} aria-label={createLabel} title={createLabel}
-        className={isPhone ? 'min-h-[40px] min-w-[40px] shrink-0 flex items-center justify-center rounded-xl text-[var(--ide-text-muted)] hover:bg-[var(--ide-surface)]' : 'min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-accent)] shrink-0'}>
+        className={isPhone ? 'dp-icon-button min-h-[40px] min-w-[40px] shrink-0 flex items-center justify-center rounded-xl' : 'dp-icon-button min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg shrink-0'}>
         <Plus className="w-4 h-4" />
       </button>
     </div>
