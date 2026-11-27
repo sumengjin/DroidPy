@@ -230,7 +230,7 @@ assert.match(tabletSplitSource, /tablet-divider-clear-core[\s\S]*tablet-gel-hand
 assert.match(tabletSplitSource, /tablet-gel-handle-vertical[\s\S]*tablet-gel-handle-horizontal/, 'the compact gel handle must adapt to both divider orientations');
 assert.match(tabletSplitSource, /setIsDragging\(true\)[\s\S]*setIsDragging\(false\)/, 'tablet gel divider must visibly respond while being dragged');
 assert.match(themeCssSource, /\.tablet-gel-divider[\s\S]*background: transparent !important[\s\S]*box-shadow: none !important/, 'the full-height divider hit area must draw no line, edge or glow');
-assert.match(themeCssSource, /\.tablet-divider-clear-core[\s\S]*background: rgba\(255, 255, 255, 0\.12\) !important[\s\S]*border: 0 !important[\s\S]*backdrop-filter: blur\(1\.5px\) saturate\(1\.35\)/, 'the 1 mm full-height divider must be a borderless clear-glass strip that reveals the 3D background');
+assert.match(themeCssSource, /\.tablet-divider-clear-core[\s\S]*background: transparent !important[\s\S]*border: 0 !important[\s\S]*backdrop-filter: blur\(0\.35px\) saturate\(1\.65\) contrast\(1\.08\)/, 'the 1 mm full-height divider must have no white film and must reveal the 3D background through clear glass');
 assert.match(themeCssSource, /\.tablet-gel-handle-vertical[\s\S]*width: 1mm[\s\S]*height: 10mm/, 'the vertical divider gel handle must be 1 mm wide and 1 cm long');
 assert.match(themeCssSource, /\.tablet-gel-handle-horizontal[\s\S]*width: 10mm[\s\S]*height: 1mm/, 'the horizontal divider gel handle must be 1 cm long and 1 mm high');
 assert.match(tabletSplitSource, /top: '66\.6667%'[\s\S]*?transform: 'translate\(-50%, -50%\)'/, 'landscape tablet gel handle must sit two-thirds down the vertical divider');
