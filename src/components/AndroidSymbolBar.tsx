@@ -113,7 +113,7 @@ export const AndroidSymbolBar: React.FC<AndroidSymbolBarProps> = ({
 
   const handleTouchSafe = (fn: () => void) => (e: React.PointerEvent<HTMLButtonElement>) => {
     e.preventDefault();
-    if (e.pointerType !== 'touch') fn();
+    fn();
   };
 
   return (
