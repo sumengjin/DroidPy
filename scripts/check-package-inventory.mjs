@@ -155,7 +155,7 @@ const mobileNavEnd = appSource.indexOf('/>', mobileNavStart);
 assert.ok(mobileNavStart >= 0 && mobileNavEnd > mobileNavStart, 'phone workspace navigation must exist');
 const mobileNavSource = appSource.slice(mobileNavStart, mobileNavEnd);
 assert.match(mobileNavSource, /variant="phone"/, 'phone navigation must use the shared responsive workspace navigation');
-assert.match(mobileNavSource, /setSettingsWorkspaceOpen\(false\);\s*setMobileTab\(destination === 'terminal' \? 'console' : destination\)/, 'switching workspaces must close the Settings workspace before showing the selected destination');
+assert.match(mobileNavSource, /onNavigate=\{navigatePhoneWorkspace\}/, 'switching workspaces must use the explicit phone destination handler');
 const workspaceNavigationSource = await readFile(new URL('../src/components/WorkspaceNavigation.tsx', import.meta.url), 'utf8');
 assert.ok(workspaceNavigationSource.includes("'relative z-[60] flex w-full shrink-0 min-h-[68px] pb-safe px-1'") && workspaceNavigationSource.includes("'grid grid-cols-4 items-stretch gap-1 w-full min-w-0'"), 'phone navigation must occupy the full viewport width with four equal-width destinations');
 assert.ok(workspaceNavigationSource.includes("'w-full flex-col min-h-[56px] px-1'"), 'phone navigation destinations must fill their equal-width grid cells');
@@ -264,7 +264,7 @@ assert.match(pyodidePackagesSource, /overscroll-x-contain touch-pan-x/, 'horizon
 assert.match(termuxPackagesSource, /activeTermuxTask === \`install:\$\{tmx\.targetName\}\`/);
 assert.match(termuxPackagesSource, /disabled=\{!!busyAction \|\| termuxRunning/);
 assert.doesNotMatch(panelSource, /handleInitEmbedded/);
-assert.ok(settingsWorkspaceSource.includes('fixed inset-0 z-50 flex flex-col bg-[var(--ide-bg)]'), 'Settings must occupy an independent full-screen workspace');
+assert.ok(settingsWorkspaceSource.includes('fixed inset-0 z-[100] isolate flex flex-col') && settingsWorkspaceSource.includes('backgroundColor: getThemeMeta(settings.theme).swatchBg'), 'Settings must occupy an opaque independent full-screen workspace');
 assert.ok(!settingsWorkspaceSource.includes('bg-black/35') && !settingsWorkspaceSource.includes('md:max-w-6xl'), 'Settings must not be rendered as a dimmed slide-over dialog');
 assert.ok(settingsWorkspaceSource.includes('dp-nav-item'), 'Settings categories must use the shared theme-aware interaction primitive');
 const allSettingsSwitchSource = exportSource + pyodidePackagesSource;
