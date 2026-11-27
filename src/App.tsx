@@ -363,7 +363,7 @@ export default function App() {
   const [negativeOpen, setNegativeOpen] = useState(false);
   const [negativeSection, setNegativeSection] = useState<NegativeScreenSection>('termux');
   const [tabletSplit, setTabletSplit] = useState(true);
-  const [tabletPaneTab, setTabletPaneTab] = useState<TabletPaneTab>('terminal');
+  const [tabletPaneTab, setTabletPaneTab] = useState<'editor' | TabletPaneTab>('terminal');
   const [crawlerSession, setCrawlerSession] = useState<CrawlerSessionData>(() => {
     const restoreSession = (saved?: Partial<CrawlerSessionData> | null): CrawlerSessionData => {
       const restored = { ...DEFAULT_CRAWLER_SESSION, ...saved };
@@ -3147,7 +3147,15 @@ export default function App() {
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
-            onClick={() => setTabletSplit((v) => !v)}
+            onClick={() => {
+              if (tabletSplit) {
+                setTabletPaneTab('editor');
+                setTabletSplit(false);
+              } else {
+                if (tabletPaneTab === 'editor') setTabletPaneTab('terminal');
+                setTabletSplit(true);
+              }
+            }}
             className={`min-h-[40px] px-3 rounded-xl border text-xs font-medium inline-flex items-center gap-1.5 whitespace-nowrap transition-colors ${
               tabletSplit
                 ? 'border-[var(--ide-accent)]/50 bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)]'
@@ -3315,20 +3323,16 @@ export default function App() {
               { id: 'files', label: t('mob_files'), Icon: FolderOpen },
               { id: 'browser', label: t('mob_browser'), Icon: Globe },
             ] as const).map(({ id, label, Icon }) => {
-              const active = id === 'editor'
-                ? !tabletSplit
-                : tabletSplit && tabletPaneTab === id;
+              const active = tabletSplit
+                ? id === 'editor' || tabletPaneTab === id
+                : tabletPaneTab === id;
               return (
                 <button
                   key={id}
                   type="button"
                   onClick={() => {
-                    if (id === 'editor') {
-                      setTabletSplit(false);
-                    } else {
-                      setTabletPaneTab(id);
-                      setTabletSplit(true);
-                    }
+                    setTabletPaneTab(id);
+                    setTabletSplit(false);
                   }}
                   aria-label={label}
                   aria-current={active ? 'page' : undefined}
@@ -3349,6 +3353,7 @@ export default function App() {
         {deviceClass === 'tablet' ? (
           <div className={`flex-1 min-h-0 flex ${isLandscape ? 'flex-row' : 'flex-col'} overflow-hidden`}>
             {/* Tablet Primary Editor Pane */}
+            {(tabletSplit || tabletPaneTab === 'editor') && (
             <section
               className={`${
                 tabletSplit
@@ -3428,9 +3433,10 @@ export default function App() {
                 />
               )}
             </section>
+            )}
 
-            {/* Tablet Secondary Output / Files / Browser Split Pane */}
-            {tabletSplit && (
+            {/* Tablet Secondary Output / Files / Browser Workspace */}
+            {(tabletSplit || tabletPaneTab !== 'editor') && (
               <aside className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-[var(--ide-bg)]">
                 <div className="flex items-center justify-between gap-2 px-3 h-10 border-b border-[var(--ide-border)] bg-[var(--ide-surface-alt)] shrink-0">
                   <div className="flex items-center gap-1 p-0.5 rounded-lg bg-[var(--ide-bg)] border border-[var(--ide-border)]">
