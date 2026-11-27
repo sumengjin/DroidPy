@@ -509,7 +509,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
                 ? !onSendTermuxStdin || !terminalValue
                 : !terminalValue.trim() || status === 'running' || (engine === 'pyodide' && status === 'loading')
           }
-          className="terminal-submit-button shrink-0 min-h-[36px] px-2.5 rounded-lg inline-flex items-center justify-center gap-1 text-xs font-semibold text-white bg-[var(--ide-accent)] disabled:opacity-40"
+          className="terminal-submit-button shrink-0 min-h-[36px] px-2.5 inline-flex items-center justify-center gap-1 text-xs font-semibold text-[var(--ide-accent-text)] bg-transparent disabled:opacity-40"
         >
           <Send className="w-3.5 h-3.5" />
           <span>{inputSessionActive || pendingInputPrompt !== null || (engine === 'termux' && status === 'running') ? '送出' : '執行'}</span>
