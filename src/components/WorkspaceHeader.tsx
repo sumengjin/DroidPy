@@ -1,7 +1,6 @@
-import { Columns2, Maximize2, Settings } from 'lucide-react';
+import { Code2, Columns2, FolderOpen, Globe, Maximize2, Settings, Terminal as TerminalIcon } from 'lucide-react';
 import type { MobileTab, PythonFile } from '../types/ide';
 import { WorkspaceExecutionControls } from './WorkspaceExecutionControls';
-import { WorkspaceFileTabs } from './WorkspaceFileTabs';
 
 type ExecutionLabels = {
   cancelInput: string;
@@ -49,6 +48,7 @@ interface WorkspaceHeaderProps {
   };
   onSelectFile: (id: string) => void;
   onCreateFile: () => void;
+  onNavigate?: (destination: 'editor' | 'terminal' | 'files' | 'browser') => void;
   onOpenSettings?: () => void;
   tabletSplit?: boolean;
   onToggleSplit?: () => void;
@@ -59,11 +59,9 @@ interface WorkspaceHeaderProps {
 export function WorkspaceHeader({
   variant,
   activeFile,
-  files,
   activeTab,
   labels,
-  onSelectFile,
-  onCreateFile,
+  onNavigate,
   onOpenSettings,
   tabletSplit = false,
   onToggleSplit,
@@ -98,20 +96,44 @@ export function WorkspaceHeader({
           <span className="text-sm font-semibold leading-tight truncate">{title}</span>
         </div>
       ) : (
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <WorkspaceFileTabs
-            files={files}
-            activeFileId={activeFile.id}
-            onSelect={onSelectFile}
-            onCreate={onCreateFile}
-            createLabel={labels.createFile}
-            filesLabel={labels.filesTitle}
-            variant="tablet"
-          />
-        </div>
+        <nav aria-label={labels.editor} className="flex items-center gap-1 min-w-0 flex-1">
+          {([
+            { id: 'editor', label: labels.editor, Icon: Code2 },
+            { id: 'terminal', label: labels.console, Icon: TerminalIcon },
+            { id: 'files', label: labels.files, Icon: FolderOpen },
+            { id: 'browser', label: labels.browser, Icon: Globe },
+          ] as const).map(({ id, label, Icon }) => {
+            const active = (activeTab === 'console' ? 'terminal' : activeTab) === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => onNavigate?.(id)}
+                aria-label={label}
+                aria-current={active ? 'page' : undefined}
+                title={label}
+                className="dp-nav-item min-h-[38px] min-w-0 px-2 inline-flex items-center justify-center gap-1.5 text-xs font-medium whitespace-nowrap"
+              >
+                <Icon className="w-4 h-4 shrink-0" />
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </nav>
       )}
 
       <div className="flex items-center gap-2 shrink-0">
+        {!isPhone && onOpenSettings && (
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            aria-label={labels.openSettings}
+            title={labels.settings}
+            className="dp-icon-button min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl shrink-0"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+        )}
         {!isPhone && (
           <button
             type="button"
