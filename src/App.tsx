@@ -48,7 +48,7 @@ import { WorkspaceFileTabs } from './components/WorkspaceFileTabs';
 import { TerminalPanel } from './components/TerminalPanel';
 import { FileExplorer } from './components/FileExplorer';
 import { WorkspaceNavigation } from './components/WorkspaceNavigation';
-import { WorkspaceExecutionControls } from './components/WorkspaceExecutionControls';
+import { WorkspaceHeader } from './components/WorkspaceHeader';
 import { SettingsWorkspace } from './components/SettingsWorkspace';
 import { CrawlerBrowserPanel } from './components/CrawlerBrowserPanel';
 import { HelpTutorialModal } from './components/HelpTutorialModal';
@@ -3100,118 +3100,101 @@ export default function App() {
         bgHex={activeThemeMeta.swatchBg}
       />
 
-      {/* Tablet Top Bar: Negative Screen Trigger + File Tabs + Split Toggle + Primary CTA */}
+      {/* Tablet workspace header: file navigation, split layout and shared execution controls. */}
       {deviceClass === 'tablet' && (
-      <header className="relative z-10 flex items-center justify-between gap-3 h-13 px-3 pt-safe border-b border-[var(--ide-border)]/50 bg-transparent shrink-0">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-
-          <WorkspaceFileTabs files={files} activeFileId={activeFile.id} onSelect={setActiveFileId} onCreate={() => setMobileNewFileOpen((open) => !open)} createLabel={t('files_new_btn')} filesLabel={t('files_title')} variant="tablet" />
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={tabletWorkspace.toggleSplit}
-            aria-pressed={tabletSplit}
-            className="dp-nav-item min-h-[40px] px-3 rounded-xl text-xs font-medium inline-flex items-center gap-1.5 whitespace-nowrap"
-          >
-            {tabletSplit ? <Maximize2 className="w-3.5 h-3.5" /> : <Columns2 className="w-3.5 h-3.5" />}
-            <span>{tabletSplit ? t('tab_focus_editor') : t('tab_split_view')}</span>
-          </button>
-          <WorkspaceExecutionControls
+        <WorkspaceHeader
           variant="tablet"
-          showRun
-          pendingInput={pendingInputPrompt !== null}
-          termuxStopping={termuxStopping}
-          termuxRunning={termuxRunning}
-          termuxScriptRunning={termuxScriptRunning}
-          termuxPauseBusy={termuxPauseBusy}
-          termuxPaused={termuxPaused}
-          isRunning={isRunning}
-          isCoreLoading={isCoreLoading}
+          activeFile={activeFile}
+          files={files}
+          activeTab={mobileTab}
           labels={{
-            cancelInput: t('cta_abort_input'),
-            stopping: '停止中',
-            pause: '暫停',
-            resume: '繼續',
-            stop: t('cta_stop_run'),
-            loading: t('cta_loading_core'),
-            running: t('cta_running'),
-            run: t('cta_run_program'),
+            editor: t('mob_editor'),
+            console: t('mob_console'),
+            files: t('mob_files'),
+            browser: t('mob_browser'),
+            settings: t('neg_title'),
+            openSettings: t('neg_open_aria'),
+            createFile: t('files_new_btn'),
+            filesTitle: t('files_title'),
+            splitView: t('tab_split_view'),
+            focusEditor: t('tab_focus_editor'),
           }}
-          onCancelInput={handleCancelInput}
-          onTogglePause={() => void handleToggleTermuxPause()}
-          onStop={() => void handleStopTermux('tablet-header')}
-          onRun={() => void handleRunCode()}
+          onSelectFile={setActiveFileId}
+          onCreateFile={() => setMobileNewFileOpen((open) => !open)}
+          tabletSplit={tabletSplit}
+          onToggleSplit={tabletWorkspace.toggleSplit}
+          execution={{
+            pendingInput: pendingInputPrompt !== null,
+            termuxStopping,
+            termuxRunning,
+            termuxScriptRunning,
+            termuxPauseBusy,
+            termuxPaused,
+            isRunning,
+            isCoreLoading,
+            labels: {
+              cancelInput: t('cta_abort_input'),
+              stopping: '停止中',
+              pause: '暫停',
+              resume: '繼續',
+              stop: t('cta_stop_run'),
+              loading: t('cta_loading_core'),
+              running: t('cta_running'),
+              run: t('cta_run_program'),
+            },
+            onCancelInput: handleCancelInput,
+            onTogglePause: () => void handleToggleTermuxPause(),
+            onStop: () => void handleStopTermux('tablet-header'),
+            onRun: () => void handleRunCode(),
+          }}
         />
-        </div>
-      </header>
       )}
 
-      {/* Phone workspace header: contextual title and only relevant primary actions */}
+      {/* Phone workspace header: contextual destination and shared execution controls. */}
       {deviceClass === 'phone' && (
-      <header className="relative z-10 flex items-center justify-between gap-2 h-13 px-2.5 pt-safe border-b border-[var(--ide-border)]/50 bg-transparent shrink-0">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <button
-            type="button"
-            onClick={() => setNegativeOpen(true)}
-            aria-label={t('neg_open_aria')}
-            title={t('neg_title')}
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl border border-transparent bg-transparent text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] transition-colors shrink-0"
-          >
-            <Settings className="w-5 h-5" />
-          </button>
-          <img
-            src="/icon.svg"
-            alt="DroidPy"
-            className="w-6 h-6 rounded-md shrink-0"
-            referrerPolicy="no-referrer"
-          />
-          <div className="flex flex-col min-w-0">
-            <span className="text-sm font-semibold leading-tight truncate">
-              {mobileTab === 'editor'
-                ? t('mob_editor')
-                : mobileTab === 'console'
-                  ? t('mob_console')
-                  : mobileTab === 'files'
-                    ? t('mob_files')
-                    : t('mob_browser')}
-            </span>
-            {mobileTab === 'editor' && (
-              <span className="font-mono text-[11px] text-[var(--ide-text-muted)] truncate leading-tight">
-                {activeFile?.name}
-              </span>
-            )}
-          </div>
-        </div>
-
-        <WorkspaceExecutionControls
+        <WorkspaceHeader
           variant="phone"
-          showRun={mobileTab === 'editor' || mobileTab === 'console'}
-          pendingInput={pendingInputPrompt !== null}
-          termuxStopping={termuxStopping}
-          termuxRunning={termuxRunning}
-          termuxScriptRunning={termuxScriptRunning}
-          termuxPauseBusy={termuxPauseBusy}
-          termuxPaused={termuxPaused}
-          isRunning={isRunning}
-          isCoreLoading={isCoreLoading}
+          activeFile={activeFile}
+          files={files}
+          activeTab={mobileTab}
           labels={{
-            cancelInput: t('cta_abort_short'),
-            stopping: '停止中',
-            pause: '暫停',
-            resume: '繼續',
-            stop: t('cta_stop_short'),
-            loading: t('cta_loading_short'),
-            running: t('cta_running'),
-            run: t('cta_run_short'),
+            editor: t('mob_editor'),
+            console: t('mob_console'),
+            files: t('mob_files'),
+            browser: t('mob_browser'),
+            settings: t('neg_title'),
+            openSettings: t('neg_open_aria'),
+            createFile: t('files_new_btn'),
+            filesTitle: t('files_title'),
+            splitView: t('tab_split_view'),
+            focusEditor: t('tab_focus_editor'),
           }}
-          onCancelInput={handleCancelInput}
-          onTogglePause={() => void handleToggleTermuxPause()}
-          onStop={() => void handleStopTermux('phone-header')}
-          onRun={() => void handleRunCode()}
+          onOpenSettings={() => setNegativeOpen(true)}
+          execution={{
+            pendingInput: pendingInputPrompt !== null,
+            termuxStopping,
+            termuxRunning,
+            termuxScriptRunning,
+            termuxPauseBusy,
+            termuxPaused,
+            isRunning,
+            isCoreLoading,
+            labels: {
+              cancelInput: t('cta_abort_short'),
+              stopping: '停止中',
+              pause: '暫停',
+              resume: '繼續',
+              stop: t('cta_stop_short'),
+              loading: t('cta_loading_short'),
+              running: t('cta_running'),
+              run: t('cta_run_short'),
+            },
+            onCancelInput: handleCancelInput,
+            onTogglePause: () => void handleToggleTermuxPause(),
+            onStop: () => void handleStopTermux('phone-header'),
+            onRun: () => void handleRunCode(),
+          }}
         />
-      </header>
       )}
 
       {/* Missing Backed-up Packages Quick Restore Bar */}
