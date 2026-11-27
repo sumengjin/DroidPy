@@ -17,6 +17,7 @@ const [source, bridgeSource, catalogSource, exportSource, panelSource, terminalS
  ]);
 const themeCssSource = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
 const pyodidePackagesSource = await readFile(new URL('../src/components/PyodidePackageWorkspace.tsx', import.meta.url), 'utf8');
+const termuxPackagesSource = await readFile(new URL('../src/components/TermuxPackageWorkspace.tsx', import.meta.url), 'utf8');
 
 const catalogItems = catalogSource.split(/\n  \{\n    id: '/).slice(1);
 assert.ok(catalogItems.length >= 70, 'package catalog should retain its complete inventory');
@@ -102,7 +103,7 @@ assert.match(catalogSource, /外部 Termux 固定 w3lib<2\.6；APK 內建環境�
 assert.match(bridgeSource, /getTermuxNativePackageName\(cleaned\[0\]\)/, 'pip inventory uninstall must resolve native APT package names');
 assert.match(bridgeSource, /polars: 'python-polars'/, 'TUR Polars must retain its native package mapping');
 assert.match(bridgeSource, /scipy: 'python-scipy'/, 'SciPy must use the official Termux native package mapping');
-assert.match(panelSource, /item\.id === 'polars' \? 'python-polars' : tmx\.targetName/, 'TUR Polars installed state must read the APT inventory');
+assert.match(termuxPackagesSource, /item\.id === 'polars' \? 'python-polars' : tmx\.targetName/, 'TUR Polars installed state must read the APT inventory');
 assert.match(catalogSource, /Termux User Repository（TUR）預編譯套件提供/);
 assert.match(source, /"polars" to "python-polars"/);
 assert.match(source, /"scipy" to "python-scipy"/, 'backup restore must use the official native SciPy package');
@@ -121,7 +122,7 @@ assert.match(source, /val updatedAt = obj\.optLong\("updatedAt", 0L\)/);
 assert.match(source, /updatedAt > bestUpdatedAt \|\| \(updatedAt == bestUpdatedAt && score > bestScore\)/, 'newer package snapshots must win over stale larger backups');
 assert.doesNotMatch(panelSource, /python-lxml libxml2 libxslt clang/);
 assert.doesNotMatch(panelSource, /pip install requests beautifulsoup4 lxml httpx/);
-assert.match(panelSource, /PackagePlus/, 'Termux package action icon must be imported when used');
+assert.match(termuxPackagesSource, /PackagePlus/, 'Termux package action icon must be imported when used');
 assert.doesNotMatch(appSource, /handleInitializeEmbeddedEnv|onQuickInitEmbedded/, 'removed manual initialization callback must not remain wired');
 assert.doesNotMatch(terminalSource, /onQuickInitEmbedded/, 'terminal must not expose the removed manual initialization action');
 assert.match(terminalSource, /tmx_py_missing/, 'terminal must explain automatic first-use Python installation');
@@ -252,8 +253,8 @@ assert.match(pyodidePackagesSource, /activePyodidePackage/);
 assert.match(pyodidePackagesSource, /installingPkg \|\| activePyodidePackage/, 'the package search action must retain its spinner after the workspace remounts');
 assert.match(pyodidePackagesSource, /disabled=\{!!installingPkg \|\| !!activePyodidePackage/, 'package actions must remain disabled while an app-level Pyodide install is active');
 assert.match(pyodidePackagesSource, /overscroll-x-contain touch-pan-x/, 'horizontal package category gestures must stay within their scroller');
-assert.match(panelSource, /activeTermuxTask === \`install:\$\{tmx\.targetName\}\`/);
-assert.match(panelSource, /disabled=\{!!busyAction \|\| termuxRunning/);
+assert.match(termuxPackagesSource, /activeTermuxTask === \`install:\$\{tmx\.targetName\}\`/);
+assert.match(termuxPackagesSource, /disabled=\{!!busyAction \|\| termuxRunning/);
 assert.doesNotMatch(panelSource, /handleInitEmbedded/);
 assert.ok(settingsWorkspaceSource.includes('fixed inset-0 z-50 flex flex-col bg-[var(--ide-bg)]'), 'Settings must occupy an independent full-screen workspace');
 assert.ok(!settingsWorkspaceSource.includes('bg-black/35') && !settingsWorkspaceSource.includes('md:max-w-6xl'), 'Settings must not be rendered as a dimmed slide-over dialog');
