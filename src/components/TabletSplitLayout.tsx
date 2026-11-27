@@ -130,8 +130,36 @@ export function TabletSplitLayout({ split, orientation, children }: TabletSplitL
         aria-hidden="true"
         className="pointer-events-none absolute block shrink-0 tablet-divider-clear-core"
         style={horizontal
-          ? { width: '1.5mm', height: '84%', top: '8%', borderRadius: '9999px' }
-          : { width: '84%', height: '1.5mm', left: '8%', borderRadius: '9999px' }}
+          ? {
+              width: '1.5mm',
+              height: '84%',
+              top: '8%',
+              borderRadius: '9999px',
+              backgroundColor: 'transparent',
+              border: 0,
+              outline: 0,
+              boxShadow: 'none',
+              filter: 'none',
+              backdropFilter: 'none',
+              WebkitBackdropFilter: 'none',
+              mixBlendMode: 'normal',
+              opacity: 1,
+            }
+          : {
+              width: '84%',
+              height: '1.5mm',
+              left: '8%',
+              borderRadius: '9999px',
+              backgroundColor: 'transparent',
+              border: 0,
+              outline: 0,
+              boxShadow: 'none',
+              filter: 'none',
+              backdropFilter: 'none',
+              WebkitBackdropFilter: 'none',
+              mixBlendMode: 'normal',
+              opacity: 1,
+            }}
       />
       <span
         aria-hidden="true"
