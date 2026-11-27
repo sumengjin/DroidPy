@@ -3104,7 +3104,7 @@ export default function App() {
           variant="tablet"
           activeFile={activeFile}
           files={files}
-          activeTab={mobileTab}
+          activeTab={tabletPaneTab === 'terminal' ? 'console' : tabletPaneTab}
           labels={{
             editor: t('mob_editor'),
             console: t('mob_console'),
@@ -3171,6 +3171,7 @@ export default function App() {
           }}
           onSelectFile={setActiveFileId}
           onCreateFile={() => setMobileNewFileOpen((open) => !open)}
+          onOpenSettings={() => setSettingsWorkspaceOpen(true)}
           execution={{
             pendingInput: pendingInputPrompt !== null,
             termuxStopping,
