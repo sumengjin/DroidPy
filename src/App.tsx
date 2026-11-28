@@ -3492,7 +3492,7 @@ export default function App() {
               }
             >
                 {/* Keep editor actions on the first workspace row, aligned with the terminal header. */}
-                <div className="shrink-0 w-full bg-transparent">
+                <div className="shrink-0 bg-transparent w-full">
                   <div className="h-11 w-full flex items-center justify-center gap-2 px-2">
                     <div className="flex items-center justify-center gap-1" aria-label="Editor tools">
                       <button
