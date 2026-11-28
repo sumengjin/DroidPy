@@ -17,6 +17,7 @@ const [source, bridgeSource, catalogSource, exportSource, panelSource, terminalS
   readFile(new URL('../android/app/src/main/assets/python/frostwork-0.2.2.dist-info/METADATA', import.meta.url), 'utf8'),
  ]);
 const themeCssSource = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
+const internalStorageSource = await readFile(new URL('../src/components/InternalStoragePanel.tsx', import.meta.url), 'utf8');
 const starterExamplesSource = await readFile(new URL('../src/data/defaultFiles.ts', import.meta.url), 'utf8');
 const examplesPanelSource = await readFile(new URL('../src/components/ScriptExamplesPanel.tsx', import.meta.url), 'utf8');
 const tabletSplitSource = await readFile(new URL('../src/components/TabletSplitLayout.tsx', import.meta.url), 'utf8');
@@ -204,6 +205,15 @@ assert.match(fileExplorerSource, /role="dialog"[\s\S]*?droidpy-create-file-title
 assert.match(fileExplorerSource, /onClick=\{\(\) => \{ setNewFileName\(''\); setIsCreating\(true\); \}\}/, 'new file action must open the dialog from the Project Files header');
 assert.ok(fileExplorerSource.includes("if (!/\\.py$/i.test(trimmed))") && fileExplorerSource.includes("trimmed += '.py';"), 'new scripts must automatically receive a .py suffix without duplicating it');
 assert.match(fileExplorerSource, /files_new_hint[\s\S]*?files_name_label[\s\S]*?files_create_confirm/, 'new file dialog must use localized Android-style form labels');
+assert.doesNotMatch(fileExplorerSource, /InternalStoragePanel|showDeviceBrowser|瀏覽裝置檔案/, 'Android shared storage browsing must not cover or live inside Project Files');
+assert.match(settingsWorkspaceSource, /id: 'files' as const, label: t\('neg_category_files'\)/, 'the independent file manager must have its own Settings entry');
+assert.match(settingsWorkspaceSource, /initialPath=\{storagePath\}[\s\S]*?basePath="DroidPy"[\s\S]*?onPathChange=\{onStoragePathChange\}/, 'the Settings file manager must start in DroidPy and report session navigation changes');
+assert.match(appSource, /const \[storageBrowserPath, setStorageBrowserPath\] = useState\('DroidPy'\)/, 'file manager location must reset to DroidPy on a full app restart and persist only in app memory during the session');
+assert.match(internalStorageSource, /initialPath = 'DroidPy'[\s\S]*?basePath = 'DroidPy'/, 'DroidPy must be the default file manager home folder');
+assert.match(internalStorageSource, /pathParts\.includes\('\.\.'\)/, 'file manager navigation must reject parent-directory traversal');
+assert.ok(internalStorageSource.includes('resolvedPath !== basePath && !resolvedPath.startsWith(`${basePath}/`)'), 'server-returned paths must remain inside the DroidPy home folder');
+assert.match(internalStorageSource, /if \(!isInsideBasePath\(entry\.relPath\)\)/, 'opening and deleting entries must be restricted to the DroidPy home folder');
+assert.doesNotMatch(exportSource, /st_sdcard/, 'the old duplicate Android file browser must be removed from Android Management');
 assert.match(appSource, /pointer-events-none absolute inset-0 z-\[1\]/, 'one continuous paper layer must cover the entire viewport behind phone and tablet chrome');
 assert.match(appSource, /const workspaceSurfaceAlpha =\s*1 - Math\.min\(100, Math\.max\(0, settings\.workspaceTransparency \?\? 35\)\) \/ 100/, 'workspace transparency must map the 0–100 slider to a clamped 1–0 alpha');
 assert.match(appSource, /One continuous translucent paper surface covers the full viewport[\s\S]*?backgroundColor: is3dBgActive[\s\S]*?hexToRgba\(activeThemeMeta\.swatchBg, workspaceSurfaceAlpha\)/, 'one full-screen paper surface must own the live transparency alpha');
