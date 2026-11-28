@@ -12,7 +12,6 @@ interface TerminalPanelProps {
   status: PyodideStatus;
   engine: ExecutionEngine;
   onChangeEngine: (engine: ExecutionEngine) => void;
-  editorActions?: React.ReactNode;
   termuxConnected: boolean;
   embeddedMissingPython?: boolean;
   lastDurationMs: number | null;
@@ -166,7 +165,6 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   status,
   engine,
   onChangeEngine,
-  editorActions,
   termuxConnected,
   embeddedMissingPython,
   lastDurationMs,
@@ -365,11 +363,6 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
               {t('tmx_engine_short')}
             </button>
           </div>
-          {editorActions && (
-            <div className="flex items-center gap-0.5 shrink-0" aria-label="Editor tools">
-              {editorActions}
-            </div>
-          )}
           <span className="truncate min-w-0">{statusLabel}</span>
           {status === 'running' && runStartedAt != null ? (
             <>
