@@ -355,6 +355,7 @@ const zhTW = {
   // Android Internal Storage (/sdcard) Manager
   sd_title: 'DroidPy 主資料夾',
   sd_desc: '管理 /storage/emulated/0/DroidPy 主資料夾及其子資料夾',
+  sd_path_blocked: '這個操作只能在 DroidPy 主資料夾內進行',
   sd_status_ok: '已授權',
   sd_status_no: '未授權',
   sd_grant_btn: '開啟儲存權限',
@@ -938,6 +939,7 @@ const zhCN: Record<TranslationKey, string> = {
   // Android Internal Storage (/sdcard) Manager
   sd_title: 'DroidPy 主文件夹',
   sd_desc: '管理 /storage/emulated/0/DroidPy 主文件夹及其子文件夹',
+  sd_path_blocked: '此操作只能在 DroidPy 主文件夹内进行',
   sd_status_ok: '已授权',
   sd_status_no: '未授权',
   sd_grant_btn: '开启存储权限',
@@ -1519,6 +1521,7 @@ const en: Record<TranslationKey, string> = {
   // Android Internal Storage (/sdcard) Manager
   sd_title: 'DroidPy Home Folder',
   sd_desc: 'Manage the /storage/emulated/0/DroidPy home folder and its subfolders',
+  sd_path_blocked: 'This operation is limited to the DroidPy home folder',
   sd_status_ok: 'Granted',
   sd_status_no: 'Denied',
   sd_grant_btn: 'Grant Storage Access',
@@ -2100,6 +2103,7 @@ const ja: Record<TranslationKey, string> = {
   // Android Internal Storage (/sdcard) Manager
   sd_title: 'DroidPy メインフォルダー',
   sd_desc: '/storage/emulated/0/DroidPy のメインフォルダーとサブフォルダーを管理します。',
+  sd_path_blocked: 'この操作は DroidPy メインフォルダー内に限定されています',
   sd_status_ok: '内部ストレージの読み書き権限あり',
   sd_status_no: '内部ストレージの全ファイル権限が未許可',
   sd_grant_btn: '権限を許可 / 設定を開く',
