@@ -709,9 +709,12 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
         const panel = view.dom.querySelector<HTMLElement>('.cm-search');
         const editorBounds = containerRef.current?.getBoundingClientRect();
         if (!panel || !editorBounds || editorBounds.width <= 0 || editorBounds.height <= 0) return;
-        panel.style.position = 'fixed';
-        panel.style.top = (editorBounds.top + editorBounds.height / 2) + 'px';
-        panel.style.left = (editorBounds.left + editorBounds.width / 2) + 'px';
+        // The search panel lives inside .cm-editor. Use editor-local absolute
+        // coordinates so Android WebView transforms/keyboard viewport offsets
+        // cannot send a viewport-fixed panel outside the visible workspace.
+        panel.style.position = 'absolute';
+        panel.style.top = (view.dom.clientHeight / 2) + 'px';
+        panel.style.left = (view.dom.clientWidth / 2) + 'px';
         panel.style.right = 'auto';
         panel.style.bottom = 'auto';
         panel.style.transform = 'translate(-50%, -50%)';
