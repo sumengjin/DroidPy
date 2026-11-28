@@ -662,7 +662,7 @@ button.dp-execution-control::after {
 }
 
 .cm-editor .cm-search {
-  position: fixed !important;
+  position: absolute !important;
   z-index: 100000 !important;
   top: 50%;
   left: 50%;
