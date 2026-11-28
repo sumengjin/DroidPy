@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [source, bridgeSource, catalogSource, exportSource, panelSource, terminalSource, appSource, settingsWorkspaceSource, i18nSource, crawlerSessionSource, frostworkSource, frostworkMetadata] = await Promise.all([
+const [source, bridgeSource, catalogSource, exportSource, panelSource, terminalSource, appSource, fileExplorerSource, settingsWorkspaceSource, i18nSource, crawlerSessionSource, frostworkSource, frostworkMetadata] = await Promise.all([
   readFile(new URL('../src/services/androidApkBuilder.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/services/termuxBridge.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/data/packageCatalog.ts', import.meta.url), 'utf8'),
@@ -9,6 +9,7 @@ const [source, bridgeSource, catalogSource, exportSource, panelSource, terminalS
   readFile(new URL('../src/components/TermuxIntegrationPanel.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/TerminalPanel.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/App.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../src/components/FileExplorer.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/SettingsWorkspace.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/services/i18n.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/utils/crawlerSession.ts', import.meta.url), 'utf8'),
@@ -161,6 +162,7 @@ assert.match(appSource, /setOpenScriptExamples\(\(request\) => request \+ 1\)/, 
 assert.match(appSource, /setTabletPaneTab\('files'\)/, 'tablet editor shortcut must navigate to the Files pane');
 assert.match(appSource, /setMobileTab\('files'\)/, 'phone editor shortcut must navigate to the Files destination');
 assert.match(appSource, /openTemplatesRequest=\{openScriptExamples\}/, 'phone and tablet file explorers must receive the examples request');
+assert.match(fileExplorerSource, /Script examples are a dedicated view[\s\S]*?absolute inset-0 z-40[\s\S]*?setShowTemplates\(false\)/, 'script examples must open as a dedicated full-pane view instead of the file manager accordion');
 const tabletEditorTools = appSource.slice(appSource.indexOf('/* Tablet Primary Editor Pane */'), appSource.indexOf('/* Tablet Secondary Output / Files / Browser Workspace */'));
 assert.match(tabletEditorTools, /<BookOpen className="w-4 h-4" \/>/, 'tablet editor must expose the same direct script examples entry');
 const mobileNavStart = appSource.indexOf('<WorkspaceNavigation');
