@@ -239,7 +239,18 @@ assert.match(tabletSplitSource, /tablet-gel-handle-vertical[\s\S]*tablet-gel-han
 assert.match(tabletSplitSource, /setIsDragging\(true\)[\s\S]*setIsDragging\(false\)/, 'tablet gel divider must visibly respond while being dragged');
 assert.match(themeCssSource, /\.tablet-gel-divider[\s\S]*background: transparent !important[\s\S]*box-shadow: none !important/, 'the full-height divider hit area must draw no line, edge or glow');
 assert.match(themeCssSource, /\.tablet-divider-clear-core[\s\S]*border-radius: 9999px !important[\s\S]*background: transparent !important[\s\S]*border: 0 !important[\s\S]*backdrop-filter: blur\(0\.35px\)/, 'the transparent divider core must not add accent saturation or contrast to the 3D scene');
-assert.match(appSource, /tablet-landscape-split-paper[\\s\\S]*<span[\\s\\S]*var\\(--tablet-divider-center, 50vw\\) - 0\\.75mm[\\s\\S]*<span[\\s\\S]*var\\(--tablet-divider-center, 50vw\\) \\+ 0\\.75mm[\\s\\S]*viewBox="0 0 1\\.5 100"[\\s\\S]*A0\\.75 0\\.75[\\s\\S]*fillRule="evenodd"/, 'tablet divider aperture must use alpha-matched side paper and a round-ended even-odd SVG opening');
+assert.ok(
+  [
+    'tablet-landscape-split-paper',
+    "width: 'calc(var(--tablet-divider-center, 50vw) - 0.75mm)'",
+    "left: 'calc(var(--tablet-divider-center, 50vw) + 0.75mm)'",
+    'viewBox="0 0 1.5 100"',
+    'M0 0H1.5V100H0Z M0.75 8 A0.75 0.75',
+    'fillRule="evenodd"',
+    'backgroundColor: hexToRgba(activeThemeMeta.swatchBg, workspaceSurfaceAlpha)',
+  ].every((fragment) => appSource.includes(fragment)),
+  'tablet divider aperture must use alpha-matched side paper and a round-ended even-odd SVG opening'
+);
 assert.doesNotMatch(appSource, /tablet-divider-rounded-aperture|<mask[\\s\\S]*maskUnits/, 'tablet divider must avoid SVG luminance-mask compositing on Android WebView');
 assert.match(appSource, /is3dBgActive && deviceClass === 'tablet' && isLandscape && tabletSplit \? 'tablet-landscape-split-paper'/, 'only the active landscape tablet split may cut a transparent channel through the paper overlay');
 assert.match(tabletSplitSource, /setProperty\('--tablet-divider-center', `\$\{dividerCenter\}px`\)/, 'the paper channel must track the live divider center while the split is resized');
