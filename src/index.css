@@ -703,9 +703,16 @@ button.dp-execution-control::after {
 
 .dp-code-editor-container .cm-editor {
   position: relative !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
 }
 
-.dp-code-editor-container .cm-panels-top {
+/* The panel host must cover the complete editor pane, not just the
+   intrinsic height of CodeMirror's content. This makes the dialog's
+   center independent of document length and toolbar/header height. */
+.dp-code-editor-container .cm-editor > .cm-panels-top {
   position: absolute !important;
   inset: 0 !important;
   display: grid !important;
