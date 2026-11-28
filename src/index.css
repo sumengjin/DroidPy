@@ -645,8 +645,15 @@ button.dp-execution-control::after {
   backdrop-filter: blur(18px) saturate(1.18);
 }
 
+/* The search dialog is anchored to the CodeMirror editor itself, not the
+   device viewport. This keeps it centered in the active editor pane on phones
+   and in the left editor pane on split-screen tablets. */
+.cm-editor {
+  position: relative !important;
+}
+
 .cm-editor .cm-search {
-  position: fixed !important;
+  position: absolute !important;
   z-index: 100000 !important;
   top: 50% !important;
   left: 50% !important;
@@ -656,9 +663,9 @@ button.dp-execution-control::after {
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  width: min(560px, calc(100vw - 28px));
-  max-width: calc(100vw - 28px);
-  max-height: min(82vh, 680px);
+  width: min(560px, calc(100% - 28px));
+  max-width: calc(100% - 28px);
+  max-height: min(82%, 680px);
   overflow-y: auto;
   box-sizing: border-box;
   padding: 18px;
@@ -743,19 +750,11 @@ button.dp-execution-control::after {
 }
 
 @media (max-width: 640px) {
-  /* The phone navigation is a sibling of <main> at z-index 60.
-     Lift only the main workspace while search is open so its fixed
-     CodeMirror dialog/backdrop paint above the bottom navigation. */
-  main.dp-search-layer-open {
-    position: relative !important;
-    z-index: 70 !important;
-  }
-
   .cm-editor .cm-search {
     gap: 8px;
-    width: calc(100vw - 24px);
-    max-width: calc(100vw - 24px);
-    max-height: 78vh;
+    width: calc(100% - 24px);
+    max-width: calc(100% - 24px);
+    max-height: 78%;
     padding: 14px;
     border-radius: 18px !important;
   }
