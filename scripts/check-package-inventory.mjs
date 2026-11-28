@@ -238,7 +238,7 @@ assert.match(tabletSplitSource, /tablet-gel-handle[\s\S]*top: '64%'[\s\S]*transf
 assert.match(tabletSplitSource, /tablet-gel-handle-vertical[\s\S]*tablet-gel-handle-horizontal/, 'the compact gel handle must adapt to both divider orientations');
 assert.match(tabletSplitSource, /setIsDragging\(true\)[\s\S]*setIsDragging\(false\)/, 'tablet gel divider must visibly respond while being dragged');
 assert.match(themeCssSource, /\.tablet-gel-divider[\s\S]*background: transparent !important[\s\S]*box-shadow: none !important/, 'the full-height divider hit area must draw no line, edge or glow');
-assert.match(themeCssSource, /\.tablet-divider-clear-core[\s\S]*border-radius: 9999px !important[\s\S]*background: transparent !important[\s\S]*border: 0 !important[\s\S]*backdrop-filter: blur\(0\.35px\)/, 'the transparent divider core must not add accent saturation or contrast to the 3D scene');
+assert.match(themeCssSource, /\.tablet-divider-clear-core[\s\S]*border-radius: 9999px !important[\s\S]*background: transparent !important[\s\S]*border: 0 !important[\s\S]*backdrop-filter: none !important/, 'the transparent divider core must stay optically empty without blur fringes');
 assert.ok(
   [
     'tablet-landscape-split-paper',
