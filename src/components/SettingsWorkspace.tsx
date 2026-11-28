@@ -263,7 +263,10 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
               initialPath={storagePath}
               basePath="DroidPy"
               onPathChange={onStoragePathChange}
-              onOpenSdcardFile={(filename, content, filePath) => onSaveWorkspaceFile(filename, content, true, filePath)}
+              onOpenSdcardFile={(filename, content, filePath) => {
+                onClose();
+                onSaveWorkspaceFile(filename, content, true, filePath);
+              }}
               onNotify={onNotify}
             />
           ) : (
