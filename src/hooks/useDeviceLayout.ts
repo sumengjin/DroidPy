@@ -17,6 +17,7 @@ function computeLayout(): DeviceLayoutInfo {
   // screen dimensions for orientation/device class so opening an input never
   // remounts the editor and drops keyboard focus.
   const width = window.innerWidth;
+  const height = window.innerHeight;
   const screenWidth = window.screen.width || width;
   const screenHeight = window.screen.height || window.innerHeight;
   const orientationType = window.screen.orientation?.type;
