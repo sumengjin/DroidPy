@@ -3167,13 +3167,20 @@ def clipboard_set(text):
         return "bytes=\${bytes.size} sha256=$digest firstNonWhitespaceByteHex=$firstCodeByteHex"
     }
 
+    // All shared-storage file operations are rooted at /storage/emulated/0/DroidPy.
+    // Canonical-path validation also blocks '..' traversal and symlink escapes.
     private fun resolveSdcardTarget(relPath: String): File? {
-        val root = Environment.getExternalStorageDirectory()
-        val rootCanonical = root.canonicalPath
+        val storageRoot = Environment.getExternalStorageDirectory()
+        val homeRoot = File(storageRoot, "DroidPy")
+        val homeCanonical = homeRoot.canonicalPath
         val cleaned = relPath.trim().trimStart('/')
-        val candidate = if (cleaned.isEmpty()) root else File(root, cleaned)
-        val candCanonical = candidate.canonicalPath
-        if (candCanonical != rootCanonical && !candCanonical.startsWith(rootCanonical + File.separator)) {
+        val candidate = when {
+            cleaned.isEmpty() || cleaned == "DroidPy" -> homeRoot
+            cleaned.startsWith("DroidPy/") -> File(storageRoot, cleaned)
+            else -> return null
+        }
+        val candidateCanonical = candidate.canonicalPath
+        if (candidateCanonical != homeCanonical && !candidateCanonical.startsWith(homeCanonical + File.separator)) {
             return null
         }
         return candidate
@@ -4442,9 +4449,9 @@ def clipboard_set(text):
 
                 method == "POST" && path == "/sdcard/delete" -> {
                     val relPath = bodyJson.optString("path", "")
-                    val rootCanonical = Environment.getExternalStorageDirectory().canonicalPath
+                    val homeCanonical = File(Environment.getExternalStorageDirectory(), "DroidPy").canonicalPath
                     val target = resolveSdcardTarget(relPath)
-                    if (target == null || target.canonicalPath == rootCanonical) {
+                    if (target == null || target.canonicalPath == homeCanonical) {
                         writeJson(out, 400, JSONObject().put("error", "Invalid path"))
                     } else if (!hasStorageAccess()) {
                         writeJson(out, 403, JSONObject().put("error", "尚未授予內部儲存空間權限"))
