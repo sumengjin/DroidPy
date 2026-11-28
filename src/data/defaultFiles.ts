@@ -21,14 +21,23 @@ export const SNIPPET_CATEGORIES: { id: SnippetCategoryId; labelKey: string }[] =
   { id: 'android', labelKey: 'tpl_cat_android' },
 ];
 
-export const DEFAULT_FILES: PythonFile[] = [
+export interface StarterExample extends PythonFile {
+  title: string;
+  category: Exclude<SnippetCategoryId, 'all'>;
+  desc: string;
+}
+
+export const STARTER_EXAMPLES: StarterExample[] = [
   {
     id: 'main-py',
-    name: 'main.py',
+    title: 'DroidPy 主程式',
+    category: 'android',
+    desc: '裝置資訊、Python 版本與 Android 震動／提示功能示範',
+    name: '主程式.py',
     updatedAt: Date.now(),
     content: `import sys
 import droid
-from utils import format_device_report
+from 工具函式 import format_device_report
 
 def main():
     print("DroidPy 行動開發環境啟動成功")
@@ -41,7 +50,7 @@ def main():
 
     # 觸發短震動回饋（在支援震動的 Android 裝置上有效）
     droid.vibrate(40)
-    droid.toast("main.py 執行完成")
+    droid.toast("主程式執行完成")
 
 if __name__ == "__main__":
     main()
@@ -49,7 +58,10 @@ if __name__ == "__main__":
   },
   {
     id: 'utils-py',
-    name: 'utils.py',
+    title: '裝置工具函式',
+    category: 'tool',
+    desc: '可供其他腳本匯入的裝置資訊格式化函式，也支援獨立測試',
+    name: '工具函式.py',
     updatedAt: Date.now() - 1000 * 60 * 5,
     content: `def format_device_report(info: dict) -> str:
     """格式化裝置硬體與螢幕參數為整齊報表"""
@@ -64,13 +76,16 @@ if __name__ == "__main__":
 
 if __name__ == "__main__":
     import droid
-    print("[utils.py 獨立測試] 裝置報表輸出：")
+    print("[工具函式獨立測試] 裝置報表輸出：")
     print(format_device_report(droid.device_info()))
 `,
   },
   {
     id: 'chart-demo-py',
-    name: 'chart_demo.py',
+    title: '感測器波形圖',
+    category: 'data',
+    desc: '使用 matplotlib 繪製模擬加速度計與陀螺儀訊號',
+    name: '感測器波形圖.py',
     updatedAt: Date.now() - 1000 * 60 * 12,
     content: `import math
 try:
@@ -88,9 +103,9 @@ signal_b = [math.cos(x * 1.4) * 0.6 for x in t]
 plt.figure(figsize=(6.4, 3.6), dpi=130)
 plt.plot(t, signal_a, color="#10B981", linewidth=2.2, label="Accelerometer X")
 plt.plot(t, signal_b, color="#F59E0B", linewidth=1.8, linestyle="--", label="Gyroscope Z")
-plt.title("Android Sensor Waveform")
-plt.xlabel("Time (s)")
-plt.ylabel("Amplitude")
+plt.title("Android 感測器波形")
+plt.xlabel("時間（秒）")
+plt.ylabel("振幅")
 plt.grid(True, alpha=0.25)
 plt.legend()
 plt.tight_layout()
@@ -100,7 +115,10 @@ print("圖表已輸出至終端機檢視區")
   },
   {
     id: 'interactive-py',
-    name: 'interactive_cli.py',
+    title: '互動式輸入示範',
+    category: 'tool',
+    desc: '在終端機輸入資料並計算筆數、總和、平均值、最大值與最小值',
+    name: '互動式輸入示範.py',
     updatedAt: Date.now() - 1000 * 60 * 25,
     content: `# 互動式輸入示範：執行後請在終端機下方輸入數值
 def analyze_numbers():
@@ -119,6 +137,15 @@ def analyze_numbers():
 
 analyze_numbers()
 `,
+  },
+];
+
+export const DEFAULT_FILES: PythonFile[] = [
+  {
+    id: 'untitled-py',
+    name: '未命名.py',
+    updatedAt: Date.now(),
+    content: '',
   },
 ];
 
