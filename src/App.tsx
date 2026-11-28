@@ -3341,16 +3341,52 @@ export default function App() {
               // The full-screen paper layer is the sole transparency surface.
               // Keep tablet panes transparent to avoid compositing alpha twice.
             >
-              <div className="shrink-0 px-2 pt-1">
-                <WorkspaceFileTabs
-                  files={files}
-                  activeFileId={activeFile.id}
-                  onSelect={setActiveFileId}
-                  onCreate={() => setMobileNewFileOpen((open) => !open)}
-                  createLabel={t('files_new_btn')}
-                  filesLabel={t('files_title')}
-                  variant="tablet"
-                />
+              <div className="flex items-center justify-between gap-2 px-2 pt-1 h-9 bg-transparent shrink-0">
+                <div className="min-w-0 flex-1 overflow-hidden">
+                  <WorkspaceFileTabs
+                    files={files}
+                    activeFileId={activeFile.id}
+                    onSelect={setActiveFileId}
+                    onCreate={() => setMobileNewFileOpen((open) => !open)}
+                    createLabel={t('files_new_btn')}
+                    filesLabel={t('files_title')}
+                    variant="tablet"
+                  />
+                </div>
+                <div className="flex items-center gap-0.5 shrink-0" aria-label="Editor tools">
+                  <button
+                    type="button"
+                    onClick={handleFormatActiveFile}
+                    aria-label={t('toolbar_format_title')}
+                    title={t('toolbar_format_title')}
+                    className="min-h-[32px] min-w-[32px] p-1 inline-flex items-center justify-center rounded-md text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]"
+                  >
+                    <AlignLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => editorRef.current?.openSearch()}
+                    aria-label={t('toolbar_search_title')}
+                    title={t('toolbar_search_title')}
+                    className="min-h-[32px] min-w-[32px] p-1 inline-flex items-center justify-center rounded-md text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]"
+                  >
+                    <Search className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateSettings({ showSymbolBar: !settings.showSymbolBar })}
+                    aria-label={t('toolbar_symbol_bar_title')}
+                    title={t('toolbar_symbol_bar_title')}
+                    aria-pressed={settings.showSymbolBar}
+                    className={`min-h-[32px] min-w-[32px] p-1 inline-flex items-center justify-center rounded-md ${
+                      settings.showSymbolBar
+                        ? 'text-[var(--ide-accent-text)]'
+                        : 'text-[var(--ide-text-muted)]'
+                    }`}
+                  >
+                    <Keyboard className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
               <div className="flex items-center gap-2 px-2 h-8 bg-transparent shrink-0">
                 <span className="tabular-nums text-xs text-[var(--ide-text-muted)] font-mono truncate">
@@ -3394,42 +3430,6 @@ export default function App() {
                       status={termuxRunning ? 'running' : pyodideStatus}
                       engine={executionEngine}
                       onChangeEngine={setExecutionEngine}
-                      editorActions={
-                        <>
-                          <button
-                            type="button"
-                            onClick={handleFormatActiveFile}
-                            aria-label={t('toolbar_format_title')}
-                            title={t('toolbar_format_title')}
-                            className="min-h-[32px] min-w-[32px] p-1 inline-flex items-center justify-center rounded-md text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]"
-                          >
-                            <AlignLeft className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => editorRef.current?.openSearch()}
-                            aria-label={t('toolbar_search_title')}
-                            title={t('toolbar_search_title')}
-                            className="min-h-[32px] min-w-[32px] p-1 inline-flex items-center justify-center rounded-md text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]"
-                          >
-                            <Search className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateSettings({ showSymbolBar: !settings.showSymbolBar })}
-                            aria-label={t('toolbar_symbol_bar_title')}
-                            title={t('toolbar_symbol_bar_title')}
-                            aria-pressed={settings.showSymbolBar}
-                            className={`min-h-[32px] min-w-[32px] p-1 inline-flex items-center justify-center rounded-md ${
-                              settings.showSymbolBar
-                                ? 'text-[var(--ide-accent-text)]'
-                                : 'text-[var(--ide-text-muted)]'
-                            }`}
-                          >
-                            <Keyboard className="w-4 h-4" />
-                          </button>
-                        </>
-                      }
                       termuxConnected={termuxConnectionState === 'connected'}
                       embeddedMissingPython={Boolean(termuxHealth?.embedded && termuxHealth.hasPython === false)}
                       runStartedAt={runStartedAt}
