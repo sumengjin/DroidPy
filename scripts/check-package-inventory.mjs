@@ -221,6 +221,7 @@ const storageResolver = source.slice(storageResolverStart, storageResolverEnd);
 assert.match(storageResolver, /val homeRoot = File\(storageRoot, "DroidPy"\)/, 'Android storage API must use DroidPy as its fixed root');
 assert.match(storageResolver, /cleaned\.startsWith\("DroidPy\/"\)/, 'Android storage API must reject paths outside DroidPy');
 assert.match(storageResolver, /homeCanonical \+ File\.separator/, 'canonical path checks must reject traversal and symlink escapes');
+assert.match(storageResolver, /homeCanonical != homeRoot\.absoluteFile\.path/, 'the DroidPy home folder itself must not be redirected through a symlink');
 assert.match(source, /val homeCanonical = File\(Environment\.getExternalStorageDirectory\(\), "DroidPy"\)\.canonicalPath[\s\S]*?childCanonical\.startsWith\(homeCanonical \+ File\.separator\)/, 'directory listings must hide symlinks that point outside DroidPy');
 assert.match(source, /target\.canonicalPath == homeCanonical/, 'the DroidPy home folder itself must not be deletable');
 assert.match(appSource, /pointer-events-none absolute inset-0 z-\[1\]/, 'one continuous paper layer must cover the entire viewport behind phone and tablet chrome');
