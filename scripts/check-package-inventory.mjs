@@ -160,9 +160,11 @@ assert.match(themeCssSource, /\.dp-code-editor-container \.cm-editor > \.cm-pane
 assert.match(appSource, /<BookOpen className="w-4 h-4" \/>/, 'phone editor must expose a direct script examples entry');
 assert.match(appSource, /setOpenScriptExamples\(\(request\) => request \+ 1\)/, 'script examples shortcut must send a fresh open request');
 assert.match(appSource, /setTabletPaneTab\('files'\)/, 'tablet editor shortcut must navigate to the Files pane');
-assert.match(appSource, /setMobileTab\('files'\)/, 'phone editor shortcut must navigate to the Files destination');
+assert.match(appSource, /setMobileTab\('files'\)/, 'phone examples view must retain its Files content host');
+assert.match(appSource, /scriptExamplesVisible \? 'editor' : mobileTab === 'console'/, 'opening script examples must not mark the Files navigation item as selected');
+assert.match(appSource, /templatesVisible=\{scriptExamplesVisible\}[\s\S]*?onTemplatesVisibilityChange=\{setScriptExamplesVisible\}/, 'examples visibility must be independent state shared with the file pane');
 assert.match(appSource, /openTemplatesRequest=\{openScriptExamples\}/, 'phone and tablet file explorers must receive the examples request');
-assert.match(fileExplorerSource, /Script examples are a dedicated view[\s\S]*?absolute inset-0 z-40[\s\S]*?setShowTemplates\(false\)/, 'script examples must open as a dedicated full-pane view instead of the file manager accordion');
+assert.match(fileExplorerSource, /Script examples are a dedicated view[\s\S]*?absolute inset-0 z-40[\s\S]*?onTemplatesVisibilityChange\?\.\(false\)/, 'script examples must open as a dedicated full-pane view and close independently of file navigation');
 const tabletEditorTools = appSource.slice(appSource.indexOf('/* Tablet Primary Editor Pane */'), appSource.indexOf('/* Tablet Secondary Output / Files / Browser Workspace */'));
 assert.match(tabletEditorTools, /<BookOpen className="w-4 h-4" \/>/, 'tablet editor must expose the same direct script examples entry');
 const mobileNavStart = appSource.indexOf('<WorkspaceNavigation');
