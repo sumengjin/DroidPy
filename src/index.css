@@ -344,6 +344,54 @@
 }
 
 
+/* Compact translucent phone workspace dock. Keep the Android gesture area
+   transparent and reserve it through the existing pb-safe utility. */
+.dp-phone-navigation {
+  box-sizing: border-box;
+  align-items: stretch;
+  padding-top: 5px;
+  border-top: 1px solid color-mix(in srgb, var(--ide-border) 52%, transparent);
+  background: color-mix(in srgb, var(--ide-surface) 76%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.16);
+  backdrop-filter: blur(18px) saturate(1.16);
+  box-shadow: 0 -5px 22px color-mix(in srgb, var(--ide-text) 5%, transparent);
+}
+
+.dp-phone-nav-item {
+  position: relative;
+  border: 1px solid transparent;
+  transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dp-phone-nav-item[aria-current="page"] {
+  color: var(--ide-accent-text);
+  background: color-mix(in srgb, var(--ide-accent) 10%, transparent);
+  border-color: color-mix(in srgb, var(--ide-accent) 13%, transparent);
+}
+
+.dp-phone-nav-item[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  width: 18px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--ide-accent);
+  transform: translateX(-50%);
+}
+
+.dp-phone-nav-item:active {
+  background: color-mix(in srgb, var(--ide-accent) 15%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dp-phone-nav-item {
+    transition: none;
+  }
+}
+
 /* Minimal workspace interaction: selected state is communicated by text color only. */
 .dp-nav-item {
   border: 0;
