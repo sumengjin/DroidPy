@@ -705,22 +705,6 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
       // CodeMirror's built-in search panel is kept for its proven find/replace
       // behavior; localize its generated controls as soon as the panel is mounted.
       let searchHistoryPushed = false;
-      const syncSearchPanelPosition = () => {
-        const panel = view.dom.querySelector<HTMLElement>('.cm-search');
-        const editorBounds = containerRef.current?.getBoundingClientRect();
-        if (!panel || !editorBounds || editorBounds.width <= 0 || editorBounds.height <= 0) return;
-        // The search panel lives inside .cm-editor. Use editor-local absolute
-        // coordinates so Android WebView transforms/keyboard viewport offsets
-        // cannot send a viewport-fixed panel outside the visible workspace.
-        panel.style.position = 'absolute';
-        panel.style.top = (view.dom.clientHeight / 2) + 'px';
-        panel.style.left = (view.dom.clientWidth / 2) + 'px';
-        panel.style.right = 'auto';
-        panel.style.bottom = 'auto';
-        panel.style.transform = 'translate(-50%, -50%)';
-        panel.style.maxWidth = Math.max(220, editorBounds.width - 32) + 'px';
-        panel.style.maxHeight = Math.max(160, editorBounds.height - 32) + 'px';
-      };
       const closeSearchDialog = () => {
         if (view.dom.querySelector('.cm-search')) closeSearchPanel(view);
       };
@@ -754,7 +738,6 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
         const panel = view.dom.querySelector('.cm-search');
         if (panel) {
           localizeSearchPanel(view.dom);
-          syncSearchPanelPosition();
           if (!searchHistoryPushed) {
             window.history.pushState({ ...(window.history.state || {}), dpSearchDialog: true }, '');
             searchHistoryPushed = true;
@@ -765,11 +748,6 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
         }
       });
       searchPanelObserver.observe(view.dom, { childList: true, subtree: true });
-      const searchPositionObserver = new ResizeObserver(syncSearchPanelPosition);
-      if (containerRef.current) searchPositionObserver.observe(containerRef.current);
-      window.addEventListener('resize', syncSearchPanelPosition);
-      window.visualViewport?.addEventListener('resize', syncSearchPanelPosition);
-      window.visualViewport?.addEventListener('scroll', syncSearchPanelPosition);
       window.addEventListener('popstate', handleSearchBack);
       document.addEventListener('keydown', handleSearchKeydown, true);
       document.addEventListener('pointerdown', handleSearchOutsideClick, true);
@@ -777,10 +755,6 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
 
       return () => {
         searchPanelObserver.disconnect();
-        searchPositionObserver.disconnect();
-        window.removeEventListener('resize', syncSearchPanelPosition);
-        window.visualViewport?.removeEventListener('resize', syncSearchPanelPosition);
-        window.visualViewport?.removeEventListener('scroll', syncSearchPanelPosition);
         window.removeEventListener('popstate', handleSearchBack);
         document.removeEventListener('keydown', handleSearchKeydown, true);
         document.removeEventListener('pointerdown', handleSearchOutsideClick, true);
