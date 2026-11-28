@@ -53,6 +53,7 @@ interface FileExplorerProps {
   onSyncBackupSdcard?: (snapshot: ScriptBackupSnapshot) => Promise<void>;
   onNotify: (msg: string) => void;
   showHeaderTitle?: boolean;
+  openTemplatesOnMount?: boolean;
 }
 
 const MAX_IMPORT_BYTES = 512 * 1024;
@@ -83,6 +84,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   onSyncBackupSdcard,
   onNotify,
   showHeaderTitle = true,
+  openTemplatesOnMount = false,
 }) => {
   const { t } = useI18n();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -96,7 +98,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   const [showDeviceBrowser, setShowDeviceBrowser] = useState(() =>
     Boolean(termuxEmbedded || window.DroidPyNative?.isNativeApp?.())
   );
-  const [showTemplates, setShowTemplates] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(openTemplatesOnMount);
   const [templateCategory, setTemplateCategory] = useState<SnippetCategoryId>('all');
   const [showBackups, setShowBackups] = useState(false);
   const [backupLabel, setBackupLabel] = useState('');
