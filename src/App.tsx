@@ -3513,7 +3513,7 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => editorRef.current?.openSearch()}
-                    data-dp-search-trigger="true"
+                        data-dp-search-trigger="true"
                         aria-label={t('toolbar_search_title')}
                         title={t('toolbar_search_title')}
                         className="min-h-[40px] min-w-[40px] inline-flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-accent-text)]"
