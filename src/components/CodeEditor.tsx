@@ -526,8 +526,15 @@ function localizeSearchPanel(root: HTMLElement): void {
     close: '關閉',
     search: '搜尋',
     'search:': '搜尋：',
+    'match case': '符合大小寫',
+    'match case:': '符合大小寫：',
+    regexp: '正規表達式',
+    'regexp:': '正規表達式：',
+    'by word': '整字匹配',
+    'by word:': '整字匹配：',
   };
-  const translate = (value: string) => translations[value.trim().toLowerCase()] ?? value;
+  const translate = (value: string) =>
+    translations[value.trim().toLowerCase().replace(/\\s+/g, ' ')] ?? value;
 
   panel.querySelectorAll<HTMLInputElement>('input').forEach((input) => {
     if (input.placeholder) input.placeholder = translate(input.placeholder);
@@ -537,16 +544,29 @@ function localizeSearchPanel(root: HTMLElement): void {
     if (input.title) input.title = translate(input.title);
   });
 
+  // Translate visible text nodes rather than assigning element.textContent:
+  // CodeMirror nests checkbox inputs inside labels, and replacing textContent
+  // would accidentally remove those working controls.
+  const walker = document.createTreeWalker(panel, NodeFilter.SHOW_TEXT);
+  let textNode: Node | null;
+  while ((textNode = walker.nextNode())) {
+    const original = textNode.nodeValue ?? '';
+    const trimmed = original.trim();
+    if (!trimmed) continue;
+    const localized = translate(trimmed);
+    if (localized !== trimmed) {
+      const leading = original.match(/^\\s*/)?.[0] ?? '';
+      const trailing = original.match(/\\s*$/)?.[0] ?? '';
+      textNode.nodeValue = leading + localized + trailing;
+    }
+  }
+
   panel.querySelectorAll<HTMLElement>('button, label, [aria-label], [title]').forEach((element) => {
     const label = element.getAttribute('aria-label');
     const title = element.getAttribute('title');
     if (label) element.setAttribute('aria-label', translate(label));
     if (title) element.setAttribute('title', translate(title));
     const text = element.textContent?.trim() ?? '';
-    if (text && text.length < 24) {
-      const localized = translate(text);
-      if (localized !== text) element.textContent = localized;
-    }
     if (text === '×' || /^(close|關閉)$/i.test(label || title || '')) {
       element.classList.add('dp-search-close');
       element.setAttribute('aria-label', '關閉搜尋／取代');
