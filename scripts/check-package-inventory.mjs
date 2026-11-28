@@ -35,7 +35,7 @@ assert.match(appSource, /import \{ appLog, clearAppLogs \} from '\.\/services\/a
 assert.match(appSource, /startupBootLoggedInModule = true;[\s\S]*?clearAppLogs\(\);[\s\S]*?appLog\(/, 'previous-session app logs must be cleared before recording the new boot entry');
 assert.match(appLoggerSource, /export function clearAppLogs\(\): void/);
 assert.ok(['setActiveTab(\'execution\');', 'setSearchQuery(\'\');', 'if (!open) setLogs([]);'].every((snippet) => executionLogModalSource.includes(snippet)), 'the log viewer must reset its filters and stale entries on close');
-assert.match(executionLogModalSource, /let cancelled = false;[\s\S]*?if \(!cancelled\) setNativeLogs\(res\);[\s\S]*?return \(\) => \{[\s\S]*?cancelled = true;/, 'late native-log responses must not repopulate a dismissed log viewer');
+assert.match(executionLogModalSource, /nativeRequestIdRef\.current\);[\s\S]*?return \(\) => \{[\s\S]*?nativeRequestIdRef\.current \+= 1;/, 'late native-log responses must not repopulate a dismissed log viewer');
 
 const catalogItems = catalogSource.split(/\n  \{\n    id: '/).slice(1);
 assert.ok(catalogItems.length >= 70, 'package catalog should retain its complete inventory');
