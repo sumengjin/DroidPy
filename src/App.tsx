@@ -53,7 +53,7 @@ import { HelpTutorialModal } from './components/HelpTutorialModal';
 import { AppExecutionLogModal } from './components/AppExecutionLogModal';
 import { AppUpdateModal } from './components/AppUpdateModal';
 import { DynamicAtmosphere3D } from './components/DynamicAtmosphere3D';
-import { appLog } from './services/appLogger';
+import { appLog, clearAppLogs } from './services/appLogger';
 import {
   getAutoUpdatePackagesPref,
   getSavedGithubRepo,
@@ -602,6 +602,9 @@ export default function App() {
     const alreadyLogged = startupBootLoggedInModule;
     if (!alreadyLogged) {
       startupBootLoggedInModule = true;
+      // Start each fresh app session with a clean log buffer; the previous
+      // session is flushed on shutdown and removed here before the new boot entry.
+      clearAppLogs();
       appLog(
         'lifecycle',
         `DroidPy started (layout=${deviceClass}, engine=${executionEngineRef.current}, files=${filesRef.current.length}, sandboxPkgs=${sandboxPackagesRef.current.length})`
