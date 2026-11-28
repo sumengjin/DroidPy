@@ -203,6 +203,18 @@ function upgradeLegacyDefaultFiles(list: PythonFile[]): PythonFile[] {
     ['chart_demo.py', 'chart-demo-py'],
     ['interactive_cli.py', 'interactive-py'],
   ]);
+  const inlineMainHelper = [
+    'def format_device_report(info: dict) -> str:',
+    '    lines = [',
+    '        f"作業平台 : {info.get(\\'platform\\', \\'Android\\')}",',
+    '        f"螢幕解析度: {info.get(\\'screen\\', \\'N/A\\')}",',
+    '        f"觸控支援 : {info.get(\\'maxTouchPoints\\', 0)} 點觸控",',
+    '        f"網路連線 : {\\'線上\\' if info.get(\\'online\\') else \\'離線模式\\'}",',
+    '    ]',
+    '    return "\\\\n".join(lines)',
+    '',
+    '',
+  ].join('\\n');
   let changed = false;
   const next = list.map((file) => {
     const starterId = starterById.has(file.id) ? file.id : starterByLegacyName.get(file.name);
@@ -225,7 +237,7 @@ function upgradeLegacyDefaultFiles(list: PythonFile[]): PythonFile[] {
       content = starter.content;
     }
     if (starter.id === 'main-py') {
-      content = content.replace(/from\s+utils\s+import\s+format_device_report/g, 'from 工具函式 import format_device_report');
+      content = content.replace(/from\s+(?:utils|工具函式)\s+import\s+format_device_report\s*/g, inlineMainHelper);
       content = content.replace(/main\.py 執行完成/g, '主程式執行完成');
     }
     if (file.name !== starter.name || content !== file.content) {
