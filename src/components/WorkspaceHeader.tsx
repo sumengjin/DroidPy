@@ -32,7 +32,6 @@ interface WorkspaceExecutionState {
 interface WorkspaceHeaderProps {
   variant: 'phone' | 'tablet';
   activeFile: PythonFile;
-  files: PythonFile[];
   activeTab: MobileTab;
   labels: {
     editor: string;
@@ -46,8 +45,6 @@ interface WorkspaceHeaderProps {
     splitView: string;
     focusEditor: string;
   };
-  onSelectFile: (id: string) => void;
-  onCreateFile: () => void;
   onNavigate?: (destination: 'editor' | 'terminal' | 'files' | 'browser') => void;
   onOpenSettings?: () => void;
   tabletSplit?: boolean;
