@@ -23,7 +23,7 @@ import {
   BookOpen,
 } from 'lucide-react';
 import { registerSW } from 'virtual:pwa-register';
-import { DEFAULT_FILES } from './data/defaultFiles';
+import { DEFAULT_FILES, STARTER_EXAMPLES } from './data/defaultFiles';
 import {
   CrawlerSessionData,
   EditorSettings,
@@ -43,7 +43,6 @@ import {
 } from './types/ide';
 import type { CodeEditorHandle } from './components/CodeEditor';
 import { CodeEditorSurface } from './components/CodeEditorSurface';
-import { WorkspaceFileTabs } from './components/WorkspaceFileTabs';
 import { TerminalPanel } from './components/TerminalPanel';
 import { FileExplorer } from './components/FileExplorer';
 import { ScriptExamplesPanel } from './components/ScriptExamplesPanel';
@@ -196,30 +195,44 @@ declare global {
 }
 
 function upgradeLegacyDefaultFiles(list: PythonFile[]): PythonFile[] {
-  const defaultUtils = DEFAULT_FILES.find((f) => f.id === 'utils-py');
-  const defaultChart = DEFAULT_FILES.find((f) => f.id === 'chart-demo-py');
+  const starterById = new Map(STARTER_EXAMPLES.map((file) => [file.id, file]));
+  const starterByLegacyName = new Map([
+    ['main.py', 'main-py'],
+    ['utils.py', 'utils-py'],
+    ['Utils.py', 'utils-py'],
+    ['chart_demo.py', 'chart-demo-py'],
+    ['interactive_cli.py', 'interactive-py'],
+  ]);
   let changed = false;
-  const next = list.map((f) => {
+  const next = list.map((file) => {
+    const starterId = starterById.has(file.id) ? file.id : starterByLegacyName.get(file.name);
+    const starter = starterId ? starterById.get(starterId) : undefined;
+    if (!starter) return file;
+
+    let content = file.content;
     if (
-      defaultUtils &&
-      (f.id === 'utils-py' || f.name === 'utils.py') &&
-      f.content.includes('def format_device_report') &&
-      !f.content.includes('__name__') &&
-      !f.content.includes('print(')
+      starter.id === 'utils-py' &&
+      content.includes('def format_device_report') &&
+      !content.includes('__name__') &&
+      !content.includes('print(')
     ) {
-      changed = true;
-      return { ...f, content: defaultUtils.content };
-    }
-    if (
-      defaultChart &&
-      (f.id === 'chart-demo-py' || f.name === 'chart_demo.py') &&
-      f.content.includes('Android Sensor Waveform') &&
-      !f.content.includes('ModuleNotFoundError')
+      content = starter.content;
+    } else if (
+      starter.id === 'chart-demo-py' &&
+      content.includes('Android Sensor Waveform') &&
+      !content.includes('ModuleNotFoundError')
     ) {
-      changed = true;
-      return { ...f, content: defaultChart.content };
+      content = starter.content;
     }
-    return f;
+    if (starter.id === 'main-py') {
+      content = content.replace(/from\s+utils\s+import\s+format_device_report/g, 'from 工具函式 import format_device_report');
+      content = content.replace(/main\.py 執行完成/g, '主程式執行完成');
+    }
+    if (file.name !== starter.name || content !== file.content) {
+      changed = true;
+      return { ...file, name: starter.name, content, updatedAt: content !== file.content ? Date.now() : file.updatedAt };
+    }
+    return file;
   });
   return changed ? next : list;
 }
@@ -384,7 +397,6 @@ export default function App() {
   const [settingsWorkspaceSection, setSettingsWorkspaceSection] = useState<SettingsWorkspaceSection>('termux');
   const navigatePhoneWorkspace = useCallback((destination: 'editor' | 'terminal' | 'files' | 'browser') => {
     setSettingsWorkspaceOpen(false);
-    setMobileNewFileOpen(false);
     setScriptExamplesVisible(false);
     setMobileTab(destination === 'terminal' ? 'console' : destination);
   }, []);
@@ -463,8 +475,6 @@ export default function App() {
   const [outdatedTermuxPips, setOutdatedTermuxPips] = useState<TermuxOutdatedPipItem[]>([]);
   const [checkingTermuxOutdated, setCheckingTermuxOutdated] = useState(false);
   const [upgradingTermux, setUpgradingTermux] = useState(false);
-  const [mobileNewFileOpen, setMobileNewFileOpen] = useState(false);
-  const [mobileNewFileName, setMobileNewFileName] = useState('');
   const [linkedDirHandle, setLinkedDirHandle] = useState<DirectoryHandleLike | null>(null);
   const [executionEngine, setExecutionEngine] = useState<ExecutionEngine>(() => {
     const nativeSnap = getInitialNativeSnapshot();
@@ -573,7 +583,6 @@ export default function App() {
     showUpdateModal,
     scriptExamplesVisible,
     settingsWorkspaceOpen,
-    mobileNewFileOpen,
   });
   overlayStateRef.current = {
     showHelpModal,
@@ -770,10 +779,6 @@ export default function App() {
         if (window.__droidpySettingsBack?.()) return true;
         setSettingsWorkspaceOpen(false);
         if (mobileTabRef.current === 'packages') setMobileTab(packageReturnTabRef.current);
-        return true;
-      }
-      if (ov.mobileNewFileOpen) {
-        setMobileNewFileOpen(false);
         return true;
       }
       if (deviceClass === 'phone') {
@@ -3062,54 +3067,6 @@ export default function App() {
     setSettingsWorkspaceSection(sec);
     setSettingsWorkspaceOpen(true);
   }, []);
-
-  const renderInlineNewFileBar = () => (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        let name = sanitizeFileName(mobileNewFileName);
-        if (!name) return;
-        if (!name.includes('.')) name += '.py';
-        if (files.some((f) => f.name.toLowerCase() === name.toLowerCase())) {
-          showToast(t('files_exists', { name }));
-          return;
-        }
-        const starter = name.toLowerCase().endsWith('.json')
-          ? '{\n  "app": "DroidPy"\n}\n'
-          : name.toLowerCase().endsWith('.py')
-          ? `# ${name}\n\ndef main():\n    print("Hello from ${name}")\n\nif __name__ == "__main__":\n    main()\n`
-          : '';
-        handleCreateFile(name, starter);
-        setMobileNewFileName('');
-        setMobileNewFileOpen(false);
-      }}
-      className="flex items-center gap-1.5 px-2.5 py-2 border-b border-[var(--ide-border)] bg-transparent shrink-0"
-    >
-      <input
-        type="text"
-        autoFocus
-        value={mobileNewFileName}
-        onChange={(e) => setMobileNewFileName(e.target.value)}
-        placeholder={t('files_new_placeholder')}
-        className="flex-1 min-w-0 min-h-[44px] px-3 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
-      />
-      <button
-        type="submit"
-        className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl bg-[var(--ide-accent)] text-white"
-        aria-label={t('files_new_btn')}
-      >
-        <Check className="w-4 h-4" />
-      </button>
-      <button
-        type="button"
-        onClick={() => setMobileNewFileOpen(false)}
-        className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl border border-[var(--ide-border)] text-[var(--ide-text-muted)]"
-        aria-label={t('files_cancel')}
-      >
-        <X className="w-4 h-4" />
-      </button>
-    </form>
-  );
 
   const activeThemeMeta = getThemeMeta(settings.theme);
   const is3dBgActive = settings.enable3dBg !== false;
