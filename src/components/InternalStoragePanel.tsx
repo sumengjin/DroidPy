@@ -110,7 +110,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
           try { await createSdcardFolder(termuxConfig, basePath); } catch { /* It may already exist. */ }
           list = await listSdcardDirectory(termuxConfig, safePath);
         }
-        const resolvedPath = (list.currentPath || safePath).replace(/\\/g, '/').replace(/^\\/+|\\/+$/g, '');
+        const resolvedPath = (list.currentPath || safePath).replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
         if (resolvedPath !== basePath && !resolvedPath.startsWith(`${basePath}/`)) {
           throw new Error('儲存服務回傳了主資料夾以外的路徑，已阻止瀏覽');
         }
