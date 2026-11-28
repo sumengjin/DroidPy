@@ -461,13 +461,7 @@ export default function App() {
   const [checkingTermuxOutdated, setCheckingTermuxOutdated] = useState(false);
   const [upgradingTermux, setUpgradingTermux] = useState(false);
   const [mobileNewFileOpen, setMobileNewFileOpen] = useState(false);
-  const [openScriptExamples, setOpenScriptExamples] = useState(false);
-  useEffect(() => {
-    if (mobileTab === 'files' && openScriptExamples) {
-      // FileExplorer consumes this one-shot request during its initial mount.
-      setOpenScriptExamples(false);
-    }
-  }, [mobileTab, openScriptExamples]);
+  const [openScriptExamples, setOpenScriptExamples] = useState(0);
   const [mobileNewFileName, setMobileNewFileName] = useState('');
   const [linkedDirHandle, setLinkedDirHandle] = useState<DirectoryHandleLike | null>(null);
   const [executionEngine, setExecutionEngine] = useState<ExecutionEngine>(() => {
@@ -3388,6 +3382,18 @@ export default function App() {
                   </button>
                   <button
                     type="button"
+                    onClick={() => {
+                      setOpenScriptExamples((request) => request + 1);
+                      setTabletPaneTab('files');
+                    }}
+                    aria-label={t('files_templates_btn')}
+                    title={t('files_templates_btn')}
+                    className="min-h-[32px] min-w-[32px] p-1 inline-flex items-center justify-center rounded-md text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]"
+                  >
+                    <BookOpen className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => handleUpdateSettings({ showSymbolBar: !settings.showSymbolBar })}
                     aria-label={t('toolbar_symbol_bar_title')}
                     title={t('toolbar_symbol_bar_title')}
@@ -3531,7 +3537,7 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => {
-                          setOpenScriptExamples(true);
+                          setOpenScriptExamples((request) => request + 1);
                           setMobileTab('files');
                         }}
                         aria-label={t('files_templates_btn')}
@@ -3626,7 +3632,7 @@ export default function App() {
                   files={files}
                   activeFileId={activeFile.id}
                   showHeaderTitle={false}
-                  openTemplatesOnMount={openScriptExamples}
+                  openTemplatesRequest={openScriptExamples}
                   linkedDirName={linkedDirHandle?.name ?? null}
                   termuxConnected={termuxConnectionState === 'connected'}
                   termuxEmbedded={Boolean(termuxHealth?.embedded)}
