@@ -44,6 +44,9 @@ interface InternalStoragePanelProps {
   fullScreen?: boolean;
   onlyPythonFiles?: boolean;
   onClose?: () => void;
+  initialPath?: string;
+  basePath?: string;
+  onPathChange?: (path: string) => void;
 }
 
 function formatSize(bytes: number): string {
@@ -63,12 +66,15 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
   fullScreen = false,
   onlyPythonFiles = false,
   onClose,
+  initialPath = 'DroidPy',
+  basePath = 'DroidPy',
+  onPathChange,
 }) => {
   const { t } = useI18n();
   const [status, setStatus] = useState<SdcardStatusInfo | null>(null);
   const [appUsage, setAppUsage] = useState<AppStorageUsageInfo | null>(null);
   const [cleaningCache, setCleaningCache] = useState(false);
-  const [currentPath, setCurrentPath] = useState('');
+  const [currentPath, setCurrentPath] = useState(initialPath);
   const [entries, setEntries] = useState<SdcardEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
@@ -82,14 +88,24 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
       setLoading(true);
       setErrorMsg(null);
       try {
+        const normalizedPath = relPath.replace(/\\/g, '/').split('/').filter((part) => part && part !== '.').join('/');
+        const safePath = normalizedPath || basePath;
+        if (safePath !== basePath && !safePath.startsWith(`${basePath}/`)) {
+          throw new Error('檔案管理只能在 DroidPy 主資料夾內瀏覽');
+        }
         const [st, list, usage] = await Promise.all([
           getSdcardStatus(termuxConfig),
-          listSdcardDirectory(termuxConfig, relPath),
+          listSdcardDirectory(termuxConfig, safePath),
           getAppStorageUsage(termuxConfig),
         ]);
+        const resolvedPath = (list.currentPath || safePath).replace(/\\/g, '/').replace(/^\\/+|\\/+$/g, '');
+        if (resolvedPath !== basePath && !resolvedPath.startsWith(`${basePath}/`)) {
+          throw new Error('儲存服務回傳了主資料夾以外的路徑，已阻止瀏覽');
+        }
         setStatus(st);
         if (usage) setAppUsage(usage);
-        setCurrentPath(list.currentPath || relPath);
+        setCurrentPath(resolvedPath);
+        onPathChange?.(resolvedPath);
         setEntries(Array.isArray(list.entries) ? list.entries : []);
       } catch (err) {
         setErrorMsg(err instanceof Error ? err.message : String(err));
@@ -97,7 +113,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
         setLoading(false);
       }
     },
-    [termuxConfig]
+    [termuxConfig, basePath, onPathChange]
   );
 
   useEffect(() => {
@@ -129,10 +145,11 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
   };
 
   const handleGoUp = () => {
-    if (!currentPath) return;
+    if (!currentPath || currentPath === basePath) return;
     const parts = currentPath.split('/').filter(Boolean);
     parts.pop();
-    const parent = parts.join('/');
+    const candidate = parts.join('/');
+    const parent = candidate === basePath || candidate.startsWith(`${basePath}/`) ? candidate : basePath;
     setConfirmDeletePath(null);
     void loadDirectory(parent);
   };
@@ -188,7 +205,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
   const handleCreateFolder = async (e: React.FormEvent) => {
     e.preventDefault();
     const clean = newFolderName.replace(/[/\\]/g, '').trim();
-    if (!clean) return;
+    if (!clean || clean === '.' || clean === '..') return;
     const targetRel = currentPath ? `${currentPath}/${clean}` : clean;
     setBusyAction('mkdir');
     try {
@@ -206,7 +223,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
   const handleCreatePythonFile = async (e: React.FormEvent) => {
     e.preventDefault();
     const clean = newPythonFileName.replace(/[/\\\\]/g, '').trim();
-    if (!clean) return;
+    if (!clean || clean === '.' || clean === '..') return;
     const filename = clean.toLowerCase().endsWith('.py') ? clean : `${clean}.py`;
     if (entries.some((entry) => entry.name.toLowerCase() === filename.toLowerCase())) {
       onNotify(`檔案已存在：${filename}`);
