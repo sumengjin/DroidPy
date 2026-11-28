@@ -10,7 +10,6 @@ import {
   Save,
   FolderSync,
   Trash2,
-  X,
   Loader2,
   HardDrive,
 } from 'lucide-react';
@@ -42,8 +41,6 @@ interface InternalStoragePanelProps {
   onOpenSdcardFile: (filename: string, content: string, path: string) => void;
   onNotify: (msg: string) => void;
   fullScreen?: boolean;
-  onlyPythonFiles?: boolean;
-  onClose?: () => void;
   initialPath?: string;
   basePath?: string;
   onPathChange?: (path: string) => void;
@@ -64,8 +61,6 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
   onOpenSdcardFile,
   onNotify,
   fullScreen = false,
-  onlyPythonFiles = false,
-  onClose,
   initialPath = 'DroidPy',
   basePath = 'DroidPy',
   onPathChange,
@@ -79,7 +74,6 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
   const [loading, setLoading] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
-  const [newPythonFileName, setNewPythonFileName] = useState('');
   const [confirmDeletePath, setConfirmDeletePath] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -252,37 +246,6 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
     }
   };
 
-  const handleCreatePythonFile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const clean = newPythonFileName.replace(/[/\\\\]/g, '').trim();
-    if (!clean || clean === '.' || clean === '..') return;
-    const filename = clean.toLowerCase().endsWith('.py') ? clean : `${clean}.py`;
-    if (entries.some((entry) => entry.name.toLowerCase() === filename.toLowerCase())) {
-      onNotify(`檔案已存在：${filename}`);
-      return;
-    }
-    const targetRel = currentPath ? `${currentPath}/${filename}` : filename;
-    const starter = `# ${filename}
-
-def main():
-    print("Hello from ${filename}")
-
-if __name__ == "__main__":
-    main()
-`;
-    setBusyAction('create-file');
-    try {
-      await writeSdcardFile(termuxConfig, targetRel, starter);
-      setNewPythonFileName('');
-      onNotify(`已建立：${filename}`);
-      await loadDirectory(currentPath);
-    } catch (err) {
-      onNotify(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusyAction(null);
-    }
-  };
-
   const handleDeleteEntry = async (entry: SdcardEntry) => {
     if (!isInsideBasePath(entry.relPath)) {
       onNotify('已阻止刪除 DroidPy 主資料夾以外的路徑');
@@ -318,9 +281,7 @@ if __name__ == "__main__":
     }
   };
 
-  const visibleEntries = onlyPythonFiles
-    ? entries.filter((entry) => entry.isDir || entry.name.toLowerCase().endsWith('.py'))
-    : entries;
+  const visibleEntries = entries;
 
   const rootDisplay = status?.rootPath || window.DroidPyNative?.getInternalStoragePath?.() || '/storage/emulated/0';
   const fullDisplayPath = currentPath ? `${rootDisplay}/${currentPath}` : rootDisplay;
@@ -365,16 +326,6 @@ if __name__ == "__main__":
                 <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
                 <span>{t('sd_refresh_btn')}</span>
               </button>
-              {onClose && (
-                <button
-                  type="button"
-                  onClick={onClose}
-                  aria-label="返回檔案"
-                  className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)]"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
             </div>
           </div>
 
@@ -431,44 +382,32 @@ if __name__ == "__main__":
 
       {/* Action Buttons: Save Active & Backup Project */}
       {showSdcard && (
-        <>
-          {!onlyPythonFiles && (
-          <div className="flex flex-wrap items-center gap-2 min-w-0">
-            <button
-              type="button"
-              onClick={() => void handleSaveActiveHere()}
-              disabled={!!busyAction || !isGranted}
-              className="min-h-[42px] min-w-0 max-w-full overflow-hidden px-3.5 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-45 text-white text-xs font-medium inline-flex items-center gap-1.5 transition-colors"
-            >
-              {busyAction === 'save' ? <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" /> : <Save className="w-3.5 h-3.5 shrink-0" />}
-              <span className="truncate">{t('sd_save_active_btn')} ({activeFile?.name})</span>
-            </button>
+        <div className="flex flex-wrap items-center gap-2 min-w-0">
+          <button
+            type="button"
+            onClick={() => void handleSaveActiveHere()}
+            disabled={!!busyAction || !isGranted}
+            className="min-h-[42px] min-w-0 max-w-full overflow-hidden px-3.5 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-45 text-white text-xs font-medium inline-flex items-center gap-1.5 transition-colors"
+          >
+            {busyAction === 'save' ? <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" /> : <Save className="w-3.5 h-3.5 shrink-0" />}
+            <span className="truncate">{t('sd_save_active_btn')} ({activeFile?.name})</span>
+          </button>
 
-            <button
-              type="button"
-              onClick={() => void handleBackupAllToDroidPy()}
-              disabled={!!busyAction || !isGranted}
-              className="min-h-[42px] min-w-0 max-w-full px-3.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] disabled:opacity-45 text-xs font-medium inline-flex items-center gap-1.5 transition-colors"
-            >
-              {busyAction === 'backup' ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--ide-accent)] shrink-0" />
-              ) : (
-                <FolderSync className="w-3.5 h-3.5 text-[var(--ide-accent)] shrink-0" />
-              )}
-              <span className="truncate">{t('sd_export_proj_btn')}</span>
-            </button>
-
-            {isGranted && (
-              <button
-                type="button"
-                onClick={() => void loadDirectory('DroidPy')}
-                className="min-h-[42px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] text-xs font-mono text-[var(--ide-accent-text)] transition-colors shrink-0"
-              >
-                /sdcard/DroidPy
-              </button>
+          <button
+            type="button"
+            onClick={() => void handleBackupAllToDroidPy()}
+            disabled={!!busyAction || !isGranted}
+            className="min-h-[42px] min-w-0 max-w-full px-3.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] disabled:opacity-45 text-xs font-medium inline-flex items-center gap-1.5 transition-colors"
+          >
+            {busyAction === 'backup' ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--ide-accent)] shrink-0" />
+            ) : (
+              <FolderSync className="w-3.5 h-3.5 text-[var(--ide-accent)] shrink-0" />
             )}
-          </div>
-          )}
+            <span className="truncate">{t('sd_export_proj_btn')}</span>
+          </button>
+        </div>
+      )}
 
       {/* Path Bar + Mkdir */}
       <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)]">
@@ -505,26 +444,7 @@ if __name__ == "__main__":
             <span>{t('sd_mkdir_btn')}</span>
           </button>
         </form>
-        {onlyPythonFiles && (
-          <form onSubmit={(e) => void handleCreatePythonFile(e)} className="flex items-center gap-1.5 w-full sm:w-auto shrink-0">
-            <input
-              type="text"
-              value={newPythonFileName}
-              onChange={(e) => setNewPythonFileName(e.target.value)}
-              placeholder="新建 Python 檔案"
-              disabled={!isGranted}
-              className="flex-1 sm:flex-initial min-w-0 sm:w-40 min-h-[34px] px-2.5 rounded-lg bg-[var(--ide-surface)] border border-[var(--ide-border)] text-xs focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
-            />
-            <button
-              type="submit"
-              disabled={!newPythonFileName.trim() || !isGranted || !!busyAction}
-              className="min-h-[34px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] disabled:opacity-40 text-xs font-medium inline-flex items-center gap-1 shrink-0"
-            >
-              <FileText className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
-              <span>建立 .py</span>
-            </button>
-          </form>
-        )}
+
       </div>
 
       {errorMsg && (
