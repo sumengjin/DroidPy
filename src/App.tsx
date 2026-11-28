@@ -379,10 +379,12 @@ export default function App() {
   }, [mobileTab]);
   const packageReturnTabRef = useRef<MobileTab>('editor');
   const [settingsWorkspaceOpen, setSettingsWorkspaceOpen] = useState(false);
+  const [scriptExamplesVisible, setScriptExamplesVisible] = useState(false);
   const [settingsWorkspaceSection, setSettingsWorkspaceSection] = useState<SettingsWorkspaceSection>('termux');
   const navigatePhoneWorkspace = useCallback((destination: 'editor' | 'terminal' | 'files' | 'browser') => {
     setSettingsWorkspaceOpen(false);
     setMobileNewFileOpen(false);
+    setScriptExamplesVisible(false);
     setMobileTab(destination === 'terminal' ? 'console' : destination);
   }, []);
   const tabletWorkspace = useTabletWorkspace();
@@ -3384,6 +3386,7 @@ export default function App() {
                     type="button"
                     onClick={() => {
                       setOpenScriptExamples((request) => request + 1);
+                      setScriptExamplesVisible(true);
                       setTabletPaneTab('files');
                     }}
                     aria-label={t('files_templates_btn')}
@@ -3471,6 +3474,8 @@ export default function App() {
                       files={files}
                       activeFileId={activeFile.id}
                       openTemplatesRequest={openScriptExamples}
+                      templatesVisible={scriptExamplesVisible}
+                      onTemplatesVisibilityChange={setScriptExamplesVisible}
                       linkedDirName={linkedDirHandle?.name ?? null}
                       termuxConnected={termuxConnectionState === 'connected'}
                       termuxEmbedded={Boolean(termuxHealth?.embedded)}
@@ -3539,6 +3544,7 @@ export default function App() {
                         type="button"
                         onClick={() => {
                           setOpenScriptExamples((request) => request + 1);
+                          setScriptExamplesVisible(true);
                           setMobileTab('files');
                         }}
                         aria-label={t('files_templates_btn')}
@@ -3634,6 +3640,8 @@ export default function App() {
                   activeFileId={activeFile.id}
                   showHeaderTitle={false}
                   openTemplatesRequest={openScriptExamples}
+                  templatesVisible={scriptExamplesVisible}
+                  onTemplatesVisibilityChange={setScriptExamplesVisible}
                   linkedDirName={linkedDirHandle?.name ?? null}
                   termuxConnected={termuxConnectionState === 'connected'}
                   termuxEmbedded={Boolean(termuxHealth?.embedded)}
@@ -3664,7 +3672,7 @@ export default function App() {
       {isPhoneLayout && (
         <WorkspaceNavigation
           variant="phone"
-          activeDestination={mobileTab === 'console' ? 'terminal' : mobileTab === 'files' ? 'files' : mobileTab === 'browser' ? 'browser' : 'editor'}
+          activeDestination={scriptExamplesVisible ? 'editor' : mobileTab === 'console' ? 'terminal' : mobileTab === 'files' ? 'files' : mobileTab === 'browser' ? 'browser' : 'editor'}
           labels={{
             editor: t('mob_editor'),
             terminal: t('mob_console'),
