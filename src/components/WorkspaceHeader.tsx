@@ -1,5 +1,5 @@
 import { Code2, Columns2, FolderOpen, Globe, Maximize2, Settings, Terminal as TerminalIcon } from 'lucide-react';
-import type { MobileTab, PythonFile } from '../types/ide';
+import type { MobileTab } from '../types/ide';
 import { WorkspaceExecutionControls } from './WorkspaceExecutionControls';
 
 type ExecutionLabels = {
@@ -31,7 +31,6 @@ interface WorkspaceExecutionState {
 
 interface WorkspaceHeaderProps {
   variant: 'phone' | 'tablet';
-  activeFile: PythonFile;
   activeTab: MobileTab;
   labels: {
     editor: string;
@@ -40,8 +39,6 @@ interface WorkspaceHeaderProps {
     browser: string;
     settings: string;
     openSettings: string;
-    createFile: string;
-    filesTitle: string;
     splitView: string;
     focusEditor: string;
   };
@@ -55,7 +52,6 @@ interface WorkspaceHeaderProps {
 /** Form-factor-specific header built from shared file and execution controls. */
 export function WorkspaceHeader({
   variant,
-  activeFile,
   activeTab,
   labels,
   onNavigate,
@@ -66,7 +62,7 @@ export function WorkspaceHeader({
 }: WorkspaceHeaderProps) {
   const isPhone = variant === 'phone';
   const title = activeTab === 'editor'
-    ? activeFile.name
+    ? labels.editor
     : activeTab === 'console'
       ? labels.console
       : activeTab === 'files'
