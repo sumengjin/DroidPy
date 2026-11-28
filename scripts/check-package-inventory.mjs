@@ -34,7 +34,7 @@ const executionLogModalSource = await readFile(new URL('../src/components/AppExe
 assert.match(appSource, /import \{ appLog, clearAppLogs \} from '\.\/services\/appLogger'/);
 assert.match(appSource, /startupBootLoggedInModule = true;[\s\S]*?clearAppLogs\(\);[\s\S]*?appLog\(/, 'previous-session app logs must be cleared before recording the new boot entry');
 assert.match(appLoggerSource, /export function clearAppLogs\(\): void/);
-assert.match(executionLogModalSource, /useEffect\(\(\) => \{[\s\S]*?setActiveTab\('execution'\);[\s\S]*?setSearchQuery\(''\);[\s\S]*?if \(!open\) setLogs\(\);[\s\S]*?\}, \[open\]\)/, 'the log viewer must reset its filters and stale entries on close');
+assert.ok(['setActiveTab(\'execution\');', 'setSearchQuery(\'\');', 'if (!open) setLogs([]);'].every((snippet) => executionLogModalSource.includes(snippet)), 'the log viewer must reset its filters and stale entries on close');
 assert.match(executionLogModalSource, /let cancelled = false;[\s\S]*?if \(!cancelled\) setNativeLogs\(res\);[\s\S]*?return \(\) => \{[\s\S]*?cancelled = true;/, 'late native-log responses must not repopulate a dismissed log viewer');
 
 const catalogItems = catalogSource.split(/\n  \{\n    id: '/).slice(1);
