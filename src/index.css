@@ -654,37 +654,30 @@ button.dp-execution-control::after {
 }
 
 .cm-editor .cm-panels-top {
-  position: absolute !important;
-  inset: 0 !important;
-  z-index: 100000 !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  box-sizing: border-box !important;
-  padding: 12px !important;
-  overflow: auto !important;
+  position: static !important;
+  inset: auto !important;
+  display: contents !important;
   background: transparent !important;
   border: 0 !important;
-  pointer-events: none !important;
 }
 
 .cm-editor .cm-search {
-  position: relative !important;
-  z-index: 1 !important;
-  top: auto !important;
-  left: auto !important;
+  position: fixed !important;
+  z-index: 100000 !important;
+  top: 50%;
+  left: 50%;
   right: auto !important;
   bottom: auto !important;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  width: min(560px, calc(100% - 28px));
-  max-width: calc(100% - 28px);
-  max-height: min(100%, 680px);
+  gap: 7px;
+  width: min(420px, calc(100vw - 48px));
+  max-width: calc(100vw - 48px);
+  max-height: 70vh;
   overflow-y: auto;
   box-sizing: border-box;
-  padding: 18px;
+  padding: 12px;
   color: var(--ide-text) !important;
   background: color-mix(in srgb, var(--ide-surface) 94%, transparent) !important;
   border: 1px solid color-mix(in srgb, var(--ide-border) 82%, transparent) !important;
@@ -694,7 +687,7 @@ button.dp-execution-control::after {
     0 24px 72px rgba(0, 0, 0, 0.28) !important;
   -webkit-backdrop-filter: blur(24px) saturate(1.22);
   backdrop-filter: blur(24px) saturate(1.22);
-  transform: none;
+  transform: translate(-50%, -50%);
   pointer-events: auto;
   animation: dp-search-dialog-in 160ms ease-out both;
 }
@@ -707,8 +700,8 @@ button.dp-execution-control::after {
 .cm-editor .cm-search input,
 .cm-editor .cm-search .cm-textfield {
   min-width: 0;
-  min-height: 40px;
-  padding: 8px 11px !important;
+  min-height: 36px;
+  padding: 6px 9px !important;
   color: var(--ide-text) !important;
   background: color-mix(in srgb, var(--ide-surface) 92%, transparent) !important;
   border: 1px solid var(--ide-border) !important;
@@ -723,8 +716,8 @@ button.dp-execution-control::after {
 
 .cm-editor .cm-search button,
 .cm-editor .cm-search .cm-button {
-  min-height: 40px;
-  padding: 7px 12px !important;
+  min-height: 36px;
+  padding: 6px 10px !important;
   color: var(--ide-text) !important;
   background: color-mix(in srgb, var(--ide-surface-alt) 88%, transparent) !important;
   border: 1px solid color-mix(in srgb, var(--ide-border) 86%, transparent) !important;
@@ -743,11 +736,11 @@ button.dp-execution-control::after {
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
-  flex: 0 0 44px;
-  width: 44px !important;
-  min-width: 44px !important;
-  height: 44px !important;
-  min-height: 44px !important;
+  flex: 0 0 40px;
+  width: 40px !important;
+  min-width: 40px !important;
+  height: 40px !important;
+  min-height: 40px !important;
   margin-inline-start: 4px;
   padding: 0 !important;
   color: var(--ide-accent-text) !important;
@@ -768,12 +761,12 @@ button.dp-execution-control::after {
 
 @media (max-width: 640px) {
   .cm-editor .cm-search {
-    gap: 8px;
-    width: calc(100% - 24px);
-    max-width: calc(100% - 24px);
-    max-height: 100%;
-    padding: 14px;
-    border-radius: 18px !important;
+    gap: 6px;
+    width: min(380px, calc(100vw - 48px));
+    max-width: calc(100vw - 48px);
+    max-height: 70vh;
+    padding: 10px;
+    border-radius: 16px !important;
   }
 
   .cm-editor .cm-search input {
@@ -781,7 +774,7 @@ button.dp-execution-control::after {
   }
 
   .cm-editor .cm-search .dp-search-close {
-    flex-basis: 44px;
+    flex-basis: 40px;
     margin-inline-start: auto;
   }
 }
