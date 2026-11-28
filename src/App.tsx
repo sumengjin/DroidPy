@@ -3227,7 +3227,6 @@ export default function App() {
       {isPhoneLayout && (
         <WorkspaceHeader
           variant="phone"
-          activeFile={activeFile}
           activeTab={mobileTab}
           labels={{
             editor: t('mob_editor'),
@@ -3236,8 +3235,6 @@ export default function App() {
             browser: t('mob_browser'),
             settings: t('neg_title'),
             openSettings: t('neg_open_aria'),
-            createFile: t('files_new_btn'),
-            filesTitle: t('files_title'),
             splitView: t('tab_split_view'),
             focusEditor: t('tab_focus_editor'),
           }}
