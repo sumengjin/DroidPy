@@ -105,7 +105,8 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
           list = await listSdcardDirectory(termuxConfig, safePath);
         }
         const resolvedPath = (list.currentPath || safePath).replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
-        if (resolvedPath !== basePath && !resolvedPath.startsWith(`${basePath}/`)) {
+        const resolvedParts = resolvedPath.split('/').filter(Boolean);
+        if (resolvedParts.includes('..') || (resolvedPath !== basePath && !resolvedPath.startsWith(`${basePath}/`))) {
           throw new Error(t('sd_path_blocked'));
         }
         setCurrentPath(resolvedPath);
@@ -174,7 +175,11 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
     void loadDirectory(parent);
   };
 
-  const isInsideBasePath = (path: string) => path === basePath || path.startsWith(`${basePath}/`);
+  const isInsideBasePath = (path: string) => {
+    const parts = path.replace(/\\/g, '/').split('/').filter(Boolean);
+    const normalized = parts.join('/');
+    return !parts.includes('..') && (normalized === basePath || normalized.startsWith(`${basePath}/`));
+  };
 
   const handleOpenEntry = async (entry: SdcardEntry) => {
     if (!isInsideBasePath(entry.relPath)) {
