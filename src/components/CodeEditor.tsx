@@ -727,32 +727,15 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
 
       viewRef.current = view;
 
-      // Mount CodeMirror's real search form in a pane-sized overlay owned by
-      // this React editor container. Moving the live panel preserves its
-      // built-in find/replace behavior while giving it a reliable editor-local
-      // centering reference on Android.
+      // Keep CodeMirror's search form in its native panel container. Reparenting
+      // the live panel breaks CodeMirror's panel lifecycle on some Android WebViews
+      // and can make a rapid close/reopen tap race.
       const editorContainer = containerRef.current;
-      const searchOverlay = document.createElement('div');
-      searchOverlay.className = 'dp-search-overlay';
-      editorContainer.appendChild(searchOverlay);
+      const getSearchPanel = () => view.dom.querySelector<HTMLElement>('.cm-search');
 
-      const getSearchPanel = () =>
-        editorContainer.querySelector<HTMLElement>('.cm-search');
-
-      // CodeMirror's built-in search panel is kept for its proven find/replace
-      // behavior; localize its generated controls as soon as the panel is mounted.
       let searchHistoryPushed = false;
       const closeSearchDialog = () => {
-        const panel = getSearchPanel();
-        if (!panel) return;
-
-        // CodeMirror's panel lifecycle expects its panel DOM to remain under
-        // view.dom. The centering overlay temporarily reparents it, so restore
-        // it before asking CodeMirror to close; otherwise its internal panel
-        // manager can fail to remove the detached node on Android WebView.
-        if (panel.parentElement !== view.dom) {
-          view.dom.appendChild(panel);
-        }
+        if (!getSearchPanel()) return;
         closeSearchPanel(view);
       };
       const closeSearchFromNativeBack = () => {
@@ -762,6 +745,7 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
       };
       closeSearchRef.current = closeSearchFromNativeBack;
       window.__droidpyCloseSearch = closeSearchFromNativeBack;
+
       const handleSearchBack = () => {
         searchHistoryPushed = false;
         closeSearchDialog();
@@ -776,27 +760,21 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
       };
       const handleSearchOutsideClick = (event: PointerEvent) => {
         const target = event.target;
-        // The toolbar button is outside the dialog by design. Do not dismiss
-        // on pointerdown there: its subsequent click must perform the toggle.
         if (target instanceof Element && target.closest('[data-dp-search-trigger]')) return;
         const panel = getSearchPanel();
-        if (panel && target instanceof Node && !panel.contains(target)) {
-          closeSearchDialog();
-        }
+        if (panel && target instanceof Node && !panel.contains(target)) closeSearchDialog();
       };
       const searchPanelObserver = new MutationObserver(() => {
         const panel = getSearchPanel();
         if (panel) {
-          if (panel.parentElement !== searchOverlay) searchOverlay.appendChild(panel);
           localizeSearchPanel(editorContainer);
           if (!searchHistoryPushed) {
             window.history.pushState({ ...(window.history.state || {}), dpSearchDialog: true }, '');
             searchHistoryPushed = true;
           }
         } else if (searchHistoryPushed) {
-          // A programmatic close must not enqueue a delayed popstate event:
-          // that stale event can arrive after a fast reopen and close the new
-          // dialog. Remove our marker from the current entry in place instead.
+          // Remove the marker in place; a delayed popstate must not close a
+          // newly opened dialog after a rapid second tap.
           searchHistoryPushed = false;
           const currentState = window.history.state || {};
           if (currentState.dpSearchDialog) {
@@ -805,7 +783,7 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
           }
         }
       });
-      searchPanelObserver.observe(editorContainer, { childList: true, subtree: true });
+      searchPanelObserver.observe(view.dom, { childList: true, subtree: true });
       window.addEventListener('popstate', handleSearchBack);
       document.addEventListener('keydown', handleSearchKeydown, true);
       document.addEventListener('pointerdown', handleSearchOutsideClick, true);
@@ -813,13 +791,8 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
 
       return () => {
         searchPanelObserver.disconnect();
-        searchOverlay.remove();
-        if (window.__droidpyCloseSearch === closeSearchFromNativeBack) {
-          delete window.__droidpyCloseSearch;
-        }
-        if (closeSearchRef.current === closeSearchFromNativeBack) {
-          closeSearchRef.current = null;
-        }
+        if (window.__droidpyCloseSearch === closeSearchFromNativeBack) delete window.__droidpyCloseSearch;
+        if (closeSearchRef.current === closeSearchFromNativeBack) closeSearchRef.current = null;
         window.removeEventListener('popstate', handleSearchBack);
         document.removeEventListener('keydown', handleSearchKeydown, true);
         document.removeEventListener('pointerdown', handleSearchOutsideClick, true);
@@ -930,9 +903,9 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
       openSearch: () => {
         const view = viewRef.current;
         if (!view) return;
-        // Use the same close path as Android Back and outside dismissal.
-        // It restores the reparented panel to view.dom before CodeMirror closes it.
-        const isOpen = Boolean(containerRef.current?.querySelector('.cm-search'));
+        // Query CodeMirror's native panel location so this remains a true toggle
+        // while Android's input method changes the visible viewport.
+        const isOpen = Boolean(view.dom.querySelector('.cm-search'));
         if (isOpen) {
           closeSearchRef.current?.();
         } else {
