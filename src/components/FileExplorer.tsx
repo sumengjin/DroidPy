@@ -299,7 +299,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           )}
           <button
             type="button"
-            onClick={() => setIsCreating((v) => !v)}
+            onClick={() => { setNewFileName(''); setIsCreating(true); }}
             aria-label={t('files_new_btn')}
             title={t('files_new_btn')}
             className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white transition-colors"
@@ -388,36 +388,68 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
         </div>
       )}
 
-      {/* Inline New File Form */}
+      {/* Android-style create-file dialog, anchored to the Project Files surface. */}
       {isCreating && (
-        <form
-          onSubmit={handleCreateSubmit}
-          className="p-3 border-b border-[var(--ide-border)] bg-[var(--ide-surface)] flex items-center gap-2 shrink-0"
+        <div
+          className="absolute inset-0 z-40 flex items-center justify-center p-5 bg-black/55 backdrop-blur-[2px]"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setIsCreating(false);
+          }}
+          role="presentation"
         >
-          <input
-            type="text"
-            autoFocus
-            value={newFileName}
-            onChange={(e) => setNewFileName(e.target.value)}
-            placeholder={t('files_new_placeholder')}
-            className="flex-1 min-w-0 min-h-[40px] px-3 rounded-lg bg-[var(--ide-bg)] border border-[var(--ide-border)] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
-          />
-          <button
-            type="submit"
-            aria-label="確認建立檔案"
-            className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg bg-[var(--ide-accent)] text-white"
+          <form
+            onSubmit={handleCreateSubmit}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="droidpy-create-file-title"
+            className="w-full max-w-sm rounded-[1.5rem] border border-[var(--ide-border)] bg-[var(--ide-surface)] p-5 shadow-2xl"
           >
-            <Check className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsCreating(false)}
-            aria-label="取消建立"
-            className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg bg-[var(--ide-surface-alt)] border border-[var(--ide-border)] text-[var(--ide-text-muted)]"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </form>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-2xl flex items-center justify-center bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)]">
+                <FileCode2 className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <h3 id="droidpy-create-file-title" className="text-base font-semibold text-[var(--ide-text)]">
+                  {t('files_new_btn')}
+                </h3>
+                <p className="text-xs text-[var(--ide-text-muted)] mt-0.5">
+                  {t('files_new_hint')}
+                </p>
+              </div>
+            </div>
+            <label htmlFor="droidpy-new-file-name" className="block text-xs font-medium text-[var(--ide-text-muted)] mb-2">
+              {t('files_name_label')}
+            </label>
+            <div className="flex items-center gap-2 rounded-xl border border-[var(--ide-accent)] bg-[var(--ide-bg)] px-3 focus-within:ring-2 focus-within:ring-[var(--ide-accent)]">
+              <input
+                id="droidpy-new-file-name"
+                type="text"
+                autoFocus
+                value={newFileName}
+                onChange={(event) => setNewFileName(event.target.value)}
+                placeholder={t('files_new_placeholder')}
+                className="flex-1 min-w-0 min-h-[50px] bg-transparent text-sm font-mono text-[var(--ide-text)] outline-none"
+              />
+              <span className="shrink-0 rounded-lg bg-[var(--ide-accent-soft)] px-2 py-1 text-xs font-semibold text-[var(--ide-accent-text)]">.py</span>
+            </div>
+            <div className="flex items-center justify-end gap-2 mt-5">
+              <button
+                type="button"
+                onClick={() => setIsCreating(false)}
+                className="min-h-[44px] px-4 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-sm font-medium text-[var(--ide-text-muted)]"
+              >
+                {t('files_cancel')}
+              </button>
+              <button
+                type="submit"
+                disabled={!newFileName.trim()}
+                className="min-h-[44px] px-5 rounded-xl bg-[var(--ide-accent)] text-white text-sm font-semibold disabled:opacity-40"
+              >
+                {t('files_create_confirm')}
+              </button>
+            </div>
+          </form>
+        </div>
       )}
 
       {/* File List */}
