@@ -200,6 +200,10 @@ assert.match(appSource, /editorHistoryIds\?: string\[\]/, 'native snapshots must
 assert.match(appSource, /setEditorHistoryIds\(\(previous\) => \[\.\.\.previous\.filter\(\(id\) => id !== activeFileId\), activeFileId\]\)/, 'opening a file must move it to the front of recent-file history');
 assert.match(appSource, /const projectFiles = useMemo\([\s\S]*?editorHistoryIds[\s\S]*?return \[\.\.\.editorHistoryIds\]\.reverse\(\)/, 'Project Files must show only active and previously opened editor files, newest first');
 assert.equal((appSource.match(/files=\{projectFiles\}/g) || []).length, 2, 'phone and tablet File Explorer must use the editor history projection, not every workspace artifact');
+assert.match(fileExplorerSource, /role="dialog"[\s\S]*?droidpy-create-file-title/, 'new file flow must use an accessible modal dialog');
+assert.match(fileExplorerSource, /onClick=\{\(\) => \{ setNewFileName\(''\); setIsCreating\(true\); \}\}/, 'new file action must open the dialog from the Project Files header');
+assert.match(fileExplorerSource, /if \(!\/\\\.py\$\/i\.test\(trimmed\)\)\s*\{\s*trimmed \+= '\\.py';/, 'new scripts must automatically receive a .py suffix without duplicating it');
+assert.match(fileExplorerSource, /files_new_hint[\s\S]*?files_name_label[\s\S]*?files_create_confirm/, 'new file dialog must use localized Android-style form labels');
 assert.match(appSource, /pointer-events-none absolute inset-0 z-\[1\]/, 'one continuous paper layer must cover the entire viewport behind phone and tablet chrome');
 assert.match(appSource, /const workspaceSurfaceAlpha =\s*1 - Math\.min\(100, Math\.max\(0, settings\.workspaceTransparency \?\? 35\)\) \/ 100/, 'workspace transparency must map the 0–100 slider to a clamped 1–0 alpha');
 assert.match(appSource, /One continuous translucent paper surface covers the full viewport[\s\S]*?backgroundColor: is3dBgActive[\s\S]*?hexToRgba\(activeThemeMeta\.swatchBg, workspaceSurfaceAlpha\)/, 'one full-screen paper surface must own the live transparency alpha');
