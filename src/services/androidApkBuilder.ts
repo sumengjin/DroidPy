@@ -4343,7 +4343,8 @@ def clipboard_set(text):
                         val children = dir.listFiles()?.sortedWith(compareBy<File>({ !it.isDirectory }, { it.name.lowercase() })) ?: emptyList()
                         for (child in children) {
                             if (child.name.startsWith(".")) continue
-                            val childCanonical = try { child.canonicalPath } catch (_: Exception) { continue }
+                            val childCanonical = try { child.canonicalPath } catch (_: Exception) { "" }
+                            if (childCanonical.isBlank()) continue
                             if (childCanonical != homeCanonical && !childCanonical.startsWith(homeCanonical + File.separator)) continue
                             val childRel = childCanonical.removePrefix(rootCanonical).trimStart('/')
                             arr.put(
