@@ -128,12 +128,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
       onNotify(t('files_exists', { name: trimmed }));
       return;
     }
-    const lower = trimmed.toLowerCase();
-    const starter = lower.endsWith('.json')
-      ? '{\n  "app": "DroidPy"\n}\n'
-      : lower.endsWith('.py')
-      ? `# ${trimmed}\n\ndef main():\n    print("Hello from ${trimmed}")\n\nif __name__ == "__main__":\n    main()\n`
-      : '';
+    const starter = `# ${trimmed}\n\ndef main():\n    print("Hello from ${trimmed}")\n\nif __name__ == "__main__":\n    main()\n`;
     onCreateFile(trimmed, starter);
     setNewFileName('');
     setIsCreating(false);
