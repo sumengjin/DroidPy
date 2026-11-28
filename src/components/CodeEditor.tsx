@@ -508,6 +508,50 @@ function createEditorTheme(themeId: ThemeId, fontSize: number, transparentBg = f
   );
 }
 
+function localizeSearchPanel(root: HTMLElement): void {
+  const panel = root.querySelector<HTMLElement>('.cm-search');
+  if (!panel) return;
+
+  const translations: Record<string, string> = {
+    find: '尋找',
+    replace: '取代',
+    next: '下一個',
+    previous: '上一個',
+    'replace all': '全部取代',
+    replaceall: '全部取代',
+    select: '選取',
+    'select all': '全部選取',
+    close: '關閉',
+    search: '搜尋',
+  };
+  const translate = (value: string) => translations[value.trim().toLowerCase()] ?? value;
+
+  panel.querySelectorAll<HTMLInputElement>('input').forEach((input) => {
+    if (input.placeholder) input.placeholder = translate(input.placeholder);
+    if (input.getAttribute('aria-label')) {
+      input.setAttribute('aria-label', translate(input.getAttribute('aria-label') || ''));
+    }
+    if (input.title) input.title = translate(input.title);
+  });
+
+  panel.querySelectorAll<HTMLElement>('button, label, [aria-label], [title]').forEach((element) => {
+    const label = element.getAttribute('aria-label');
+    const title = element.getAttribute('title');
+    if (label) element.setAttribute('aria-label', translate(label));
+    if (title) element.setAttribute('title', translate(title));
+    const text = element.textContent?.trim() ?? '';
+    if (text && text.length < 24) {
+      const localized = translate(text);
+      if (localized !== text) element.textContent = localized;
+    }
+    if (text === '×' || /^(close|關閉)$/i.test(label || title || '')) {
+      element.classList.add('dp-search-close');
+      element.setAttribute('aria-label', '關閉搜尋／取代');
+      element.setAttribute('title', '關閉搜尋／取代');
+    }
+  });
+}
+
 function getLanguageMode(filename?: string): 'python' | 'json' | 'plain' {
   const lower = (filename ?? 'main.py').toLowerCase();
   if (lower.endsWith('.json')) return 'json';
@@ -655,7 +699,14 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
 
       viewRef.current = view;
 
+      // CodeMirror's built-in search panel is kept for its proven find/replace
+      // behavior; localize its generated controls as soon as the panel is mounted.
+      const searchPanelObserver = new MutationObserver(() => localizeSearchPanel(view.dom));
+      searchPanelObserver.observe(view.dom, { childList: true, subtree: true });
+      localizeSearchPanel(view.dom);
+
       return () => {
+        searchPanelObserver.disconnect();
         view.destroy();
         viewRef.current = null;
       };
