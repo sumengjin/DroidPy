@@ -167,7 +167,7 @@ assert.match(appSource, /if \(ov\.scriptExamplesVisible\)[\s\S]*?setScriptExampl
 assert.doesNotMatch(fileExplorerSource, /SNIPPET_TEMPLATES|templatesVisible|openTemplatesRequest/, 'the file manager must not own or render script examples');
 assert.doesNotMatch(appSource, /WorkspaceFileTabs/, 'the editor must not render the old filename tab strip or plus button');
 assert.equal((appSource.match(/t\('editor_current_file'/g) || []).length, 2, 'phone and tablet editor panes must display the active script name in their own header');
-assert.match(appSource, /upgradeLegacyDefaultFiles[\s\S]*?from 工具函式 import format_device_report/, 'existing main.py files must be migrated to the renamed Chinese helper module');
+assert.match(appSource, /inlineMainHelper[\s\S]*?format_device_report[\s\S]*?starter\.name/, 'existing main.py files must be migrated to a self-contained Chinese starter script');
 const tabletEditorTools = appSource.slice(appSource.indexOf('/* Tablet Primary Editor Pane */'), appSource.indexOf('/* Tablet Secondary Output / Files / Browser Workspace */'));
 assert.match(tabletEditorTools, /<BookOpen className="w-4 h-4" \/>/, 'tablet editor must expose the same direct script examples entry');
 const mobileNavStart = appSource.indexOf('<WorkspaceNavigation');
