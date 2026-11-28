@@ -3174,7 +3174,7 @@ export default function App() {
         )}
       </div>
 
-      {/* Tablet workspace header: file navigation, split layout and shared execution controls. */}
+      {/* Tablet workspace header: workspace navigation, split layout and shared execution controls. */}
       {deviceClass === 'tablet' && isLandscape && (
         <WorkspaceHeader
           variant="tablet"
