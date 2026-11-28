@@ -433,6 +433,7 @@ assert.ok(androidBuilder.includes('Requesting shared-storage permission on first
 assert.ok(!androidBuilder.includes('private val executor = Executors.newCachedThreadPool()'));
 
 // The Settings workspace opens its main tools directly; nested folder landing pages are retired.
+const toolsHubSource = await readFile('src/components/ToolsAndPackages.tsx', 'utf8');
 const settingsWorkspaceSource = await readFile('src/components/SettingsWorkspace.tsx', 'utf8');
 assert.ok(settingsWorkspaceSource.includes('onOpenSdcardFile={(filename, content, filePath) => onSaveWorkspaceFile(filename, content, true, filePath)}'), 'the independent Settings file manager must preserve the source path when importing files');
 assert.ok(settingsWorkspaceSource.includes('onSaveWorkspaceFile(filename, content, true, filePath)'), 'all Settings file-manager import callbacks must forward their original path');
