@@ -135,6 +135,19 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
   }, []);
 
   useEffect(() => {
+    if (mode !== 'cache') return;
+    let cancelled = false;
+    void getAppStorageUsage(termuxConfig)
+      .then((usage) => {
+        if (!cancelled && usage) setAppUsage(usage);
+      })
+      .catch((err) => {
+        if (!cancelled) setErrorMsg(err instanceof Error ? err.message : String(err));
+      });
+    return () => { cancelled = true; };
+  }, [mode, termuxConfig]);
+
+  useEffect(() => {
     const onResume = () => {
       if ((mode === 'all' || mode === 'sdcard') && document.visibilityState === 'visible') {
         void loadDirectory(currentPath);
