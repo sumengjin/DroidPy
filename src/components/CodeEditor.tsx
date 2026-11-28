@@ -513,6 +513,8 @@ function localizeSearchPanel(root: HTMLElement): void {
   if (!panel) return;
 
   const translations: Record<string, string> = {
+    all: '全部',
+    'all:': '全部：',
     find: '尋找',
     'find:': '尋找：',
     replace: '取代',
@@ -567,10 +569,10 @@ function localizeSearchPanel(root: HTMLElement): void {
     if (label) element.setAttribute('aria-label', translate(label));
     if (title) element.setAttribute('title', translate(title));
     const text = element.textContent?.trim() ?? '';
+    // The dialog is closed from the editor toolbar (tap Search again),
+    // Escape, Android Back, or tapping outside. Remove CodeMirror's tiny X.
     if (text === '×' || /^(close|關閉)$/i.test(label || title || '')) {
-      element.classList.add('dp-search-close');
-      element.setAttribute('aria-label', '關閉搜尋／取代');
-      element.setAttribute('title', '關閉搜尋／取代');
+      element.remove();
     }
   });
 }
@@ -897,9 +899,14 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
         viewRef.current?.focus();
       },
       openSearch: () => {
-        if (viewRef.current) {
-          openSearchPanel(viewRef.current);
-        }
+        const view = viewRef.current;
+        if (!view) return;
+        // Toggle the live CodeMirror panel instead of always opening it.
+        // The panel may have been moved into the editor-owned overlay, so
+        // query from the editor container rather than view.dom.
+        const isOpen = Boolean(containerRef.current?.querySelector('.cm-search'));
+        if (isOpen) closeSearchPanel(view);
+        else openSearchPanel(view);
       },
       formatCode: () => {
         const view = viewRef.current;
