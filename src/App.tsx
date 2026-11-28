@@ -3491,35 +3491,27 @@ export default function App() {
                   : 'hidden'
               }
             >
-                {/* Mobile file strip and compact editor actions */}
-                <div className="shrink-0 bg-transparent">
-                  <div className="flex items-center gap-1.5 px-2 pt-2 pb-1">
-                    <WorkspaceFileTabs files={files} activeFileId={activeFile.id} onSelect={setActiveFileId} onCreate={() => setMobileNewFileOpen((open) => !open)} createLabel={t('files_new_btn')} filesLabel={t('files_title')} variant="phone" />
-                  </div>
-                  <div className="flex items-center justify-between gap-2 px-2 pb-1.5">
-                    <span className="min-w-0 truncate px-1 font-mono text-[10px] text-[var(--ide-text-muted)]">
-                      {activeFile.name}
-                    </span>
-                    <div className="flex items-center gap-0.5 shrink-0">
+                {/* Keep editor actions on the first workspace row, aligned with the terminal header. */}
+                <div className="shrink-0 w-full bg-transparent">
+                  <div className="h-11 w-full flex items-center justify-center gap-2 px-2">
+                    <div className="flex items-center justify-center gap-1" aria-label="Editor tools">
                       <button
                         type="button"
                         onClick={handleFormatActiveFile}
                         aria-label={t('toolbar_format_title')}
                         title={t('toolbar_format_title')}
-                        className="min-h-[36px] min-w-[52px] px-1 flex flex-col items-center justify-center gap-0.5 rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-accent-text)]"
+                        className="min-h-[40px] min-w-[40px] inline-flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-accent-text)]"
                       >
                         <AlignLeft className="w-4 h-4" />
-                        <span className="text-[9px] leading-none whitespace-nowrap">{t('toolbar_format_title')}</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => editorRef.current?.openSearch()}
                         aria-label={t('toolbar_search_title')}
                         title={t('toolbar_search_title')}
-                        className="min-h-[36px] min-w-[52px] px-1 flex flex-col items-center justify-center gap-0.5 rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-accent-text)]"
+                        className="min-h-[40px] min-w-[40px] inline-flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-accent-text)]"
                       >
                         <Search className="w-4 h-4" />
-                        <span className="text-[9px] leading-none whitespace-nowrap">{t('toolbar_search_title')}</span>
                       </button>
                       <button
                         type="button"
@@ -3527,16 +3519,21 @@ export default function App() {
                         aria-label={t('toolbar_symbol_bar_title')}
                         title={t('toolbar_symbol_bar_title')}
                         aria-pressed={settings.showSymbolBar}
-                        className={`min-h-[36px] min-w-[52px] px-1 flex flex-col items-center justify-center gap-0.5 rounded-lg ${
+                        className={`min-h-[40px] min-w-[40px] inline-flex items-center justify-center rounded-lg ${
                           settings.showSymbolBar
                             ? 'text-[var(--ide-accent-text)]'
                             : 'text-[var(--ide-text-muted)]'
                         }`}
                       >
                         <Keyboard className="w-4 h-4" />
-                        <span className="text-[9px] leading-none whitespace-nowrap">{t('toolbar_symbol_bar_title')}</span>
                       </button>
                     </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-2 pt-1 pb-1">
+                    <WorkspaceFileTabs files={files} activeFileId={activeFile.id} onSelect={setActiveFileId} onCreate={() => setMobileNewFileOpen((open) => !open)} createLabel={t('files_new_btn')} filesLabel={t('files_title')} variant="phone" />
+                  </div>
+                  <div className="px-3 pb-1 text-[10px] font-mono text-[var(--ide-text-muted)] truncate">
+                    {activeFile.name}
                   </div>
                 </div>
 
