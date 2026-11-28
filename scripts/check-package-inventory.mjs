@@ -154,6 +154,10 @@ assert.match(pyBulkUpgradeHandler, /pyodidePackageOperationLockRef\.current = tr
 assert.match(appSource, /if \(pyodideStatus === 'ready'\) \{\s*pyodidePackageOperationLockRef\.current = true/,'combined package upgrades must lock the Pyodide phase');
 const pyCombinedUpgrade = appSource.slice(appSource.indexOf('const handleUpgradeAllPackages'), appSource.indexOf('const handleCheckAppUpdates'));
 assert.match(pyCombinedUpgrade, /pyodidePackageOperationLockRef\.current = true[\s\S]*?pyodidePackageOperationLockRef\.current = false/, 'combined package upgrades must release the Pyodide lock before continuing');
+assert.match(themeCssSource, /\.cm-panels-top,[\s\S]*?\.cm-panels-bottom/, 'search dialog positioning must support both CodeMirror panel hosts');
+assert.match(themeCssSource, /\.dp-code-editor-container \.cm-editor > \.cm-panels-top,[\s\S]*?\.dp-code-editor-container \.cm-editor > \.cm-panels-bottom/, 'search dialog must center in the full editor pane whether CodeMirror mounts at top or bottom');
+assert.match(appSource, /<BookOpen className="w-4 h-4" \/>/, 'phone editor must expose a direct script examples entry');
+assert.match(appSource, /setOpenScriptExamples\(true\);\s*setMobileTab\('files'\)/, 'script examples shortcut must navigate to Files and auto-open templates');
 const mobileNavStart = appSource.indexOf('<WorkspaceNavigation');
 const mobileNavEnd = appSource.indexOf('/>', mobileNavStart);
 assert.ok(mobileNavStart >= 0 && mobileNavEnd > mobileNavStart, 'phone workspace navigation must exist');
