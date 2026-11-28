@@ -195,6 +195,11 @@ assert.match(workspaceHeaderSource, /labels\.console[\s\S]*?labels\.files[\s\S]*
 assert.match(starterExamplesSource, /name: '主程式\.py'[\s\S]*?name: '工具函式\.py'[\s\S]*?name: '感測器波形圖\.py'[\s\S]*?name: '互動式輸入示範\.py'/, 'the four built-in starter scripts must be moved into the examples catalog with Chinese filenames');
 assert.match(starterExamplesSource, /export const DEFAULT_FILES[\s\S]*?name: '未命名\.py'/, 'new workspaces must start with a blank script instead of preloading the four examples');
 assert.match(examplesPanelSource, /STARTER_EXAMPLES[\s\S]*?onSelectFile\(existing\.id\)/, 'existing starter scripts must be selectable from the examples catalog without losing edits');
+assert.match(appSource, /STORAGE_EDITOR_HISTORY_KEY = 'droidpy_editor_history_v1'/, 'editor file history must use its own persisted index');
+assert.match(appSource, /editorHistoryIds\?: string\[\]/, 'native snapshots must preserve editor file history');
+assert.match(appSource, /setEditorHistoryIds\(\(previous\) => \[\.\.\.previous\.filter\(\(id\) => id !== activeFileId\), activeFileId\]\)/, 'opening a file must move it to the front of recent-file history');
+assert.match(appSource, /const projectFiles = useMemo\([\s\S]*?editorHistoryIds[\s\S]*?return \[\.\.\.editorHistoryIds\]\.reverse\(\)/, 'Project Files must show only active and previously opened editor files, newest first');
+assert.equal((appSource.match(/files=\{projectFiles\}/g) || []).length, 2, 'phone and tablet File Explorer must use the editor history projection, not every workspace artifact');
 assert.match(appSource, /pointer-events-none absolute inset-0 z-\[1\]/, 'one continuous paper layer must cover the entire viewport behind phone and tablet chrome');
 assert.match(appSource, /const workspaceSurfaceAlpha =\s*1 - Math\.min\(100, Math\.max\(0, settings\.workspaceTransparency \?\? 35\)\) \/ 100/, 'workspace transparency must map the 0–100 slider to a clamped 1–0 alpha');
 assert.match(appSource, /One continuous translucent paper surface covers the full viewport[\s\S]*?backgroundColor: is3dBgActive[\s\S]*?hexToRgba\(activeThemeMeta\.swatchBg, workspaceSurfaceAlpha\)/, 'one full-screen paper surface must own the live transparency alpha');
