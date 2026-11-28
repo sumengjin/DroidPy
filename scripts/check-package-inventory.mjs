@@ -157,7 +157,12 @@ assert.match(pyCombinedUpgrade, /pyodidePackageOperationLockRef\.current = true[
 assert.match(themeCssSource, /\.cm-panels-top,[\s\S]*?\.cm-panels-bottom/, 'search dialog positioning must support both CodeMirror panel hosts');
 assert.match(themeCssSource, /\.dp-code-editor-container \.cm-editor > \.cm-panels-top,[\s\S]*?\.dp-code-editor-container \.cm-editor > \.cm-panels-bottom/, 'search dialog must center in the full editor pane whether CodeMirror mounts at top or bottom');
 assert.match(appSource, /<BookOpen className="w-4 h-4" \/>/, 'phone editor must expose a direct script examples entry');
-assert.match(appSource, /setOpenScriptExamples\(true\);\s*setMobileTab\('files'\)/, 'script examples shortcut must navigate to Files and auto-open templates');
+assert.match(appSource, /setOpenScriptExamples\(\(request\) => request \+ 1\)/, 'script examples shortcut must send a fresh open request');
+assert.match(appSource, /setTabletPaneTab\('files'\)/, 'tablet editor shortcut must navigate to the Files pane');
+assert.match(appSource, /setMobileTab\('files'\)/, 'phone editor shortcut must navigate to the Files destination');
+assert.match(appSource, /openTemplatesRequest=\{openScriptExamples\}/, 'phone and tablet file explorers must receive the examples request');
+const tabletEditorTools = appSource.slice(appSource.indexOf('/* Tablet Primary Editor Pane */'), appSource.indexOf('/* Tablet Secondary Output / Files / Browser Workspace */'));
+assert.match(tabletEditorTools, /<BookOpen className="w-4 h-4" \/>/, 'tablet editor must expose the same direct script examples entry');
 const mobileNavStart = appSource.indexOf('<WorkspaceNavigation');
 const mobileNavEnd = appSource.indexOf('/>', mobileNavStart);
 assert.ok(mobileNavStart >= 0 && mobileNavEnd > mobileNavStart, 'phone workspace navigation must exist');
