@@ -281,8 +281,6 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
     }
   };
 
-  const visibleEntries = entries;
-
   const rootDisplay = status?.rootPath || window.DroidPyNative?.getInternalStoragePath?.() || '/storage/emulated/0';
   const fullDisplayPath = currentPath ? `${rootDisplay}/${currentPath}` : rootDisplay;
 
@@ -460,12 +458,12 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
             <Loader2 className="w-4 h-4 animate-spin" />
             <span>Loading...</span>
           </div>
-        ) : visibleEntries.length === 0 ? (
+        ) : entries.length === 0 ? (
           <div className="p-5 text-center text-xs text-[var(--ide-text-muted)]">
             {t('sd_empty_dir')}
           </div>
         ) : (
-          visibleEntries.map((entry) => (
+          entries.map((entry) => (
             <div
               key={entry.relPath}
               className="flex items-center justify-between gap-2 px-3 py-2 hover:bg-[var(--ide-surface)] transition-colors"
