@@ -221,7 +221,7 @@ function upgradeLegacyDefaultFiles(list: PythonFile[]): PythonFile[] {
 
     let content = file.content;
     if (starter.id === 'main-py') {
-      content = content.replace(/from\s+(?:utils|工具函式)\s+import\s+format_device_report\s*/g, inlineMainHelper);
+      content = content.replace(/from\s+(?:utils|工具函式)\s+import\s+format_device_report\s*/gi, inlineMainHelper);
       content = content.replace(/main\.py 執行完成/g, '主程式執行完成');
     }
     if (file.name !== starter.name || content !== file.content) {
