@@ -88,16 +88,26 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
       setLoading(true);
       setErrorMsg(null);
       try {
-        const normalizedPath = relPath.replace(/\\/g, '/').split('/').filter((part) => part && part !== '.').join('/');
+        const pathParts = relPath.replace(/\\/g, '/').split('/').filter((part) => part && part !== '.');
+        if (pathParts.includes('..')) throw new Error('不允許使用上一層路徑跳出主資料夾');
+        const normalizedPath = pathParts.join('/');
         const safePath = normalizedPath || basePath;
         if (safePath !== basePath && !safePath.startsWith(`${basePath}/`)) {
           throw new Error('檔案管理只能在 DroidPy 主資料夾內瀏覽');
         }
-        const [st, list, usage] = await Promise.all([
+        const [st, usage] = await Promise.all([
           getSdcardStatus(termuxConfig),
-          listSdcardDirectory(termuxConfig, safePath),
           getAppStorageUsage(termuxConfig),
         ]);
+        let list;
+        try {
+          list = await listSdcardDirectory(termuxConfig, safePath);
+        } catch (firstError) {
+          if (safePath !== basePath) throw firstError;
+          // First launch: create the fixed DroidPy home folder if it does not exist yet.
+          try { await createSdcardFolder(termuxConfig, basePath); } catch { /* It may already exist. */ }
+          list = await listSdcardDirectory(termuxConfig, safePath);
+        }
         const resolvedPath = (list.currentPath || safePath).replace(/\\/g, '/').replace(/^\\/+|\\/+$/g, '');
         if (resolvedPath !== basePath && !resolvedPath.startsWith(`${basePath}/`)) {
           throw new Error('儲存服務回傳了主資料夾以外的路徑，已阻止瀏覽');
@@ -154,7 +164,13 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
     void loadDirectory(parent);
   };
 
+  const isInsideBasePath = (path: string) => path === basePath || path.startsWith(`${basePath}/`);
+
   const handleOpenEntry = async (entry: SdcardEntry) => {
+    if (!isInsideBasePath(entry.relPath)) {
+      onNotify('已阻止存取 DroidPy 主資料夾以外的路徑');
+      return;
+    }
     if (entry.isDir) {
       setConfirmDeletePath(null);
       await loadDirectory(entry.relPath);
@@ -252,6 +268,10 @@ if __name__ == "__main__":
   };
 
   const handleDeleteEntry = async (entry: SdcardEntry) => {
+    if (!isInsideBasePath(entry.relPath)) {
+      onNotify('已阻止刪除 DroidPy 主資料夾以外的路徑');
+      return;
+    }
     setBusyAction(`del:${entry.relPath}`);
     try {
       await deleteSdcardPath(termuxConfig, entry.relPath);
@@ -440,7 +460,7 @@ if __name__ == "__main__":
           <button
             type="button"
             onClick={handleGoUp}
-            disabled={!currentPath || loading}
+            disabled={!currentPath || currentPath === basePath || loading}
             className="min-h-[34px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium inline-flex items-center gap-1 disabled:opacity-40 hover:border-[var(--ide-accent)] shrink-0"
           >
             <ArrowUp className="w-3.5 h-3.5" />
