@@ -214,7 +214,7 @@ function upgradeLegacyDefaultFiles(list: PythonFile[]): PythonFile[] {
     '    return "\\n".join(lines)',
     '',
     '',
-  ].join('\\n');
+  ].join('\n');
   let changed = false;
   const next = list.map((file) => {
     const starterId = starterById.has(file.id) ? file.id : starterByLegacyName.get(file.name);
