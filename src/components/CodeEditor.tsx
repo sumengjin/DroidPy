@@ -538,12 +538,14 @@ function localizeSearchPanel(root: HTMLElement): void {
   const translate = (value: string) =>
     translations[value.trim().toLowerCase().replace(/\s+/g, ' ')] ?? value;
 
-  panel.querySelectorAll<HTMLInputElement>('input').forEach((input) => {
-    if (input.placeholder) input.placeholder = translate(input.placeholder);
-    if (input.getAttribute('aria-label')) {
-      input.setAttribute('aria-label', translate(input.getAttribute('aria-label') || ''));
+  panel.querySelectorAll<HTMLElement>('[aria-label], [title], input').forEach((element) => {
+    if (element instanceof HTMLInputElement && element.placeholder) {
+      element.placeholder = translate(element.placeholder);
     }
-    if (input.title) input.title = translate(input.title);
+    const ariaLabel = element.getAttribute('aria-label');
+    if (ariaLabel) element.setAttribute('aria-label', translate(ariaLabel));
+    const title = element.getAttribute('title');
+    if (title) element.setAttribute('title', translate(title));
   });
 
   // Translate visible text nodes rather than assigning element.textContent:
@@ -646,6 +648,7 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
     const onCursorRef = useRef(onCursorChange);
     const filenameRef = useRef(filename);
     const isExternalSyncRef = useRef(false);
+    const closeSearchRef = useRef<(() => boolean) | null>(null);
 
     const themeCompartment = useRef(new Compartment()).current;
     const highlightCompartment = useRef(new Compartment()).current;
@@ -757,6 +760,7 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
         closeSearchDialog();
         return true;
       };
+      closeSearchRef.current = closeSearchFromNativeBack;
       window.__droidpyCloseSearch = closeSearchFromNativeBack;
       const handleSearchBack = () => {
         searchHistoryPushed = false;
@@ -775,8 +779,12 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
         }
       };
       const handleSearchOutsideClick = (event: PointerEvent) => {
+        const target = event.target;
+        // The toolbar button is outside the dialog by design. Do not dismiss
+        // on pointerdown there: its subsequent click must perform the toggle.
+        if (target instanceof Element && target.closest('[data-dp-search-trigger]')) return;
         const panel = getSearchPanel();
-        if (panel && event.target instanceof Node && !panel.contains(event.target)) {
+        if (panel && target instanceof Node && !panel.contains(target)) {
           closeSearchDialog();
           if (searchHistoryPushed) {
             searchHistoryPushed = false;
@@ -809,6 +817,9 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
         searchOverlay.remove();
         if (window.__droidpyCloseSearch === closeSearchFromNativeBack) {
           delete window.__droidpyCloseSearch;
+        }
+        if (closeSearchRef.current === closeSearchFromNativeBack) {
+          closeSearchRef.current = null;
         }
         window.removeEventListener('popstate', handleSearchBack);
         document.removeEventListener('keydown', handleSearchKeydown, true);
@@ -920,12 +931,14 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
       openSearch: () => {
         const view = viewRef.current;
         if (!view) return;
-        // Toggle the live CodeMirror panel instead of always opening it.
-        // The panel may have been moved into the editor-owned overlay, so
-        // query from the editor container rather than view.dom.
+        // Use the same close path as Android Back and outside dismissal.
+        // It restores the reparented panel to view.dom before CodeMirror closes it.
         const isOpen = Boolean(containerRef.current?.querySelector('.cm-search'));
-        if (isOpen) closeSearchPanel(view);
-        else openSearchPanel(view);
+        if (isOpen) {
+          closeSearchRef.current?.();
+        } else {
+          openSearchPanel(view);
+        }
       },
       formatCode: () => {
         const view = viewRef.current;
