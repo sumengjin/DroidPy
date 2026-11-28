@@ -95,6 +95,11 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
         ]);
         setStatus(st);
         if (usage) setAppUsage(usage);
+        if (safePath === basePath && st.granted) {
+          // The native list endpoint returns an empty array for a missing directory,
+          // so create the main folder before the first listing rather than relying on 404.
+          await createSdcardFolder(termuxConfig, basePath);
+        }
         let list;
         try {
           list = await listSdcardDirectory(termuxConfig, safePath);
