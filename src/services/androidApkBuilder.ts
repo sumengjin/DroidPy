@@ -3171,8 +3171,10 @@ def clipboard_set(text):
     // Canonical-path validation also blocks '..' traversal and symlink escapes.
     private fun resolveSdcardTarget(relPath: String): File? {
         val storageRoot = Environment.getExternalStorageDirectory()
+        val storageCanonical = storageRoot.canonicalPath
         val homeRoot = File(storageRoot, "DroidPy")
         val homeCanonical = homeRoot.canonicalPath
+        if (!homeCanonical.startsWith(storageCanonical + File.separator)) return null
         val cleaned = relPath.trim().trimStart('/')
         val candidate = when {
             cleaned.isEmpty() || cleaned == "DroidPy" -> homeRoot
@@ -4332,11 +4334,14 @@ def clipboard_set(text):
                         writeJson(out, 403, JSONObject().put("error", "尚未取得手機內部儲存空間存取權限"))
                     } else {
                         val rootCanonical = Environment.getExternalStorageDirectory().canonicalPath
+                        val homeCanonical = File(Environment.getExternalStorageDirectory(), "DroidPy").canonicalPath
                         val arr = JSONArray()
                         val children = dir.listFiles()?.sortedWith(compareBy<File>({ !it.isDirectory }, { it.name.lowercase() })) ?: emptyList()
                         for (child in children) {
                             if (child.name.startsWith(".")) continue
-                            val childRel = child.canonicalPath.removePrefix(rootCanonical).trimStart('/')
+                            val childCanonical = child.canonicalPath
+                            if (childCanonical != homeCanonical && !childCanonical.startsWith(homeCanonical + File.separator)) continue
+                            val childRel = childCanonical.removePrefix(rootCanonical).trimStart('/')
                             arr.put(
                                 JSONObject()
                                     .put("name", child.name)
