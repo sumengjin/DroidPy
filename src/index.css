@@ -629,3 +629,105 @@ button.dp-execution-control::after {
   border: 0 !important;
   box-shadow: none !important;
 }
+
+
+/* Search / replace panel: readable theme-aware glass and a reliably tappable close control. */
+.cm-editor .cm-panels,
+.cm-editor .cm-panels-top,
+.cm-editor .cm-search {
+  color: var(--ide-text) !important;
+}
+
+.cm-editor .cm-panels {
+  background: color-mix(in srgb, var(--ide-surface) 86%, transparent) !important;
+  border-color: color-mix(in srgb, var(--ide-border) 78%, transparent) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(1.18);
+  backdrop-filter: blur(18px) saturate(1.18);
+}
+
+.cm-editor .cm-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: transparent;
+}
+
+.cm-editor .cm-search input,
+.cm-editor .cm-search .cm-textfield {
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 11px !important;
+  color: var(--ide-text) !important;
+  background: color-mix(in srgb, var(--ide-surface) 92%, transparent) !important;
+  border: 1px solid var(--ide-border) !important;
+  border-radius: 10px !important;
+  outline-color: var(--ide-accent) !important;
+}
+
+.cm-editor .cm-search input::placeholder {
+  color: var(--ide-text-muted);
+  opacity: 0.9;
+}
+
+.cm-editor .cm-search button,
+.cm-editor .cm-search .cm-button {
+  min-height: 40px;
+  padding: 7px 12px !important;
+  color: var(--ide-text) !important;
+  background: color-mix(in srgb, var(--ide-surface-alt) 88%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--ide-border) 86%, transparent) !important;
+  border-radius: 10px !important;
+  font: inherit;
+  line-height: 1.2;
+}
+
+.cm-editor .cm-search button:focus-visible,
+.cm-editor .cm-search input:focus-visible {
+  outline: 2px solid var(--ide-accent) !important;
+  outline-offset: 2px;
+}
+
+.cm-editor .cm-search .dp-search-close {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 44px;
+  width: 44px !important;
+  min-width: 44px !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  margin-inline-start: 4px;
+  padding: 0 !important;
+  color: var(--ide-accent-text) !important;
+  background: color-mix(in srgb, var(--ide-accent) 12%, var(--ide-surface)) !important;
+  border: 1px solid color-mix(in srgb, var(--ide-accent) 30%, var(--ide-border)) !important;
+  border-radius: 14px !important;
+  font-size: 24px !important;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.cm-editor .cm-search .dp-search-close:active {
+  transform: scale(0.96);
+  background: color-mix(in srgb, var(--ide-accent) 20%, var(--ide-surface)) !important;
+}
+
+@media (max-width: 640px) {
+  .cm-editor .cm-search {
+    gap: 7px;
+    padding: 9px;
+  }
+
+  .cm-editor .cm-search input {
+    flex: 1 1 42%;
+  }
+
+  .cm-editor .cm-search .dp-search-close {
+    flex-basis: 44px;
+    margin-inline-start: auto;
+  }
+}
