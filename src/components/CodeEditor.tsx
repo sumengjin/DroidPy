@@ -752,6 +752,12 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
         }
         closeSearchPanel(view);
       };
+      const closeSearchFromNativeBack = () => {
+        if (!getSearchPanel()) return false;
+        closeSearchDialog();
+        return true;
+      };
+      window.__droidpyCloseSearch = closeSearchFromNativeBack;
       const handleSearchBack = () => {
         searchHistoryPushed = false;
         closeSearchDialog();
@@ -801,6 +807,9 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
       return () => {
         searchPanelObserver.disconnect();
         searchOverlay.remove();
+        if (window.__droidpyCloseSearch === closeSearchFromNativeBack) {
+          delete window.__droidpyCloseSearch;
+        }
         window.removeEventListener('popstate', handleSearchBack);
         document.removeEventListener('keydown', handleSearchKeydown, true);
         document.removeEventListener('pointerdown', handleSearchOutsideClick, true);
