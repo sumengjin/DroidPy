@@ -168,6 +168,7 @@ assert.doesNotMatch(fileExplorerSource, /SNIPPET_TEMPLATES|templatesVisible|open
 assert.doesNotMatch(appSource, /WorkspaceFileTabs/, 'the editor must not render the old filename tab strip or plus button');
 assert.equal((appSource.match(/t\('editor_current_file'/g) || []).length, 2, 'phone and tablet editor panes must display the active script name in their own header');
 assert.match(appSource, /inlineMainHelper[\s\S]*?format_device_report[\s\S]*?starter\.name/, 'existing main.py files must be migrated to a self-contained Chinese starter script');
+assert.doesNotMatch(appSource, /content = starter\.content/, 'migrating legacy starter files must preserve user-edited script contents');
 const tabletEditorTools = appSource.slice(appSource.indexOf('/* Tablet Primary Editor Pane */'), appSource.indexOf('/* Tablet Secondary Output / Files / Browser Workspace */'));
 assert.match(tabletEditorTools, /<BookOpen className="w-4 h-4" \/>/, 'tablet editor must expose the same direct script examples entry');
 const mobileNavStart = appSource.indexOf('<WorkspaceNavigation');
