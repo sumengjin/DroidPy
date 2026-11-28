@@ -99,11 +99,13 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
           getSdcardStatus(termuxConfig),
           getAppStorageUsage(termuxConfig),
         ]);
+        setStatus(st);
+        if (usage) setAppUsage(usage);
         let list;
         try {
           list = await listSdcardDirectory(termuxConfig, safePath);
         } catch (firstError) {
-          if (safePath !== basePath) throw firstError;
+          if (safePath !== basePath || !st.granted) throw firstError;
           // First launch: create the fixed DroidPy home folder if it does not exist yet.
           try { await createSdcardFolder(termuxConfig, basePath); } catch { /* It may already exist. */ }
           list = await listSdcardDirectory(termuxConfig, safePath);
@@ -112,8 +114,6 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
         if (resolvedPath !== basePath && !resolvedPath.startsWith(`${basePath}/`)) {
           throw new Error('儲存服務回傳了主資料夾以外的路徑，已阻止瀏覽');
         }
-        setStatus(st);
-        if (usage) setAppUsage(usage);
         setCurrentPath(resolvedPath);
         onPathChange?.(resolvedPath);
         setEntries(Array.isArray(list.entries) ? list.entries : []);
