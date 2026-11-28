@@ -83,11 +83,11 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
       setErrorMsg(null);
       try {
         const pathParts = relPath.replace(/\\/g, '/').split('/').filter((part) => part && part !== '.');
-        if (pathParts.includes('..')) throw new Error('不允許使用上一層路徑跳出主資料夾');
+        if (pathParts.includes('..')) throw new Error(t('sd_path_blocked'));
         const normalizedPath = pathParts.join('/');
         const safePath = normalizedPath || basePath;
         if (safePath !== basePath && !safePath.startsWith(`${basePath}/`)) {
-          throw new Error('檔案管理只能在 DroidPy 主資料夾內瀏覽');
+          throw new Error(t('sd_path_blocked'));
         }
         const [st, usage] = await Promise.all([
           getSdcardStatus(termuxConfig),
@@ -106,7 +106,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
         }
         const resolvedPath = (list.currentPath || safePath).replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
         if (resolvedPath !== basePath && !resolvedPath.startsWith(`${basePath}/`)) {
-          throw new Error('儲存服務回傳了主資料夾以外的路徑，已阻止瀏覽');
+          throw new Error(t('sd_path_blocked'));
         }
         setCurrentPath(resolvedPath);
         onPathChange?.(resolvedPath);
@@ -117,7 +117,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
         setLoading(false);
       }
     },
-    [termuxConfig, basePath, onPathChange]
+    [termuxConfig, basePath, onPathChange, t]
   );
 
   useEffect(() => {
@@ -178,7 +178,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
 
   const handleOpenEntry = async (entry: SdcardEntry) => {
     if (!isInsideBasePath(entry.relPath)) {
-      onNotify('已阻止存取 DroidPy 主資料夾以外的路徑');
+      onNotify(t('sd_path_blocked'));
       return;
     }
     if (entry.isDir) {
@@ -248,7 +248,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
 
   const handleDeleteEntry = async (entry: SdcardEntry) => {
     if (!isInsideBasePath(entry.relPath)) {
-      onNotify('已阻止刪除 DroidPy 主資料夾以外的路徑');
+      onNotify(t('sd_path_blocked'));
       return;
     }
     setBusyAction(`del:${entry.relPath}`);
