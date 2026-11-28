@@ -772,10 +772,6 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
           event.preventDefault();
           event.stopPropagation();
           closeSearchDialog();
-          if (searchHistoryPushed) {
-            searchHistoryPushed = false;
-            window.history.back();
-          }
         }
       };
       const handleSearchOutsideClick = (event: PointerEvent) => {
@@ -786,10 +782,6 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
         const panel = getSearchPanel();
         if (panel && target instanceof Node && !panel.contains(target)) {
           closeSearchDialog();
-          if (searchHistoryPushed) {
-            searchHistoryPushed = false;
-            window.history.back();
-          }
         }
       };
       const searchPanelObserver = new MutationObserver(() => {
@@ -802,8 +794,15 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
             searchHistoryPushed = true;
           }
         } else if (searchHistoryPushed) {
+          // A programmatic close must not enqueue a delayed popstate event:
+          // that stale event can arrive after a fast reopen and close the new
+          // dialog. Remove our marker from the current entry in place instead.
           searchHistoryPushed = false;
-          window.history.back();
+          const currentState = window.history.state || {};
+          if (currentState.dpSearchDialog) {
+            const { dpSearchDialog: _dpSearchDialog, ...restState } = currentState;
+            window.history.replaceState(restState, '');
+          }
         }
       });
       searchPanelObserver.observe(editorContainer, { childList: true, subtree: true });
