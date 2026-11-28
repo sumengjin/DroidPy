@@ -73,6 +73,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   showHeaderTitle = true,
 }) => {
   const { t } = useI18n();
+  const isNativeApk = Boolean(window.DroidPyNative?.isNativeApp?.());
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const backupImportInputRef = useRef<HTMLInputElement | null>(null);
   const [isCreating, setIsCreating] = useState(false);
