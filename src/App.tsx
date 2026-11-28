@@ -3352,49 +3352,10 @@ export default function App() {
                   variant="tablet"
                 />
               </div>
-              <div className="flex items-center justify-between gap-2 px-2 h-8 bg-transparent shrink-0">
-                <div className="flex items-center gap-2 text-xs text-[var(--ide-text-muted)] font-mono truncate">
-                  <span className="tabular-nums">
-                    {t('status_cursor', { line: cursorPos.line, col: cursorPos.col })}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    type="button"
-                    onClick={handleFormatActiveFile}
-                    aria-label={t('toolbar_format_title')}
-                    title={t('toolbar_format_title')}
-                    className="min-h-[34px] min-w-[52px] px-1 flex flex-col items-center justify-center gap-0.5 rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]"
-                  >
-                    <AlignLeft className="w-4 h-4" />
-                    <span className="text-[9px] leading-none whitespace-nowrap">{t('toolbar_format_title')}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => editorRef.current?.openSearch()}
-                    aria-label={t('toolbar_search_title')}
-                    title={t('toolbar_search_title')}
-                    className="min-h-[34px] min-w-[52px] px-1 flex flex-col items-center justify-center gap-0.5 rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]"
-                  >
-                    <Search className="w-4 h-4" />
-                    <span className="text-[9px] leading-none whitespace-nowrap">{t('toolbar_search_title')}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleUpdateSettings({ showSymbolBar: !settings.showSymbolBar })}
-                    aria-label={t('toolbar_symbol_bar_title')}
-                    title={t('toolbar_symbol_bar_title')}
-                    aria-pressed={settings.showSymbolBar}
-                    className={`min-h-[34px] min-w-[52px] px-1 flex flex-col items-center justify-center gap-0.5 rounded-lg ${
-                      settings.showSymbolBar
-                        ? 'text-[var(--ide-accent-text)]'
-                        : 'text-[var(--ide-text-muted)]'
-                    }`}
-                  >
-                    <Keyboard className="w-4 h-4" />
-                    <span className="text-[9px] leading-none whitespace-nowrap">{t('toolbar_symbol_bar_title')}</span>
-                  </button>
-                </div>
+              <div className="flex items-center gap-2 px-2 h-8 bg-transparent shrink-0">
+                <span className="tabular-nums text-xs text-[var(--ide-text-muted)] font-mono truncate">
+                  {t('status_cursor', { line: cursorPos.line, col: cursorPos.col })}
+                </span>
               </div>
 
               {mobileNewFileOpen && renderInlineNewFileBar()}
@@ -3433,6 +3394,42 @@ export default function App() {
                       status={termuxRunning ? 'running' : pyodideStatus}
                       engine={executionEngine}
                       onChangeEngine={setExecutionEngine}
+                      editorActions={
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleFormatActiveFile}
+                            aria-label={t('toolbar_format_title')}
+                            title={t('toolbar_format_title')}
+                            className="min-h-[32px] min-w-[32px] p-1 inline-flex items-center justify-center rounded-md text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]"
+                          >
+                            <AlignLeft className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => editorRef.current?.openSearch()}
+                            aria-label={t('toolbar_search_title')}
+                            title={t('toolbar_search_title')}
+                            className="min-h-[32px] min-w-[32px] p-1 inline-flex items-center justify-center rounded-md text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]"
+                          >
+                            <Search className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateSettings({ showSymbolBar: !settings.showSymbolBar })}
+                            aria-label={t('toolbar_symbol_bar_title')}
+                            title={t('toolbar_symbol_bar_title')}
+                            aria-pressed={settings.showSymbolBar}
+                            className={`min-h-[32px] min-w-[32px] p-1 inline-flex items-center justify-center rounded-md ${
+                              settings.showSymbolBar
+                                ? 'text-[var(--ide-accent-text)]'
+                                : 'text-[var(--ide-text-muted)]'
+                            }`}
+                          >
+                            <Keyboard className="w-4 h-4" />
+                          </button>
+                        </>
+                      }
                       termuxConnected={termuxConnectionState === 'connected'}
                       embeddedMissingPython={Boolean(termuxHealth?.embedded && termuxHealth.hasPython === false)}
                       runStartedAt={runStartedAt}
