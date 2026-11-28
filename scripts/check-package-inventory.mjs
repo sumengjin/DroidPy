@@ -26,6 +26,16 @@ const codeEditorSource = await readFile(new URL('../src/components/CodeEditor.ts
 const symbolBarSource = await readFile(new URL('../src/components/AndroidSymbolBar.tsx', import.meta.url), 'utf8');
 const pyodidePackagesSource = await readFile(new URL('../src/components/PyodidePackageWorkspace.tsx', import.meta.url), 'utf8');
 const termuxPackagesSource = await readFile(new URL('../src/components/TermuxPackageWorkspace.tsx', import.meta.url), 'utf8');
+const appLoggerSource = await readFile(new URL('../src/services/appLogger.ts', import.meta.url), 'utf8');
+const executionLogModalSource = await readFile(new URL('../src/components/AppExecutionLogModal.tsx', import.meta.url), 'utf8');
+
+// A fresh app session must discard persisted logs from the previous launch,
+// while the log viewer must reset its transient state after each dismissal.
+assert.match(appSource, /import \{ appLog, clearAppLogs \} from '\.\/services\/appLogger'/);
+assert.match(appSource, /startupBootLoggedInModule = true;[\s\S]*?clearAppLogs\(\);[\s\S]*?appLog\(/, 'previous-session app logs must be cleared before recording the new boot entry');
+assert.match(appLoggerSource, /export function clearAppLogs\(\): void/);
+assert.match(executionLogModalSource, /useEffect\(\(\) => \{[\s\S]*?setActiveTab\('execution'\);[\s\S]*?setSearchQuery\(''\);[\s\S]*?if \(!open\) setLogs\(\);[\s\S]*?\}, \[open\]\)/, 'the log viewer must reset its filters and stale entries on close');
+assert.match(executionLogModalSource, /let cancelled = false;[\s\S]*?if \(!cancelled\) setNativeLogs\(res\);[\s\S]*?return \(\) => \{[\s\S]*?cancelled = true;/, 'late native-log responses must not repopulate a dismissed log viewer');
 
 const catalogItems = catalogSource.split(/\n  \{\n    id: '/).slice(1);
 assert.ok(catalogItems.length >= 70, 'package catalog should retain its complete inventory');
