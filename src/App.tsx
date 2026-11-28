@@ -3167,7 +3167,6 @@ export default function App() {
         <WorkspaceHeader
           variant="tablet"
           activeFile={activeFile}
-          files={files}
           activeTab={tabletPaneTab === 'terminal' ? 'console' : tabletPaneTab}
           labels={{
             editor: t('mob_editor'),
@@ -3181,7 +3180,6 @@ export default function App() {
             splitView: t('tab_split_view'),
             focusEditor: t('tab_focus_editor'),
           }}
-          onSelectFile={setActiveFileId}
           onNavigate={(destination) => {
             setScriptExamplesVisible(false);
             tabletWorkspace.navigate(destination);
@@ -3221,7 +3219,6 @@ export default function App() {
         <WorkspaceHeader
           variant="phone"
           activeFile={activeFile}
-          files={files}
           activeTab={mobileTab}
           labels={{
             editor: t('mob_editor'),
@@ -3235,7 +3232,6 @@ export default function App() {
             splitView: t('tab_split_view'),
             focusEditor: t('tab_focus_editor'),
           }}
-          onSelectFile={setActiveFileId}
           onOpenSettings={() => setSettingsWorkspaceOpen(true)}
           execution={{
             pendingInput: pendingInputPrompt !== null,
@@ -3540,6 +3536,7 @@ export default function App() {
                 <ScriptExamplesPanel
                   files={files}
                   onCreateFile={handleCreateFile}
+                  onSelectFile={setActiveFileId}
                   onClose={() => setScriptExamplesVisible(false)}
                   onNotify={showToast}
                 />
