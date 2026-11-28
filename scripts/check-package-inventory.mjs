@@ -217,7 +217,7 @@ assert.match(internalStorageSource, /if \(!isWithinStoragePath\(entry\.relPath\)
 assert.match(internalStorageSource, /if \(!isInsideBasePath\(currentPath\)\)/, 'saving and creating folders must remain restricted to the DroidPy home folder');
 assert.match(internalStorageSource, /disabled=\{!!busyAction \|\| !isInsideBasePath\(entry\.relPath\)\}/, 'deleting entries outside DroidPy must be disabled');
 assert.doesNotMatch(exportSource, /st_sdcard/, 'the old duplicate Android file browser must be removed from Android Management');
-const storageResolverStart = source.indexOf('private fun resolveSdcardTarget(relPath: String): File? {');
+const storageResolverStart = source.indexOf('private fun resolveSdcardTarget(relPath: String, allowOutsideHome: Boolean = false): File? {');
 const storageResolverEnd = source.indexOf('private fun processPid', storageResolverStart);
 assert.ok(storageResolverStart >= 0 && storageResolverEnd > storageResolverStart, 'DroidPy storage path resolver must exist');
 const storageResolver = source.slice(storageResolverStart, storageResolverEnd);
@@ -228,6 +228,9 @@ assert.match(storageResolver, /withinStorage[\s\S]*?withinHome[\s\S]*?!allowOuts
 assert.match(storageResolver, /homeCanonical != homeRoot\.absoluteFile\.path/, 'the DroidPy home folder itself must not be redirected through a symlink');
 assert.match(source, /resolveSdcardTarget\(relParam, allowOutsideHome = true\)/, 'directory listing must allow the shared-storage root');
 assert.match(source, /resolveSdcardTarget\(relPath, allowOutsideHome = true\)/, 'file reading must allow shared-storage paths');
+assert.match(source, /method == "POST" && path == "\/sdcard\/write"[\s\S]*?resolveSdcardTarget\(folderRel\)/, 'backup writes must remain confined to DroidPy by the default resolver policy');
+assert.match(source, /method == "POST" && path == "\/sdcard\/mkdir"[\s\S]*?resolveSdcardTarget\(relPath\)/, 'folder creation must remain confined to DroidPy');
+assert.match(source, /method == "POST" && path == "\/sdcard\/delete"[\s\S]*?resolveSdcardTarget\(relPath\)/, 'deletion must remain confined to DroidPy');
 assert.match(source, /childCanonical != rootCanonical && !childCanonical\.startsWith\(rootCanonical \+ File\.separator\)/, 'directory listings must stay inside shared storage and reject symlink escapes');
 assert.match(source, /target\.canonicalPath == homeCanonical/, 'the DroidPy home folder itself must not be deletable');
 assert.match(appSource, /pointer-events-none absolute inset-0 z-\[1\]/, 'one continuous paper layer must cover the entire viewport behind phone and tablet chrome');
