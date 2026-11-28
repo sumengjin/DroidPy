@@ -46,6 +46,7 @@ import { CodeEditorSurface } from './components/CodeEditorSurface';
 import { WorkspaceFileTabs } from './components/WorkspaceFileTabs';
 import { TerminalPanel } from './components/TerminalPanel';
 import { FileExplorer } from './components/FileExplorer';
+import { ScriptExamplesPanel } from './components/ScriptExamplesPanel';
 import { WorkspaceNavigation } from './components/WorkspaceNavigation';
 import { TabletSplitLayout } from './components/TabletSplitLayout';
 import { WorkspaceHeader } from './components/WorkspaceHeader';
@@ -463,7 +464,6 @@ export default function App() {
   const [checkingTermuxOutdated, setCheckingTermuxOutdated] = useState(false);
   const [upgradingTermux, setUpgradingTermux] = useState(false);
   const [mobileNewFileOpen, setMobileNewFileOpen] = useState(false);
-  const [openScriptExamples, setOpenScriptExamples] = useState(0);
   const [mobileNewFileName, setMobileNewFileName] = useState('');
   const [linkedDirHandle, setLinkedDirHandle] = useState<DirectoryHandleLike | null>(null);
   const [executionEngine, setExecutionEngine] = useState<ExecutionEngine>(() => {
@@ -571,6 +571,7 @@ export default function App() {
     showHelpModal,
     showLogsModal,
     showUpdateModal,
+    scriptExamplesVisible,
     settingsWorkspaceOpen,
     mobileNewFileOpen,
   });
@@ -758,6 +759,10 @@ export default function App() {
       }
       if (ov.showHelpModal) {
         setShowHelpModal(false);
+        return true;
+      }
+      if (ov.scriptExamplesVisible) {
+        setScriptExamplesVisible(false);
         return true;
       }
       if (ov.settingsWorkspaceOpen) {
@@ -3221,7 +3226,10 @@ export default function App() {
           }}
           onSelectFile={setActiveFileId}
           onCreateFile={() => setMobileNewFileOpen((open) => !open)}
-          onNavigate={(destination) => tabletWorkspace.navigate(destination)}
+          onNavigate={(destination) => {
+            setScriptExamplesVisible(false);
+            tabletWorkspace.navigate(destination);
+          }}
           onOpenSettings={() => setSettingsWorkspaceOpen(true)}
           tabletSplit={tabletSplit}
           onToggleSplit={tabletWorkspace.toggleSplit}
@@ -3385,9 +3393,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => {
-                      setOpenScriptExamples((request) => request + 1);
                       setScriptExamplesVisible(true);
-                      setTabletPaneTab('files');
                     }}
                     aria-label={t('files_templates_btn')}
                     title={t('files_templates_btn')}
@@ -3419,7 +3425,15 @@ export default function App() {
 
               {mobileNewFileOpen && renderInlineNewFileBar()}
 
-              <CodeEditorSurface
+              {scriptExamplesVisible ? (
+                <ScriptExamplesPanel
+                  files={files}
+                  onCreateFile={handleCreateFile}
+                  onClose={() => setScriptExamplesVisible(false)}
+                  onNotify={showToast}
+                />
+              ) : (
+                <CodeEditorSurface
   file={activeFile}
   editorRef={editorRef}
   onChange={handleCodeChange}
@@ -3437,6 +3451,7 @@ export default function App() {
   onUndo={() => editorRef.current?.undo()}
   onRedo={() => editorRef.current?.redo()}
 />
+              )}
             </section>
             )}
 
@@ -3473,9 +3488,6 @@ export default function App() {
                     <FileExplorer
                       files={files}
                       activeFileId={activeFile.id}
-                      openTemplatesRequest={openScriptExamples}
-                      templatesVisible={scriptExamplesVisible}
-                      onTemplatesVisibilityChange={setScriptExamplesVisible}
                       linkedDirName={linkedDirHandle?.name ?? null}
                       termuxConnected={termuxConnectionState === 'connected'}
                       termuxEmbedded={Boolean(termuxHealth?.embedded)}
@@ -3543,9 +3555,7 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => {
-                          setOpenScriptExamples((request) => request + 1);
                           setScriptExamplesVisible(true);
-                          setMobileTab('files');
                         }}
                         aria-label={t('files_templates_btn')}
                         title={t('files_templates_btn')}
@@ -3577,6 +3587,14 @@ export default function App() {
                   </div>
                 </div>
 
+                {scriptExamplesVisible ? (
+                <ScriptExamplesPanel
+                  files={files}
+                  onCreateFile={handleCreateFile}
+                  onClose={() => setScriptExamplesVisible(false)}
+                  onNotify={showToast}
+                />
+              ) : (
                 <CodeEditorSurface
   file={activeFile}
   editorRef={editorRef}
@@ -3595,6 +3613,7 @@ export default function App() {
   onUndo={() => editorRef.current?.undo()}
   onRedo={() => editorRef.current?.redo()}
 />
+              )}
             </div>
 
             {mobileTab === 'console' && (
@@ -3639,9 +3658,6 @@ export default function App() {
                   files={files}
                   activeFileId={activeFile.id}
                   showHeaderTitle={false}
-                  openTemplatesRequest={openScriptExamples}
-                  templatesVisible={scriptExamplesVisible}
-                  onTemplatesVisibilityChange={setScriptExamplesVisible}
                   linkedDirName={linkedDirHandle?.name ?? null}
                   termuxConnected={termuxConnectionState === 'connected'}
                   termuxEmbedded={Boolean(termuxHealth?.embedded)}
@@ -3672,7 +3688,7 @@ export default function App() {
       {isPhoneLayout && (
         <WorkspaceNavigation
           variant="phone"
-          activeDestination={scriptExamplesVisible ? 'editor' : mobileTab === 'console' ? 'terminal' : mobileTab === 'files' ? 'files' : mobileTab === 'browser' ? 'browser' : 'editor'}
+          activeDestination={mobileTab === 'console' ? 'terminal' : mobileTab === 'files' ? 'files' : mobileTab === 'browser' ? 'browser' : 'editor'}
           labels={{
             editor: t('mob_editor'),
             terminal: t('mob_console'),
