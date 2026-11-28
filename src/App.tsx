@@ -21,7 +21,6 @@ import {
   Sparkles,
   Download,
   BookOpen,
-  FileCode2,
 } from 'lucide-react';
 import { registerSW } from 'virtual:pwa-register';
 import { DEFAULT_FILES } from './data/defaultFiles';
@@ -3532,18 +3531,6 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => {
-                          setOpenScriptExamples(false);
-                          setMobileTab('files');
-                        }}
-                        aria-label={t('mob_files')}
-                        title={t('mob_files')}
-                        className="min-h-[40px] min-w-[40px] inline-flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-accent-text)]"
-                      >
-                        <BookOpen className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
                           setOpenScriptExamples(true);
                           setMobileTab('files');
                         }}
@@ -3551,7 +3538,7 @@ export default function App() {
                         title={t('files_templates_btn')}
                         className="min-h-[40px] min-w-[40px] inline-flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-accent-text)]"
                       >
-                        <FileCode2 className="w-4 h-4" />
+                        <BookOpen className="w-4 h-4" />
                       </button>
                       <button
                         type="button"
