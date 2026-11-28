@@ -39,7 +39,7 @@ export function WorkspaceNavigation({
     <nav
       aria-label={ariaLabel}
       className={isPhone
-        ? 'relative z-[60] flex w-full shrink-0 min-h-[68px] pb-safe px-1'
+        ? 'dp-phone-navigation relative z-[60] flex w-full shrink-0 min-h-[64px] pb-safe px-2 pt-1'
         : 'w-full h-11 shrink-0 flex items-center justify-between gap-3 px-3'}
     >
       <div className={isPhone
@@ -57,11 +57,11 @@ export function WorkspaceNavigation({
               aria-current={active ? 'page' : undefined}
               title={labels[id]}
               className={`dp-nav-item min-w-0 flex items-center justify-center gap-1.5 ${
-                isPhone ? 'w-full flex-col min-h-[56px] px-1' : 'flex-row min-h-[36px] px-2'
+                isPhone ? 'dp-phone-nav-item relative w-full flex-col min-h-[56px] px-1 pt-2 pb-1 rounded-xl' : 'flex-row min-h-[36px] px-2'
               }`}
             >
-              <Icon className={isPhone ? 'w-5 h-5' : 'w-4 h-4'} strokeWidth={active ? 2.3 : 1.8} />
-              <span className={isPhone ? 'text-[11px] font-semibold leading-tight whitespace-nowrap' : 'text-xs font-medium whitespace-nowrap'}>{labels[id]}</span>
+              <Icon className={isPhone ? 'w-[21px] h-[21px] mb-0.5' : 'w-4 h-4'} strokeWidth={active ? 2.3 : 1.8} />
+              <span className={isPhone ? 'text-[10px] font-semibold leading-none tracking-wide whitespace-nowrap' : 'text-xs font-medium whitespace-nowrap'}>{labels[id]}</span>
             </button>
           );
         })}
