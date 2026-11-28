@@ -579,6 +579,7 @@ export default function App() {
     showHelpModal,
     showLogsModal,
     showUpdateModal,
+    scriptExamplesVisible,
     settingsWorkspaceOpen,
     mobileNewFileOpen,
   };
