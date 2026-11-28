@@ -5,7 +5,7 @@ All notable changes to **DroidPy** are documented in this file.
 ## [Unreleased]
 
 - Position the search/replace dialog from the live editor-pane bounds on phones and tablets, including split-screen tablets; keep it centered above bottom navigation, respond to resize/orientation/keyboard changes, and reduce its width, padding and controls to a compact size.
-- **搜尋／取代改為彈窗**：編輯器搜尋按鈕改為開啟置中的半透明玻璃彈窗，背景加深遮罩並保留清晰輸入框；介面操作全面繁體中文，關閉按鈕為 44×44 px，支援點擊彈窗外、鍵盤 Escape，以及 Android／瀏覽器返回鍵關閉。
+- **搜尋／取代彈窗與返回操作修正**：彈窗固定在目前編輯窗格正中央，移除容易誤觸且過小的 X 關閉按鈕；再次點擊搜尋工具列按鈕可正常切換關閉，點擊彈窗外、Escape、Android 系統返回／側滑返回也會關閉。修正全文件 pointerdown 先關閉、後續 click 又重新開啟的事件競態；所有搜尋選項（包含 All、符合大小寫、正規表達式、整字匹配）統一繁體中文，核取方塊與文字同列對齊，並統一經 CodeMirror 面板生命週期關閉。
 - **終端機無框與真正透明玻璃分隔通道**：移除終端機輸出／輸入共用表面的外圍邊框與圓角；平板橫屏分割模式會依可拖曳分隔線的即時位置，在全螢幕紙面層動態挖出 1.5 毫米透明通道，讓底層 3D 寫實背景真正穿透，不再讓紙面層形成白線；通道寬度調整為 1.5 毫米並隨分割比例同步移動，手機、平板直屏及專注編輯模式不受影響。可見透明分隔線縮短為容器長度的 84%，上下各留 8% 空間，兩端採完整圓角；不可見的 28 px 觸控／滑鼠拖曳熱區仍維持全長，確保容易拖動。保留原有比例限制與鍵盤調整功能。垂直膠狀握把為 1 mm 寬、10 mm 長，仍位於可見短線由上往下約三分之二處。
 - **修正符號列跟手滑動與遮擋**：改由整條符號列捕捉 Android Pointer 手勢，水平拖動時同步捲動符號列，讓原本在可視範圍外或被相鄰終端窗格遮住的符號能滑入選取區；以按鈕實際幾何位置判斷手指下的符號，不依賴被覆蓋元素的 hit-test；符號列提升至終端窗格上層，放開才插入，並阻止長按選單／輸入法干擾。
 - **編輯符號列寬度跟隨編輯區**：移除固定三分之二寬度，改為完整填滿編輯區容器，並移除符號列內的垂直裝飾分隔線。
