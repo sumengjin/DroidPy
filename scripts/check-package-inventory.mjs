@@ -17,6 +17,8 @@ const [source, bridgeSource, catalogSource, exportSource, panelSource, terminalS
   readFile(new URL('../android/app/src/main/assets/python/frostwork-0.2.2.dist-info/METADATA', import.meta.url), 'utf8'),
  ]);
 const themeCssSource = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
+const starterExamplesSource = await readFile(new URL('../src/data/defaultFiles.ts', import.meta.url), 'utf8');
+const examplesPanelSource = await readFile(new URL('../src/components/ScriptExamplesPanel.tsx', import.meta.url), 'utf8');
 const tabletSplitSource = await readFile(new URL('../src/components/TabletSplitLayout.tsx', import.meta.url), 'utf8');
 const workspaceHeaderSource = await readFile(new URL('../src/components/WorkspaceHeader.tsx', import.meta.url), 'utf8');
 const executionControlsSource = await readFile(new URL('../src/components/WorkspaceExecutionControls.tsx', import.meta.url), 'utf8');
@@ -163,7 +165,9 @@ assert.match(appSource, /setScriptExamplesVisible\(true\)/, 'the book shortcut m
 assert.doesNotMatch(appSource, /setScriptExamplesVisible\(true\);\s*set(?:MobileTab|TabletPaneTab)\('files'\)/, 'opening examples must not mutate the Files navigation destination');
 assert.match(appSource, /if \(ov\.scriptExamplesVisible\)[\s\S]*?setScriptExamplesVisible\(false\)/, 'Android Back must close the editor-owned examples workspace first');
 assert.doesNotMatch(fileExplorerSource, /SNIPPET_TEMPLATES|templatesVisible|openTemplatesRequest/, 'the file manager must not own or render script examples');
-assert.match(appSource, /<WorkspaceFileTabs[\s\S]*?variant="phone"/, 'main.py and other editor file entries must remain visible in the phone editor header while examples are open');
+assert.doesNotMatch(appSource, /WorkspaceFileTabs/, 'the editor must not render the old filename tab strip or plus button');
+assert.equal((appSource.match(/t\('editor_current_file'/g) || []).length, 2, 'phone and tablet editor panes must display the active script name in their own header');
+assert.match(appSource, /upgradeLegacyDefaultFiles[\s\S]*?from 工具函式 import format_device_report/, 'existing main.py files must be migrated to the renamed Chinese helper module');
 const tabletEditorTools = appSource.slice(appSource.indexOf('/* Tablet Primary Editor Pane */'), appSource.indexOf('/* Tablet Secondary Output / Files / Browser Workspace */'));
 assert.match(tabletEditorTools, /<BookOpen className="w-4 h-4" \/>/, 'tablet editor must expose the same direct script examples entry');
 const mobileNavStart = appSource.indexOf('<WorkspaceNavigation');
@@ -177,7 +181,9 @@ assert.ok(workspaceNavigationSource.includes("'dp-phone-navigation relative z-[6
 assert.ok(workspaceNavigationSource.includes("'dp-phone-nav-item relative w-full flex-col min-h-[56px] px-1 pt-2 pb-1 rounded-xl'"), 'phone navigation destinations must fill their equal-width grid cells with the compact dock style');
 assert.match(workspaceHeaderSource, /onNavigate\?\.\(id\)/, 'tablet workspace destinations must be integrated into the single top header');
 assert.match(workspaceHeaderSource, /labels\.console[\s\S]*?labels\.files[\s\S]*?labels\.browser/, 'tablet header must expose terminal, files and browser destinations once');
-assert.match(appSource, /<WorkspaceFileTabs[\s\S]*?variant="tablet"/, 'tablet file tabs must live inside the editor pane, not occupy a second global header row');
+assert.match(starterExamplesSource, /name: '主程式\.py'[\s\S]*?name: '工具函式\.py'[\s\S]*?name: '感測器波形圖\.py'[\s\S]*?name: '互動式輸入示範\.py'/, 'the four built-in starter scripts must be moved into the examples catalog with Chinese filenames');
+assert.match(starterExamplesSource, /export const DEFAULT_FILES[\s\S]*?name: '未命名\.py'/, 'new workspaces must start with a blank script instead of preloading the four examples');
+assert.match(examplesPanelSource, /STARTER_EXAMPLES[\s\S]*?onSelectFile\(existing\.id\)/, 'existing starter scripts must be selectable from the examples catalog without losing edits');
 assert.match(appSource, /pointer-events-none absolute inset-0 z-\[1\]/, 'one continuous paper layer must cover the entire viewport behind phone and tablet chrome');
 assert.match(appSource, /const workspaceSurfaceAlpha =\s*1 - Math\.min\(100, Math\.max\(0, settings\.workspaceTransparency \?\? 35\)\) \/ 100/, 'workspace transparency must map the 0–100 slider to a clamped 1–0 alpha');
 assert.match(appSource, /One continuous translucent paper surface covers the full viewport[\s\S]*?backgroundColor: is3dBgActive[\s\S]*?hexToRgba\(activeThemeMeta\.swatchBg, workspaceSurfaceAlpha\)/, 'one full-screen paper surface must own the live transparency alpha');
@@ -276,9 +282,6 @@ assert.match(tabletSplitSource, /onPointerDown=[\s\S]*setPointerCapture[\s\S]*up
 assert.match(themeCssSource, /\.tablet-split-layout \.terminal-console-surface[\s\S]*background: transparent !important[\s\S]*border: 0 !important/, 'tablet terminal must share the transparent workspace background and have no frame');
 assert.doesNotMatch(appSource, /w-\[56%\]|h-\[56%\]/, 'tablet split panes must not use the old fixed 56 percent layout');
 assert.match(workspaceNavigationSource, /dp-nav-item/, 'phone and tablet navigation must use the shared interaction token');
-const fileTabsSource = await readFile(new URL('../src/components/WorkspaceFileTabs.tsx', import.meta.url), 'utf8');
-assert.match(fileTabsSource, /dp-nav-item/, 'file tabs must share the selected-state interaction token');
-assert.match(fileTabsSource, /aria-selected={active}/, 'file tabs must expose their selected state accessibly');
 assert.ok(appSource.includes('tabletWorkspace.toggleSplit'), 'tablet split view must remain available');
 assert.ok(workspaceHeaderSource.includes('aria-pressed={tabletSplit}'), 'split layout toggle must expose its selected state');
 assert.match(workspaceNavigationSource, /aria-current={active \? 'page' : undefined}/, 'shared phone/tablet workspace navigation must expose its selected destination accessibly');
@@ -334,10 +337,8 @@ assert.ok(phoneHeaderStart > tabletHeaderEnd && phoneHeaderEnd > phoneHeaderStar
 assert.ok(appSource.slice(phoneHeaderStart, phoneHeaderEnd).includes('variant="phone"'), 'phone must use the shared workspace header');
 assert.match(workspaceHeaderSource, /WorkspaceExecutionControls/, 'the shared header must compose the execution controls');
 assert.doesNotMatch(workspaceHeaderSource, /WorkspaceFileTabs/, 'the global tablet header must not duplicate the editor file strip');
-const tabletFileTabsStart = appSource.indexOf('<WorkspaceFileTabs');
-const tabletFileTabsEnd = appSource.indexOf('/>', tabletFileTabsStart);
-assert.ok(tabletFileTabsStart >= 0 && tabletFileTabsEnd > tabletFileTabsStart, 'tablet file tabs must remain available inside the editor pane');
-assert.match(appSource.slice(tabletFileTabsStart, tabletFileTabsEnd), /variant="tablet"/, 'tablet file tabs must remain inside the editor pane');
+assert.doesNotMatch(appSource, /WorkspaceFileTabs/, 'neither phone nor tablet may retain the file tab strip');
+assert.match(appSource, /editor_current_file/, 'the active script title must be visible in the editor header');
 assert.match(workspaceHeaderSource, /tabletSplit/, 'the tablet split-view control must remain in the header');
 assert.match(executionControlsSource, /termuxStopping \?[/\s\S]*termuxRunning \?/, 'execution controls must prioritize stopping and active Termux states');
 assert.match(executionControlsSource, /termuxPaused \? labels\.resume : labels\.pause/, 'pause control must expose the current process state');
