@@ -189,6 +189,7 @@ interface PersistedIdeSnapshot {
 declare global {
   interface Window {
     __droidpyHandleBack?: () => boolean;
+    __droidpyCloseSearch?: () => boolean;
   }
 }
 
@@ -738,6 +739,10 @@ export default function App() {
 
   useEffect(() => {
     window.__droidpyHandleBack = () => {
+      // Search is the topmost transient editor surface: close it before
+      // navigating tabs or dismissing the underlying workspace.
+      if (window.__droidpyCloseSearch?.()) return true;
+
       const ov = overlayStateRef.current;
       if (ov.showUpdateModal) {
         setShowUpdateModal(false);
