@@ -27,7 +27,7 @@ import {
   HighlightStyle,
 } from '@codemirror/language';
 import { closeBrackets, closeBracketsKeymap, autocompletion, completionKeymap } from '@codemirror/autocomplete';
-import { searchKeymap, highlightSelectionMatches, openSearchPanel } from '@codemirror/search';
+import { searchKeymap, highlightSelectionMatches, openSearchPanel, closeSearchPanel } from '@codemirror/search';
 import { python } from '@codemirror/lang-python';
 import { json } from '@codemirror/lang-json';
 import { linter, lintGutter, Diagnostic, forceLinting } from '@codemirror/lint';
@@ -704,12 +704,60 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
 
       // CodeMirror's built-in search panel is kept for its proven find/replace
       // behavior; localize its generated controls as soon as the panel is mounted.
-      const searchPanelObserver = new MutationObserver(() => localizeSearchPanel(view.dom));
+      let searchHistoryPushed = false;
+      const closeSearchDialog = () => {
+        if (view.dom.querySelector('.cm-search')) closeSearchPanel(view);
+      };
+      const handleSearchBack = () => {
+        searchHistoryPushed = false;
+        closeSearchDialog();
+      };
+      const handleSearchKeydown = (event: KeyboardEvent) => {
+        if (!view.dom.querySelector('.cm-search')) return;
+        if (event.key === 'Escape' || event.key === 'BrowserBack' || event.key === 'GoBack' || event.keyCode === 4) {
+          event.preventDefault();
+          event.stopPropagation();
+          closeSearchDialog();
+          if (searchHistoryPushed) {
+            searchHistoryPushed = false;
+            window.history.back();
+          }
+        }
+      };
+      const handleSearchOutsideClick = (event: PointerEvent) => {
+        const panel = view.dom.querySelector('.cm-search');
+        if (panel && event.target instanceof Node && !panel.contains(event.target)) {
+          closeSearchDialog();
+          if (searchHistoryPushed) {
+            searchHistoryPushed = false;
+            window.history.back();
+          }
+        }
+      };
+      const searchPanelObserver = new MutationObserver(() => {
+        const panel = view.dom.querySelector('.cm-search');
+        if (panel) {
+          localizeSearchPanel(view.dom);
+          if (!searchHistoryPushed) {
+            window.history.pushState({ ...(window.history.state || {}), dpSearchDialog: true }, '');
+            searchHistoryPushed = true;
+          }
+        } else if (searchHistoryPushed) {
+          searchHistoryPushed = false;
+          window.history.back();
+        }
+      });
       searchPanelObserver.observe(view.dom, { childList: true, subtree: true });
+      window.addEventListener('popstate', handleSearchBack);
+      document.addEventListener('keydown', handleSearchKeydown, true);
+      document.addEventListener('pointerdown', handleSearchOutsideClick, true);
       localizeSearchPanel(view.dom);
 
       return () => {
         searchPanelObserver.disconnect();
+        window.removeEventListener('popstate', handleSearchBack);
+        document.removeEventListener('keydown', handleSearchKeydown, true);
+        document.removeEventListener('pointerdown', handleSearchOutsideClick, true);
         view.destroy();
         viewRef.current = null;
       };
