@@ -85,8 +85,8 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
         const pathParts = relPath.replace(/\\/g, '/').split('/').filter((part) => part && part !== '.');
         if (pathParts.includes('..')) throw new Error(t('sd_path_blocked'));
         const normalizedPath = pathParts.join('/');
-        const safePath = normalizedPath || basePath;
-        if (safePath !== basePath && !safePath.startsWith(`${basePath}/`)) {
+        const safePath = normalizedPath;
+        if (safePath && safePath !== basePath && !safePath.startsWith(`${basePath}/`)) {
           throw new Error(t('sd_path_blocked'));
         }
         const [st, usage] = await Promise.all([
@@ -111,7 +111,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
         }
         const resolvedPath = (list.currentPath || safePath).replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
         const resolvedParts = resolvedPath.split('/').filter(Boolean);
-        if (resolvedParts.includes('..') || (resolvedPath !== basePath && !resolvedPath.startsWith(`${basePath}/`))) {
+        if (resolvedParts.includes('..')) {
           throw new Error(t('sd_path_blocked'));
         }
         setCurrentPath(resolvedPath);
@@ -171,13 +171,11 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
   };
 
   const handleGoUp = () => {
-    if (!currentPath || currentPath === basePath) return;
+    if (!currentPath) return;
     const parts = currentPath.split('/').filter(Boolean);
     parts.pop();
-    const candidate = parts.join('/');
-    const parent = candidate === basePath || candidate.startsWith(`${basePath}/`) ? candidate : basePath;
     setConfirmDeletePath(null);
-    void loadDirectory(parent);
+    void loadDirectory(parts.join('/'));
   };
 
   const isInsideBasePath = (path: string) => {
@@ -186,8 +184,13 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
     return !parts.includes('..') && (normalized === basePath || normalized.startsWith(`${basePath}/`));
   };
 
+  const isWithinStoragePath = (path: string) => {
+    const parts = path.replace(/\\\\/g, '/').split('/').filter(Boolean);
+    return !parts.includes('..');
+  };
+
   const handleOpenEntry = async (entry: SdcardEntry) => {
-    if (!isInsideBasePath(entry.relPath)) {
+    if (!isWithinStoragePath(entry.relPath)) {
       onNotify(t('sd_path_blocked'));
       return;
     }
@@ -210,7 +213,11 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
 
   const handleSaveActiveHere = async () => {
     if (!activeFile) return;
-    const targetRel = currentPath ? `${currentPath}/${activeFile.name}` : activeFile.name;
+    if (!isInsideBasePath(currentPath)) {
+      onNotify(t('sd_path_blocked'));
+      return;
+    }
+    const targetRel = `${currentPath}/${activeFile.name}`;
     setBusyAction('save');
     try {
       const res = await writeSdcardFile(termuxConfig, targetRel, activeFile.content);
@@ -242,7 +249,11 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
     e.preventDefault();
     const clean = newFolderName.replace(/[/\\]/g, '').trim();
     if (!clean || clean === '.' || clean === '..') return;
-    const targetRel = currentPath ? `${currentPath}/${clean}` : clean;
+    if (!isInsideBasePath(currentPath)) {
+      onNotify(t('sd_path_blocked'));
+      return;
+    }
+    const targetRel = `${currentPath}/${clean}`;
     setBusyAction('mkdir');
     try {
       await createSdcardFolder(termuxConfig, targetRel);
@@ -395,7 +406,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
           <button
             type="button"
             onClick={() => void handleSaveActiveHere()}
-            disabled={!!busyAction || !isGranted}
+            disabled={!!busyAction || !isGranted || !isInsideBasePath(currentPath)}
             className="min-h-[42px] min-w-0 max-w-full overflow-hidden px-3.5 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-45 text-white text-xs font-medium inline-flex items-center gap-1.5 transition-colors"
           >
             {busyAction === 'save' ? <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" /> : <Save className="w-3.5 h-3.5 shrink-0" />}
@@ -423,7 +434,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
           <button
             type="button"
             onClick={handleGoUp}
-            disabled={!currentPath || currentPath === basePath || loading}
+            disabled={!currentPath || loading}
             className="min-h-[34px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium inline-flex items-center gap-1 disabled:opacity-40 hover:border-[var(--ide-accent)] shrink-0"
           >
             <ArrowUp className="w-3.5 h-3.5" />
@@ -440,12 +451,12 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
             value={newFolderName}
             onChange={(e) => setNewFolderName(e.target.value)}
             placeholder={t('sd_mkdir_placeholder')}
-            disabled={!isGranted}
+            disabled={!isGranted || !isInsideBasePath(currentPath)}
             className="flex-1 sm:flex-initial min-w-0 sm:w-40 min-h-[34px] px-2.5 rounded-lg bg-[var(--ide-surface)] border border-[var(--ide-border)] text-xs focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
           />
           <button
             type="submit"
-            disabled={!newFolderName.trim() || !isGranted || !!busyAction}
+            disabled={!newFolderName.trim() || !isGranted || !isInsideBasePath(currentPath) || !!busyAction}
             className="min-h-[34px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] disabled:opacity-40 text-xs font-medium inline-flex items-center gap-1 shrink-0"
           >
             <FolderPlus className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
@@ -506,7 +517,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
                   <button
                     type="button"
                     onClick={() => void handleDeleteEntry(entry)}
-                    disabled={!!busyAction}
+                    disabled={!!busyAction || !isInsideBasePath(entry.relPath)}
                     className="min-h-[32px] px-2.5 rounded-lg bg-red-600 text-white text-[11px] font-medium"
                   >
                     {t('sd_delete_confirm')}
