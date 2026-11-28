@@ -20,6 +20,7 @@ import {
   Globe,
   Sparkles,
   Download,
+  BookOpen,
 } from 'lucide-react';
 import { registerSW } from 'virtual:pwa-register';
 import { DEFAULT_FILES } from './data/defaultFiles';
@@ -460,6 +461,7 @@ export default function App() {
   const [checkingTermuxOutdated, setCheckingTermuxOutdated] = useState(false);
   const [upgradingTermux, setUpgradingTermux] = useState(false);
   const [mobileNewFileOpen, setMobileNewFileOpen] = useState(false);
+  const [openScriptExamples, setOpenScriptExamples] = useState(false);
   const [mobileNewFileName, setMobileNewFileName] = useState('');
   const [linkedDirHandle, setLinkedDirHandle] = useState<DirectoryHandleLike | null>(null);
   const [executionEngine, setExecutionEngine] = useState<ExecutionEngine>(() => {
@@ -3522,6 +3524,18 @@ export default function App() {
                       </button>
                       <button
                         type="button"
+                        onClick={() => {
+                          setOpenScriptExamples(true);
+                          setMobileTab('files');
+                        }}
+                        aria-label={t('files_templates_btn')}
+                        title={t('files_templates_btn')}
+                        className="min-h-[40px] min-w-[40px] inline-flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-accent-text)]"
+                      >
+                        <BookOpen className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleUpdateSettings({ showSymbolBar: !settings.showSymbolBar })}
                         aria-label={t('toolbar_symbol_bar_title')}
                         title={t('toolbar_symbol_bar_title')}
@@ -3606,6 +3620,7 @@ export default function App() {
                   files={files}
                   activeFileId={activeFile.id}
                   showHeaderTitle={false}
+                  openTemplatesOnMount={openScriptExamples}
                   linkedDirName={linkedDirHandle?.name ?? null}
                   termuxConnected={termuxConnectionState === 'connected'}
                   termuxEmbedded={Boolean(termuxHealth?.embedded)}
