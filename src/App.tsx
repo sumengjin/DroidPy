@@ -220,20 +220,6 @@ function upgradeLegacyDefaultFiles(list: PythonFile[]): PythonFile[] {
     if (!starter) return file;
 
     let content = file.content;
-    if (
-      starter.id === 'utils-py' &&
-      content.includes('def format_device_report') &&
-      !content.includes('__name__') &&
-      !content.includes('print(')
-    ) {
-      content = starter.content;
-    } else if (
-      starter.id === 'chart-demo-py' &&
-      content.includes('Android Sensor Waveform') &&
-      !content.includes('ModuleNotFoundError')
-    ) {
-      content = starter.content;
-    }
     if (starter.id === 'main-py') {
       content = content.replace(/from\s+(?:utils|工具函式)\s+import\s+format_device_report\s*/g, inlineMainHelper);
       content = content.replace(/main\.py 執行完成/g, '主程式執行完成');
