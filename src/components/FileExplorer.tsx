@@ -9,7 +9,6 @@ import {
   Share2,
   Check,
   X,
-  BookOpen,
   FolderSync,
   RefreshCw,
   HardDrive,
@@ -21,7 +20,6 @@ import {
 import JSZip from 'jszip';
 import { PythonFile, ScriptBackupSnapshot, TermuxConfig } from '../types/ide';
 import { InternalStoragePanel } from './InternalStoragePanel';
-import { SNIPPET_CATEGORIES, SNIPPET_TEMPLATES, SnippetCategoryId } from '../data/defaultFiles';
 import { useI18n } from '../services/i18n';
 import { copyTextReliable } from '../utils/clipboard';
 import { downloadBlob } from '../utils/downloadBlob';
@@ -53,9 +51,6 @@ interface FileExplorerProps {
   onSyncBackupSdcard?: (snapshot: ScriptBackupSnapshot) => Promise<void>;
   onNotify: (msg: string) => void;
   showHeaderTitle?: boolean;
-  openTemplatesRequest?: number;
-  templatesVisible?: boolean;
-  onTemplatesVisibilityChange?: (visible: boolean) => void;
 }
 
 const MAX_IMPORT_BYTES = 512 * 1024;
@@ -86,9 +81,6 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   onSyncBackupSdcard,
   onNotify,
   showHeaderTitle = true,
-  openTemplatesRequest = 0,
-  templatesVisible = false,
-  onTemplatesVisibilityChange,
 }) => {
   const { t } = useI18n();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -102,10 +94,6 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   const [showDeviceBrowser, setShowDeviceBrowser] = useState(() =>
     Boolean(termuxEmbedded || window.DroidPyNative?.isNativeApp?.())
   );
-  useEffect(() => {
-    if (openTemplatesRequest > 0) onTemplatesVisibilityChange?.(true);
-  }, [openTemplatesRequest, onTemplatesVisibilityChange]);
-  const [templateCategory, setTemplateCategory] = useState<SnippetCategoryId>('all');
   const [showBackups, setShowBackups] = useState(false);
   const [backupLabel, setBackupLabel] = useState('');
   const [backups, setBackups] = useState<ScriptBackupSnapshot[]>(() => listScriptBackups());
@@ -678,73 +666,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           )}
         </div>
 
-        {/* Script examples are a dedicated view, separate from file management. */}
-        {templatesVisible && (
-          <div className="absolute inset-0 z-40 flex min-h-0 flex-col overflow-y-auto bg-[var(--ide-bg)]">
-            <div className="flex min-h-[56px] shrink-0 items-center justify-between border-b border-[var(--ide-border)] px-4">
-              <div className="flex items-center gap-2 text-sm font-semibold text-[var(--ide-text)]">
-                <BookOpen className="h-4 w-4 text-[var(--ide-accent)]" />
-                <span>{t('files_templates_btn')}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => onTemplatesVisibilityChange?.(false)}
-                className="min-h-[40px] px-3 text-xs font-medium text-[var(--ide-accent-text)]"
-              >
-                {t('files_collapse')}
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 p-3">
-              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-0.5">
-                {SNIPPET_CATEGORIES.map((cat) => {
-                  const active = templateCategory === cat.id;
-                  return (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => setTemplateCategory(cat.id)}
-                      className={`min-h-[44px] px-3 rounded-xl text-[11px] font-medium whitespace-nowrap shrink-0 transition-colors ${
-                        active
-                          ? 'bg-[var(--ide-accent)] text-white font-semibold'
-                          : 'bg-[var(--ide-surface)] border border-[var(--ide-border)] text-[var(--ide-text-muted)] hover:border-[var(--ide-accent)]'
-                      }`}
-                    >
-                      {t(cat.labelKey as Parameters<typeof t>[0])}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="mt-2.5 space-y-2">
-                {SNIPPET_TEMPLATES.filter(
-                  (tpl) => templateCategory === 'all' || tpl.category === templateCategory
-                ).map((tpl) => (
-                  <button
-                    key={tpl.id}
-                    type="button"
-                    onClick={() => {
-                      let targetName = tpl.filename;
-                      if (files.some((f) => f.name === targetName)) {
-                        targetName = `${tpl.filename.replace('.py', '')}_${Date.now().toString().slice(-3)}.py`;
-                      }
-                      onCreateFile(targetName, tpl.code);
-                      onTemplatesVisibilityChange?.(false);
-                      onNotify(t('files_template_added', { name: targetName }));
-                    }}
-                    className="w-full text-left p-3.5 dp-panel hover:border-[var(--ide-accent)] transition-colors"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold text-[var(--ide-text)] truncate">{tpl.title}</span>
-                      <span className="font-mono text-[10px] text-[var(--ide-accent-text)] shrink-0">{tpl.filename}</span>
-                    </div>
-                    <div className="text-[11px] text-[var(--ide-text-muted)] mt-0.5 leading-snug">
-                      {tpl.desc}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
+
       </div>
 
       {/* Bottom File Actions */}
