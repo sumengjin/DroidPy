@@ -121,7 +121,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     e.preventDefault();
     let trimmed = sanitizeFileName(newFileName);
     if (!trimmed) return;
-    if (!trimmed.includes('.')) {
+    if (!/\.py$/i.test(trimmed)) {
       trimmed += '.py';
     }
     if (files.some((f) => f.name.toLowerCase() === trimmed.toLowerCase())) {
