@@ -3170,22 +3170,26 @@ def clipboard_set(text):
     // All shared-storage file operations are rooted at /storage/emulated/0/DroidPy.
     // Canonical-path validation also blocks '..' traversal and symlink escapes.
     private fun resolveSdcardTarget(relPath: String): File? {
-        val storageRoot = Environment.getExternalStorageDirectory()
-        val storageCanonical = storageRoot.canonicalPath
-        val homeRoot = File(storageRoot, "DroidPy")
-        val homeCanonical = homeRoot.canonicalPath
-        if (!homeCanonical.startsWith(storageCanonical + File.separator)) return null
-        val cleaned = relPath.trim().trimStart('/')
-        val candidate = when {
-            cleaned.isEmpty() || cleaned == "DroidPy" -> homeRoot
-            cleaned.startsWith("DroidPy/") -> File(storageRoot, cleaned)
-            else -> return null
+        return try {
+            val storageRoot = Environment.getExternalStorageDirectory()
+            val storageCanonical = storageRoot.canonicalPath
+            val homeRoot = File(storageRoot, "DroidPy")
+            val homeCanonical = homeRoot.canonicalPath
+            if (!homeCanonical.startsWith(storageCanonical + File.separator)) return null
+            val cleaned = relPath.trim().trimStart('/')
+            val candidate = when {
+                cleaned.isEmpty() || cleaned == "DroidPy" -> homeRoot
+                cleaned.startsWith("DroidPy/") -> File(storageRoot, cleaned)
+                else -> return null
+            }
+            val candidateCanonical = candidate.canonicalPath
+            if (candidateCanonical != homeCanonical && !candidateCanonical.startsWith(homeCanonical + File.separator)) {
+                return null
+            }
+            candidate
+        } catch (_: Exception) {
+            null
         }
-        val candidateCanonical = candidate.canonicalPath
-        if (candidateCanonical != homeCanonical && !candidateCanonical.startsWith(homeCanonical + File.separator)) {
-            return null
-        }
-        return candidate
     }
 
     private fun processPid(proc: Process): Int {
@@ -4339,7 +4343,7 @@ def clipboard_set(text):
                         val children = dir.listFiles()?.sortedWith(compareBy<File>({ !it.isDirectory }, { it.name.lowercase() })) ?: emptyList()
                         for (child in children) {
                             if (child.name.startsWith(".")) continue
-                            val childCanonical = child.canonicalPath
+                            val childCanonical = try { child.canonicalPath } catch (_: Exception) { continue }
                             if (childCanonical != homeCanonical && !childCanonical.startsWith(homeCanonical + File.separator)) continue
                             val childRel = childCanonical.removePrefix(rootCanonical).trimStart('/')
                             arr.put(
