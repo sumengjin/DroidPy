@@ -48,6 +48,7 @@ const zhTW = {
   toolbar_choose_lang: '切換介面語言',
   status_tab_size: '{n} 格縮排',
   status_cursor: '第 {line} 行 · 第 {col} 欄',
+  editor_current_file: '正在編輯：{name}',
 
   // Theme & Language Modals
   modal_theme_title: '選擇編輯器主題',
@@ -640,6 +641,7 @@ const zhCN: Record<TranslationKey, string> = {
   toolbar_choose_lang: '切换界面语言',
   status_tab_size: '{n} 格缩进',
   status_cursor: '第 {line} 行 · 第 {col} 列',
+  editor_current_file: '正在编辑：{name}',
 
   modal_theme_title: '选择编辑器主题',
   modal_theme_desc: '精选女生柔粉系与经典开发者配色',
@@ -1221,6 +1223,7 @@ const en: Record<TranslationKey, string> = {
   toolbar_choose_lang: 'Switch Interface Language',
   status_tab_size: '{n}-space Tab',
   status_cursor: 'Ln {line} · Col {col}',
+  editor_current_file: 'Editing: {name}',
 
   modal_theme_title: 'Choose Editor Theme',
   modal_theme_desc: 'Curated pastel & dark themes tuned for mobile OLED and outdoor readability',
@@ -1802,6 +1805,7 @@ const ja: Record<TranslationKey, string> = {
   toolbar_choose_lang: '表示言語を切り替え',
   status_tab_size: '{n} スペース',
   status_cursor: '{line} 行 · {col} 列',
+  editor_current_file: '編集中：{name}',
 
   modal_theme_title: 'エディタテーマを選択',
   modal_theme_desc: 'パステル系・クラシック系から選べる配色テーマ',
