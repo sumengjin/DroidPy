@@ -702,18 +702,30 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
 
       viewRef.current = view;
 
+      // Mount CodeMirror's real search form in a pane-sized overlay owned by
+      // this React editor container. Moving the live panel preserves its
+      // built-in find/replace behavior while giving it a reliable editor-local
+      // centering reference on Android.
+      const editorContainer = containerRef.current;
+      const searchOverlay = document.createElement('div');
+      searchOverlay.className = 'dp-search-overlay';
+      editorContainer.appendChild(searchOverlay);
+
+      const getSearchPanel = () =>
+        editorContainer.querySelector<HTMLElement>('.cm-search');
+
       // CodeMirror's built-in search panel is kept for its proven find/replace
       // behavior; localize its generated controls as soon as the panel is mounted.
       let searchHistoryPushed = false;
       const closeSearchDialog = () => {
-        if (view.dom.querySelector('.cm-search')) closeSearchPanel(view);
+        if (getSearchPanel()) closeSearchPanel(view);
       };
       const handleSearchBack = () => {
         searchHistoryPushed = false;
         closeSearchDialog();
       };
       const handleSearchKeydown = (event: KeyboardEvent) => {
-        if (!view.dom.querySelector('.cm-search')) return;
+        if (!getSearchPanel()) return;
         if (event.key === 'Escape' || event.key === 'BrowserBack' || event.key === 'GoBack' || event.keyCode === 4) {
           event.preventDefault();
           event.stopPropagation();
@@ -725,7 +737,7 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
         }
       };
       const handleSearchOutsideClick = (event: PointerEvent) => {
-        const panel = view.dom.querySelector('.cm-search');
+        const panel = getSearchPanel();
         if (panel && event.target instanceof Node && !panel.contains(event.target)) {
           closeSearchDialog();
           if (searchHistoryPushed) {
@@ -735,9 +747,10 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
         }
       };
       const searchPanelObserver = new MutationObserver(() => {
-        const panel = view.dom.querySelector('.cm-search');
+        const panel = getSearchPanel();
         if (panel) {
-          localizeSearchPanel(view.dom);
+          if (panel.parentElement !== searchOverlay) searchOverlay.appendChild(panel);
+          localizeSearchPanel(editorContainer);
           if (!searchHistoryPushed) {
             window.history.pushState({ ...(window.history.state || {}), dpSearchDialog: true }, '');
             searchHistoryPushed = true;
@@ -747,14 +760,15 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
           window.history.back();
         }
       });
-      searchPanelObserver.observe(view.dom, { childList: true, subtree: true });
+      searchPanelObserver.observe(editorContainer, { childList: true, subtree: true });
       window.addEventListener('popstate', handleSearchBack);
       document.addEventListener('keydown', handleSearchKeydown, true);
       document.addEventListener('pointerdown', handleSearchOutsideClick, true);
-      localizeSearchPanel(view.dom);
+      localizeSearchPanel(editorContainer);
 
       return () => {
         searchPanelObserver.disconnect();
+        searchOverlay.remove();
         window.removeEventListener('popstate', handleSearchBack);
         document.removeEventListener('keydown', handleSearchKeydown, true);
         document.removeEventListener('pointerdown', handleSearchOutsideClick, true);
@@ -904,7 +918,7 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
       },
     }));
 
-    return <div ref={containerRef} className="h-full w-full overflow-hidden" />;
+    return <div ref={containerRef} className="dp-code-editor-container h-full w-full overflow-hidden" />;
   }
 );
 
