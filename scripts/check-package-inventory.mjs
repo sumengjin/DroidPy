@@ -214,6 +214,15 @@ assert.match(internalStorageSource, /pathParts\.includes\('\.\.'\)/, 'file manag
 assert.ok(internalStorageSource.includes('resolvedPath !== basePath && !resolvedPath.startsWith(`${basePath}/`)'), 'server-returned paths must remain inside the DroidPy home folder');
 assert.match(internalStorageSource, /if \(!isInsideBasePath\(entry\.relPath\)\)/, 'opening and deleting entries must be restricted to the DroidPy home folder');
 assert.doesNotMatch(exportSource, /st_sdcard/, 'the old duplicate Android file browser must be removed from Android Management');
+const storageResolverStart = source.indexOf('private fun resolveSdcardTarget(relPath: String): File? {');
+const storageResolverEnd = source.indexOf('private fun processPid', storageResolverStart);
+assert.ok(storageResolverStart >= 0 && storageResolverEnd > storageResolverStart, 'DroidPy storage path resolver must exist');
+const storageResolver = source.slice(storageResolverStart, storageResolverEnd);
+assert.match(storageResolver, /val homeRoot = File\(storageRoot, "DroidPy"\)/, 'Android storage API must use DroidPy as its fixed root');
+assert.match(storageResolver, /cleaned\.startsWith\("DroidPy\/"\)/, 'Android storage API must reject paths outside DroidPy');
+assert.match(storageResolver, /homeCanonical \+ File\.separator/, 'canonical path checks must reject traversal and symlink escapes');
+assert.match(source, /val homeCanonical = File\(Environment\.getExternalStorageDirectory\(\), "DroidPy"\)\.canonicalPath[\s\S]*?childCanonical\.startsWith\(homeCanonical \+ File\.separator\)/, 'directory listings must hide symlinks that point outside DroidPy');
+assert.match(source, /target\.canonicalPath == homeCanonical/, 'the DroidPy home folder itself must not be deletable');
 assert.match(appSource, /pointer-events-none absolute inset-0 z-\[1\]/, 'one continuous paper layer must cover the entire viewport behind phone and tablet chrome');
 assert.match(appSource, /const workspaceSurfaceAlpha =\s*1 - Math\.min\(100, Math\.max\(0, settings\.workspaceTransparency \?\? 35\)\) \/ 100/, 'workspace transparency must map the 0–100 slider to a clamped 1–0 alpha');
 assert.match(appSource, /One continuous translucent paper surface covers the full viewport[\s\S]*?backgroundColor: is3dBgActive[\s\S]*?hexToRgba\(activeThemeMeta\.swatchBg, workspaceSurfaceAlpha\)/, 'one full-screen paper surface must own the live transparency alpha');
