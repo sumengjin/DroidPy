@@ -3165,12 +3165,14 @@ export default function App() {
                 backgroundColor: hexToRgba(activeThemeMeta.swatchBg, workspaceSurfaceAlpha),
               }}
             />
-            {/* A single SVG luminance mask cuts a true capsule-shaped opening from
-                the center paper strip. Its 0.75 mm radii keep both ends circular
-                instead of producing crescent-shaped joins between paper pieces. */}
+            {/* A single even-odd SVG path paints the paper around a capsule-shaped
+                opening. Avoiding an SVG luminance mask reduces Android WebView's
+                intermediate mask compositing at the two rounded ends. */}
             <svg
               aria-hidden="true"
               className="pointer-events-none absolute"
+              viewBox="0 0 1.5 100"
+              preserveAspectRatio="none"
               style={{
                 left: 'calc(var(--tablet-divider-center, 50vw) - 0.75mm)',
                 top: 0,
@@ -3179,35 +3181,10 @@ export default function App() {
                 overflow: 'visible',
               }}
             >
-              <defs>
-                <mask
-                  id="tablet-divider-rounded-aperture"
-                  maskUnits="userSpaceOnUse"
-                  maskContentUnits="userSpaceOnUse"
-                  x="0"
-                  y="0"
-                  width="100%"
-                  height="100%"
-                >
-                  <rect x="0" y="0" width="100%" height="100%" fill="white" />
-                  <rect
-                    x="0"
-                    y="8%"
-                    width="100%"
-                    height="84%"
-                    rx="0.75mm"
-                    ry="0.75mm"
-                    fill="black"
-                  />
-                </mask>
-              </defs>
-              <rect
-                x="0"
-                y="0"
-                width="100%"
-                height="100%"
+              <path
+                d="M0 0H1.5V100H0Z M0.75 8 A0.75 0.75 0 0 0 0 8.75 V91.25 A0.75 0.75 0 0 0 1.5 91.25 V8.75 A0.75 0.75 0 0 0 0.75 8Z"
                 fill={hexToRgba(activeThemeMeta.swatchBg, workspaceSurfaceAlpha)}
-                mask="url(#tablet-divider-rounded-aperture)"
+                fillRule="evenodd"
               />
             </svg>
           </>
