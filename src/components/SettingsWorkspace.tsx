@@ -1,5 +1,6 @@
 import React from 'react';
-import { HardDrive, Package, Sliders, Terminal, X } from 'lucide-react';
+import { FolderOpen, HardDrive, Package, Sliders, Terminal, X } from 'lucide-react';
+import { InternalStoragePanel } from './InternalStoragePanel';
 import {
   EditorSettings,
   ExecutionEngine,
@@ -75,7 +76,9 @@ interface SettingsWorkspaceProps {
   onRunShellInTermux: (cmd: string) => Promise<boolean | void>;
   onGenerateRequirements: () => void;
   onInstallRequirements: () => Promise<void>;
-  onSaveWorkspaceFile: (filename: string, content: string, openInEditor?: boolean) => void;
+  onSaveWorkspaceFile: (filename: string, content: string, openInEditor?: boolean, path?: string) => void;
+  storagePath: string;
+  onStoragePathChange: (path: string) => void;
   onOpenHelp: () => void;
   onOpenLogs: () => void;
   backupStatus?: PackageBackupStatus | null;
@@ -140,6 +143,8 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
   onGenerateRequirements,
   onInstallRequirements,
   onSaveWorkspaceFile,
+  storagePath,
+  onStoragePathChange,
   onOpenHelp,
   onOpenLogs,
   backupStatus,
@@ -162,7 +167,7 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
     return () => { delete window.__droidpySettingsBack; };
   }, [showCategories]);
   React.useEffect(() => {
-    if (open) setShowCategories(true);
+    if (open) setShowCategories(section === 'files' ? false : true);
   }, [open]);
   if (!open) return null;
 
@@ -207,6 +212,7 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
                 { id: 'packages' as const, label: t('neg_category_packages'), Icon: Package, desc: t('neg_category_packages_desc') },
                 { id: 'android' as const, label: t('neg_category_android'), Icon: HardDrive, desc: t('neg_category_android_desc') },
                 { id: 'settings' as const, label: t('neg_category_personalization'), Icon: Sliders, desc: t('neg_category_personalization_desc') },
+                { id: 'files' as const, label: t('neg_category_files'), Icon: FolderOpen, desc: t('neg_category_files_desc') },
               ].map(({ id, label, Icon, desc }) => (
                 <button
                   key={id}
@@ -247,6 +253,20 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
             </div>
         {/* Selected settings category */}
         <div className="flex-1 min-h-0 overflow-hidden">
+          {section === 'files' ? (
+            <InternalStoragePanel
+              mode="sdcard"
+              fullScreen
+              termuxConfig={termuxConfig}
+              files={files}
+              activeFile={activeFile}
+              initialPath={storagePath}
+              basePath="DroidPy"
+              onPathChange={onStoragePathChange}
+              onOpenSdcardFile={(filename, content, filePath) => onSaveWorkspaceFile(filename, content, true, filePath)}
+              onNotify={onNotify}
+            />
+          ) : (
           <ToolsAndPackages
             activeSubView={section}
             workspaceMode
@@ -337,6 +357,7 @@ export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
             onRebuildPipCertifi={onRebuildPipCertifi}
             onNotify={onNotify}
           />
+          )}
             </div>
           </div>
         </div>
