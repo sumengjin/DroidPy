@@ -736,11 +736,6 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
       };
       const searchPanelObserver = new MutationObserver(() => {
         const panel = view.dom.querySelector('.cm-search');
-        // On phones, the bottom workspace navigation is a sibling of <main>
-        // with its own stacking layer. Raise the editor's main layer only while
-        // the search dialog is open so the fixed dialog and backdrop cover it.
-        const workspaceMain = view.dom.closest('main');
-        workspaceMain?.classList.toggle('dp-search-layer-open', Boolean(panel));
         if (panel) {
           localizeSearchPanel(view.dom);
           if (!searchHistoryPushed) {
@@ -760,7 +755,6 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
 
       return () => {
         searchPanelObserver.disconnect();
-        view.dom.closest('main')?.classList.remove('dp-search-layer-open');
         window.removeEventListener('popstate', handleSearchBack);
         document.removeEventListener('keydown', handleSearchKeydown, true);
         document.removeEventListener('pointerdown', handleSearchOutsideClick, true);
