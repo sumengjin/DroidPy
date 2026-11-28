@@ -103,7 +103,6 @@ type ToolWindowId =
   | 'py_bridge'
   | 'pkg_native'
   | 'pkg_sandbox'
-  | 'st_sdcard'
   | 'st_cache'
   | 'st_dir'
   | 'set_theme'
@@ -555,17 +554,6 @@ python ${entryFile}
 
   const storageHubOptions: HubOptionItem[] = [
     {
-      id: 'st_sdcard',
-      title: t('hub_st_sdcard'),
-      desc: t('hub_st_sdcard_desc'),
-      badge: isNativeApk
-        ? nativeStorageGranted
-          ? t('sd_status_ok')
-          : t('sd_status_no')
-        : undefined,
-      Icon: HardDrive,
-    },
-    {
       id: 'st_cache',
       title: t('hub_st_cache'),
       desc: t('hub_st_cache_desc'),
@@ -946,36 +934,6 @@ python ${entryFile}
             onGenerateRequirements={onGenerateRequirements}
             onInstallRequirements={onInstallRequirements}
           />
-        );
-
-      case 'st_sdcard':
-        return isNativeApk ? (
-          <InternalStoragePanel
-            mode="sdcard"
-            termuxConfig={termuxConfig}
-            files={files}
-            activeFile={activeFile}
-            onOpenSdcardFile={(filename, content, path) => onSaveWorkspaceFile(filename, content, true, path)}
-            onNotify={onNotify}
-          />
-        ) : (
-          <div className="dp-panel p-4 space-y-3 min-w-0">
-            <h3 className="text-sm font-semibold flex items-center gap-2">
-              <HardDrive className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
-              <span>{t('sd_title')}</span>
-            </h3>
-            <p className="text-xs text-[var(--ide-text-muted)] leading-relaxed">
-              {canPickFolder ? t('set_dir_desc_ok') : t('set_dir_desc_no')}
-            </p>
-            <button
-              type="button"
-              onClick={() => void onLinkDirectory()}
-              className="min-h-[42px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium inline-flex items-center gap-2 transition-colors max-w-full overflow-hidden"
-            >
-              <FolderSync className="w-4 h-4 shrink-0" />
-              <span className="truncate">{linkedDirName ? t('set_dir_change') : t('set_dir_grant')}</span>
-            </button>
-          </div>
         );
 
       case 'st_cache':
