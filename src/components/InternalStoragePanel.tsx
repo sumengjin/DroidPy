@@ -185,7 +185,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
   };
 
   const isWithinStoragePath = (path: string) => {
-    const parts = path.replace(/\\\\/g, '/').split('/').filter(Boolean);
+    const parts = path.replace(/\\/g, '/').split('/').filter(Boolean);
     return !parts.includes('..');
   };
 
