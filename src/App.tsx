@@ -590,7 +590,6 @@ export default function App() {
     showUpdateModal,
     scriptExamplesVisible,
     settingsWorkspaceOpen,
-    mobileNewFileOpen,
   };
   const inputResolverRef = useRef<{
     resolve: (val: string) => void;
@@ -3183,7 +3182,6 @@ export default function App() {
             focusEditor: t('tab_focus_editor'),
           }}
           onSelectFile={setActiveFileId}
-          onCreateFile={() => setMobileNewFileOpen((open) => !open)}
           onNavigate={(destination) => {
             setScriptExamplesVisible(false);
             tabletWorkspace.navigate(destination);
@@ -3238,7 +3236,6 @@ export default function App() {
             focusEditor: t('tab_focus_editor'),
           }}
           onSelectFile={setActiveFileId}
-          onCreateFile={() => setMobileNewFileOpen((open) => !open)}
           onOpenSettings={() => setSettingsWorkspaceOpen(true)}
           execution={{
             pendingInput: pendingInputPrompt !== null,
@@ -3317,16 +3314,11 @@ export default function App() {
               // Keep tablet panes transparent to avoid compositing alpha twice.
             >
               <div className="flex items-center justify-between gap-2 px-2 pt-1 h-9 bg-transparent shrink-0">
-                <div className="min-w-0 flex-1 overflow-hidden">
-                  <WorkspaceFileTabs
-                    files={files}
-                    activeFileId={activeFile.id}
-                    onSelect={setActiveFileId}
-                    onCreate={() => setMobileNewFileOpen((open) => !open)}
-                    createLabel={t('files_new_btn')}
-                    filesLabel={t('files_title')}
-                    variant="tablet"
-                  />
+                <div className="min-w-0 flex-1 flex items-center gap-2 overflow-hidden px-1">
+                  <Code2 className="w-4 h-4 shrink-0 text-[var(--ide-accent-text)]" />
+                  <span className="min-w-0 truncate text-xs font-mono text-[var(--ide-text)]" title={activeFile.name}>
+                    {t('editor_current_file', { name: activeFile.name })}
+                  </span>
                 </div>
                 <div className="flex items-center gap-0.5 shrink-0" aria-label="Editor tools">
                   <button
@@ -3381,12 +3373,11 @@ export default function App() {
                 </span>
               </div>
 
-              {mobileNewFileOpen && renderInlineNewFileBar()}
-
               {scriptExamplesVisible ? (
                 <ScriptExamplesPanel
                   files={files}
                   onCreateFile={handleCreateFile}
+                  onSelectFile={setActiveFileId}
                   onClose={() => setScriptExamplesVisible(false)}
                   onNotify={showToast}
                 />
@@ -3537,11 +3528,11 @@ export default function App() {
                       </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 px-2 pt-1 pb-1">
-                    <WorkspaceFileTabs files={files} activeFileId={activeFile.id} onSelect={setActiveFileId} onCreate={() => setMobileNewFileOpen((open) => !open)} createLabel={t('files_new_btn')} filesLabel={t('files_title')} variant="phone" />
-                  </div>
-                  <div className="px-3 pb-1 text-[10px] font-mono text-[var(--ide-text-muted)] truncate">
-                    {activeFile.name}
+                  <div className="flex min-h-[30px] items-center gap-2 px-3 pt-0.5 pb-1 min-w-0">
+                    <Code2 className="w-3.5 h-3.5 shrink-0 text-[var(--ide-accent-text)]" />
+                    <span className="min-w-0 truncate text-[10px] font-mono text-[var(--ide-text)]" title={activeFile.name}>
+                      {t('editor_current_file', { name: activeFile.name })}
+                    </span>
                   </div>
                 </div>
 
