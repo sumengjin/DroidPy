@@ -3470,6 +3470,7 @@ export default function App() {
                     <FileExplorer
                       files={files}
                       activeFileId={activeFile.id}
+                      openTemplatesRequest={openScriptExamples}
                       linkedDirName={linkedDirHandle?.name ?? null}
                       termuxConnected={termuxConnectionState === 'connected'}
                       termuxEmbedded={Boolean(termuxHealth?.embedded)}
