@@ -11,15 +11,13 @@ import {
   X,
   FolderSync,
   RefreshCw,
-  HardDrive,
   History,
   RotateCcw,
   FileDown,
   FileUp,
 } from 'lucide-react';
 import JSZip from 'jszip';
-import { PythonFile, ScriptBackupSnapshot, TermuxConfig } from '../types/ide';
-import { InternalStoragePanel } from './InternalStoragePanel';
+import { PythonFile, ScriptBackupSnapshot } from '../types/ide';
 import { useI18n } from '../services/i18n';
 import { copyTextReliable } from '../utils/clipboard';
 import { downloadBlob } from '../utils/downloadBlob';
@@ -36,10 +34,6 @@ interface FileExplorerProps {
   activeFileId: string;
   linkedDirName: string | null;
   termuxConnected?: boolean;
-  termuxEmbedded?: boolean;
-  termuxConfig?: TermuxConfig;
-  onOpenExternalFile?: (file: { name: string; content: string; path: string }) => void;
-  onBackupToSdcard?: () => Promise<void>;
   onPullFromTermux?: () => Promise<void>;
   onLinkDirectory: () => Promise<void>;
   onSaveToDirectory: () => Promise<void>;
@@ -66,10 +60,6 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   activeFileId,
   linkedDirName,
   termuxConnected,
-  termuxEmbedded,
-  termuxConfig,
-  onOpenExternalFile,
-  onBackupToSdcard,
   onPullFromTermux,
   onLinkDirectory,
   onSaveToDirectory,
@@ -90,32 +80,10 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  // On Android, Files opens directly into shared storage instead of hiding the real file manager one level deeper.
-  const [showDeviceBrowser, setShowDeviceBrowser] = useState(() =>
-    Boolean(termuxEmbedded || window.DroidPyNative?.isNativeApp?.())
-  );
   const [showBackups, setShowBackups] = useState(false);
   const [backupLabel, setBackupLabel] = useState('');
   const [backups, setBackups] = useState<ScriptBackupSnapshot[]>(() => listScriptBackups());
   const [confirmDeleteBackupId, setConfirmDeleteBackupId] = useState<string | null>(null);
-  const isNativeApk = Boolean(termuxEmbedded || window.DroidPyNative?.isNativeApp?.());
-  const [nativeStorageGranted, setNativeStorageGranted] = useState<boolean>(() =>
-    Boolean(window.DroidPyNative?.hasStoragePermission?.())
-  );
-
-  useEffect(() => {
-    if (!isNativeApk) return;
-    const syncPerm = () => {
-      setNativeStorageGranted(Boolean(window.DroidPyNative?.hasStoragePermission?.()));
-    };
-    syncPerm();
-    window.addEventListener('focus', syncPerm);
-    document.addEventListener('visibilitychange', syncPerm);
-    return () => {
-      window.removeEventListener('focus', syncPerm);
-      document.removeEventListener('visibilitychange', syncPerm);
-    };
-  }, [isNativeApk]);
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -330,56 +298,6 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
               <span>{t('files_dir_auth')}</span>
             </button>
           )}
-        </div>
-      )}
-
-      {/* Android APK /sdcard Quick Bar */}
-      {isNativeApk && (
-        <div className="px-3 py-2 border-b border-[var(--ide-border)] bg-[var(--ide-surface)] space-y-1.5 shrink-0">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <HardDrive className="w-3.5 h-3.5 text-[var(--ide-accent)] shrink-0" />
-              <span className="text-[11px] font-medium truncate">
-                {nativeStorageGranted ? t('sd_quick_granted') : t('sd_quick_denied')}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                void onLinkDirectory();
-                window.setTimeout(() => {
-                  setNativeStorageGranted(Boolean(window.DroidPyNative?.hasStoragePermission?.()));
-                }, 800);
-              }}
-              className={`min-h-[44px] px-3 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 ${
-                nativeStorageGranted
-                  ? 'border border-[var(--ide-border)] bg-[var(--ide-bg)] text-[var(--ide-text)] hover:border-[var(--ide-accent)]'
-                  : 'bg-amber-600 text-white'
-              }`}
-            >
-              {nativeStorageGranted ? t('files_dir_auth') : t('sd_grant_btn')}
-            </button>
-          </div>
-          <div className="flex items-center gap-1.5">
-            {termuxConfig && (
-              <button
-                type="button"
-                onClick={() => setShowDeviceBrowser(true)}
-                className="flex-1 min-h-[44px] px-2 rounded-lg bg-[var(--ide-accent)] text-white text-xs font-semibold truncate"
-              >
-                瀏覽裝置檔案
-              </button>
-            )}
-            {onBackupToSdcard && (
-              <button
-                type="button"
-                onClick={() => void onBackupToSdcard()}
-                className="flex-1 min-h-[44px] px-2 rounded-lg bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] text-xs font-medium truncate"
-              >
-                {t('sd_quick_backup')}
-              </button>
-            )}
-          </div>
         </div>
       )}
 
@@ -730,24 +648,6 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           <span>{t('files_zip')}</span>
         </button>
       </div>
-      {showDeviceBrowser && termuxConfig && onOpenExternalFile && (
-        <div className="absolute inset-0 z-30 overflow-hidden bg-[var(--ide-bg)]">
-          <InternalStoragePanel
-            mode="sdcard"
-            fullScreen
-            onlyPythonFiles
-            onClose={() => setShowDeviceBrowser(false)}
-            termuxConfig={termuxConfig}
-            files={files}
-            activeFile={files.find((file) => file.id === activeFileId) ?? files[0]}
-            onOpenSdcardFile={(name, content, path) => {
-              setShowDeviceBrowser(false);
-              onOpenExternalFile({ name, content, path });
-            }}
-            onNotify={onNotify}
-          />
-        </div>
-      )}
     </div>
   );
 };
