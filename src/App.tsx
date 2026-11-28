@@ -679,7 +679,7 @@ export default function App() {
 
   useEffect(() => {
     if (!activeFileId) return;
-    setEditorHistoryIds((previous) => previous.includes(activeFileId) ? previous : [...previous, activeFileId]);
+    setEditorHistoryIds((previous) => [...previous.filter((id) => id !== activeFileId), activeFileId]);
   }, [activeFileId]);
 
   useEffect(() => {
@@ -790,6 +790,7 @@ export default function App() {
     termuxConfig,
     crawlerSession,
     sandboxPackages,
+    editorHistoryIds,
     flushNativeStateNow,
   ]);
 
@@ -869,7 +870,8 @@ export default function App() {
   const projectFiles = useMemo(() => {
     const historyIds = new Set(editorHistoryIds);
     historyIds.add(activeFileId);
-    return files.filter((file) => historyIds.has(file.id));
+    const byId = new Map(files.map((file) => [file.id, file]));
+    return [...editorHistoryIds].reverse().map((id) => byId.get(id)).filter((file): file is PythonFile => Boolean(file && historyIds.has(file.id)));
   }, [files, editorHistoryIds, activeFileId]);
 
   useEffect(() => {
