@@ -3175,6 +3175,7 @@ def clipboard_set(text):
             val storageCanonical = storageRoot.canonicalPath
             val homeRoot = File(storageRoot, "DroidPy")
             val homeCanonical = homeRoot.canonicalPath
+            if (homeCanonical != homeRoot.absoluteFile.path) return null
             if (!homeCanonical.startsWith(storageCanonical + File.separator)) return null
             val cleaned = relPath.trim().trimStart('/')
             val candidate = when {
