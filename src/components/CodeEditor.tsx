@@ -514,7 +514,9 @@ function localizeSearchPanel(root: HTMLElement): void {
 
   const translations: Record<string, string> = {
     find: '尋找',
+    'find:': '尋找：',
     replace: '取代',
+    'replace:': '取代：',
     next: '下一個',
     previous: '上一個',
     'replace all': '全部取代',
@@ -523,6 +525,7 @@ function localizeSearchPanel(root: HTMLElement): void {
     'select all': '全部選取',
     close: '關閉',
     search: '搜尋',
+    'search:': '搜尋：',
   };
   const translate = (value: string) => translations[value.trim().toLowerCase()] ?? value;
 
