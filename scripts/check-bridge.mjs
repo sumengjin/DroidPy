@@ -435,7 +435,7 @@ assert.ok(!androidBuilder.includes('private val executor = Executors.newCachedTh
 // The Settings workspace opens its main tools directly; nested folder landing pages are retired.
 const toolsHubSource = await readFile('src/components/ToolsAndPackages.tsx', 'utf8');
 const settingsWorkspaceSource = await readFile('src/components/SettingsWorkspace.tsx', 'utf8');
-assert.ok(settingsWorkspaceSource.includes('onOpenSdcardFile={(filename, content, filePath) => onSaveWorkspaceFile(filename, content, true, filePath)}'), 'the independent Settings file manager must preserve the source path when importing files');
+assert.ok(settingsWorkspaceSource.includes('onOpenSdcardFile={(filename, content, filePath) => {') && settingsWorkspaceSource.includes('onClose();') && settingsWorkspaceSource.includes('onSaveWorkspaceFile(filename, content, true, filePath)'), 'the independent Settings file manager must close back to the editor and preserve the source path when importing files');
 assert.ok(settingsWorkspaceSource.includes('onSaveWorkspaceFile(filename, content, true, filePath)'), 'all Settings file-manager import callbacks must forward their original path');
 const externalFileSaveStart = appSource.indexOf('const handleSaveWorkspaceFile = useCallback');
 const externalFileSaveEnd = appSource.indexOf('const handleUpdateSettings', externalFileSaveStart);
