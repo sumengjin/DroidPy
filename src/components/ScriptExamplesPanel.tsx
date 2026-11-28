@@ -1,25 +1,52 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { BookOpen } from 'lucide-react';
-import { PythonFile } from '../types/ide';
-import { SNIPPET_CATEGORIES, SNIPPET_TEMPLATES, SnippetCategoryId } from '../data/defaultFiles';
+import type { PythonFile } from '../types/ide';
+import { SNIPPET_CATEGORIES, SNIPPET_TEMPLATES, STARTER_EXAMPLES, SnippetCategoryId } from '../data/defaultFiles';
 import { useI18n } from '../services/i18n';
 
 interface ScriptExamplesPanelProps {
   files: PythonFile[];
   onCreateFile: (name: string, content: string) => void;
+  onSelectFile: (id: string) => void;
   onClose: () => void;
   onNotify: (message: string) => void;
 }
+
+type ExampleItem = {
+  id: string;
+  title: string;
+  filename: string;
+  category: Exclude<SnippetCategoryId, 'all'>;
+  desc: string;
+  code: string;
+  existingFileId: string | null;
+};
 
 /** Editor-owned examples workspace. It never changes the Files navigation destination. */
 export const ScriptExamplesPanel: React.FC<ScriptExamplesPanelProps> = ({
   files,
   onCreateFile,
+  onSelectFile,
   onClose,
   onNotify,
 }) => {
   const { t } = useI18n();
   const [category, setCategory] = useState<SnippetCategoryId>('all');
+  const examples = useMemo<ExampleItem[]>(() => [
+    ...STARTER_EXAMPLES.map((example) => ({
+      id: example.id,
+      title: example.title,
+      filename: example.name,
+      category: example.category,
+      desc: example.desc,
+      code: example.content,
+      existingFileId: example.id,
+    })),
+    ...SNIPPET_TEMPLATES.map((template) => ({
+      ...template,
+      existingFileId: null,
+    })),
+  ], []);
 
   return (
     <section
@@ -61,13 +88,21 @@ export const ScriptExamplesPanel: React.FC<ScriptExamplesPanelProps> = ({
           })}
         </div>
         <div className="mt-2.5 space-y-2">
-          {SNIPPET_TEMPLATES.filter(
+          {examples.filter(
             (template) => category === 'all' || template.category === category
           ).map((template) => (
             <button
               key={template.id}
               type="button"
               onClick={() => {
+                const existing = template.existingFileId
+                  ? files.find((file) => file.id === template.existingFileId)
+                  : undefined;
+                if (existing) {
+                  onSelectFile(existing.id);
+                  onClose();
+                  return;
+                }
                 let name = template.filename;
                 if (files.some((file) => file.name.toLowerCase() === name.toLowerCase())) {
                   const stem = template.filename.replace(/\.py$/i, '');
