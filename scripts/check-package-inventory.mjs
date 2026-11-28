@@ -163,7 +163,7 @@ assert.match(appSource, /setScriptExamplesVisible\(true\)/, 'the book shortcut m
 assert.doesNotMatch(appSource, /setScriptExamplesVisible\(true\);\s*set(?:MobileTab|TabletPaneTab)\('files'\)/, 'opening examples must not mutate the Files navigation destination');
 assert.match(appSource, /if \(ov\.scriptExamplesVisible\)[\s\S]*?setScriptExamplesVisible\(false\)/, 'Android Back must close the editor-owned examples workspace first');
 assert.doesNotMatch(fileExplorerSource, /SNIPPET_TEMPLATES|templatesVisible|openTemplatesRequest/, 'the file manager must not own or render script examples');
-assert.match(appSource, /<WorkspaceFileTabs[\s\S]*?</WorkspaceFileTabs>/, 'main.py and other editor file entries must remain visible above the examples panel');
+assert.match(appSource, /<WorkspaceFileTabs[\s\S]*?variant="phone"/, 'main.py and other editor file entries must remain visible in the phone editor header while examples are open');
 const tabletEditorTools = appSource.slice(appSource.indexOf('/* Tablet Primary Editor Pane */'), appSource.indexOf('/* Tablet Secondary Output / Files / Browser Workspace */'));
 assert.match(tabletEditorTools, /<BookOpen className="w-4 h-4" \/>/, 'tablet editor must expose the same direct script examples entry');
 const mobileNavStart = appSource.indexOf('<WorkspaceNavigation');
