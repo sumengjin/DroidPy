@@ -682,7 +682,9 @@ button.dp-execution-control::after {
 /* Search / replace panel: readable theme-aware glass dialog. */
 .cm-editor .cm-panels,
 .cm-editor .cm-panels-top,
-.cm-panels-top .cm-search {
+.cm-editor .cm-panels-bottom,
+:is(.cm-panels-top, .cm-panels-bottom) .cm-search,
+.cm-panels-bottom .cm-search {
   color: var(--ide-text) !important;
 }
 
@@ -709,10 +711,10 @@ button.dp-execution-control::after {
   min-height: 0 !important;
 }
 
-/* The panel host must cover the complete editor pane, not just the
-   intrinsic height of CodeMirror's content. This makes the dialog's
-   center independent of document length and toolbar/header height. */
-.dp-code-editor-container .cm-editor > .cm-panels-top {
+/* CodeMirror may mount search in either the top or bottom panel host.
+   Cover the entire editor pane in both cases so the dialog always centers. */
+.dp-code-editor-container .cm-editor > .cm-panels-top,
+.dp-code-editor-container .cm-editor > .cm-panels-bottom {
   position: absolute !important;
   inset: 0 !important;
   display: grid !important;
@@ -725,7 +727,7 @@ button.dp-execution-control::after {
   z-index: 100000 !important;
 }
 
-.cm-panels-top .cm-search {
+:is(.cm-panels-top, .cm-panels-bottom) .cm-search {
   position: relative !important;
   inset: auto !important;
   z-index: 1 !important;
@@ -758,8 +760,8 @@ button.dp-execution-control::after {
   to { opacity: 1; transform: scale(1); }
 }
 
-.cm-panels-top .cm-search input:not([type="checkbox"]),
-.cm-panels-top .cm-search .cm-textfield {
+:is(.cm-panels-top, .cm-panels-bottom) .cm-search input:not([type="checkbox"]),
+:is(.cm-panels-top, .cm-panels-bottom) .cm-search .cm-textfield {
   min-width: 0;
   min-height: 36px;
   padding: 6px 9px !important;
@@ -770,13 +772,13 @@ button.dp-execution-control::after {
   outline-color: var(--ide-accent) !important;
 }
 
-.cm-panels-top .cm-search input::placeholder {
+:is(.cm-panels-top, .cm-panels-bottom) .cm-search input::placeholder {
   color: var(--ide-text-muted);
   opacity: 0.9;
 }
 
 /* Keep each option's checkbox and Traditional Chinese label on one baseline. */
-.cm-panels-top .cm-search label {
+:is(.cm-panels-top, .cm-panels-bottom) .cm-search label {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: flex-start;
@@ -787,7 +789,7 @@ button.dp-execution-control::after {
   white-space: nowrap;
 }
 
-.cm-panels-top .cm-search input[type="checkbox"] {
+:is(.cm-panels-top, .cm-panels-bottom) .cm-search input[type="checkbox"] {
   flex: 0 0 16px;
   width: 16px !important;
   min-width: 16px !important;
@@ -798,8 +800,8 @@ button.dp-execution-control::after {
   accent-color: var(--ide-accent);
 }
 
-.cm-panels-top .cm-search button,
-.cm-panels-top .cm-search .cm-button {
+:is(.cm-panels-top, .cm-panels-bottom) .cm-search button,
+:is(.cm-panels-top, .cm-panels-bottom) .cm-search .cm-button {
   min-height: 36px;
   padding: 6px 10px !important;
   color: var(--ide-text) !important;
@@ -810,14 +812,14 @@ button.dp-execution-control::after {
   line-height: 1.2;
 }
 
-.cm-panels-top .cm-search button:focus-visible,
-.cm-panels-top .cm-search input:focus-visible {
+:is(.cm-panels-top, .cm-panels-bottom) .cm-search button:focus-visible,
+:is(.cm-panels-top, .cm-panels-bottom) .cm-search input:focus-visible {
   outline: 2px solid var(--ide-accent) !important;
   outline-offset: 2px;
 }
 
 @media (max-width: 640px) {
-  .cm-panels-top .cm-search {
+  :is(.cm-panels-top, .cm-panels-bottom) .cm-search {
     gap: 6px;
     width: min(380px, calc(100vw - 48px));
     max-width: calc(100vw - 48px);
@@ -826,7 +828,7 @@ button.dp-execution-control::after {
     border-radius: 16px !important;
   }
 
-  .cm-panels-top .cm-search input {
+  :is(.cm-panels-top, .cm-panels-bottom) .cm-search input {
     flex: 1 1 42%;
   }
 
