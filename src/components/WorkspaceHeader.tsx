@@ -49,7 +49,7 @@ interface WorkspaceHeaderProps {
   execution: WorkspaceExecutionState;
 }
 
-/** Form-factor-specific header built from shared file and execution controls. */
+/** Form-factor-specific workspace navigation and shared execution controls. */
 export function WorkspaceHeader({
   variant,
   activeTab,
