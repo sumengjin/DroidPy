@@ -382,7 +382,7 @@ assert.ok(appSource.includes('await scriptCompletion'), 'Stop must wait for the 
 assert.ok(appSource.includes('if (termuxStopRequestedRef.current) return;'), 'a pending script must re-check Stop before spawning');
 assert.ok(appSource.includes('waitForActiveTermuxStreamReady'), 'Stop must wait until the native bridge has accepted an in-flight run request');
 const stopHandlerStart = appSource.indexOf('const handleStopTermux = useCallback');
-const stopHandlerEnd = appSource.indexOf('const handleBackupToSdcard', stopHandlerStart);
+const stopHandlerEnd = appSource.indexOf('const handleCleanupStuckProcesses', stopHandlerStart);
 assert.ok(stopHandlerStart >= 0 && stopHandlerEnd > stopHandlerStart);
 const stopHandler = appSource.slice(stopHandlerStart, stopHandlerEnd);
 assert.ok(stopHandler.indexOf('await stopTermuxProcess(termuxConfig, { source, operation })') < stopHandler.indexOf('await waitForActiveTermuxStream()'), 'native process must be stopped before waiting for its output stream');
