@@ -676,24 +676,23 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           )}
         </div>
 
-        {/* Android Code Templates Accordion */}
-        <div className="p-3">
-          <button
-            type="button"
-            onClick={() => setShowTemplates((v) => !v)}
-            className="w-full min-h-[44px] px-3.5 flex items-center justify-between dp-panel text-xs font-medium text-[var(--ide-text)] hover:border-[var(--ide-accent)] transition-colors"
-          >
-            <span className="flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-[var(--ide-accent)]" />
-              <span>{t('files_templates_btn')}</span>
-            </span>
-            <span className="text-[var(--ide-text-muted)]">
-              {showTemplates ? t('files_collapse') : t('files_expand')}
-            </span>
-          </button>
-
-          {showTemplates && (
-            <div className="mt-2.5 space-y-2.5">
+        {/* Script examples are a dedicated view, separate from file management. */}
+        {showTemplates && (
+          <div className="absolute inset-0 z-40 flex min-h-0 flex-col overflow-y-auto bg-[var(--ide-bg)]">
+            <div className="flex min-h-[56px] shrink-0 items-center justify-between border-b border-[var(--ide-border)] px-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-[var(--ide-text)]">
+                <BookOpen className="h-4 w-4 text-[var(--ide-accent)]" />
+                <span>{t('files_templates_btn')}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTemplates(false)}
+                className="min-h-[40px] px-3 text-xs font-medium text-[var(--ide-accent-text)]"
+              >
+                {t('files_collapse')}
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 p-3">
               <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-0.5">
                 {SNIPPET_CATEGORIES.map((cat) => {
                   const active = templateCategory === cat.id;
@@ -713,8 +712,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                   );
                 })}
               </div>
-
-              <div className="space-y-2">
+              <div className="mt-2.5 space-y-2">
                 {SNIPPET_TEMPLATES.filter(
                   (tpl) => templateCategory === 'all' || tpl.category === templateCategory
                 ).map((tpl) => (
@@ -727,6 +725,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                         targetName = `${tpl.filename.replace('.py', '')}_${Date.now().toString().slice(-3)}.py`;
                       }
                       onCreateFile(targetName, tpl.code);
+                      setShowTemplates(false);
                       onNotify(t('files_template_added', { name: targetName }));
                     }}
                     className="w-full text-left p-3.5 dp-panel hover:border-[var(--ide-accent)] transition-colors"
@@ -742,8 +741,8 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                 ))}
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Bottom File Actions */}
