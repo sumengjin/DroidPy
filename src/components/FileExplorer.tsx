@@ -54,6 +54,8 @@ interface FileExplorerProps {
   onNotify: (msg: string) => void;
   showHeaderTitle?: boolean;
   openTemplatesRequest?: number;
+  templatesVisible?: boolean;
+  onTemplatesVisibilityChange?: (visible: boolean) => void;
 }
 
 const MAX_IMPORT_BYTES = 512 * 1024;
@@ -85,6 +87,8 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   onNotify,
   showHeaderTitle = true,
   openTemplatesRequest = 0,
+  templatesVisible = false,
+  onTemplatesVisibilityChange,
 }) => {
   const { t } = useI18n();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -98,11 +102,9 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   const [showDeviceBrowser, setShowDeviceBrowser] = useState(() =>
     Boolean(termuxEmbedded || window.DroidPyNative?.isNativeApp?.())
   );
-  const [showTemplates, setShowTemplates] = useState(openTemplatesRequest > 0);
-
   useEffect(() => {
-    if (openTemplatesRequest > 0) setShowTemplates(true);
-  }, [openTemplatesRequest]);
+    if (openTemplatesRequest > 0) onTemplatesVisibilityChange?.(true);
+  }, [openTemplatesRequest, onTemplatesVisibilityChange]);
   const [templateCategory, setTemplateCategory] = useState<SnippetCategoryId>('all');
   const [showBackups, setShowBackups] = useState(false);
   const [backupLabel, setBackupLabel] = useState('');
@@ -677,7 +679,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
         </div>
 
         {/* Script examples are a dedicated view, separate from file management. */}
-        {showTemplates && (
+        {templatesVisible && (
           <div className="absolute inset-0 z-40 flex min-h-0 flex-col overflow-y-auto bg-[var(--ide-bg)]">
             <div className="flex min-h-[56px] shrink-0 items-center justify-between border-b border-[var(--ide-border)] px-4">
               <div className="flex items-center gap-2 text-sm font-semibold text-[var(--ide-text)]">
@@ -686,7 +688,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
               </div>
               <button
                 type="button"
-                onClick={() => setShowTemplates(false)}
+                onClick={() => onTemplatesVisibilityChange?.(false)}
                 className="min-h-[40px] px-3 text-xs font-medium text-[var(--ide-accent-text)]"
               >
                 {t('files_collapse')}
@@ -725,7 +727,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                         targetName = `${tpl.filename.replace('.py', '')}_${Date.now().toString().slice(-3)}.py`;
                       }
                       onCreateFile(targetName, tpl.code);
-                      setShowTemplates(false);
+                      onTemplatesVisibilityChange?.(false);
                       onNotify(t('files_template_added', { name: targetName }));
                     }}
                     className="w-full text-left p-3.5 dp-panel hover:border-[var(--ide-accent)] transition-colors"
