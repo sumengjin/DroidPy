@@ -3167,9 +3167,9 @@ def clipboard_set(text):
         return "bytes=\${bytes.size} sha256=$digest firstNonWhitespaceByteHex=$firstCodeByteHex"
     }
 
-    // All shared-storage file operations are rooted at /storage/emulated/0/DroidPy.
-    // Canonical-path validation also blocks '..' traversal and symlink escapes.
-    private fun resolveSdcardTarget(relPath: String): File? {
+    // Browsing/reading may cover shared storage; mutations remain confined to DroidPy.
+    // Canonical-path validation blocks '..' traversal and symlink escapes in both modes.
+    private fun resolveSdcardTarget(relPath: String, allowOutsideHome: Boolean = false): File? {
         return try {
             val storageRoot = Environment.getExternalStorageDirectory()
             val storageCanonical = storageRoot.canonicalPath
@@ -3179,14 +3179,18 @@ def clipboard_set(text):
             if (!homeCanonical.startsWith(storageCanonical + File.separator)) return null
             val cleaned = relPath.trim().trimStart('/')
             val candidate = when {
+                cleaned.isEmpty() && allowOutsideHome -> storageRoot
                 cleaned.isEmpty() || cleaned == "DroidPy" -> homeRoot
                 cleaned.startsWith("DroidPy/") -> File(storageRoot, cleaned)
+                allowOutsideHome -> File(storageRoot, cleaned)
                 else -> return null
             }
             val candidateCanonical = candidate.canonicalPath
-            if (candidateCanonical != homeCanonical && !candidateCanonical.startsWith(homeCanonical + File.separator)) {
-                return null
-            }
+            val withinStorage = candidateCanonical == storageCanonical ||
+                candidateCanonical.startsWith(storageCanonical + File.separator)
+            val withinHome = candidateCanonical == homeCanonical ||
+                candidateCanonical.startsWith(homeCanonical + File.separator)
+            if (!withinStorage || (!allowOutsideHome && !withinHome)) return null
             candidate
         } catch (_: Exception) {
             null
@@ -4332,7 +4336,7 @@ def clipboard_set(text):
                         .firstOrNull { it.startsWith("path=") }
                         ?.substringAfter("=")
                         ?.let { URLDecoder.decode(it, "UTF-8") } ?: ""
-                    val dir = resolveSdcardTarget(relParam)
+                    val dir = resolveSdcardTarget(relParam, allowOutsideHome = true)
                     if (dir == null) {
                         writeJson(out, 400, JSONObject().put("error", "Invalid path"))
                     } else if (!hasStorageAccess() && !dir.canRead()) {
@@ -4346,7 +4350,7 @@ def clipboard_set(text):
                             if (child.name.startsWith(".")) continue
                             val childCanonical = try { child.canonicalPath } catch (_: Exception) { "" }
                             if (childCanonical.isBlank()) continue
-                            if (childCanonical != homeCanonical && !childCanonical.startsWith(homeCanonical + File.separator)) continue
+                            if (childCanonical != rootCanonical && !childCanonical.startsWith(rootCanonical + File.separator)) continue
                             val childRel = childCanonical.removePrefix(rootCanonical).trimStart('/')
                             arr.put(
                                 JSONObject()
@@ -4372,7 +4376,7 @@ def clipboard_set(text):
 
                 method == "POST" && path == "/sdcard/read" -> {
                     val relPath = bodyJson.optString("path", "")
-                    val target = resolveSdcardTarget(relPath)
+                    val target = resolveSdcardTarget(relPath, allowOutsideHome = true)
                     if (target == null || !target.exists() || !target.isFile) {
                         writeJson(out, 404, JSONObject().put("error", "找不到目標檔案"))
                     } else if (target.length() > 512 * 1024) {
