@@ -646,12 +646,38 @@ button.dp-execution-control::after {
 }
 
 .cm-editor .cm-search {
+  position: fixed !important;
+  z-index: 100000 !important;
+  top: 50% !important;
+  left: 50% !important;
+  right: auto !important;
+  bottom: auto !important;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  background: transparent;
+  gap: 10px;
+  width: min(560px, calc(100vw - 28px));
+  max-width: calc(100vw - 28px);
+  max-height: min(82vh, 680px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 18px;
+  color: var(--ide-text) !important;
+  background: color-mix(in srgb, var(--ide-surface) 94%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--ide-border) 82%, transparent) !important;
+  border-radius: 20px !important;
+  box-shadow:
+    0 0 0 100vmax rgba(8, 13, 24, 0.54),
+    0 24px 72px rgba(0, 0, 0, 0.28) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.22);
+  backdrop-filter: blur(24px) saturate(1.22);
+  transform: translate(-50%, -50%);
+  animation: dp-search-dialog-in 160ms ease-out both;
+}
+
+@keyframes dp-search-dialog-in {
+  from { opacity: 0; transform: translate(-50%, -47%) scale(0.98); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
 .cm-editor .cm-search input,
@@ -718,8 +744,12 @@ button.dp-execution-control::after {
 
 @media (max-width: 640px) {
   .cm-editor .cm-search {
-    gap: 7px;
-    padding: 9px;
+    gap: 8px;
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+    max-height: 78vh;
+    padding: 14px;
+    border-radius: 18px !important;
   }
 
   .cm-editor .cm-search input {
