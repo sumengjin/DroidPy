@@ -634,7 +634,7 @@ button.dp-execution-control::after {
 /* Search / replace panel: readable theme-aware glass and a reliably tappable close control. */
 .cm-editor .cm-panels,
 .cm-editor .cm-panels-top,
-.cm-editor .cm-search {
+.dp-search-overlay .cm-search {
   color: var(--ide-text) !important;
 }
 
@@ -645,31 +645,32 @@ button.dp-execution-control::after {
   backdrop-filter: blur(18px) saturate(1.18);
 }
 
-/* CodeMirror renders the search panel inside its top-panels wrapper.
-   Turn that wrapper into a full-editor overlay so the dialog is centered in
-   the actual editing viewport, not in the wrapper's tiny content height.
-   The wrapper is local to each editor, so split-screen tablets stay pane-local. */
-.cm-editor {
+/* The live CodeMirror search form is moved into a pane-owned overlay.
+   The overlay fills the actual editor container, independent of CodeMirror's
+   top-panel strip, so it centers correctly on phones and tablets. */
+.dp-code-editor-container {
   position: relative !important;
+  min-width: 0;
+  min-height: 0;
 }
 
-.cm-editor .cm-panels-top {
+.dp-search-overlay {
   position: absolute !important;
   inset: 0 !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  padding: 16px !important;
+  display: grid !important;
+  place-items: center !important;
   box-sizing: border-box !important;
+  padding: 16px !important;
   background: transparent !important;
-  border: 0 !important;
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
   pointer-events: none !important;
   z-index: 100000 !important;
 }
 
-.cm-editor .cm-search {
+.dp-search-overlay:empty {
+  display: none !important;
+}
+
+.dp-search-overlay .cm-search {
   position: relative !important;
   inset: auto !important;
   z-index: 1 !important;
@@ -677,8 +678,8 @@ button.dp-execution-control::after {
   flex-wrap: wrap;
   align-items: center;
   gap: 7px;
-  width: min(420px, calc(100vw - 48px));
-  max-width: calc(100vw - 48px);
+  width: min(420px, 100%);
+  max-width: 100%;
   max-height: 70vh;
   overflow-y: auto;
   box-sizing: border-box;
@@ -702,8 +703,8 @@ button.dp-execution-control::after {
   to { opacity: 1; transform: scale(1); }
 }
 
-.cm-editor .cm-search input,
-.cm-editor .cm-search .cm-textfield {
+.dp-search-overlay .cm-search input,
+.dp-search-overlay .cm-search .cm-textfield {
   min-width: 0;
   min-height: 36px;
   padding: 6px 9px !important;
@@ -714,13 +715,13 @@ button.dp-execution-control::after {
   outline-color: var(--ide-accent) !important;
 }
 
-.cm-editor .cm-search input::placeholder {
+.dp-search-overlay .cm-search input::placeholder {
   color: var(--ide-text-muted);
   opacity: 0.9;
 }
 
-.cm-editor .cm-search button,
-.cm-editor .cm-search .cm-button {
+.dp-search-overlay .cm-search button,
+.dp-search-overlay .cm-search .cm-button {
   min-height: 36px;
   padding: 6px 10px !important;
   color: var(--ide-text) !important;
@@ -731,13 +732,13 @@ button.dp-execution-control::after {
   line-height: 1.2;
 }
 
-.cm-editor .cm-search button:focus-visible,
-.cm-editor .cm-search input:focus-visible {
+.dp-search-overlay .cm-search button:focus-visible,
+.dp-search-overlay .cm-search input:focus-visible {
   outline: 2px solid var(--ide-accent) !important;
   outline-offset: 2px;
 }
 
-.cm-editor .cm-search .dp-search-close {
+.dp-search-overlay .cm-search .dp-search-close {
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
@@ -759,13 +760,13 @@ button.dp-execution-control::after {
   touch-action: manipulation;
 }
 
-.cm-editor .cm-search .dp-search-close:active {
+.dp-search-overlay .cm-search .dp-search-close:active {
   transform: scale(0.96);
   background: color-mix(in srgb, var(--ide-accent) 20%, var(--ide-surface)) !important;
 }
 
 @media (max-width: 640px) {
-  .cm-editor .cm-search {
+  .dp-search-overlay .cm-search {
     gap: 6px;
     width: min(380px, calc(100vw - 48px));
     max-width: calc(100vw - 48px);
@@ -774,11 +775,11 @@ button.dp-execution-control::after {
     border-radius: 16px !important;
   }
 
-  .cm-editor .cm-search input {
+  .dp-search-overlay .cm-search input {
     flex: 1 1 42%;
   }
 
-  .cm-editor .cm-search .dp-search-close {
+  .dp-search-overlay .cm-search .dp-search-close {
     flex-basis: 40px;
     margin-inline-start: auto;
   }
