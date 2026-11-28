@@ -204,14 +204,14 @@ function upgradeLegacyDefaultFiles(list: PythonFile[]): PythonFile[] {
     ['interactive_cli.py', 'interactive-py'],
   ]);
   const inlineMainHelper = [
-    'def format_device_report(info: dict) -> str:',
-    '    lines = [',
-    '        f"作業平台 : {info.get(\\'platform\\', \\'Android\\')}",',
-    '        f"螢幕解析度: {info.get(\\'screen\\', \\'N/A\\')}",',
-    '        f"觸控支援 : {info.get(\\'maxTouchPoints\\', 0)} 點觸控",',
-    '        f"網路連線 : {\\'線上\\' if info.get(\\'online\\') else \\'離線模式\\'}",',
-    '    ]',
-    '    return "\\\\n".join(lines)',
+    "def format_device_report(info: dict) -> str:",
+    "    lines = [",
+    "        f\"作業平台 : {info.get('platform', 'Android')}\",",
+    "        f\"螢幕解析度: {info.get('screen', 'N/A')}\",",
+    "        f\"觸控支援 : {info.get('maxTouchPoints', 0)} 點觸控\",",
+    "        f\"網路連線 : {'線上' if info.get('online') else '離線模式'}\",",
+    "    ]",
+    '    return "\\n".join(lines)',
     '',
     '',
   ].join('\\n');
