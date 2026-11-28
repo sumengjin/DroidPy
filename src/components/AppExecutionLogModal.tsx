@@ -54,6 +54,18 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
   const [loadingNative, setLoadingNative] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // The modal stays mounted while hidden, so explicitly reset its view state
+  // on every close/open instead of carrying filters or native output forward.
+  useEffect(() => {
+    setActiveTab('execution');
+    setOnlyErrors(false);
+    setSearchQuery('');
+    setNativeLogs(null);
+    setLoadingNative(false);
+    setCopied(false);
+    if (!open) setLogs([]);
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     return subscribeAppLogs(setLogs);
@@ -76,9 +88,29 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
   };
 
   useEffect(() => {
-    if (open && termuxConnected) {
-      void loadNative();
+    if (!open || !termuxConnected) {
+      setNativeLogs(null);
+      setLoadingNative(false);
+      return;
     }
+
+    let cancelled = false;
+    setLoadingNative(true);
+    void fetchTermuxNativeLogs(termuxConfig)
+      .then((res) => {
+        if (!cancelled) setNativeLogs(res);
+      })
+      .catch(() => {
+        if (!cancelled) setNativeLogs(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingNative(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // termuxConfig is managed by the parent and is stable for this modal session.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, termuxConnected]);
 
