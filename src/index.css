@@ -631,7 +631,7 @@ button.dp-execution-control::after {
 }
 
 
-/* Search / replace panel: readable theme-aware glass and a reliably tappable close control. */
+/* Search / replace panel: readable theme-aware glass dialog. */
 .cm-editor .cm-panels,
 .cm-editor .cm-panels-top,
 .dp-search-overlay .cm-search {
@@ -703,7 +703,7 @@ button.dp-execution-control::after {
   to { opacity: 1; transform: scale(1); }
 }
 
-.dp-search-overlay .cm-search input,
+.dp-search-overlay .cm-search input:not([type="checkbox"]),
 .dp-search-overlay .cm-search .cm-textfield {
   min-width: 0;
   min-height: 36px;
@@ -718,6 +718,29 @@ button.dp-execution-control::after {
 .dp-search-overlay .cm-search input::placeholder {
   color: var(--ide-text-muted);
   opacity: 0.9;
+}
+
+/* Keep each option's checkbox and Traditional Chinese label on one baseline. */
+.dp-search-overlay .cm-search label {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: flex-start;
+  gap: 7px;
+  min-height: 28px;
+  margin: 0;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.dp-search-overlay .cm-search input[type="checkbox"] {
+  flex: 0 0 16px;
+  width: 16px !important;
+  min-width: 16px !important;
+  height: 16px !important;
+  min-height: 16px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  accent-color: var(--ide-accent);
 }
 
 .dp-search-overlay .cm-search button,
@@ -738,33 +761,6 @@ button.dp-execution-control::after {
   outline-offset: 2px;
 }
 
-.dp-search-overlay .cm-search .dp-search-close {
-  display: inline-flex !important;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 40px;
-  width: 40px !important;
-  min-width: 40px !important;
-  height: 40px !important;
-  min-height: 40px !important;
-  margin-inline-start: 4px;
-  padding: 0 !important;
-  color: var(--ide-accent-text) !important;
-  background: color-mix(in srgb, var(--ide-accent) 12%, var(--ide-surface)) !important;
-  border: 1px solid color-mix(in srgb, var(--ide-accent) 30%, var(--ide-border)) !important;
-  border-radius: 14px !important;
-  font-size: 24px !important;
-  font-weight: 600;
-  line-height: 1;
-  cursor: pointer;
-  touch-action: manipulation;
-}
-
-.dp-search-overlay .cm-search .dp-search-close:active {
-  transform: scale(0.96);
-  background: color-mix(in srgb, var(--ide-accent) 20%, var(--ide-surface)) !important;
-}
-
 @media (max-width: 640px) {
   .dp-search-overlay .cm-search {
     gap: 6px;
@@ -779,8 +775,4 @@ button.dp-execution-control::after {
     flex: 1 1 42%;
   }
 
-  .dp-search-overlay .cm-search .dp-search-close {
-    flex-basis: 40px;
-    margin-inline-start: auto;
-  }
 }
