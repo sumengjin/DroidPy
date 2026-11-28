@@ -536,7 +536,7 @@ function localizeSearchPanel(root: HTMLElement): void {
     'by word:': '整字匹配：',
   };
   const translate = (value: string) =>
-    translations[value.trim().toLowerCase().replace(/\\s+/g, ' ')] ?? value;
+    translations[value.trim().toLowerCase().replace(/\s+/g, ' ')] ?? value;
 
   panel.querySelectorAll<HTMLInputElement>('input').forEach((input) => {
     if (input.placeholder) input.placeholder = translate(input.placeholder);
@@ -557,8 +557,8 @@ function localizeSearchPanel(root: HTMLElement): void {
     if (!trimmed) continue;
     const localized = translate(trimmed);
     if (localized !== trimmed) {
-      const leading = original.match(/^\\s*/)?.[0] ?? '';
-      const trailing = original.match(/\\s*$/)?.[0] ?? '';
+      const leading = original.match(/^\s*/)?.[0] ?? '';
+      const trailing = original.match(/\s*$/)?.[0] ?? '';
       textNode.nodeValue = leading + localized + trailing;
     }
   }
