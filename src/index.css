@@ -668,23 +668,11 @@ button.dp-execution-control::after {
   appearance: none !important;
 }
 
-/* Legacy horizontal-divider decoration is intentionally disabled: the guide stays invisible. */
-.tablet-gel-divider-horizontal,
-.tablet-gel-divider-active.tablet-gel-divider-horizontal,
-.tablet-gel-divider-core-horizontal,
-.tablet-gel-divider-core-horizontal.tablet-gel-divider-core-active {
-  background: transparent !important;
-  border: 0 !important;
-  box-shadow: none !important;
-}
-
-
 /* Search / replace panel: readable theme-aware glass dialog. */
 .cm-editor .cm-panels,
 .cm-editor .cm-panels-top,
 .cm-editor .cm-panels-bottom,
-:is(.cm-panels-top, .cm-panels-bottom) .cm-search,
-.cm-panels-bottom .cm-search {
+:is(.cm-panels-top, .cm-panels-bottom) .cm-search {
   color: var(--ide-text) !important;
 }
 
@@ -695,8 +683,8 @@ button.dp-execution-control::after {
   backdrop-filter: blur(18px) saturate(1.18);
 }
 
-/* Keep CodeMirror's search panel in its native DOM parent, but make its
-   top-panel host a pane-local overlay. This avoids reparenting the live panel. */
+/* Keep CodeMirror's search panel in its native DOM parent and use the
+   complete editor pane as the positioning reference. */
 .dp-code-editor-container {
   position: relative !important;
   min-width: 0;
