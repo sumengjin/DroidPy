@@ -137,6 +137,7 @@ import {
 
 const STORAGE_FILES_KEY = 'droidpy_files_v1';
 const STORAGE_ACTIVE_ID_KEY = 'droidpy_active_file_v1';
+const STORAGE_EDITOR_HISTORY_KEY = 'droidpy_editor_history_v1';
 const STORAGE_SETTINGS_KEY = 'droidpy_settings_v2';
 const STORAGE_ENGINE_KEY = 'droidpy_engine_v1';
 const STORAGE_TERMUX_CFG_KEY = 'droidpy_termux_cfg_v1';
@@ -178,6 +179,7 @@ const DEFAULT_SETTINGS: EditorSettings = {
 interface PersistedIdeSnapshot {
   files?: PythonFile[];
   activeFileId?: string;
+  editorHistoryIds?: string[];
   settings?: Partial<EditorSettings>;
   executionEngine?: ExecutionEngine;
   termuxConfig?: Partial<TermuxConfig>;
@@ -349,6 +351,29 @@ export default function App() {
       // ignore
     }
     return files[0]?.id ?? DEFAULT_FILES[0].id;
+  });
+
+  const [editorHistoryIds, setEditorHistoryIds] = useState<string[]>(() => {
+    const nativeSnap = getInitialNativeSnapshot();
+    const validIds = new Set(files.map((file) => file.id));
+    const nativeHistory = nativeSnap?.editorHistoryIds;
+    if (Array.isArray(nativeHistory)) {
+      const restored = nativeHistory.filter((id): id is string => typeof id === 'string' && validIds.has(id));
+      if (restored.length > 0) return restored;
+    }
+    try {
+      const saved = localStorage.getItem(STORAGE_EDITOR_HISTORY_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as unknown;
+        if (Array.isArray(parsed)) {
+          const restored = parsed.filter((id): id is string => typeof id === 'string' && validIds.has(id));
+          if (restored.length > 0) return restored;
+        }
+      }
+    } catch {
+      // Ignore invalid history data and keep the active file.
+    }
+    return activeFileId ? [activeFileId] : [];
   });
 
   const [settings, setSettings] = useState<EditorSettings>(() => {
@@ -554,6 +579,8 @@ export default function App() {
 
   const editorRef = useRef<CodeEditorHandle | null>(null);
   const filesRef = useRef(files);
+  const editorHistoryIdsRef = useRef(editorHistoryIds);
+  editorHistoryIdsRef.current = editorHistoryIds;
   filesRef.current = files;
   const activeFileIdRef = useRef(activeFileId);
   activeFileIdRef.current = activeFileId;
@@ -651,6 +678,21 @@ export default function App() {
   }, [activeFileId]);
 
   useEffect(() => {
+    if (!activeFileId) return;
+    setEditorHistoryIds((previous) => previous.includes(activeFileId) ? previous : [...previous, activeFileId]);
+  }, [activeFileId]);
+
+  useEffect(() => {
+    const validIds = new Set(files.map((file) => file.id));
+    const history = editorHistoryIds.filter((id) => validIds.has(id));
+    try {
+      localStorage.setItem(STORAGE_EDITOR_HISTORY_KEY, JSON.stringify(history));
+    } catch {
+      // ignore storage errors
+    }
+  }, [editorHistoryIds, files]);
+
+  useEffect(() => {
     try {
       localStorage.setItem(STORAGE_SETTINGS_KEY, JSON.stringify(settings));
     } catch {
@@ -722,6 +764,7 @@ export default function App() {
         JSON.stringify({
           files: filesRef.current,
           activeFileId: activeFileIdRef.current,
+          editorHistoryIds: editorHistoryIdsRef.current,
           settings: settingsRef.current,
           executionEngine: executionEngineRef.current,
           termuxConfig: termuxConfigRef.current,
@@ -822,6 +865,12 @@ export default function App() {
     () => files.find((f) => f.id === activeFileId) ?? files[0],
     [files, activeFileId]
   );
+
+  const projectFiles = useMemo(() => {
+    const historyIds = new Set(editorHistoryIds);
+    historyIds.add(activeFileId);
+    return files.filter((file) => historyIds.has(file.id));
+  }, [files, editorHistoryIds, activeFileId]);
 
   useEffect(() => {
     setCursorPos({ line: 1, col: 1 });
@@ -3424,7 +3473,7 @@ export default function App() {
                   </div>
                   <div className={tabletPaneTab === 'files' ? 'h-full' : 'hidden'}>
                     <FileExplorer
-                      files={files}
+                      files={projectFiles}
                       activeFileId={activeFile.id}
                       linkedDirName={linkedDirHandle?.name ?? null}
                       termuxConnected={termuxConnectionState === 'connected'}
@@ -3594,7 +3643,7 @@ export default function App() {
             {mobileTab === 'files' && (
               <div className="flex-1 min-h-0 overflow-hidden">
                 <FileExplorer
-                  files={files}
+                  files={projectFiles}
                   activeFileId={activeFile.id}
                   showHeaderTitle={false}
                   linkedDirName={linkedDirHandle?.name ?? null}
