@@ -1,10 +1,11 @@
 import React from 'react';
-import { HardDrive, Package, Sliders, Terminal, X } from 'lucide-react';
+import { FolderOpen, HardDrive, Package, Sliders, Terminal, X } from 'lucide-react';
+import { InternalStoragePanel } from './InternalStoragePanel';
 import {
   EditorSettings,
   ExecutionEngine,
   InstalledPackage,
-  NegativeScreenSection,
+  SettingsWorkspaceSection,
   PackageBackupStatus,
   ProcessCleanupResult,
   PyodideStatus,
@@ -17,12 +18,17 @@ import { ToolsAndPackages } from './ToolsAndPackages';
 import { useI18n } from '../services/i18n';
 import { OutdatedPackageInfo } from '../services/pyodideRuntime';
 import { TermuxOutdatedPipItem } from '../services/termuxBridge';
+import { getThemeMeta } from '../services/themes';
+
+declare global {
+  interface Window { __droidpySettingsBack?: () => boolean; __droidpyToolsBack?: () => boolean; }
+}
 import { AppUpdateCheckResult } from '../services/appUpdater';
 
-interface NegativeScreenDrawerProps {
+interface SettingsWorkspaceProps {
   open: boolean;
-  section: NegativeScreenSection;
-  onChangeSection: (section: NegativeScreenSection) => void;
+  section: SettingsWorkspaceSection;
+  onChangeSection: (section: SettingsWorkspaceSection) => void;
   onClose: () => void;
   files: PythonFile[];
   activeFile: PythonFile;
@@ -47,6 +53,9 @@ interface NegativeScreenDrawerProps {
   onCheckTermuxOutdated?: () => Promise<void>;
   onUninstallInTermux?: (mode: 'pip' | 'pkg', target: string) => Promise<void>;
   upgradingTermux?: boolean;
+  termuxRunning?: boolean;
+  termuxActiveTask?: string | null;
+  activePyodidePackage?: string | null;
   appUpdateResult?: AppUpdateCheckResult | null;
   checkingAppUpdate?: boolean;
   onOpenUpdateModal?: () => void;
@@ -65,10 +74,11 @@ interface NegativeScreenDrawerProps {
   onInstallInTermux: (mode: 'pip' | 'pkg', target: string) => Promise<void>;
   onRunInTermux: () => Promise<void>;
   onRunShellInTermux: (cmd: string) => Promise<boolean | void>;
-  onInitializeEmbeddedEnv: (includeBaseSystem: boolean) => Promise<void>;
   onGenerateRequirements: () => void;
   onInstallRequirements: () => Promise<void>;
-  onSaveWorkspaceFile: (filename: string, content: string, openInEditor?: boolean) => void;
+  onSaveWorkspaceFile: (filename: string, content: string, openInEditor?: boolean, path?: string) => void;
+  storagePath: string;
+  onStoragePathChange: (path: string) => void;
   onOpenHelp: () => void;
   onOpenLogs: () => void;
   backupStatus?: PackageBackupStatus | null;
@@ -81,7 +91,7 @@ interface NegativeScreenDrawerProps {
   onNotify: (msg: string) => void;
 }
 
-export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
+export const SettingsWorkspace: React.FC<SettingsWorkspaceProps> = ({
   open,
   section,
   onChangeSection,
@@ -109,6 +119,9 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
   onCheckTermuxOutdated,
   onUninstallInTermux,
   upgradingTermux,
+  termuxRunning = false,
+  termuxActiveTask = null,
+  activePyodidePackage = null,
   appUpdateResult,
   checkingAppUpdate,
   onOpenUpdateModal,
@@ -127,10 +140,11 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
   onInstallInTermux,
   onRunInTermux,
   onRunShellInTermux,
-  onInitializeEmbeddedEnv,
   onGenerateRequirements,
   onInstallRequirements,
   onSaveWorkspaceFile,
+  storagePath,
+  onStoragePathChange,
   onOpenHelp,
   onOpenLogs,
   backupStatus,
@@ -143,106 +157,122 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
   onNotify,
 }) => {
   const { t } = useI18n();
-  const touchStartX = React.useRef<number | null>(null);
-  const touchStartY = React.useRef<number | null>(null);
-
+  const [showCategories, setShowCategories] = React.useState(true);
+  React.useEffect(() => {
+    window.__droidpySettingsBack = () => {
+      if (window.__droidpyToolsBack?.()) return true;
+      if (!showCategories) { setShowCategories(true); return true; }
+      return false;
+    };
+    return () => { delete window.__droidpySettingsBack; };
+  }, [showCategories]);
+  React.useEffect(() => {
+    if (open) setShowCategories(section === 'files' ? false : true);
+  }, [open]);
   if (!open) return null;
-
-  const tabs: { id: NegativeScreenSection; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
-    { id: 'termux', label: t('neg_tab_termux'), Icon: Terminal },
-    { id: 'packages', label: t('neg_tab_packages'), Icon: Package },
-    { id: 'android', label: t('neg_tab_storage'), Icon: HardDrive },
-    { id: 'settings', label: t('neg_tab_system'), Icon: Sliders },
-  ];
 
   return (
     <div
-      className="fixed inset-0 z-50 flex bg-black/55"
-      onClick={onClose}
+      className="fixed inset-0 z-[1000] isolate flex flex-col text-[var(--ide-text)]"
+      style={{ backgroundColor: 'var(--ide-surface)' }}
       role="dialog"
       aria-modal="true"
       aria-label={t('neg_title')}
     >
       <aside
         onClick={(e) => e.stopPropagation()}
-        onTouchStart={(e) => {
-          const touch = e.touches[0];
-          touchStartX.current = touch.clientX;
-          touchStartY.current = touch.clientY;
-        }}
-        onTouchEnd={(e) => {
-          if (touchStartX.current === null || touchStartY.current === null) return;
-          const touch = e.changedTouches[0];
-          const dx = touch.clientX - touchStartX.current;
-          const dy = Math.abs(touch.clientY - touchStartY.current);
-          touchStartX.current = null;
-          touchStartY.current = null;
-          // Swipe left on drawer to dismiss
-          if (dx < -64 && dy < 60) {
-            onClose();
-          }
-        }}
-        className="w-[90vw] max-w-[460px] h-full rounded-r-[28px] bg-[var(--ide-bg)] text-[var(--ide-text)] border-r border-[var(--ide-border)] shadow-2xl flex flex-col overflow-hidden"
+        className="w-full h-full flex flex-col overflow-hidden"
       >
-        {/* Drawer Header */}
-        <div className="px-4 py-3 pt-safe border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] flex items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <img
-              src="/icon.svg"
-              alt="DroidPy"
-              className="w-7 h-7 rounded-lg shrink-0"
-              referrerPolicy="no-referrer"
-            />
-            <div className="min-w-0">
-              <h2 className="text-sm font-bold truncate">{t('neg_title')}</h2>
-              <p className="text-[11px] text-[var(--ide-text-muted)] truncate">{t('neg_subtitle')}</p>
-            </div>
+        {/* Independent settings workspace header */}
+        <header className="px-5 py-3 pt-safe flex items-center justify-between gap-3 shrink-0">
+          <div className="min-w-0">
+            <h1 className="text-lg font-semibold tracking-tight truncate">{t('neg_title')}</h1>
+            <p className="text-xs text-[var(--ide-text-muted)] truncate mt-0.5">{t('neg_subtitle')}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label={t('btn_done')}
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full border border-[var(--ide-border)] bg-[var(--ide-bg)] text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] shrink-0"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl border border-transparent bg-transparent text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] shrink-0 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
-        </div>
+        </header>
 
-        {/* Segmented Drawer Tabs */}
-        <div className="px-2.5 sm:px-3 py-2 border-b border-[var(--ide-border)] bg-[var(--md-surface-container-low)] shrink-0">
-          <div className="grid grid-cols-4 gap-1.5 p-1.5 rounded-2xl bg-[var(--ide-bg)] border border-[var(--ide-border)]">
-            {tabs.map(({ id, label, Icon }) => {
-              const active = section === id;
-              const showDot = id === 'settings' && Boolean(appUpdateResult?.hasUpdate);
-              return (
+        <div className="flex-1 min-h-0 overflow-hidden flex flex-col md:flex-row">
+        <div className={`${showCategories ? 'flex' : 'hidden'} md:flex flex-1 min-h-0 overflow-y-auto ide-scroll px-3 py-3 pb-safe md:flex-none md:w-64 md:border-r md:border-[var(--ide-border)] flex-col gap-2`}>
+          
+            <div className="mb-3 px-1">
+              <h3 className="text-base font-semibold text-[var(--ide-text)]">{t('neg_category_heading')}</h3>
+              <p className="mt-1 text-xs text-[var(--ide-text-muted)]">{t('neg_category_hint')}</p>
+            </div>
+            <div className="flex flex-col gap-1">
+              {[
+                { id: 'termux' as const, label: t('neg_category_termux'), Icon: Terminal, desc: t('neg_category_termux_desc') },
+                { id: 'packages' as const, label: t('neg_category_packages'), Icon: Package, desc: t('neg_category_packages_desc') },
+                { id: 'android' as const, label: t('neg_category_android'), Icon: HardDrive, desc: t('neg_category_android_desc') },
+                { id: 'settings' as const, label: t('neg_category_personalization'), Icon: Sliders, desc: t('neg_category_personalization_desc') },
+                { id: 'files' as const, label: t('neg_category_files'), Icon: FolderOpen, desc: t('neg_category_files_desc') },
+              ].map(({ id, label, Icon, desc }) => (
                 <button
                   key={id}
                   type="button"
-                  onClick={() => onChangeSection(id)}
-                  className={`relative min-h-[54px] min-w-0 px-1 py-1.5 rounded-xl text-xs font-medium flex flex-col items-center justify-center gap-1 transition-colors ${
-                    active
-                      ? 'bg-[var(--ide-accent)] text-white font-semibold shadow-xs'
-                      : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
-                  }`}
+                  onClick={() => {
+                    onChangeSection(id);
+                    // Keep the category rail logically open on wide layouts; it remains visible beside the detail pane.
+                    setShowCategories(window.matchMedia('(min-width: 768px)').matches);
+                  }}
+                  aria-current={section === id ? 'page' : undefined}
+                  className="dp-nav-item w-full min-h-[68px] px-3 py-2.5 flex items-center gap-3 text-left rounded-xl"
                 >
-                  <span className="relative">
-                    <Icon className="w-4 h-4 shrink-0" />
-                    {showDot && (
-                      <span className="absolute -right-1 -top-1 w-1.5 h-1.5 rounded-full bg-[var(--ide-accent)]" />
-                    )}
+                  <span className="w-10 h-10 flex items-center justify-center shrink-0 text-current">
+                    <Icon className="w-5 h-5" />
                   </span>
-                  <span className="truncate max-w-full text-[11px] leading-tight">{label}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold text-current">{label}</span>
+                    <span className="block text-xs text-[var(--ide-text-muted)] mt-1">{desc}</span>
+                  </span>
+                  <span className="relative shrink-0">
+                    <span className="text-[var(--ide-text-muted)] text-lg">›</span>
+                    {id === 'settings' && appUpdateResult?.hasUpdate && <span className="absolute -right-1 -top-1 w-2 h-2 rounded-full bg-[var(--ide-accent)]" />}
+                  </span>
                 </button>
-              );
-            })}
+              ))}
+            </div>
           </div>
-        </div>
-
-        {/* Drawer Content */}
+          <div className={`${showCategories ? 'hidden' : 'flex'} md:flex flex-1 min-w-0 min-h-0 overflow-hidden flex-col`}>
+            <div className="px-3 py-2 border-b border-[var(--ide-border)] shrink-0 md:hidden">
+              <button
+                type="button"
+                onClick={() => setShowCategories(true)}
+                className="min-h-[44px] px-2 inline-flex items-center gap-2 text-sm font-semibold text-[var(--ide-accent-text)]"
+              >
+                <span aria-hidden="true">‹</span>
+                <span>{t('neg_back_categories')}</span>
+              </button>
+            </div>
+        {/* Selected settings category */}
         <div className="flex-1 min-h-0 overflow-hidden">
+          {section === 'files' ? (
+            <InternalStoragePanel
+              mode="sdcard"
+              fullScreen
+              termuxConfig={termuxConfig}
+              files={files}
+              activeFile={activeFile}
+              initialPath={storagePath}
+              basePath="DroidPy"
+              onPathChange={onStoragePathChange}
+              onOpenSdcardFile={(filename, content, filePath) => {
+                onClose();
+                onSaveWorkspaceFile(filename, content, true, filePath);
+              }}
+              onNotify={onNotify}
+            />
+          ) : (
           <ToolsAndPackages
             activeSubView={section}
-            compactDrawer
+            workspaceMode
             files={files}
             activeFile={activeFile}
             settings={settings}
@@ -250,6 +280,7 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
             onResetWorkspace={onResetWorkspace}
             pyodideStatus={pyodideStatus}
             installedPackages={installedPackages}
+            activePyodidePackage={activePyodidePackage}
             onInstallPackage={onInstallPackage}
             onRefreshPackages={onRefreshPackages}
             outdatedPackages={outdatedPackages}
@@ -266,6 +297,8 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
             onCheckTermuxOutdated={onCheckTermuxOutdated}
             onUninstallInTermux={onUninstallInTermux}
             upgradingTermux={upgradingTermux}
+            termuxRunning={termuxRunning}
+            termuxActiveTask={termuxActiveTask}
             appUpdateResult={appUpdateResult}
             checkingAppUpdate={checkingAppUpdate}
             onOpenUpdateModal={
@@ -297,10 +330,6 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
               onClose();
               await onRunShellInTermux(cmd);
             }}
-            onInitializeEmbeddedEnv={async (includeBase) => {
-              onClose();
-              await onInitializeEmbeddedEnv(includeBase);
-            }}
             onGenerateRequirements={onGenerateRequirements}
             onInstallRequirements={async () => {
               onClose();
@@ -331,6 +360,9 @@ export const NegativeScreenDrawer: React.FC<NegativeScreenDrawerProps> = ({
             onRebuildPipCertifi={onRebuildPipCertifi}
             onNotify={onNotify}
           />
+          )}
+            </div>
+          </div>
         </div>
       </aside>
     </div>

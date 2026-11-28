@@ -74,10 +74,10 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
     latest?.apkAssets[0] ??
     null;
   const currentNorm = normalizeVersionStr(currentVersion);
+  // Never substitute another version's notes: show only an exact match for the installed version.
   const currentRelease: AppReleaseInfo | null =
     releases.find((r) => normalizeVersionStr(r.version) === currentNorm) ??
     BUILTIN_LOCAL_RELEASES.find((r) => normalizeVersionStr(r.version) === currentNorm) ??
-    BUILTIN_LOCAL_RELEASES[0] ??
     null;
 
   const handleSaveAndCheck = async (e: React.FormEvent) => {
@@ -108,7 +108,7 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full sm:max-w-xl max-h-[88dvh] md-sheet rounded-b-none sm:rounded-b-[1.75rem] flex flex-col overflow-hidden text-[var(--ide-text)]"
+        className="w-full sm:max-w-xl max-h-[88dvh] dp-sheet rounded-b-none sm:rounded-b-[1.75rem] flex flex-col overflow-hidden text-[var(--ide-text)]"
       >
         <div className="w-10 h-1 bg-[var(--ide-border)] rounded-full mx-auto mt-2.5 sm:hidden shrink-0" />
 
@@ -205,7 +205,7 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
 
           {/* New Version Available Card + Changelog */}
           {hasUpdate && latest ? (
-            <div className="md-card-tonal border-[var(--ide-accent)] p-4 space-y-3">
+            <div className="dp-callout border-l-2 border-[var(--ide-accent)] p-4 space-y-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="inline-flex items-center gap-1.5 text-xs font-bold text-[var(--ide-accent-text)]">
@@ -252,7 +252,7 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
               )}
             </div>
           ) : (
-            <div className="md-card p-4 flex items-center justify-between gap-3">
+            <div className="dp-panel p-4 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 min-w-0">
                 <CheckCircle2 className="w-5 h-5 text-[var(--ide-accent)] shrink-0" />
                 <div className="min-w-0">
@@ -283,7 +283,7 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
           )}
 
           {/* Current Installed Version Changelog Only (shown when already up to date) */}
-          {!hasUpdate && currentRelease && (
+          {!hasUpdate && (
             <div className="rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] p-4 space-y-2.5">
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
@@ -291,13 +291,13 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
                     <span>{t('upd_current_changelog_title')}</span>
                     <span className="font-mono text-[var(--ide-accent-text)]">v{currentVersion}</span>
                   </div>
-                  {currentRelease.publishedAt && (
+                  {currentRelease?.publishedAt && (
                     <div className="text-[11px] text-[var(--ide-text-muted)] tabular-nums mt-0.5">
                       {currentRelease.publishedAt.slice(0, 10)}
                     </div>
                   )}
                 </div>
-                {currentRelease.apkAssets[0] && (
+                {currentRelease?.apkAssets[0] && (
                   <button
                     type="button"
                     onClick={() =>
@@ -314,7 +314,7 @@ export const AppUpdateModal: React.FC<AppUpdateModalProps> = ({
                 )}
               </div>
               <pre className="selectable-text text-xs text-[var(--ide-text)] whitespace-pre-wrap font-sans leading-relaxed max-h-60 overflow-y-auto ide-scroll">
-                {currentRelease.body || t('upd_no_notes')}
+                {currentRelease?.body || t('upd_no_notes')}
               </pre>
             </div>
           )}

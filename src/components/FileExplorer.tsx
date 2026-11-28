@@ -9,10 +9,8 @@ import {
   Share2,
   Check,
   X,
-  BookOpen,
   FolderSync,
   RefreshCw,
-  HardDrive,
   History,
   RotateCcw,
   FileDown,
@@ -20,7 +18,6 @@ import {
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { PythonFile, ScriptBackupSnapshot } from '../types/ide';
-import { SNIPPET_CATEGORIES, SNIPPET_TEMPLATES, SnippetCategoryId } from '../data/defaultFiles';
 import { useI18n } from '../services/i18n';
 import { copyTextReliable } from '../utils/clipboard';
 import { downloadBlob } from '../utils/downloadBlob';
@@ -37,9 +34,6 @@ interface FileExplorerProps {
   activeFileId: string;
   linkedDirName: string | null;
   termuxConnected?: boolean;
-  termuxEmbedded?: boolean;
-  onOpenSdcardManager?: () => void;
-  onBackupToSdcard?: () => Promise<void>;
   onPullFromTermux?: () => Promise<void>;
   onLinkDirectory: () => Promise<void>;
   onSaveToDirectory: () => Promise<void>;
@@ -50,6 +44,7 @@ interface FileExplorerProps {
   onRestoreFiles?: (files: PythonFile[], label: string) => void;
   onSyncBackupSdcard?: (snapshot: ScriptBackupSnapshot) => Promise<void>;
   onNotify: (msg: string) => void;
+  showHeaderTitle?: boolean;
 }
 
 const MAX_IMPORT_BYTES = 512 * 1024;
@@ -65,9 +60,6 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   activeFileId,
   linkedDirName,
   termuxConnected,
-  termuxEmbedded,
-  onOpenSdcardManager,
-  onBackupToSdcard,
   onPullFromTermux,
   onLinkDirectory,
   onSaveToDirectory,
@@ -78,8 +70,10 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   onRestoreFiles,
   onSyncBackupSdcard,
   onNotify,
+  showHeaderTitle = true,
 }) => {
   const { t } = useI18n();
+  const isNativeApk = Boolean(window.DroidPyNative?.isNativeApp?.());
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const backupImportInputRef = useRef<HTMLInputElement | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -87,48 +81,23 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [showTemplates, setShowTemplates] = useState(false);
-  const [templateCategory, setTemplateCategory] = useState<SnippetCategoryId>('all');
   const [showBackups, setShowBackups] = useState(false);
   const [backupLabel, setBackupLabel] = useState('');
   const [backups, setBackups] = useState<ScriptBackupSnapshot[]>(() => listScriptBackups());
   const [confirmDeleteBackupId, setConfirmDeleteBackupId] = useState<string | null>(null);
-  const isNativeApk = Boolean(termuxEmbedded || window.DroidPyNative?.isNativeApp?.());
-  const [nativeStorageGranted, setNativeStorageGranted] = useState<boolean>(() =>
-    Boolean(window.DroidPyNative?.hasStoragePermission?.())
-  );
-
-  useEffect(() => {
-    if (!isNativeApk) return;
-    const syncPerm = () => {
-      setNativeStorageGranted(Boolean(window.DroidPyNative?.hasStoragePermission?.()));
-    };
-    syncPerm();
-    window.addEventListener('focus', syncPerm);
-    document.addEventListener('visibilitychange', syncPerm);
-    return () => {
-      window.removeEventListener('focus', syncPerm);
-      document.removeEventListener('visibilitychange', syncPerm);
-    };
-  }, [isNativeApk]);
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     let trimmed = sanitizeFileName(newFileName);
     if (!trimmed) return;
-    if (!trimmed.includes('.')) {
+    if (!/\.py$/i.test(trimmed)) {
       trimmed += '.py';
     }
     if (files.some((f) => f.name.toLowerCase() === trimmed.toLowerCase())) {
       onNotify(t('files_exists', { name: trimmed }));
       return;
     }
-    const lower = trimmed.toLowerCase();
-    const starter = lower.endsWith('.json')
-      ? '{\n  "app": "DroidPy"\n}\n'
-      : lower.endsWith('.py')
-      ? `# ${trimmed}\n\ndef main():\n    print("Hello from ${trimmed}")\n\nif __name__ == "__main__":\n    main()\n`
-      : '';
+    const starter = `# ${trimmed}\n\ndef main():\n    print("Hello from ${trimmed}")\n\nif __name__ == "__main__":\n    main()\n`;
     onCreateFile(trimmed, starter);
     setNewFileName('');
     setIsCreating(false);
@@ -269,11 +238,13 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-[var(--ide-surface-alt)] text-[var(--ide-text)]">
+    <div className="relative flex flex-col h-full bg-transparent text-[var(--ide-text)]">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--ide-border)] bg-[var(--ide-surface)] shrink-0">
-        <div>
-          <h2 className="text-sm font-semibold text-[var(--ide-text)]">{t('files_title')}</h2>
+      <div className="flex items-center justify-between px-4 py-3 bg-transparent shrink-0">
+        <div className="min-w-0">
+          {showHeaderTitle && (
+            <h2 className="text-sm font-semibold text-[var(--ide-text)]">{t('files_title')}</h2>
+          )}
           <p className="text-xs text-[var(--ide-text-muted)] tabular-nums">
             {t('files_count', { count: files.length })}
           </p>
@@ -292,7 +263,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           )}
           <button
             type="button"
-            onClick={() => setIsCreating((v) => !v)}
+            onClick={() => { setNewFileName(''); setIsCreating(true); }}
             aria-label={t('files_new_btn')}
             title={t('files_new_btn')}
             className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white transition-colors"
@@ -314,7 +285,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
             <button
               type="button"
               onClick={() => void onSaveToDirectory()}
-              className="min-h-[32px] px-2.5 rounded-lg bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] text-[11px] font-medium whitespace-nowrap shrink-0"
+              className="min-h-[44px] px-3 rounded-lg bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] text-xs font-medium whitespace-nowrap shrink-0"
             >
               {t('files_dir_write')}
             </button>
@@ -322,7 +293,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
             <button
               type="button"
               onClick={() => void onLinkDirectory()}
-              className="min-h-[32px] px-2.5 rounded-lg border border-[var(--ide-border)] text-[11px] font-medium inline-flex items-center gap-1 hover:bg-[var(--ide-accent-soft)] whitespace-nowrap shrink-0"
+              className="min-h-[44px] px-3 rounded-lg border border-[var(--ide-border)] text-xs font-medium inline-flex items-center gap-1 hover:bg-[var(--ide-accent-soft)] whitespace-nowrap shrink-0"
             >
               <FolderSync className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
               <span>{t('files_dir_auth')}</span>
@@ -331,86 +302,68 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
         </div>
       )}
 
-      {/* Android APK /sdcard Quick Bar */}
-      {isNativeApk && (
-        <div className="px-3 py-2 border-b border-[var(--ide-border)] bg-[var(--ide-surface)] space-y-1.5 shrink-0">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <HardDrive className="w-3.5 h-3.5 text-[var(--ide-accent)] shrink-0" />
-              <span className="text-[11px] font-medium truncate">
-                {nativeStorageGranted ? t('sd_quick_granted') : t('sd_quick_denied')}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                void onLinkDirectory();
-                window.setTimeout(() => {
-                  setNativeStorageGranted(Boolean(window.DroidPyNative?.hasStoragePermission?.()));
-                }, 800);
-              }}
-              className={`min-h-[28px] px-2 rounded-lg text-[11px] font-semibold whitespace-nowrap shrink-0 ${
-                nativeStorageGranted
-                  ? 'border border-[var(--ide-border)] bg-[var(--ide-bg)] text-[var(--ide-text)] hover:border-[var(--ide-accent)]'
-                  : 'bg-amber-600 text-white'
-              }`}
-            >
-              {nativeStorageGranted ? t('files_dir_auth') : t('sd_grant_btn')}
-            </button>
-          </div>
-          <div className="flex items-center gap-1.5">
-            {onOpenSdcardManager && (
-              <button
-                type="button"
-                onClick={onOpenSdcardManager}
-                className="flex-1 min-h-[30px] px-2 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-bg)] text-[11px] font-medium hover:border-[var(--ide-accent)] truncate"
-              >
-                {t('sd_quick_manage')}
-              </button>
-            )}
-            {onBackupToSdcard && (
-              <button
-                type="button"
-                onClick={() => void onBackupToSdcard()}
-                className="flex-1 min-h-[30px] px-2 rounded-lg bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] text-[11px] font-medium truncate"
-              >
-                {t('sd_quick_backup')}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Inline New File Form */}
+      {/* Android-style create-file dialog, anchored to the Project Files surface. */}
       {isCreating && (
-        <form
-          onSubmit={handleCreateSubmit}
-          className="p-3 border-b border-[var(--ide-border)] bg-[var(--ide-surface)] flex items-center gap-2 shrink-0"
+        <div
+          className="absolute inset-0 z-40 flex items-center justify-center p-5 bg-black/55 backdrop-blur-[2px]"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setIsCreating(false);
+          }}
+          role="presentation"
         >
-          <input
-            type="text"
-            autoFocus
-            value={newFileName}
-            onChange={(e) => setNewFileName(e.target.value)}
-            placeholder={t('files_new_placeholder')}
-            className="flex-1 min-w-0 min-h-[40px] px-3 rounded-lg bg-[var(--ide-bg)] border border-[var(--ide-border)] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
-          />
-          <button
-            type="submit"
-            aria-label="確認建立檔案"
-            className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg bg-[var(--ide-accent)] text-white"
+          <form
+            onSubmit={handleCreateSubmit}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="droidpy-create-file-title"
+            className="w-full max-w-sm rounded-[1.5rem] border border-[var(--ide-border)] bg-[var(--ide-surface)] p-5 shadow-2xl"
           >
-            <Check className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsCreating(false)}
-            aria-label="取消建立"
-            className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg bg-[var(--ide-surface-alt)] border border-[var(--ide-border)] text-[var(--ide-text-muted)]"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </form>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-2xl flex items-center justify-center bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)]">
+                <FileCode2 className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <h3 id="droidpy-create-file-title" className="text-base font-semibold text-[var(--ide-text)]">
+                  {t('files_new_btn')}
+                </h3>
+                <p className="text-xs text-[var(--ide-text-muted)] mt-0.5">
+                  {t('files_new_hint')}
+                </p>
+              </div>
+            </div>
+            <label htmlFor="droidpy-new-file-name" className="block text-xs font-medium text-[var(--ide-text-muted)] mb-2">
+              {t('files_name_label')}
+            </label>
+            <div className="flex items-center gap-2 rounded-xl border border-[var(--ide-accent)] bg-[var(--ide-bg)] px-3 focus-within:ring-2 focus-within:ring-[var(--ide-accent)]">
+              <input
+                id="droidpy-new-file-name"
+                type="text"
+                autoFocus
+                value={newFileName}
+                onChange={(event) => setNewFileName(event.target.value)}
+                placeholder={t('files_new_placeholder')}
+                className="flex-1 min-w-0 min-h-[50px] bg-transparent text-sm font-mono text-[var(--ide-text)] outline-none"
+              />
+              <span className="shrink-0 rounded-lg bg-[var(--ide-accent-soft)] px-2 py-1 text-xs font-semibold text-[var(--ide-accent-text)]">.py</span>
+            </div>
+            <div className="flex items-center justify-end gap-2 mt-5">
+              <button
+                type="button"
+                onClick={() => setIsCreating(false)}
+                className="min-h-[44px] px-4 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-sm font-medium text-[var(--ide-text-muted)]"
+              >
+                {t('files_cancel')}
+              </button>
+              <button
+                type="submit"
+                disabled={!newFileName.trim()}
+                className="min-h-[44px] px-5 rounded-xl bg-[var(--ide-accent)] text-white text-sm font-semibold disabled:opacity-40"
+              >
+                {t('files_create_confirm')}
+              </button>
+            </div>
+          </form>
+        </div>
       )}
 
       {/* File List */}
@@ -431,12 +384,12 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                   autoFocus
                   value={renameValue}
                   onChange={(e) => setRenameValue(e.target.value)}
-                  className="flex-1 min-w-0 min-h-[38px] px-2.5 rounded-lg bg-[var(--ide-bg)] border border-[var(--ide-accent)] text-sm font-mono focus:outline-none"
+                  className="flex-1 min-w-0 min-h-[44px] px-2.5 rounded-lg bg-[var(--ide-bg)] border border-[var(--ide-accent)] text-sm font-mono focus:outline-none"
                 />
                 <button
                   type="submit"
                   aria-label="儲存檔名"
-                  className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg bg-[var(--ide-accent)] text-white"
+                  className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg bg-[var(--ide-accent)] text-white"
                 >
                   <Check className="w-4 h-4" />
                 </button>
@@ -444,7 +397,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                   type="button"
                   onClick={() => setRenamingId(null)}
                   aria-label="取消重新命名"
-                  className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg bg-[var(--ide-surface-alt)] border border-[var(--ide-border)] text-[var(--ide-text-muted)]"
+                  className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg bg-[var(--ide-surface-alt)] border border-[var(--ide-border)] text-[var(--ide-text-muted)]"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -487,14 +440,14 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                       onDeleteFile(file.id);
                       setConfirmDeleteId(null);
                     }}
-                    className="min-h-[36px] px-2.5 rounded-lg bg-red-600 text-white text-xs font-medium"
+                    className="min-h-[44px] px-2.5 rounded-lg bg-red-600 text-white text-xs font-medium"
                   >
                     {t('files_delete')}
                   </button>
                   <button
                     type="button"
                     onClick={() => setConfirmDeleteId(null)}
-                    className="min-h-[36px] px-2 rounded-lg bg-[var(--ide-surface)] border border-[var(--ide-border)] text-xs"
+                    className="min-h-[44px] px-2 rounded-lg bg-[var(--ide-surface)] border border-[var(--ide-border)] text-xs"
                   >
                     {t('files_cancel')}
                   </button>
@@ -508,7 +461,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                       setRenameValue(file.name);
                     }}
                     aria-label={`重新命名 ${file.name}`}
-                    className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-surface)]"
+                    className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-surface)]"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
                   </button>
@@ -517,7 +470,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                       type="button"
                       onClick={() => setConfirmDeleteId(file.id)}
                       aria-label={`刪除 ${file.name}`}
-                      className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
+                      className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-[var(--ide-text-muted)] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -537,7 +490,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
               if (next) setBackups(listScriptBackups());
               setShowBackups(next);
             }}
-            className="w-full min-h-[44px] px-3.5 flex items-center justify-between md-card text-xs font-semibold text-[var(--ide-text)] hover:border-[var(--ide-accent)] transition-colors"
+            className="w-full min-h-[44px] px-3.5 flex items-center justify-between dp-panel text-xs font-semibold text-[var(--ide-text)] hover:border-[var(--ide-accent)] transition-colors"
           >
             <span className="flex items-center gap-2">
               <History className="w-4 h-4 text-[var(--ide-accent)]" />
@@ -549,7 +502,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           </button>
 
           {showBackups && (
-            <div className="mt-2.5 md-card p-3 space-y-3">
+            <div className="mt-2.5 dp-panel p-3 space-y-3">
               <form onSubmit={handleCreateSnapshot} className="flex items-center gap-1.5">
                 <input
                   type="text"
@@ -609,7 +562,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                           <button
                             type="button"
                             onClick={() => handleRestoreSnapshot(snap)}
-                            className="min-h-[38px] px-3 rounded-xl bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] text-xs font-semibold inline-flex items-center gap-1 whitespace-nowrap"
+                            className="min-h-[44px] px-3 rounded-xl bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] text-xs font-semibold inline-flex items-center gap-1 whitespace-nowrap"
                           >
                             <RotateCcw className="w-3.5 h-3.5" />
                             <span>{t('bak_restore_btn')}</span>
@@ -618,7 +571,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                         <button
                           type="button"
                           onClick={() => void handleExportSnapshot(snap)}
-                          className="min-h-[38px] px-2.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium inline-flex items-center gap-1 whitespace-nowrap"
+                          className="min-h-[44px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium inline-flex items-center gap-1 whitespace-nowrap"
                         >
                           <FileDown className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
                           <span>{t('bak_export_btn')}</span>
@@ -627,7 +580,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                           <button
                             type="button"
                             onClick={() => void onSyncBackupSdcard(snap)}
-                            className="min-h-[38px] px-2.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium whitespace-nowrap"
+                            className="min-h-[44px] px-2.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] text-xs font-medium whitespace-nowrap"
                           >
                             {t('bak_sync_sdcard_btn')}
                           </button>
@@ -636,7 +589,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                           <button
                             type="button"
                             onClick={() => handleDeleteSnapshot(snap.id)}
-                            className="min-h-[38px] px-2.5 rounded-xl bg-red-600 text-white text-xs font-medium ml-auto"
+                            className="min-h-[44px] px-3 rounded-xl bg-red-600 text-white text-xs font-medium ml-auto"
                           >
                             {t('files_delete')}
                           </button>
@@ -645,7 +598,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                             type="button"
                             onClick={() => setConfirmDeleteBackupId(snap.id)}
                             aria-label={t('files_delete')}
-                            className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl text-[var(--ide-text-muted)] hover:text-red-500 ml-auto"
+                            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-[var(--ide-text-muted)] hover:text-red-500 ml-auto"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -659,74 +612,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           )}
         </div>
 
-        {/* Android Code Templates Accordion */}
-        <div className="p-3">
-          <button
-            type="button"
-            onClick={() => setShowTemplates((v) => !v)}
-            className="w-full min-h-[44px] px-3.5 flex items-center justify-between md-card text-xs font-medium text-[var(--ide-text)] hover:border-[var(--ide-accent)] transition-colors"
-          >
-            <span className="flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-[var(--ide-accent)]" />
-              <span>{t('files_templates_btn')}</span>
-            </span>
-            <span className="text-[var(--ide-text-muted)]">
-              {showTemplates ? t('files_collapse') : t('files_expand')}
-            </span>
-          </button>
 
-          {showTemplates && (
-            <div className="mt-2.5 space-y-2.5">
-              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-0.5">
-                {SNIPPET_CATEGORIES.map((cat) => {
-                  const active = templateCategory === cat.id;
-                  return (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => setTemplateCategory(cat.id)}
-                      className={`min-h-[36px] px-3 rounded-xl text-[11px] font-medium whitespace-nowrap shrink-0 transition-colors ${
-                        active
-                          ? 'bg-[var(--ide-accent)] text-white font-semibold'
-                          : 'bg-[var(--ide-surface)] border border-[var(--ide-border)] text-[var(--ide-text-muted)] hover:border-[var(--ide-accent)]'
-                      }`}
-                    >
-                      {t(cat.labelKey as Parameters<typeof t>[0])}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="space-y-2">
-                {SNIPPET_TEMPLATES.filter(
-                  (tpl) => templateCategory === 'all' || tpl.category === templateCategory
-                ).map((tpl) => (
-                  <button
-                    key={tpl.id}
-                    type="button"
-                    onClick={() => {
-                      let targetName = tpl.filename;
-                      if (files.some((f) => f.name === targetName)) {
-                        targetName = `${tpl.filename.replace('.py', '')}_${Date.now().toString().slice(-3)}.py`;
-                      }
-                      onCreateFile(targetName, tpl.code);
-                      onNotify(t('files_template_added', { name: targetName }));
-                    }}
-                    className="w-full text-left p-3.5 md-card hover:border-[var(--ide-accent)] transition-colors"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold text-[var(--ide-text)] truncate">{tpl.title}</span>
-                      <span className="font-mono text-[10px] text-[var(--ide-accent-text)] shrink-0">{tpl.filename}</span>
-                    </div>
-                    <div className="text-[11px] text-[var(--ide-text-muted)] mt-0.5 leading-snug">
-                      {tpl.desc}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Bottom File Actions */}

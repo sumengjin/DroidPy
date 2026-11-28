@@ -384,7 +384,7 @@ export const HelpTutorialModal: React.FC<HelpTutorialModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="w-full sm:max-w-2xl max-h-[88vh] flex flex-col md-sheet rounded-b-none sm:rounded-b-[1.75rem] text-[var(--ide-text)] overflow-hidden"
+        className="w-full sm:max-w-2xl max-h-[88vh] flex flex-col dp-sheet rounded-b-none sm:rounded-b-[1.75rem] text-[var(--ide-text)] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="w-10 h-1 bg-[var(--ide-border)] rounded-full mx-auto mt-2.5 sm:hidden shrink-0" />
@@ -443,7 +443,7 @@ export const HelpTutorialModal: React.FC<HelpTutorialModalProps> = ({
             content.quickSteps.map((step, i) => (
               <div
                 key={i}
-                className="md-card p-4 space-y-1.5"
+                className="dp-panel p-4 space-y-1.5"
               >
                 <h3 className="text-sm font-semibold text-[var(--ide-text)]">{step.title}</h3>
                 <p className="text-xs text-[var(--ide-text-muted)] leading-relaxed">{step.body}</p>
@@ -454,7 +454,7 @@ export const HelpTutorialModal: React.FC<HelpTutorialModalProps> = ({
             content.crawlerSteps.map((step, i) => (
               <div
                 key={i}
-                className="md-card p-4 space-y-1.5"
+                className="dp-panel p-4 space-y-1.5"
               >
                 <h3 className="text-sm font-semibold text-[var(--ide-text)]">{step.title}</h3>
                 <p className="text-xs text-[var(--ide-text-muted)] leading-relaxed">{step.body}</p>
@@ -465,7 +465,7 @@ export const HelpTutorialModal: React.FC<HelpTutorialModalProps> = ({
             content.apkSteps.map((step, i) => (
               <div
                 key={i}
-                className="md-card p-4 space-y-1.5"
+                className="dp-panel p-4 space-y-1.5"
               >
                 <h3 className="text-sm font-semibold text-[var(--ide-text)]">{step.title}</h3>
                 <p className="text-xs text-[var(--ide-text-muted)] leading-relaxed">{step.body}</p>
@@ -476,7 +476,7 @@ export const HelpTutorialModal: React.FC<HelpTutorialModalProps> = ({
             content.faqs.map((item, i) => (
               <div
                 key={i}
-                className="md-card p-4 space-y-1.5"
+                className="dp-panel p-4 space-y-1.5"
               >
                 <h3 className="text-sm font-semibold text-[var(--ide-accent-text)]">{item.q}</h3>
                 <p className="text-xs text-[var(--ide-text-muted)] leading-relaxed">{item.a}</p>

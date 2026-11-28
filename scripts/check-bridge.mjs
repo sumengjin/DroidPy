@@ -16,7 +16,33 @@ const bundle = await build({
   write: false,
 });
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`;
-const { buildTermuxBridgeScript, resolveTermuxInstallTarget } = await import(moduleUrl);
+const {
+  buildTermuxBridgeScript,
+  buildTermuxRunFiles,
+  resolveTermuxInstallTarget,
+  buildTermuxUninstallCommand,
+  buildTermuxPipUpgradeCommand,
+  parseOutdatedPipJson,
+  filterTermuxPipPackages,
+} = await import(moduleUrl);
+
+const activeRunFile = { name: 'same.py', content: 'print("active editor buffer")' };
+assert.deepEqual(
+  buildTermuxRunFiles(activeRunFile, [
+    { name: 'same.py', content: 'print("stale workspace copy")' },
+    { name: 'helper.py', content: 'VALUE = 1' },
+    { name: 'same.py', content: 'print("later stale duplicate")' },
+  ]),
+  [
+    { name: 'helper.py', content: 'VALUE = 1' },
+    activeRunFile,
+  ],
+  'the active editor buffer must be staged last and duplicate basenames must not overwrite it'
+);
+assert.throws(
+  () => buildTermuxRunFiles({ name: '..', content: '' }, []),
+  /檔案名稱無效/
+);
 
 const token = 'a'.repeat(64);
 const origin = 'https://droidpy-ci.example';
@@ -39,7 +65,7 @@ assert.ok(generated.includes('threading.BoundedSemaphore(8)'));
 assert.ok(generated.includes('self.send_header("Connection", "close")'));
 assert.ok(generated.includes('self.close_connection = True'));
 assert.ok(generated.includes('if self.path in ("/pause", "/resume"):'));
-const pythonStreamStart = generated.indexOf('    def _stream_pty_command(self, cmd, shell=False):');
+const pythonStreamStart = generated.indexOf('    def _stream_pty_command(self, cmd, shell=False, before_start=None):');
 const pythonStreamEnd = generated.indexOf('    def _read_json_body(self):', pythonStreamStart);
 assert.ok(pythonStreamStart >= 0 && pythonStreamEnd > pythonStreamStart);
 const pythonStream = generated.slice(pythonStreamStart, pythonStreamEnd);
@@ -47,7 +73,10 @@ assert.ok(pythonStream.includes('client_disconnected = False'));
 assert.ok(pythonStream.includes('def emit_stream_event(event):'));
 assert.ok(pythonStream.includes('client_disconnected = True'));
 assert.ok(pythonStream.includes('The HTTP client does not own the child process.'));
-assert.ok(!pythonStream.includes('os.killpg(proc.pid, signal.SIGKILL)'));
+const disconnectHandlerStart = pythonStream.indexOf('def emit_stream_event(event):');
+const disconnectHandlerEnd = pythonStream.indexOf('            while True:', disconnectHandlerStart);
+assert.ok(disconnectHandlerStart >= 0 && disconnectHandlerEnd > disconnectHandlerStart);
+assert.ok(!pythonStream.slice(disconnectHandlerStart, disconnectHandlerEnd).includes('os.killpg('), 'a dropped output socket must not kill the Python child');
 const explicitStopStart = generated.indexOf('        if self.path == "/stop":');
 const explicitStopEnd = generated.indexOf('        if self.path in ("/run"', explicitStopStart);
 assert.ok(explicitStopStart >= 0 && explicitStopEnd > explicitStopStart);
@@ -56,6 +85,64 @@ assert.ok(generated.slice(explicitStopStart, explicitStopEnd).includes('os.killp
 assert.ok(generated.includes('os.killpg(pgid, signal.SIGSTOP if should_pause else signal.SIGCONT)'));
 assert.ok(generated.includes('def _normalize_shell_command(command):'));
 assert.ok(generated.includes('python-polars'));
+assert.ok(generated.includes('OPERATION_LOCK = threading.Lock()'), 'external Bridge must serialize all Termux operations');
+assert.ok(generated.includes('def _stage_workspace_files(files):'), 'external Bridge must stage workspace files through one safe writer');
+assert.ok(generated.includes('os.fsync(fp.fileno())') && generated.includes('os.replace(temp_path, target)'), 'external Bridge writes must be durable and atomic');
+assert.ok(generated.includes('before_start=lambda: _stage_workspace_files(files)'), 'streaming run must reserve the process before staging workspace files');
+assert.ok(generated.includes('ACTIVE_PROC["starting"]') && generated.includes('ACTIVE_PROC["stop_requested"]'), 'external Bridge must retain Stop requests during process startup');
+assert.ok(generated.includes('if not OPERATION_LOCK.acquire(blocking=False)'), 'overlapping external Termux operations must be rejected');
+
+const nativeInstalledPackages = ['python-numpy', 'python-polars', 'python-scipy'];
+assert.equal(
+  buildTermuxUninstallCommand('pip', 'polars', nativeInstalledPackages),
+  'pkg uninstall -y python-polars',
+  'TUR Polars must be removed through APT, not pip'
+);
+assert.equal(
+  buildTermuxUninstallCommand('pip', 'numpy', nativeInstalledPackages),
+  'pkg uninstall -y python-numpy',
+  'APT-backed Python distributions must be removed through APT'
+);
+assert.equal(
+  buildTermuxUninstallCommand('pip', 'polars', []),
+  'pip uninstall -y polars',
+  'a genuine PyPI Polars install must remain removable through pip'
+);
+assert.equal(
+  buildTermuxUninstallCommand('pip', 'requests', nativeInstalledPackages),
+  'pip uninstall -y requests',
+  'ordinary PyPI packages must continue to uninstall through pip'
+);
+assert.deepEqual(
+  filterTermuxPipPackages(['numpy', 'polars', 'requests'], nativeInstalledPackages),
+  ['requests'],
+  'native APT distributions must not be duplicated in the pip inventory'
+);
+assert.deepEqual(
+  filterTermuxPipPackages(['numpy', 'requests']),
+  ['requests'],
+  'when APT inventory is unavailable, known native packages must be excluded conservatively'
+);
+const outdatedJson = JSON.stringify([
+  { name: 'numpy', version: '1.0', latest_version: '2.0' },
+  { name: 'polars', version: '1.0', latest_version: '2.0' },
+  { name: 'requests', version: '1.0', latest_version: '2.0' },
+]);
+assert.deepEqual(
+  parseOutdatedPipJson(outdatedJson, nativeInstalledPackages).map((item) => item.name),
+  ['requests'],
+  'APT-backed distributions must not be offered as pip upgrades'
+);
+assert.deepEqual(
+  parseOutdatedPipJson(outdatedJson).map((item) => item.name),
+  ['requests'],
+  'unknown APT inventory must conservatively suppress native package pip upgrades'
+);
+assert.equal(
+  buildTermuxPipUpgradeCommand(['numpy', 'polars', 'requests'], false, nativeInstalledPackages),
+  'pip install --upgrade requests',
+  'bulk pip upgrades must not overwrite native APT distributions'
+);
 
 
 assert.ok(generated.includes('index-url = https://pypi.org/simple'));
@@ -95,8 +182,38 @@ assert.ok(generated.includes('_compatibility_install_command(pkgs[0], trusted_ho
 assert.ok(generated.includes('return re.sub(r"^(\\s*pkg\\s+install\\b)", r"\\1 -y"'));
 assert.ok(generated.includes('BoundedThreadingHTTPServer(("127.0.0.1", 8765), DroidPyBridgeHandler)'));
 
-// Native Bridge limits are checked against the actual generated Android source.
+// Android edge-to-edge system bars must stay transparent while app content respects insets.
+const edgeToEdgeBuilder = await readFile('src/services/androidApkBuilder.ts', 'utf8');
+assert.ok(edgeToEdgeBuilder.includes('WindowCompat.setDecorFitsSystemWindows(window, false)'));
+assert.ok(edgeToEdgeBuilder.includes('window.statusBarColor = Color.TRANSPARENT'));
+assert.ok(edgeToEdgeBuilder.includes('window.navigationBarColor = Color.TRANSPARENT'));
+assert.ok(edgeToEdgeBuilder.includes('WindowInsetsCompat.Type.statusBars()'));
+assert.ok(edgeToEdgeBuilder.includes('WindowInsetsCompat.Type.navigationBars()'));
+assert.ok(edgeToEdgeBuilder.includes("setProperty('--droidpy-statusbar-inset'"));
+assert.ok(edgeToEdgeBuilder.includes('fun setSystemBarAppearance(isDark: Boolean)'));
+assert.ok(edgeToEdgeBuilder.includes('override fun onPageFinished(view: WebView?, url: String?)'));
+const systemBarApp = await readFile('src/App.tsx', 'utf8');
+assert.ok(systemBarApp.includes('window.DroidPyNative?.setSystemBarAppearance?.(meta.isDark)'));
+const systemBarTypes = await readFile('src/types/ide.ts', 'utf8');
+assert.ok(systemBarTypes.includes('setSystemBarAppearance?: (isDark: boolean) => void;'));
+const systemBarCss = await readFile('src/index.css', 'utf8');
+assert.ok(systemBarCss.includes('var(--droidpy-statusbar-inset, 0px)'));
+assert.ok(systemBarCss.includes('var(--droidpy-navigationbar-inset, 0px)'));
+
+const termuxBridgeSource = await readFile('src/services/termuxBridge.ts', 'utf8');
 const androidBuilder = await readFile('src/services/androidApkBuilder.ts', 'utf8');
+
+// Native and external Termux bridges emit NDJSON records terminated by real LF bytes.
+// The client must split on an actual newline, not the two-character backslash+n sequence.
+assert.ok(termuxBridgeSource.includes("buffer.split('\\n')"), 'NDJSON parser must split on real newline characters');
+assert.ok(!termuxBridgeSource.includes("buffer.split('\\\\n')"), 'NDJSON parser must not split on a literal backslash+n sequence');
+
+// Native diagnostics start a fresh session before recording the new process launch.
+const nativeSessionReset = androidBuilder.indexOf('File(filesDir, "droidpy_native.log").writeText("", Charsets.UTF_8)');
+const nativeSessionStart = androidBuilder.indexOf('appendActivityLog("Startup", "MainActivity.onCreate entered")');
+assert.ok(nativeSessionReset >= 0 && nativeSessionStart > nativeSessionReset, 'native logs must be cleared before the first startup record');
+
+// Native Bridge limits are checked against the actual generated Android source.
 assert.ok(androidBuilder.includes('ThreadPoolExecutor('));
 assert.ok(androidBuilder.includes('4, 8, 60L, TimeUnit.SECONDS, ArrayBlockingQueue<Runnable>(16)'));
 assert.ok(androidBuilder.includes('RejectedExecutionException'));
@@ -137,20 +254,31 @@ assert.ok(androidBuilder.includes('Stream client disconnected; continuing proces
 assert.ok(androidBuilder.includes('Process started pid='));
 assert.ok(androidBuilder.includes('Process exited pid='));
 assert.ok(androidBuilder.includes('activeProcessStopRequested'));
-assert.ok(androidBuilder.includes('Explicit Stop request: force stopping process tree'));
+assert.ok(androidBuilder.includes('Stop endpoint invoked source=$stopSource operation=$stopOperation'));
+assert.ok(androidBuilder.includes('Stop request: force stopping process tree pid='));
 assert.ok(androidBuilder.includes('Process output read ended after explicit Stop'));
 assert.ok(androidBuilder.includes('Run script requested: $entry'));
 assert.ok(androidBuilder.includes('SD-card write request received'));
-const streamShellStart = androidBuilder.indexOf('private fun streamShellCommand(out: OutputStream, command: String) {');
+const sdcardReadStart = androidBuilder.indexOf('method == "POST" && path == "/sdcard/read"');
+const sdcardReadEnd = androidBuilder.indexOf('method == "POST" && path == "/sdcard/write"', sdcardReadStart);
+assert.ok(sdcardReadStart >= 0 && sdcardReadEnd > sdcardReadStart);
+const sdcardRead = androidBuilder.slice(sdcardReadStart, sdcardReadEnd);
+assert.ok(sdcardRead.includes('target.readBytes()') && sdcardRead.includes('fileWriteDiagnostic(sourceBytes)'), 'external file reads must record a content fingerprint before the editor receives them');
+const streamShellStart = androidBuilder.indexOf('private fun streamShellCommand(out: OutputStream, command: String, beforeStart: (() -> Unit)? = null) {');
 const streamShellEnd = androidBuilder.indexOf('private fun corsHeaders(', streamShellStart);
 assert.ok(streamShellStart >= 0 && streamShellEnd > streamShellStart);
 const nativeStreamShell = androidBuilder.slice(streamShellStart, streamShellEnd);
 assert.ok(nativeStreamShell.includes('Stream client disconnected; continuing process'));
 assert.ok(!nativeStreamShell.includes('proc.destroyForcibly()'), 'a dropped output socket must not kill the Python child');
+assert.ok(nativeStreamShell.indexOf('val reserved = synchronized(activeProcessLock)') < nativeStreamShell.indexOf('beforeStart?.invoke()'));
+assert.ok(nativeStreamShell.indexOf('out.write((') < nativeStreamShell.indexOf('beforeStart?.invoke()'), 'native stream readiness must be sent only after reserving the operation, but before staging');
+assert.ok(androidBuilder.includes('writeFileAtomically(target, bytes)') && androidBuilder.includes('committed.contentEquals(bytes)'), 'native Bridge must verify the committed file bytes before execution');
+assert.ok(generated.includes('committed.read() != content.encode("utf-8")'), 'external Bridge must verify committed file bytes before execution');
+assert.ok(androidBuilder.includes('processSnapshot = synchronized(activeProcessLock)'), 'native Stop must read process and starting state atomically');
 const runLoggingSource = await readFile('src/App.tsx', 'utf8');
 assert.ok(runLoggingSource.includes('${entryFile.name} exited with code ${res.exitCode}'));
 assert.ok(runLoggingSource.includes('Finished ${entryFile.name}'));
-assert.ok(androidBuilder.includes('Explicit Stop request: force stopping process tree'));
+assert.ok(androidBuilder.includes('Stop request: force stopping process tree pid='));
 assert.ok(androidBuilder.includes('headerBuf.size() > 16 * 1024'));
 assert.ok(androidBuilder.includes('len > 8 * 1024 * 1024'));
 assert.ok(androidBuilder.includes('duplicateContentLength'));
@@ -158,7 +286,15 @@ assert.ok(androidBuilder.includes('headers.containsKey("transfer-encoding")'));
 assert.ok(androidBuilder.includes('Only the explicit /stop action may terminate that process.'));
 assert.ok(androidBuilder.includes('"/pause"'));
 assert.ok(androidBuilder.includes('"/resume"'));
-assert.ok(androidBuilder.includes('android.os.Process.sendSignal(pid, signal)'));
+assert.ok(androidBuilder.includes('private fun signalActiveProcess(signal: Int): Boolean'));
+const pauseSignalStart = androidBuilder.indexOf('private fun signalActiveProcess(signal: Int): Boolean');
+const pauseSignalEnd = androidBuilder.indexOf('private fun runBufferedShellCommand', pauseSignalStart);
+assert.ok(pauseSignalStart >= 0 && pauseSignalEnd > pauseSignalStart);
+const pauseSignal = androidBuilder.slice(pauseSignalStart, pauseSignalEnd);
+assert.ok(pauseSignal.includes('collectDescendants(rootPid, descendants)'));
+assert.ok(pauseSignal.includes('descendants + rootPid'));
+assert.ok(pauseSignal.includes('listOf(rootPid) + descendants.asReversed()'));
+assert.ok(pauseSignal.includes('android.os.Process.sendSignal(targetPid, signal)'));
 assert.ok(androidBuilder.includes('private fun normalizeShellCommand(command: String): String'));
 assert.ok(androidBuilder.includes('val normalizedCommand = normalizeShellCommand(command)'));
 assert.ok(androidBuilder.includes('ProcessBuilder(shFile.absolutePath, "-c", normalizedCommand)'));
@@ -229,17 +365,94 @@ assert.ok(cookieCapture.includes('writeText(sessionJson.toString(2), Charsets.UT
 assert.ok(androidBuilder.includes('Cookie capture button clicked'));
 
 const terminalUi = await readFile('src/components/TerminalPanel.tsx', 'utf8');
-assert.ok(terminalUi.includes('paused ? \'繼續\' : \'暫停\''));
+assert.ok(!terminalUi.includes('onStopScript'), 'TerminalPanel must not render a second Stop control');
+assert.ok(!terminalUi.includes('onTogglePause'), 'pause/resume belongs in the single workspace execution bar');
+assert.ok(terminalUi.includes('disabled={executionBusy}'), 'engine switching must be disabled during an active job');
 const appSource = await readFile('src/App.tsx', 'utf8');
 assert.ok(appSource.includes('pauseTermuxProcess(termuxConfig)'));
 assert.ok(appSource.includes('resumeTermuxProcess(termuxConfig)'));
+assert.ok(appSource.split('onTogglePause: () => void handleToggleTermuxPause()').length - 1 >= 2, 'phone and tablet headers must both connect to the shared pause/resume controller');
+const executionControls = await readFile('src/components/WorkspaceExecutionControls.tsx', 'utf8');
+assert.ok(executionControls.includes('termuxPaused ? labels.resume : labels.pause'), 'the shared execution controls must expose the correct pause/resume state');
+assert.ok(executionControls.includes('onStop') && executionControls.includes('onRun'), 'the shared execution controls must own Run and Stop presentation');
+assert.ok(appSource.includes('termuxStopping'), 'Run must remain locked until Stop cleanup completes');
+assert.ok(appSource.includes('termuxPauseBusy'), 'pause/resume requests must be serialized');
+assert.ok(appSource.includes('termuxStopRequestedRef.current = true'), 'Stop intent must be latched before a pending script can launch');
+assert.ok(appSource.includes('await scriptCompletion'), 'Stop must wait for the entire script start/cleanup routine');
+assert.ok(appSource.includes('if (termuxStopRequestedRef.current) return;'), 'a pending script must re-check Stop before spawning');
+assert.ok(appSource.includes('waitForActiveTermuxStreamReady'), 'Stop must wait until the native bridge has accepted an in-flight run request');
+const stopHandlerStart = appSource.indexOf('const handleStopTermux = useCallback');
+const stopHandlerEnd = appSource.indexOf('const handleCleanupStuckProcesses', stopHandlerStart);
+assert.ok(stopHandlerStart >= 0 && stopHandlerEnd > stopHandlerStart);
+const stopHandler = appSource.slice(stopHandlerStart, stopHandlerEnd);
+assert.ok(stopHandler.indexOf('await stopTermuxProcess(termuxConfig, { source, operation })') < stopHandler.indexOf('await waitForActiveTermuxStream()'), 'native process must be stopped before waiting for its output stream');
+assert.ok(!stopHandler.includes('setTermuxRunning(false)'), 'failed Stop must not unlock a still-running process');
 assert.ok(appSource.includes('termuxScriptStartLockRef.current = true'));
 assert.ok(appSource.includes('termuxScriptStartLockRef.current = false'));
+const termuxBridgeUi = await readFile('src/services/termuxBridge.ts', 'utf8');
+assert.ok(termuxBridgeUi.includes('activeStreamCompletion'));
+assert.ok(termuxBridgeUi.includes('waitForActiveTermuxStream'));
+assert.ok(termuxBridgeUi.includes('activeStreamReady'));
+assert.ok(termuxBridgeUi.includes('waitForActiveTermuxStreamReady'));
+assert.ok(termuxBridgeUi.includes('await completion'), 'Stop must wait for the old stream slot to be released');
+assert.ok(androidBuilder.includes('activeProcess === proc'));
+assert.ok(androidBuilder.includes('!proc.isAlive && activeProcess !== proc && !activeProcessStarting'));
+assert.ok(androidBuilder.includes('activeProcessStarting'));
+assert.ok(androidBuilder.includes('Stop arrived during process launch'));
+const streamReservation = androidBuilder.indexOf('activeProcessStarting = true', streamShellStart);
+const streamHeaders = androidBuilder.indexOf('HTTP/1.1 200 OK', streamShellStart);
+assert.ok(streamReservation >= 0 && streamHeaders > streamReservation, 'native process start must be reserved before acknowledging the stream');
+const streamReservationGuard = androidBuilder.indexOf('if (activeProcess != null || activeProcessStarting)', streamShellStart);
+const workspaceStageCall = androidBuilder.indexOf('beforeStart?.invoke()', streamShellStart);
+assert.ok(streamReservationGuard >= 0 && streamReservationGuard < workspaceStageCall, 'overlapping streamed operations must be rejected before touching workspace files');
+assert.ok(androidBuilder.includes('Rejected overlapping streamed operation'));
+assert.ok(androidBuilder.includes('另一個 Termux 工作仍在執行，已拒絕這次操作'));
+assert.ok(androidBuilder.includes('java.io.FileOutputStream(temp).use'));
+assert.ok(androidBuilder.includes('stream.fd.sync()'));
+assert.ok(androidBuilder.includes('android.system.Os.rename(temp.absolutePath, target.absolutePath)'), 'workspace scripts must use an API-21-compatible atomic replacement');
+assert.ok(androidBuilder.includes('Workspace file committed name=$name') && androidBuilder.includes('fileWriteDiagnostic(committedBytes)'));
+assert.ok(androidBuilder.includes('private fun fileWriteDiagnostic(bytes: ByteArray): String'));
+assert.ok(androidBuilder.includes('SD-card file committed name=$name') && androidBuilder.includes('SD-card file committed name=\\${target.name}'));
+const atomicWriterStart = androidBuilder.indexOf('private fun writeFileAtomically(target: File, bytes: ByteArray): ByteArray');
+const atomicWriterEnd = androidBuilder.indexOf('private fun resolveSdcardTarget', atomicWriterStart);
+assert.ok(atomicWriterStart >= 0 && atomicWriterEnd > atomicWriterStart);
+const atomicWriter = androidBuilder.slice(atomicWriterStart, atomicWriterEnd);
+assert.ok(atomicWriter.includes('atomicFileWriteLock') && atomicWriter.includes('stream.fd.sync()') && atomicWriter.includes('android.system.Os.rename'));
+assert.ok(atomicWriter.includes('committed.contentEquals(bytes)'), 'native atomic writer must verify persisted bytes');
+const storageWriteStart = androidBuilder.indexOf('method == "POST" && path == "/sdcard/write"');
+const storageWriteEnd = androidBuilder.indexOf('method == "POST" && path == "/sdcard/mkdir"', storageWriteStart);
+assert.ok(storageWriteStart >= 0 && storageWriteEnd > storageWriteStart);
+const storageWrite = androidBuilder.slice(storageWriteStart, storageWriteEnd);
+assert.ok(storageWrite.includes('writeFileAtomically(target, bytes)'));
+assert.ok(!storageWrite.includes('.writeText('), 'shared-storage writes must not truncate files in place');
+
+assert.ok(androidBuilder.includes('streamShellCommand(out, shellCmd, stageWorkspaceFiles)'), 'script staging must happen inside the reserved native operation');
+
+assert.ok(androidBuilder.includes('code = -1'), 'intentional Stop must not be reported as script failure');
+assert.ok(androidBuilder.includes('Requesting shared-storage permission on first launch'));
 assert.ok(!androidBuilder.includes('private val executor = Executors.newCachedThreadPool()'));
+
+// The Settings workspace opens its main tools directly; nested folder landing pages are retired.
+const toolsHubSource = await readFile('src/components/ToolsAndPackages.tsx', 'utf8');
+const settingsWorkspaceSource = await readFile('src/components/SettingsWorkspace.tsx', 'utf8');
+assert.ok(settingsWorkspaceSource.includes('onOpenSdcardFile={(filename, content, filePath) => {') && settingsWorkspaceSource.includes('onClose();') && settingsWorkspaceSource.includes('onSaveWorkspaceFile(filename, content, true, filePath)'), 'the independent Settings file manager must close back to the editor and preserve the source path when importing files');
+assert.ok(settingsWorkspaceSource.includes('onSaveWorkspaceFile(filename, content, true, filePath)'), 'all Settings file-manager import callbacks must forward their original path');
+const externalFileSaveStart = appSource.indexOf('const handleSaveWorkspaceFile = useCallback');
+const externalFileSaveEnd = appSource.indexOf('const handleUpdateSettings', externalFileSaveStart);
+assert.ok(externalFileSaveStart >= 0 && externalFileSaveEnd > externalFileSaveStart);
+const externalFileSave = appSource.slice(externalFileSaveStart, externalFileSaveEnd);
+assert.ok(externalFileSave.includes('externalPath?: string'));
+assert.ok(externalFileSave.includes('file.externalPath === externalPath'), 'external files must be matched by their original path, not basename alone');
+assert.ok(externalFileSave.includes('{ externalPath }'), 'opening an external file must retain its original path for save-before-run');
+assert.ok(toolsHubSource.includes("const [activeWindow, setActiveWindow] = useState<ToolWindowId | null>(null)"));
+assert.ok(toolsHubSource.includes('const renderHubOptionList ='));
+assert.ok(toolsHubSource.includes("if (activeSubView === 'packages')"));
+assert.ok(toolsHubSource.includes('renderHubOptionList(packageHubOptions'), 'the package center must open native and sandbox package destinations directly');
+assert.ok(!/renderFolderList|renderFolderContents|setTermuxFolder|setPackageFolder|setStorageFolder|setSettingsFolder|activeFolderLabel/.test(toolsHubSource), 'nested folder landing pages and folder-specific back states must be removed');
 
 // A second streamed action must never cancel the currently running Python job.
 // Only the explicit Stop control is allowed to abort its AbortController.
-const termuxBridgeSource = await readFile('src/services/termuxBridge.ts', 'utf8');
+
 assert.ok(termuxBridgeSource.includes('已有 Termux 工作正在執行'));
 assert.ok(termuxBridgeSource.includes('def _compatibility_install_command(package_name, trusted_host=False):'));
 assert.ok(termuxBridgeSource.includes('package == "parsel"'));
@@ -256,12 +469,12 @@ assert.ok(!termuxBridgeSource.includes('_scikit_learn_source_install_command'));
 assert.ok(termuxBridgeSource.includes('pip_prefix = r"(?:(?:[^\\\\s;&|]*/)?python'));
 
 assert.ok(!termuxBridgeSource.includes("  abortActiveTermuxStream();\n  const controller = new AbortController();"));
-const abortHelperStart = termuxBridgeSource.indexOf('export function abortActiveTermuxStream(): void {');
+const abortHelperStart = termuxBridgeSource.indexOf('export async function abortActiveTermuxStream(): Promise<void> {');
 const abortHelperEnd = termuxBridgeSource.indexOf('\n}', abortHelperStart);
 assert.ok(abortHelperStart >= 0 && abortHelperEnd > abortHelperStart);
 assert.ok(!termuxBridgeSource.slice(abortHelperStart, abortHelperEnd).includes('activeStreamController = null'));
 assert.ok(termuxBridgeSource.includes('return { exitCode: -1, durationMs: 0 };'));
-assert.ok(termuxBridgeSource.includes('return { exitCode: -1, durationMs };'));
+assert.ok(termuxBridgeSource.includes('settleCompletion();'), 'stream completion must release waiters on every exit path');
 assert.ok(termuxBridgeSource.includes('橋接請求（${path}）'));
 assert.ok(termuxBridgeSource.includes('    30000\n  );\n}\n\nexport async function createSdcardFolder'));
 
@@ -403,6 +616,7 @@ try {
 // Package installation routing: Python archives must use pip, native extensions should use Termux binaries.
 const cases = [
   ['pip', 'numpy', 'pkg', 'python-numpy'],
+  ['pip', 'scipy', 'pkg', 'python-scipy'],
   ['pip', 'pandas', 'pkg', 'python-pandas'],
   ['pip', 'Pillow', 'pkg', 'python-pillow'],
   ['pip', 'PIL', 'pkg', 'python-pillow'],
@@ -449,13 +663,13 @@ for (const [inputMode, input, expectedMode, expectedTarget] of cases) {
 const routeTestFile = path.join(os.tmpdir(), 'droidpy-package-route-test.py');
 const routeSourceFile = path.join(os.tmpdir(), 'droidpy-route-generated.py');
 const routeTest = [
-  'import ast, re, shlex, sys',
+  'import ast, os, re, shlex, sys, tempfile, threading, time',
   'source = open(sys.argv[1], encoding="utf-8").read()',
   'tree = ast.parse(source)',
-  'wanted = {"_compatibility_install_command", "_normalize_shell_command"}',
+  'wanted = {"_compatibility_install_command", "_normalize_shell_command", "_stage_workspace_files", "_reserve_process_start", "_set_active", "_clear_active"}',
   'nodes = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name in wanted]',
   'assert {node.name for node in nodes} == wanted',
-  'namespace = {"re": re, "shlex": shlex, "_build_pip_cmd": lambda args, trusted_host=False: ["pip", "install", *args]}',
+  'namespace = {"re": re, "shlex": shlex, "os": os, "tempfile": tempfile, "threading": threading, "time": time, "PROC_LOCK": threading.Lock(), "ACTIVE_PROC": {"pid": None, "pgid": None, "master_fd": None, "started_at": 0.0, "paused": False, "starting": False, "stop_requested": False}, "_build_pip_cmd": lambda args, trusted_host=False: ["pip", "install", *args]}',
   'exec(compile(ast.Module(body=nodes, type_ignores=[]), "<package-routes>", "exec"), namespace)',
   'expected = {"numpy": "python-numpy", "pandas": "python-pandas", "pillow": "python-pillow", "pil": "python-pillow", "lxml": "python-lxml", "cryptography": "python-cryptography", "matplotlib": "matplotlib", "apsw": "python-apsw", "bcrypt": "python-bcrypt", "brotli": "python-brotli", "grpcio": "python-grpcio", "msgpack": "python-msgpack", "psutil": "python-psutil", "pycryptodomex": "python-pycryptodomex", "tflite-runtime": "python-tflite-runtime", "torch": "python-torch", "torchaudio": "python-torchaudio", "torchvision": "python-torchvision", "yt-dlp": "python-yt-dlp", "scipy": "python-scipy"}',
   'for name, target in expected.items():',
@@ -465,6 +679,16 @@ const routeTest = [
   'assert namespace["_normalize_shell_command"]("pip install numpy==2.0.0") == "pip install numpy==2.0.0"',
   'assert namespace["_normalize_shell_command"]("pip install requests pandas") == "pip install requests pandas"',
   'assert namespace["_normalize_shell_command"]("pip install scikit-learn").startswith("echo ")',
+  'with tempfile.TemporaryDirectory() as workspace:',
+  '    namespace["WORKSPACE"] = workspace',
+  '    namespace["_stage_workspace_files"]([{"name": "../same.py", "content": "old"}, {"name": "same.py", "content": "active"}])',
+  '    with open(os.path.join(workspace, "same.py"), encoding="utf-8") as fp: assert fp.read() == "active"',
+  '    assert not any(name.endswith(".tmp") for name in os.listdir(workspace)), "atomic staging must clean temporary files"',
+  'assert namespace["_reserve_process_start"]() is True',
+  'with namespace["PROC_LOCK"]: namespace["ACTIVE_PROC"]["stop_requested"] = True',
+  'assert namespace["_set_active"](123, 123, None) is True, "a Stop arriving during startup must be retained"',
+  'namespace["_clear_active"]()',
+  'assert namespace["ACTIVE_PROC"]["starting"] is False and namespace["ACTIVE_PROC"]["pgid"] is None'
 ];
 await writeFile(routeTestFile, routeTest.join('\n'), 'utf8');
 await writeFile(routeSourceFile, generated, 'utf8');

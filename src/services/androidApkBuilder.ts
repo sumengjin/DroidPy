@@ -163,9 +163,9 @@ jobs:
             printf '%s' "$CUSTOM_KS_B64" | base64 --decode > android/app/droidpy-release.keystore
             keytool -list -keystore android/app/droidpy-release.keystore -storepass "$CUSTOM_STORE_PASS" -alias "$CUSTOM_KEY_ALIAS" >/dev/null
             echo 'DROIDPY_KEYSTORE_FILE=droidpy-release.keystore' >> "$GITHUB_ENV"
-            printf 'DROIDPY_STORE_PASSWORD=%s\\n' "$CUSTOM_STORE_PASS" >> "$GITHUB_ENV"
-            printf 'DROIDPY_KEY_ALIAS=%s\\n' "$CUSTOM_KEY_ALIAS" >> "$GITHUB_ENV"
-            printf 'DROIDPY_KEY_PASSWORD=%s\\n' "$CUSTOM_KEY_PASS" >> "$GITHUB_ENV"
+            printf 'DROIDPY_STORE_PASSWORD=%s\n' "$CUSTOM_STORE_PASS" >> "$GITHUB_ENV"
+            printf 'DROIDPY_KEY_ALIAS=%s\n' "$CUSTOM_KEY_ALIAS" >> "$GITHUB_ENV"
+            printf 'DROIDPY_KEY_PASSWORD=%s\n' "$CUSTOM_KEY_PASS" >> "$GITHUB_ENV"
             ACTUAL_KEYSTORE_SHA256=$(keytool -exportcert -keystore android/app/droidpy-release.keystore -storepass "$CUSTOM_STORE_PASS" -alias "$CUSTOM_KEY_ALIAS" | sha256sum | awk '{print toupper($1)}')
             echo "DROIDPY_EXPECTED_CERT_SHA256=$ACTUAL_KEYSTORE_SHA256" >> "$GITHUB_ENV"
             echo "Verified protected Release signing certificate: $ACTUAL_KEYSTORE_SHA256"
@@ -195,8 +195,8 @@ jobs:
           APKSIGNER=$(find "\${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/build-tools" -type f -name apksigner -perm -u+x 2>/dev/null | sort -V | tail -n1)
           if [ -z "$APKSIGNER" ]; then echo '::error::Android apksigner not found.'; exit 1; fi
           SIGNER_OUTPUT=$("$APKSIGNER" verify --verbose --print-certs "$APK_PATH" 2>&1)
-          printf '%s\\n' "$SIGNER_OUTPUT"
-          ACTUAL_SHA256=$(printf '%s\\n' "$SIGNER_OUTPUT" | sed -nE 's/.*certificate SHA-256 digest: *([0-9A-Fa-f:]+).*/\\1/ip' | head -n1 | tr -d ':' | tr '[:lower:]' '[:upper:]')
+          printf '%s\n' "$SIGNER_OUTPUT"
+          ACTUAL_SHA256=$(printf '%s\n' "$SIGNER_OUTPUT" | sed -nE 's/.*certificate SHA-256 digest: *([0-9A-Fa-f:]+).*/\\1/ip' | head -n1 | tr -d ':' | tr '[:lower:]' '[:upper:]')
           if ! [[ "$ACTUAL_SHA256" =~ ^[0-9A-F]{64}$ ]]; then echo '::error::Invalid APK signer fingerprint.'; exit 1; fi
           if [ "$DROIDPY_RELEASE_BUILD" = true ]; then
             EXPECTED_SHA256="\${DROIDPY_EXPECTED_CERT_SHA256:-}"
@@ -251,11 +251,27 @@ jobs:
           set -euo pipefail
           APK_FILE=$(find release-apk -maxdepth 1 -type f -name '*.apk' -print | head -n1)
           if [ -z "$APK_FILE" ]; then echo '::error::Verified Release APK artifact is missing.'; exit 1; fi
+          RELEASE_NOTES_FILE=$(mktemp)
+          CHANGELOG_SECTION=$(awk '
+            /^## \[[0-9]+\.[0-9]+\.[0-9]+\]/ {
+              if (found) exit
+              found = 1
+            }
+            /^## \[/ && found && $0 !~ /^## \[[0-9]+\.[0-9]+\.[0-9]+\]/ { exit }
+            found { print }
+          ' CHANGELOG.md)
+          if [ -n "$CHANGELOG_SECTION" ]; then
+            printf '%s\n' "$CHANGELOG_SECTION" > "$RELEASE_NOTES_FILE"
+          else
+            printf '%s\n' "# DroidPy $RELEASE_TAG" "此版本尚未提供專屬更新日誌。" > "$RELEASE_NOTES_FILE"
+          fi
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" "$APK_FILE" --clobber
+            gh release edit "$RELEASE_TAG" --notes-file "$RELEASE_NOTES_FILE"
           else
-            gh release create "$RELEASE_TAG" "$APK_FILE" --title "${appSlug} $RELEASE_TAG" --notes-file CHANGELOG.md --target "$GITHUB_SHA"
-          fi`
+            gh release create "$RELEASE_TAG" "$APK_FILE" --title "${appSlug} $RELEASE_TAG" --notes-file "$RELEASE_NOTES_FILE" --target "$GITHUB_SHA"
+          fi
+          rm -f "$RELEASE_NOTES_FILE"`
   );
 
   // 2. Gradle root files
@@ -482,6 +498,10 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
@@ -637,6 +657,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     inner class NativeDownloadBridge {
+        @JavascriptInterface
+        fun setSystemBarAppearance(isDark: Boolean) {
+            runOnUiThread {
+                WindowInsetsControllerCompat(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = !isDark
+                    isAppearanceLightNavigationBars = !isDark
+                }
+            }
+        }
+
         @JavascriptInterface
         fun isNativeApp(): Boolean = true
 
@@ -1293,7 +1323,26 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         installCrashDiagnostics()
+        // A new Activity process session starts with an empty native diagnostic file.
+        // This does not touch user workspace, Termux prefix, or package backups.
+        try {
+            File(filesDir, "droidpy_native.log").writeText("", Charsets.UTF_8)
+        } catch (_: Exception) {
+        }
         appendActivityLog("Startup", "MainActivity.onCreate entered")
+
+        appendActivityLog("Startup", "Enabling edge-to-edge system bars")
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isStatusBarContrastEnforced = false
+            window.isNavigationBarContrastEnforced = false
+        }
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            isAppearanceLightStatusBars = true
+            isAppearanceLightNavigationBars = true
+        }
 
         appendActivityLog("Startup", "Creating root container")
         rootContainer = FrameLayout(this)
@@ -1306,6 +1355,24 @@ class MainActivity : AppCompatActivity() {
         rootContainer.addView(webView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         rootContainer.addView(crawlerOverlay, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         setContentView(rootContainer)
+        ViewCompat.setOnApplyWindowInsetsListener(rootContainer) { _, insets ->
+            val density = resources.displayMetrics.density.coerceAtLeast(1f)
+            val statusTopDp = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top / density
+            val navigationBottomDp = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom / density
+            crawlerOverlay.setPadding(
+                crawlerOverlay.paddingLeft,
+                insets.getInsets(WindowInsetsCompat.Type.statusBars()).top,
+                crawlerOverlay.paddingRight,
+                insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            )
+            webView.evaluateJavascript(
+                "document.documentElement.style.setProperty('--droidpy-statusbar-inset', '\${statusTopDp}px');" +
+                    "document.documentElement.style.setProperty('--droidpy-navigationbar-inset', '\${navigationBottomDp}px');",
+                null
+            )
+            insets
+        }
+        ViewCompat.requestApplyInsets(rootContainer)
 
         appendActivityLog("Startup", "Configuring primary WebView settings")
         val settings: WebSettings = webView.settings
@@ -1326,7 +1393,24 @@ class MainActivity : AppCompatActivity() {
         appendActivityLog("Startup", "Installing native JavaScript bridge and WebView clients")
         webView.addJavascriptInterface(NativeDownloadBridge(), "DroidPyNative")
         webView.webChromeClient = WebChromeClient()
+        var firstStoragePermissionPromptHandled = false
         webView.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                ViewCompat.requestApplyInsets(rootContainer)
+                if (!firstStoragePermissionPromptHandled) {
+                    firstStoragePermissionPromptHandled = true
+                    val permissionPrefs = getSharedPreferences("droidpy_permissions", Context.MODE_PRIVATE)
+                    if (!permissionPrefs.getBoolean("initial_storage_permission_prompted", false)) {
+                        permissionPrefs.edit().putBoolean("initial_storage_permission_prompted", true).apply()
+                        window.decorView.post {
+                            appendActivityLog("StoragePermission", "Requesting shared-storage permission on first launch")
+                            requestExternalStoragePermissionIfNeeded()
+                        }
+                    }
+                }
+            }
+
             override fun onRenderProcessGone(
                 view: WebView?,
                 detail: android.webkit.RenderProcessGoneDetail?
@@ -1387,6 +1471,8 @@ class MainActivity : AppCompatActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (crawlerOverlay.visibility == View.VISIBLE) {
+                    // A Back press consumed inside the browser must never count toward app exit.
+                    lastBackPressedAt = 0L
                     if (crawlerWebView.canGoBack()) {
                         crawlerWebView.goBack()
                     } else {
@@ -1397,8 +1483,13 @@ class MainActivity : AppCompatActivity() {
                 webView.evaluateJavascript(
                     "(function(){ return window.__droidpyHandleBack ? Boolean(window.__droidpyHandleBack()) : false; })()"
                 ) { handled ->
-                    if (handled == "true") return@evaluateJavascript
+                    if (handled == "true") {
+                        // Returning within the app resets the double-Back-to-exit timer.
+                        lastBackPressedAt = 0L
+                        return@evaluateJavascript
+                    }
                     if (webView.canGoBack()) {
+                        lastBackPressedAt = 0L
                         webView.goBack()
                         return@evaluateJavascript
                     }
@@ -1963,6 +2054,9 @@ class EmbeddedTermuxBridge(
     )
     @Volatile private var running = false
     @Volatile private var activeProcess: Process? = null
+    @Volatile private var activeProcessStarting: Boolean = false
+    private val activeProcessLock = Any()
+    private val atomicFileWriteLock = Any()
     @Volatile private var activeProcessPaused: Boolean = false
     @Volatile private var activeProcessStopRequested: Boolean = false
     private val activeProcessStartedAt = AtomicLong(0L)
@@ -3038,16 +3132,69 @@ def clipboard_set(text):
         }
     }
 
-    private fun resolveSdcardTarget(relPath: String): File? {
-        val root = Environment.getExternalStorageDirectory()
-        val rootCanonical = root.canonicalPath
-        val cleaned = relPath.trim().trimStart('/')
-        val candidate = if (cleaned.isEmpty()) root else File(root, cleaned)
-        val candCanonical = candidate.canonicalPath
-        if (candCanonical != rootCanonical && !candCanonical.startsWith(rootCanonical + File.separator)) {
-            return null
+    private fun writeFileAtomically(target: File, bytes: ByteArray): ByteArray {
+        val parent = target.parentFile ?: throw java.io.IOException("Target has no parent directory")
+        if (!parent.exists() && !parent.mkdirs()) {
+            throw java.io.IOException("Cannot create target directory: \${parent.absolutePath}")
         }
-        return candidate
+        synchronized(atomicFileWriteLock) {
+            val temp = File(parent, ".\${target.name}.\${System.nanoTime()}.tmp")
+            try {
+                java.io.FileOutputStream(temp).use { stream ->
+                    stream.write(bytes)
+                    stream.fd.sync()
+                }
+                // POSIX rename is atomic on the same filesystem and replaces an existing file.
+                android.system.Os.rename(temp.absolutePath, target.absolutePath)
+                val committed = target.readBytes()
+                if (!committed.contentEquals(bytes)) {
+                    throw java.io.IOException("Atomic write read-back verification failed: \${target.name}")
+                }
+                return committed
+            } finally {
+                if (temp.exists()) temp.delete()
+            }
+        }
+    }
+
+    private fun fileWriteDiagnostic(bytes: ByteArray): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(bytes).joinToString("") { "%02x".format(it) }
+        val firstCodeByte = bytes.firstOrNull {
+            it != 32.toByte() && it != 9.toByte() && it != 10.toByte() && it != 13.toByte()
+        }
+        val firstCodeByteHex = firstCodeByte?.let { "%02x".format(it) } ?: "none"
+        return "bytes=\${bytes.size} sha256=$digest firstNonWhitespaceByteHex=$firstCodeByteHex"
+    }
+
+    // Browsing/reading may cover shared storage; mutations remain confined to DroidPy.
+    // Canonical-path validation blocks '..' traversal and symlink escapes in both modes.
+    private fun resolveSdcardTarget(relPath: String, allowOutsideHome: Boolean = false): File? {
+        return try {
+            val storageRoot = Environment.getExternalStorageDirectory()
+            val storageCanonical = storageRoot.canonicalPath
+            val homeRoot = File(storageRoot, "DroidPy")
+            val homeCanonical = homeRoot.canonicalPath
+            if (homeCanonical != homeRoot.absoluteFile.path) return null
+            if (!homeCanonical.startsWith(storageCanonical + File.separator)) return null
+            val cleaned = relPath.trim().trimStart('/')
+            val candidate = when {
+                cleaned.isEmpty() && allowOutsideHome -> storageRoot
+                cleaned.isEmpty() || cleaned == "DroidPy" -> homeRoot
+                cleaned.startsWith("DroidPy/") -> File(storageRoot, cleaned)
+                allowOutsideHome -> File(storageRoot, cleaned)
+                else -> return null
+            }
+            val candidateCanonical = candidate.canonicalPath
+            val withinStorage = candidateCanonical == storageCanonical ||
+                candidateCanonical.startsWith(storageCanonical + File.separator)
+            val withinHome = candidateCanonical == homeCanonical ||
+                candidateCanonical.startsWith(homeCanonical + File.separator)
+            if (!withinStorage || (!allowOutsideHome && !withinHome)) return null
+            candidate
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun processPid(proc: Process): Int {
@@ -3629,14 +3776,18 @@ def clipboard_set(text):
             candidates.add(File(Environment.getExternalStorageDirectory(), "DroidPy/.droidpy_backup/packages_manifest.json"))
         }
         var best: JSONObject? = null
+        var bestUpdatedAt = Long.MIN_VALUE
         var bestScore = -1
         for (f in candidates) {
             try {
                 if (f.isFile && f.length() > 2L) {
                     val obj = JSONObject(f.readText(Charsets.UTF_8))
+                    val updatedAt = obj.optLong("updatedAt", 0L)
                     val score = (obj.optJSONArray("pipPackages")?.length() ?: 0) + (obj.optJSONArray("pkgPackages")?.length() ?: 0)
-                    if (score > bestScore) {
+                    // Prefer the newest successful snapshot; package count is only a tie-breaker.
+                    if (updatedAt > bestUpdatedAt || (updatedAt == bestUpdatedAt && score > bestScore)) {
                         best = obj
+                        bestUpdatedAt = updatedAt
                         bestScore = score
                     }
                 }
@@ -3785,10 +3936,11 @@ def clipboard_set(text):
             when {
                 method == "GET" && path == "/health" -> {
                     val binDir = File(usrDir, "bin")
-                    val pyBin = listOf(File(binDir, "python"), File(binDir, "python3")).firstOrNull { it.exists() }
-                        ?: binDir.listFiles()?.firstOrNull {
-                            it.name.startsWith("python3.") && !it.name.endsWith("-config") && it.isFile
-                        }
+                    val pyBin = listOf(File(binDir, "python"), File(binDir, "python3")).firstOrNull {
+                        it.isFile && it.canExecute()
+                    } ?: binDir.listFiles()?.firstOrNull {
+                        it.name.startsWith("python3.") && !it.name.endsWith("-config") && it.isFile && it.canExecute()
+                    }
                     val hasPython = pyBin != null
 
                     val pipInventory = collectInstalledPipInventory()
@@ -3869,12 +4021,18 @@ def clipboard_set(text):
                         val currentPips = pipInventory.names.toSet()
                         val currentPkgs = pkgInventory.names.toSet()
                         val needPkgs = mutableListOf("python", "python-pip")
+                        val safePkgName = Regex("""^[A-Za-z0-9][A-Za-z0-9+.-]*$""")
+                        var invalidPkgEntries = 0
                         val arrK = manifest.optJSONArray("pkgPackages")
                         if (pkgInventory.complete && arrK != null) {
                             for (i in 0 until arrK.length()) {
                                 val v = arrK.optString(i, "").trim()
-                                if (v.isNotEmpty() && v !in currentPkgs && v !in needPkgs) {
-                                    needPkgs.add(v)
+                                if (v.isNotEmpty()) {
+                                    if (!safePkgName.matches(v)) {
+                                        invalidPkgEntries++
+                                    } else if (v !in currentPkgs && v !in needPkgs) {
+                                        needPkgs.add(v)
+                                    }
                                 }
                             }
                         }
@@ -3889,6 +4047,9 @@ def clipboard_set(text):
                             }
                         }
                         val steps = mutableListOf<String>()
+                        if (invalidPkgEntries > 0) {
+                            steps.add("echo '[DroidPy] Skipped invalid APT package names in backup manifest.' >&2")
+                        }
                         val nativeRestoreTargets = linkedSetOf<String>()
                         val remainingPips = mutableListOf<String>()
                         val safePipName = Regex("""^[A-Za-z0-9][A-Za-z0-9._+-]*$""")
@@ -3905,31 +4066,46 @@ def clipboard_set(text):
                             }
                         }
                         val missingPkgsOnly = (needPkgs + nativeRestoreTargets).distinct().filter { it !in currentPkgs }
-                        if ("python-polars" in missingPkgsOnly) {
-                            // Polars is supplied by the optional, signed Termux User Repository (TUR).
-                            steps.add("pkg install -y tur-repo && pkg update -y")
+                        val needsTurPolars = "python-polars" in missingPkgsOnly
+                        if (needsTurPolars) {
+                            // Refresh the official Termux index before installing tur-repo.
+                            // TUR is optional: a TUR outage must not block unrelated package restoration.
+                            steps.add("(pkg update -y && pkg install -y tur-repo && pkg update -y) || echo '[DroidPy] TUR setup failed; continuing without blocking other packages.' >&2")
                         }
                         if (nativeRestoreTargets.isNotEmpty()) {
                             steps.add("echo '[DroidPy] Restoring native Termux packages: " + nativeRestoreTargets.joinToString(" ") + "'")
                         }
-                        if (missingPkgsOnly.isNotEmpty()) {
+                        val packagesWithoutTur = missingPkgsOnly.filter { it != "python-polars" }
+                        if (packagesWithoutTur.isNotEmpty()) {
                             steps.add("(pkg update -y || true)")
-                            steps.add("pkg install -y " + missingPkgsOnly.joinToString(" "))
+                            steps.add("pkg install -y " + packagesWithoutTur.joinToString(" "))
+                        }
+                        if (needsTurPolars) {
+                            // Install the optional TUR package independently so its failure cannot abort the rest.
+                            steps.add("if pkg install -y python-polars; then echo '[DroidPy] Restored optional TUR package: python-polars.'; else echo '[DroidPy] Could not restore optional TUR package python-polars; all other restore steps will continue.' >&2; fi")
                         }
                         if (!pipInventory.complete && arrP != null && arrP.length() > 0) {
                             // Python is not ready yet. Restore native packages first; retry pip restore after initialization.
                             steps.add("echo '[DroidPy] Python package inventory is incomplete; skipped pip restore safely. Initialize Python, then retry restore.'")
                         }
                         // Use the same embedded Termux interpreter for imports and pip installs.
-                        val pythonCmd = File(usrDir, "bin/python3").absolutePath
+                        val binDir = File(usrDir, "bin")
+                        val pythonCmd = listOf(File(binDir, "python"), File(binDir, "python3")).firstOrNull {
+                            it.isFile && it.canExecute()
+                        } ?: binDir.listFiles()?.firstOrNull {
+                            it.name.startsWith("python3.") && !it.name.endsWith("-config") && it.isFile && it.canExecute()
+                        }?.absolutePath
                         if (pipInventory.complete) {
                             val restoreFailureFile = File(workspaceDir, ".droidpy-restore-failed").absolutePath
-                            steps.add("test -x $pythonCmd || { echo '[DroidPy] Python is not ready; package restore aborted.' >&2; exit 127; }")
-                            steps.add("rm -f $restoreFailureFile")
-                            if (remainingPips.isNotEmpty()) {
-                                steps.add("if $pythonCmd -m pip install --no-cache-dir --prefer-binary " + remainingPips.joinToString(" ") + "; then echo '[DroidPy] Remaining pip packages restored.'; else echo '[DroidPy] One or more pip packages failed to restore.' >&2; touch $restoreFailureFile; fi")
+                            if (pythonCmd == null) {
+                                steps.add("echo '[DroidPy] No executable Termux Python interpreter was found; native package restore completed but pip restore was skipped.' >&2")
+                            } else {
+                                steps.add("rm -f $restoreFailureFile")
+                                if (remainingPips.isNotEmpty()) {
+                                    steps.add("if '$pythonCmd' -m pip install --no-cache-dir --prefer-binary " + remainingPips.joinToString(" ") + "; then echo '[DroidPy] Remaining pip packages restored.'; else echo '[DroidPy] One or more pip packages failed to restore.' >&2; touch $restoreFailureFile; fi")
+                                }
+                                steps.add("test ! -f $restoreFailureFile")
                             }
-                            steps.add("test ! -f $restoreFailureFile")
                         }
                         val restoreCmd = if (steps.isEmpty()) {
                             "echo '[DroidPy] 所有已備份套件均已存在，無需還原。'"
@@ -4018,16 +4194,64 @@ def clipboard_set(text):
                 }
 
                 method == "POST" && path == "/stop" -> {
-                    val proc = activeProcess
-                    if (proc != null) {
-                        activeProcessStopRequested = true
-                        appendNativeLog("Exec", "Explicit Stop request: force stopping process tree pid=\${processPid(proc)}")
-                        killProcessTree(proc)
-                    } else {
-                        appendNativeLog("Exec", "Explicit Stop request received; no active process")
+                    val stopSource = bodyJson.optString("source", "unknown").take(40)
+                    val stopOperation = bodyJson.optString("operation", "unknown").take(40)
+                    appendNativeLog("Exec", "Stop endpoint invoked source=$stopSource operation=$stopOperation")
+                    var processSnapshot = synchronized(activeProcessLock) {
+                        activeProcess to activeProcessStarting
                     }
-                    activeProcessPaused = false
-                    writeJson(out, 200, JSONObject().put("ok", true))
+                    var proc = processSnapshot.first
+                    val starting = processSnapshot.second
+                    if (proc != null || starting) {
+                        synchronized(activeProcessLock) { activeProcessStopRequested = true }
+                    }
+                    // Stop can arrive before ProcessBuilder publishes the child PID.
+                    if (proc == null && starting) {
+                        val startDeadline = System.currentTimeMillis() + 3500L
+                        while (System.currentTimeMillis() < startDeadline) {
+                            processSnapshot = synchronized(activeProcessLock) {
+                                activeProcess to activeProcessStarting
+                            }
+                            proc = processSnapshot.first
+                            if (proc != null || !processSnapshot.second) break
+                            try { Thread.sleep(20L) } catch (_: InterruptedException) { break }
+                        }
+                    }
+                    var stopped = true
+                    if (proc != null) {
+                        appendNativeLog("Exec", "Stop request: force stopping process tree pid=" + processPid(proc))
+                        killProcessTree(proc)
+                        try {
+                            if (proc.isAlive) proc.waitFor(2, TimeUnit.SECONDS)
+                        } catch (_: Exception) {
+                        }
+                        val cleanupDeadline = System.currentTimeMillis() + 2500L
+                        while (System.currentTimeMillis() < cleanupDeadline) {
+                            val stillActive = synchronized(activeProcessLock) {
+                                activeProcess === proc || activeProcessStarting
+                            }
+                            if (!stillActive) break
+                            try { Thread.sleep(20L) } catch (_: InterruptedException) { break }
+                        }
+                        stopped = synchronized(activeProcessLock) {
+                            !proc.isAlive && activeProcess !== proc && !activeProcessStarting
+                        }
+                        if (!stopped) {
+                            appendNativeLog("Exec", "Stop did not complete process/stream cleanup before timeout pid=" + processPid(proc))
+                        }
+                    } else {
+                        stopped = synchronized(activeProcessLock) { !activeProcessStarting }
+                        appendNativeLog("Exec", if (stopped) "Stop request received; no active process" else "Stop timed out while waiting for process launch")
+                    }
+                    if (stopped) activeProcessPaused = false
+                    writeJson(
+                        out,
+                        if (stopped) 200 else 409,
+                        JSONObject()
+                            .put("ok", stopped)
+                            .put("stopped", stopped)
+                            .put("error", if (stopped) "" else "停止逾時：原生程序或串流尚未完成清理")
+                    )
                 }
 
                 method == "POST" && path == "/droid-action" -> {
@@ -4112,18 +4336,22 @@ def clipboard_set(text):
                         .firstOrNull { it.startsWith("path=") }
                         ?.substringAfter("=")
                         ?.let { URLDecoder.decode(it, "UTF-8") } ?: ""
-                    val dir = resolveSdcardTarget(relParam)
+                    val dir = resolveSdcardTarget(relParam, allowOutsideHome = true)
                     if (dir == null) {
                         writeJson(out, 400, JSONObject().put("error", "Invalid path"))
                     } else if (!hasStorageAccess() && !dir.canRead()) {
                         writeJson(out, 403, JSONObject().put("error", "尚未取得手機內部儲存空間存取權限"))
                     } else {
                         val rootCanonical = Environment.getExternalStorageDirectory().canonicalPath
+                        val homeCanonical = File(Environment.getExternalStorageDirectory(), "DroidPy").canonicalPath
                         val arr = JSONArray()
                         val children = dir.listFiles()?.sortedWith(compareBy<File>({ !it.isDirectory }, { it.name.lowercase() })) ?: emptyList()
                         for (child in children) {
                             if (child.name.startsWith(".")) continue
-                            val childRel = child.canonicalPath.removePrefix(rootCanonical).trimStart('/')
+                            val childCanonical = try { child.canonicalPath } catch (_: Exception) { "" }
+                            if (childCanonical.isBlank()) continue
+                            if (childCanonical != rootCanonical && !childCanonical.startsWith(rootCanonical + File.separator)) continue
+                            val childRel = childCanonical.removePrefix(rootCanonical).trimStart('/')
                             arr.put(
                                 JSONObject()
                                     .put("name", child.name)
@@ -4148,20 +4376,23 @@ def clipboard_set(text):
 
                 method == "POST" && path == "/sdcard/read" -> {
                     val relPath = bodyJson.optString("path", "")
-                    val target = resolveSdcardTarget(relPath)
+                    val target = resolveSdcardTarget(relPath, allowOutsideHome = true)
                     if (target == null || !target.exists() || !target.isFile) {
                         writeJson(out, 404, JSONObject().put("error", "找不到目標檔案"))
                     } else if (target.length() > 512 * 1024) {
                         writeJson(out, 413, JSONObject().put("error", "檔案超過 512 KB 上限"))
                     } else {
                         try {
+                            val sourceBytes = target.readBytes()
+                            val sourceContent = String(sourceBytes, Charsets.UTF_8)
+                            appendNativeLog("Storage", "SD-card file read name=\${target.name} \${fileWriteDiagnostic(sourceBytes)}")
                             writeJson(
                                 out,
                                 200,
                                 JSONObject()
                                     .put("name", target.name)
                                     .put("relPath", relPath)
-                                    .put("content", target.readText(Charsets.UTF_8))
+                                    .put("content", sourceContent)
                             )
                         } catch (e: Exception) {
                             writeJson(out, 403, JSONObject().put("error", e.message ?: "讀取失敗"))
@@ -4188,8 +4419,11 @@ def clipboard_set(text):
                                     for (i in 0 until batch.length()) {
                                         val item = batch.getJSONObject(i)
                                         val name = File(item.optString("name", "")).name
-                                        if (name.isNotBlank()) {
-                                            File(destDir, name).writeText(item.optString("content", ""), Charsets.UTF_8)
+                                        if (name.isNotBlank() && name != "." && name != "..") {
+                                            val target = File(destDir, name)
+                                            val bytes = item.optString("content", "").toByteArray(Charsets.UTF_8)
+                                            val committed = writeFileAtomically(target, bytes)
+                                            appendNativeLog("Storage", "SD-card file committed name=$name \${fileWriteDiagnostic(committed)}")
                                             count++
                                         }
                                     }
@@ -4202,8 +4436,9 @@ def clipboard_set(text):
                                 if (target == null) {
                                     writeJson(out, 400, JSONObject().put("error", "Invalid path"))
                                 } else {
-                                    target.parentFile?.mkdirs()
-                                    target.writeText(bodyJson.optString("content", ""), Charsets.UTF_8)
+                                    val bytes = bodyJson.optString("content", "").toByteArray(Charsets.UTF_8)
+                                    val committed = writeFileAtomically(target, bytes)
+                                    appendNativeLog("Storage", "SD-card file committed name=\${target.name} \${fileWriteDiagnostic(committed)}")
                                     writeJson(out, 200, JSONObject().put("ok", true).put("path", target.absolutePath))
                                 }
                             }
@@ -4229,9 +4464,9 @@ def clipboard_set(text):
 
                 method == "POST" && path == "/sdcard/delete" -> {
                     val relPath = bodyJson.optString("path", "")
-                    val rootCanonical = Environment.getExternalStorageDirectory().canonicalPath
+                    val homeCanonical = File(Environment.getExternalStorageDirectory(), "DroidPy").canonicalPath
                     val target = resolveSdcardTarget(relPath)
-                    if (target == null || target.canonicalPath == rootCanonical) {
+                    if (target == null || target.canonicalPath == homeCanonical) {
                         writeJson(out, 400, JSONObject().put("error", "Invalid path"))
                     } else if (!hasStorageAccess()) {
                         writeJson(out, 403, JSONObject().put("error", "尚未授予內部儲存空間權限"))
@@ -4276,16 +4511,11 @@ def clipboard_set(text):
                 }
 
                 method == "POST" && (path == "/run-stream" || path == "/install-stream" || path == "/shell-stream") -> {
+                    var runFiles: JSONArray? = null
                     val shellCmd = when (path) {
                         "/run-stream" -> {
                             val arr = bodyJson.optJSONArray("files") ?: JSONArray()
-                            for (i in 0 until arr.length()) {
-                                val f = arr.getJSONObject(i)
-                                val name = File(f.optString("name", "")).name
-                                if (name.isNotBlank()) {
-                                    File(workspaceDir, name).writeText(f.optString("content", ""))
-                                }
-                            }
+                            runFiles = arr
                             val entry = File(bodyJson.optString("entry", "main.py")).name.ifBlank { "main.py" }
                             appendNativeLog("Exec", "Run script requested: $entry")
                             val safeEntrySh = entry.replace("'", "'\\\\''")
@@ -4314,7 +4544,21 @@ def clipboard_set(text):
                         }
                         else -> bodyJson.optString("command", "")
                     }
-                    streamShellCommand(out, shellCmd)
+                    val stageWorkspaceFiles: (() -> Unit)? = if (path == "/run-stream") {
+                        {
+                            val filesToStage = runFiles ?: JSONArray()
+                            for (i in 0 until filesToStage.length()) {
+                                val f = filesToStage.getJSONObject(i)
+                                val name = File(f.optString("name", "")).name
+                                if (name.isBlank()) continue
+                                val target = File(workspaceDir, name)
+                                val bytes = f.optString("content", "").toByteArray(Charsets.UTF_8)
+                                val committedBytes = writeFileAtomically(target, bytes)
+                                appendNativeLog("Exec", "Workspace file committed name=$name \${fileWriteDiagnostic(committedBytes)}")
+                            }
+                        }
+                    } else null
+                    streamShellCommand(out, shellCmd, stageWorkspaceFiles)
                 }
 
                 method == "GET" && path == "/files" -> {
@@ -4715,7 +4959,7 @@ def clipboard_set(text):
         val match = installPrefix.find(command) ?: return command
         val tailStart = match.range.last + 1
         val tail = command.substring(tailStart)
-        val tokens = tail.trim().split(Regex("""\\s+""")).filter { it.isNotBlank() }
+        val tokens = tail.trim().split(Regex("""\s+""")).filter { it.isNotBlank() }
         val safeTokens = tokens.isNotEmpty() && tokens.all {
             it.matches(Regex("""(?:--?[A-Za-z][A-Za-z0-9-]*|[A-Za-z0-9][A-Za-z0-9+_.-]*)"""))
         }
@@ -4740,17 +4984,55 @@ def clipboard_set(text):
         val proc = activeProcess ?: return false
         return try {
             if (!proc.isAlive) return false
-            val pid = activeProcessPidFile.takeIf { it.isFile }
+            val rootPid = activeProcessPidFile.takeIf { it.isFile }
                 ?.readText(Charsets.US_ASCII)?.trim()?.toIntOrNull() ?: return false
-            if (pid <= 0) return false
-            android.os.Process.sendSignal(pid, signal)
-            true
+            if (rootPid <= 0) return false
+
+            // The PID file points at the shell wrapper. Python and its workers are
+            // descendants, so signal the complete process tree rather than only
+            // suspending the wrapper while Python continues to run.
+            fun collectDescendants(parentPid: Int, out: MutableList<Int>) {
+                File("/proc").listFiles()?.forEach { entry ->
+                    val childPid = entry.name.toIntOrNull() ?: return@forEach
+                    try {
+                        val stat = File(entry, "stat").readText(Charsets.US_ASCII)
+                        val closeParen = stat.lastIndexOf(')')
+                        if (closeParen > 0) {
+                            val fields = stat.substring(closeParen + 2).trim().split(Regex("""\\s+"""))
+                            val parentOfChild = fields.getOrNull(1)?.toIntOrNull()
+                            if (parentOfChild == parentPid && childPid !in out) {
+                                collectDescendants(childPid, out)
+                                out.add(childPid)
+                            }
+                        }
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+
+            val descendants = mutableListOf<Int>()
+            collectDescendants(rootPid, descendants)
+            // Stop children before their parent; resume the parent before its children.
+            val targets = if (signal == 19) {
+                descendants + rootPid
+            } else {
+                listOf(rootPid) + descendants.asReversed()
+            }
+            var signaled = 0
+            targets.forEach { targetPid ->
+                try {
+                    android.os.Process.sendSignal(targetPid, signal)
+                    signaled++
+                } catch (_: Exception) {
+                }
+            }
+            appendNativeLog("Exec", "Pause/resume signal=" + signal + " rootPid=" + rootPid + " descendants=" + descendants.size + " signaled=" + signaled)
+            signaled > 0
         } catch (error: Exception) {
-            appendNativeLog("Exec", "Pause/resume signal failed: \${error.message}")
+            appendNativeLog("Exec", "Pause/resume process-tree signal failed: \${error.message}")
             false
         }
     }
-
     private fun runBufferedShellCommand(command: String): JSONObject {
         val normalizedCommand = normalizeShellCommand(command)
         val t0 = System.currentTimeMillis()
@@ -4826,7 +5108,7 @@ def clipboard_set(text):
             .put("durationMs", System.currentTimeMillis() - t0)
     }
 
-    private fun streamShellCommand(out: OutputStream, command: String) {
+    private fun streamShellCommand(out: OutputStream, command: String, beforeStart: (() -> Unit)? = null) {
         val t0 = System.currentTimeMillis()
         val normalizedCommand = normalizeShellCommand(command)
         val shFile = File(usrDir, "bin/sh")
@@ -4834,13 +5116,49 @@ def clipboard_set(text):
             .containsMatchIn(normalizedCommand)
         appendNativeLog("Exec", "Stream shell start: \${normalizedCommand.take(180)}")
 
-        out.write((
-            "HTTP/1.1 200 OK\\r\\n" +
-            corsHeaders() +
-            "Content-Type: application/x-ndjson; charset=utf-8\\r\\n" +
-            "Connection: close\\r\\n\\r\\n"
-        ).toByteArray())
-        out.flush()
+        val reserved = synchronized(activeProcessLock) {
+            if (activeProcess != null || activeProcessStarting) {
+                false
+            } else {
+                activeProcessStopRequested = false
+                activeProcessStarting = true
+                true
+            }
+        }
+        if (!reserved) {
+            appendNativeLog("Exec", "Rejected overlapping streamed operation; active process is still reserved")
+            val headers = "HTTP/1.1 200 OK\\r\\n" +
+                corsHeaders() +
+                "Content-Type: application/x-ndjson; charset=utf-8\\r\\n" +
+                "Connection: close\\r\\n\\r\\n"
+            val output = JSONObject().put("type", "stdout")
+                .put("data", "[DroidPy] 另一個 Termux 工作仍在執行，已拒絕這次操作，避免覆寫正在使用的檔案。\\n")
+                .toString() + "\\n"
+            val done = JSONObject().put("type", "done").put("exitCode", 1).put("durationMs", 0).toString() + "\\n"
+            try {
+                out.write(headers.toByteArray())
+                out.write(output.toByteArray(Charsets.UTF_8))
+                out.write(done.toByteArray(Charsets.UTF_8))
+                out.flush()
+            } catch (_: Exception) {
+            }
+            return
+        }
+        try {
+            out.write((
+                "HTTP/1.1 200 OK\\r\\n" +
+                corsHeaders() +
+                "Content-Type: application/x-ndjson; charset=utf-8\\r\\n" +
+                "Connection: close\\r\\n\\r\\n"
+            ).toByteArray())
+            out.flush()
+        } catch (error: Exception) {
+            synchronized(activeProcessLock) {
+                activeProcessStarting = false
+                activeProcessStopRequested = false
+            }
+            throw error
+        }
 
         fun sendStdout(text: String) {
             val line = JSONObject().put("type", "stdout").put("data", text).toString() + "\\n"
@@ -4848,14 +5166,36 @@ def clipboard_set(text):
             out.flush()
         }
 
+        try {
+            beforeStart?.invoke()
+        } catch (error: Exception) {
+            appendNativeLog("Exec", "Workspace staging failed: \${error.javaClass.simpleName}: \${error.message}")
+            try {
+                sendStdout("[DroidPy] 無法安全寫入工作區檔案；原有檔案未被部分覆寫。\\n")
+                val done = JSONObject().put("type", "done").put("exitCode", 1).put("durationMs", System.currentTimeMillis() - t0).toString() + "\\n"
+                out.write(done.toByteArray(Charsets.UTF_8))
+                out.flush()
+            } catch (_: Exception) {
+            }
+            synchronized(activeProcessLock) {
+                activeProcessStarting = false
+                activeProcessStopRequested = false
+            }
+            return
+        }
+
         if (!shFile.exists()) {
             try {
                 sendStdout("[DroidPy] Waiting for Termux bootstrap extraction...\\n")
             } catch (_: Exception) {
+                synchronized(activeProcessLock) {
+                    activeProcessStarting = false
+                    activeProcessStopRequested = false
+                }
                 return
             }
             var waited = 0
-            while (!shFile.exists() && waited < 45000) {
+            while (!shFile.exists() && waited < 45000 && !activeProcessStopRequested) {
                 try { Thread.sleep(250) } catch (_: InterruptedException) { break }
                 waited += 250
             }
@@ -4872,7 +5212,10 @@ def clipboard_set(text):
                 }
             }
         }
-        if (!shFile.exists()) {
+        if (activeProcessStopRequested) {
+            code = -1
+            appendNativeLog("Exec", "Run request canceled before native process launch")
+        } else if (!shFile.exists()) {
             appendNativeLog("Exec", "Bootstrap missing sh at \${shFile.absolutePath}")
             try {
                 sendStdout("[DroidPy] Bootstrap not ready at \${shFile.absolutePath}\\n")
@@ -4889,15 +5232,23 @@ def clipboard_set(text):
                 pb.redirectErrorStream(true)
                 pb.environment().putAll(buildEnv())
 
-                proc = pb.start()
-                activeProcess = proc
-                activeProcessPaused = false
-                activeProcessStopRequested = false
+                val startedProcess = pb.start()
+                proc = startedProcess
+                val stopImmediately = synchronized(activeProcessLock) {
+                    activeProcess = startedProcess
+                    activeProcessStarting = false
+                    activeProcessPaused = false
+                    activeProcessStopRequested
+                }
+                if (stopImmediately) {
+                    appendNativeLog("Exec", "Stop arrived during process launch; terminating pid=" + processPid(startedProcess))
+                    killProcessTree(startedProcess)
+                }
                 activeProcessStartedAt.set(System.currentTimeMillis())
-                appendNativeLog("Exec", "Process started pid=\${processPid(proc)} command=\${normalizedCommand.take(120)}")
+                appendNativeLog("Exec", "Process started pid=\${processPid(startedProcess)} command=\${normalizedCommand.take(120)}")
                 var clientDisconnected = false
                 val charBuf = CharArray(1024)
-                val inpReader = InputStreamReader(proc.inputStream, Charsets.UTF_8)
+                val inpReader = InputStreamReader(startedProcess.inputStream, Charsets.UTF_8)
                 while (true) {
                     val n = inpReader.read(charBuf)
                     if (n < 0) break
@@ -4909,15 +5260,17 @@ def clipboard_set(text):
                                 sendStdout(s)
                             } catch (e: Exception) {
                                 clientDisconnected = true
-                                appendNativeLog("Exec", "Stream client disconnected; continuing process pid=\${processPid(proc)} (\${e.javaClass.simpleName}: \${e.message})")
+                                appendNativeLog("Exec", "Stream client disconnected; continuing process pid=\${processPid(startedProcess)} (\${e.javaClass.simpleName}: \${e.message})")
                             }
                         }
                     }
                 }
-                code = proc.waitFor()
-                appendNativeLog("Exec", "Process exited pid=\${processPid(proc)} exitCode=$code")
+                code = startedProcess.waitFor()
+                if (activeProcessStopRequested) code = -1
+                appendNativeLog("Exec", "Process exited pid=\${processPid(startedProcess)} exitCode=$code")
             } catch (e: Exception) {
                 if (activeProcessStopRequested) {
+                    code = -1
                     appendNativeLog("Exec", "Process output read ended after explicit Stop pid=\${proc?.let { processPid(it) } ?: -1} (\${e.javaClass.simpleName}: \${e.message})")
                 } else {
                     appendNativeLog("Exec", "Exec exception: \${e.javaClass.simpleName}: \${e.message}")
@@ -4931,9 +5284,12 @@ def clipboard_set(text):
                 try { proc?.inputStream?.close() } catch (_: Exception) {}
                 try { proc?.errorStream?.close() } catch (_: Exception) {}
                 try { proc?.outputStream?.close() } catch (_: Exception) {}
-                activeProcess = null
-                activeProcessPaused = false
-                activeProcessStopRequested = false
+                synchronized(activeProcessLock) {
+                    activeProcess = null
+                    activeProcessStarting = false
+                    activeProcessPaused = false
+                    activeProcessStopRequested = false
+                }
                 activeProcessStartedAt.set(0L)
                 try { activeProcessPidFile.delete() } catch (_: Exception) {}
                 if (isPkgOrPip) {
@@ -4942,13 +5298,20 @@ def clipboard_set(text):
             }
         }
 
+        synchronized(activeProcessLock) {
+            if (activeProcess == null) {
+                activeProcessStarting = false
+                activeProcessPaused = false
+                activeProcessStopRequested = false
+            }
+        }
         val elapsed = System.currentTimeMillis() - t0
         appendNativeLog("Exec", "Stream shell finished: exitCode=$code, durationMs=$elapsed")
         if (code == 0 && isPkgOrPip) {
             val isUninstall = command.contains("uninstall") || command.contains("remove") || command.contains("purge")
             savePackageBackupSnapshot(forceShrink = isUninstall)
         }
-        if (code != 0 && outputTail.isNotBlank()) {
+        if (code != 0 && code != -1 && outputTail.isNotBlank()) {
             val tailCompact = stripAnsiForLog(outputTail.toString()).trim().takeLast(1200)
             appendNativeLog("Exec", "Non-zero exit ($code) output tail:\\n$tailCompact")
         }

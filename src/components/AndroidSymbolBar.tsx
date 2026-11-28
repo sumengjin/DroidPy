@@ -16,6 +16,15 @@ interface SymbolAction {
   ariaLabel: string;
 }
 
+interface SwipeSelection {
+  pointerId: number;
+  selectedIndex: number;
+  startX: number;
+  startY: number;
+  startScrollLeft: number;
+  moved: boolean;
+}
+
 export const AndroidSymbolBar: React.FC<AndroidSymbolBarProps> = ({
   tabSize,
   onInsert,
@@ -43,6 +52,93 @@ export const AndroidSymbolBar: React.FC<AndroidSymbolBarProps> = ({
     { label: '->', insert: ' -> ', ariaLabel: '插入型別箭頭' },
   ];
 
+  const swipeRef = React.useRef<SwipeSelection | null>(null);
+  const lastTouchAtRef = React.useRef(0);
+  const [activeSymbolIndex, setActiveSymbolIndex] = React.useState<number | null>(null);
+
+  const findSymbolAtX = (container: HTMLDivElement, clientX: number): number | null => {
+    const buttons = Array.from(container.querySelectorAll<HTMLButtonElement>('[data-symbol-index]'));
+    if (!buttons.length) return null;
+    let nearestIndex: number | null = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (const button of buttons) {
+      const rect = button.getBoundingClientRect();
+      const distance = clientX < rect.left ? rect.left - clientX : clientX > rect.right ? clientX - rect.right : 0;
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestIndex = Number(button.dataset.symbolIndex);
+      }
+    }
+    return nearestIndex !== null && Number.isInteger(nearestIndex) ? nearestIndex : null;
+  };
+
+  // Capture the gesture on the strip itself. Dragging scrolls the symbol row
+  // with the finger, while hit-testing by button geometry still works if a
+  // neighboring pane visually overlaps the strip.
+  const handleStripPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== 'touch' || e.button !== 0) return;
+    const target = (e.target as HTMLElement).closest<HTMLElement>('[data-symbol-index]');
+    if (!target) return;
+    const index = Number(target.dataset.symbolIndex);
+    if (!Number.isInteger(index) || index < 0 || index >= symbols.length) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    lastTouchAtRef.current = Date.now();
+    swipeRef.current = {
+      pointerId: e.pointerId,
+      selectedIndex: index,
+      startX: e.clientX,
+      startY: e.clientY,
+      startScrollLeft: e.currentTarget.scrollLeft,
+      moved: false,
+    };
+    setActiveSymbolIndex(index);
+  };
+
+  const handleStripPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const swipe = swipeRef.current;
+    if (!swipe || swipe.pointerId !== e.pointerId) return;
+    e.preventDefault();
+    const deltaX = e.clientX - swipe.startX;
+    if (Math.abs(deltaX) > 6 || Math.abs(e.clientY - swipe.startY) > 6) swipe.moved = true;
+    if (swipe.moved) {
+      const maxScroll = Math.max(0, e.currentTarget.scrollWidth - e.currentTarget.clientWidth);
+      e.currentTarget.scrollLeft = Math.max(0, Math.min(maxScroll, swipe.startScrollLeft - deltaX));
+    }
+    const nextIndex = findSymbolAtX(e.currentTarget, e.clientX);
+    if (nextIndex !== null && nextIndex !== swipe.selectedIndex) {
+      swipe.selectedIndex = nextIndex;
+      setActiveSymbolIndex(nextIndex);
+    }
+  };
+
+  const finishStripPointer = (e: React.PointerEvent<HTMLDivElement>) => {
+    const swipe = swipeRef.current;
+    if (!swipe || swipe.pointerId !== e.pointerId) return;
+    e.preventDefault();
+    const selected = symbols[swipe.selectedIndex];
+    swipeRef.current = null;
+    setActiveSymbolIndex(null);
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    // A tap inserts; a drag is navigation/selection only and must never type on release.
+    if (selected && !swipe.moved) onInsert(selected.insert, selected.offset ?? 0);
+  };
+
+  const cancelStripPointer = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (swipeRef.current?.pointerId !== e.pointerId) return;
+    swipeRef.current = null;
+    setActiveSymbolIndex(null);
+  };
+
+  const handleSymbolClick = (index: number) => (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (Date.now() - lastTouchAtRef.current < 700) {
+      e.preventDefault();
+      return;
+    }
+    const selected = symbols[index];
+    if (selected) onInsert(selected.insert, selected.offset ?? 0);
+  };
+
   const handleTouchSafe = (fn: () => void) => (e: React.PointerEvent<HTMLButtonElement>) => {
     e.preventDefault();
     fn();
@@ -50,7 +146,13 @@ export const AndroidSymbolBar: React.FC<AndroidSymbolBarProps> = ({
 
   return (
     <div
-      className="flex items-center gap-1.5 overflow-x-auto no-scrollbar px-2 py-1.5 bg-[var(--ide-surface-alt)] border-t border-[var(--ide-border)] select-none"
+      onPointerDown={handleStripPointerDown}
+      onPointerMove={handleStripPointerMove}
+      onPointerUp={finishStripPointer}
+      onPointerCancel={cancelStripPointer}
+      onLostPointerCapture={cancelStripPointer}
+      onContextMenu={(e) => e.preventDefault()}
+      className="android-symbol-bar relative z-50 shrink-0 w-full self-stretch flex items-center gap-1.5 overflow-x-auto no-scrollbar px-2 py-1.5 bg-transparent select-none [touch-action:none] [-webkit-touch-callout:none] [-webkit-user-select:none]"
       role="toolbar"
       aria-label="Android 觸控符號列"
     >
@@ -58,7 +160,7 @@ export const AndroidSymbolBar: React.FC<AndroidSymbolBarProps> = ({
         type="button"
         onPointerDown={handleTouchSafe(onUndo)}
         aria-label="復原"
-        className="min-h-[40px] min-w-[40px] shrink-0 flex items-center justify-center rounded-lg bg-[var(--ide-surface)] text-[var(--ide-text)] border border-[var(--ide-border)] active:scale-95 transition-transform"
+        className="min-h-[40px] min-w-[40px] shrink-0 flex items-center justify-center bg-transparent text-[var(--ide-text)] border-0 shadow-none rounded-none active:opacity-60 transition-opacity"
       >
         <Undo2 className="w-4 h-4" />
       </button>
@@ -66,7 +168,7 @@ export const AndroidSymbolBar: React.FC<AndroidSymbolBarProps> = ({
         type="button"
         onPointerDown={handleTouchSafe(onRedo)}
         aria-label="重做"
-        className="min-h-[40px] min-w-[40px] shrink-0 flex items-center justify-center rounded-lg bg-[var(--ide-surface)] text-[var(--ide-text)] border border-[var(--ide-border)] active:scale-95 transition-transform"
+        className="min-h-[40px] min-w-[40px] shrink-0 flex items-center justify-center bg-transparent text-[var(--ide-text)] border-0 shadow-none rounded-none active:opacity-60 transition-opacity"
       >
         <Redo2 className="w-4 h-4" />
       </button>
@@ -74,7 +176,7 @@ export const AndroidSymbolBar: React.FC<AndroidSymbolBarProps> = ({
         type="button"
         onPointerDown={handleTouchSafe(() => onMoveCursor(-1))}
         aria-label="游標左移"
-        className="min-h-[40px] min-w-[40px] shrink-0 flex items-center justify-center rounded-lg bg-[var(--ide-surface)] text-[var(--ide-text)] border border-[var(--ide-border)] active:scale-95 transition-transform"
+        className="min-h-[40px] min-w-[40px] shrink-0 flex items-center justify-center bg-transparent text-[var(--ide-text)] border-0 shadow-none rounded-none active:opacity-60 transition-opacity"
       >
         <ChevronLeft className="w-4 h-4" />
       </button>
@@ -82,20 +184,20 @@ export const AndroidSymbolBar: React.FC<AndroidSymbolBarProps> = ({
         type="button"
         onPointerDown={handleTouchSafe(() => onMoveCursor(1))}
         aria-label="游標右移"
-        className="min-h-[40px] min-w-[40px] shrink-0 flex items-center justify-center rounded-lg bg-[var(--ide-surface)] text-[var(--ide-text)] border border-[var(--ide-border)] active:scale-95 transition-transform"
+        className="min-h-[40px] min-w-[40px] shrink-0 flex items-center justify-center bg-transparent text-[var(--ide-text)] border-0 shadow-none rounded-none active:opacity-60 transition-opacity"
       >
         <ChevronRight className="w-4 h-4" />
       </button>
 
-      <div className="h-5 w-px bg-[var(--ide-border)] shrink-0 mx-0.5" aria-hidden="true" />
-
-      {symbols.map((sym) => (
+      {symbols.map((sym, index) => (
         <button
           key={sym.label}
           type="button"
-          onPointerDown={handleTouchSafe(() => onInsert(sym.insert, sym.offset ?? 0))}
+          data-symbol-index={index}
+          data-swipe-active={activeSymbolIndex === index ? 'true' : 'false'}
+          onClick={handleSymbolClick(index)}
           aria-label={sym.ariaLabel}
-          className="min-h-[40px] min-w-[42px] px-2.5 shrink-0 flex items-center justify-center rounded-lg font-mono text-xs font-medium bg-[var(--ide-surface)] text-[var(--ide-text)] border border-[var(--ide-border)] hover:border-[var(--ide-accent)] active:scale-95 transition-transform whitespace-nowrap"
+          className="min-h-[40px] min-w-[42px] px-2.5 shrink-0 flex items-center justify-center font-mono text-xs font-medium bg-transparent text-[var(--ide-text)] border-0 shadow-none rounded-none hover:text-[var(--ide-accent-text)] data-[swipe-active=true]:text-[var(--ide-accent-text)] active:opacity-60 transition-opacity whitespace-nowrap pointer-events-auto"
         >
           {sym.label}
         </button>

@@ -6,13 +6,13 @@ import {
   Check,
   Download,
   Play,
-  PackagePlus,
   RefreshCw,
   ExternalLink,
   AlertCircle,
   Loader2,
   Cpu,
   ArrowUpCircle,
+  PackagePlus,
   Search,
   Trash2,
   Activity,
@@ -35,17 +35,10 @@ import {
   buildTermuxOneLineCommand,
   normalizeTermuxPkgName,
 } from '../services/termuxBridge';
-import { TranslationKey, useI18n } from '../services/i18n';
+import { useI18n } from '../services/i18n';
 import { downloadBlob } from '../utils/downloadBlob';
 import { copyTextReliable } from '../utils/clipboard';
-import {
-  PACKAGE_CATALOG,
-  PACKAGE_CATEGORIES,
-  PackageCategoryId,
-  PackageTier,
-  TERMUX_PKG_NAME_HINTS,
-  fuzzyMatchPackages,
-} from '../data/packageCatalog';
+import { TermuxPackageWorkspace } from './TermuxPackageWorkspace';
 
 export type TermuxVisibleSection =
   | 'all'
@@ -70,7 +63,6 @@ interface TermuxIntegrationPanelProps {
   onInstallInTermux: (mode: 'pip' | 'pkg', target: string) => Promise<void>;
   onRunInTermux: () => Promise<void>;
   onRunShellInTermux: (cmd: string) => Promise<boolean | void>;
-  onInitializeEmbeddedEnv: (includeBaseSystem: boolean) => Promise<void>;
   onUpgradeAllTermux?: (kind: 'pip' | 'pkg') => Promise<void>;
   onUpgradeSinglePip?: (pkg: string) => Promise<void>;
   onUpgradeAllPackages?: () => Promise<void>;
@@ -79,6 +71,8 @@ interface TermuxIntegrationPanelProps {
   onCheckTermuxOutdated?: () => Promise<void>;
   onUninstallInTermux?: (mode: 'pip' | 'pkg', target: string) => Promise<void>;
   upgradingTermux?: boolean;
+  termuxRunning?: boolean;
+  activeTermuxTask?: string | null;
   enableSandboxAddon?: boolean;
   backupStatus?: PackageBackupStatus | null;
   onRestoreBackedUpPackages?: () => Promise<void>;
@@ -106,7 +100,6 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
   onInstallInTermux,
   onRunInTermux,
   onRunShellInTermux,
-  onInitializeEmbeddedEnv,
   onUpgradeAllTermux,
   onUpgradeSinglePip,
   onUpgradeAllPackages,
@@ -115,6 +108,8 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
   onCheckTermuxOutdated,
   onUninstallInTermux,
   upgradingTermux = false,
+  termuxRunning = false,
+  activeTermuxTask = null,
   enableSandboxAddon = false,
   backupStatus = null,
   onRestoreBackedUpPackages,
@@ -129,40 +124,10 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
 }) => {
   const { t } = useI18n();
   const [copiedCmd, setCopiedCmd] = useState(false);
-  const [installMode, setInstallMode] = useState<'pip' | 'pkg'>('pip');
-  const [pkgTarget, setPkgTarget] = useState('');
   const [shellCmd, setShellCmd] = useState('');
   const [busyAction, setBusyAction] = useState<string | null>(null);
-  const [tierFilter, setTierFilter] = useState<'all' | PackageTier>('all');
-  const [catFilter, setCatFilter] = useState<PackageCategoryId>('all');
 
   const oneLineCmd = buildTermuxOneLineCommand(config.token, window.location.origin);
-
-  const termuxCatalogItems = useMemo(
-    () => PACKAGE_CATALOG.filter((item) => Boolean(item.termux)),
-    []
-  );
-
-  const filteredCatalog = useMemo(
-    () =>
-      termuxCatalogItems.filter((item) => {
-        if (tierFilter !== 'all' && item.tier !== tierFilter) return false;
-        if (catFilter !== 'all' && item.category !== catFilter) return false;
-        return true;
-      }),
-    [termuxCatalogItems, tierFilter, catFilter]
-  );
-
-  const fuzzyResults = useMemo(() => {
-    const q = pkgTarget.trim();
-    if (!q) return [];
-    return fuzzyMatchPackages(q, termuxCatalogItems, { runtime: 'all', limit: 6 });
-  }, [pkgTarget, termuxCatalogItems]);
-
-  const termuxNameHint = useMemo(() => {
-    const key = pkgTarget.trim().toLowerCase();
-    return key ? TERMUX_PKG_NAME_HINTS[key] ?? null : null;
-  }, [pkgTarget]);
 
   const outdatedPipMap = useMemo(() => {
     const map = new Map<string, TermuxOutdatedPipItem>();
@@ -171,6 +136,17 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
     }
     return map;
   }, [outdatedTermuxPips]);
+
+  const handleUninstallTarget = async (mode: 'pkg' | 'pip', target: string) => {
+    const clean = target.trim();
+    if (!clean || !onUninstallInTermux || busyAction || termuxRunning || upgradingTermux) return;
+    setBusyAction(`uninstall:${clean}`);
+    try {
+      await onUninstallInTermux(mode, clean);
+    } finally {
+      setBusyAction(null);
+    }
+  };
 
   const handleCopyBootstrap = async () => {
     const ok = await copyTextReliable(oneLineCmd);
@@ -190,60 +166,14 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
     onNotify('droidpy_bridge.py');
   };
 
-  const handleInstallSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const clean = pkgTarget.trim();
-    if (!clean || busyAction || upgradingTermux) return;
-    setBusyAction(`install:${clean}`);
-    try {
-      await onInstallInTermux(installMode, clean);
-      setPkgTarget('');
-    } finally {
-      setBusyAction(null);
-    }
-  };
-
-  const handleQuickInstall = async (mode: 'pkg' | 'pip', target: string) => {
-    if (busyAction || upgradingTermux) return;
-    setBusyAction(`install:${target}`);
-    try {
-      await onInstallInTermux(mode, target);
-      setPkgTarget('');
-    } finally {
-      setBusyAction(null);
-    }
-  };
-
-  const handleUninstallTarget = async (mode: 'pkg' | 'pip', target: string) => {
-    const clean = target.trim();
-    if (!clean || !onUninstallInTermux || busyAction || upgradingTermux) return;
-    setBusyAction(`uninstall:${clean}`);
-    try {
-      await onUninstallInTermux(mode, clean);
-      if (pkgTarget.trim() === clean) setPkgTarget('');
-    } finally {
-      setBusyAction(null);
-    }
-  };
-
   const handleShellSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const clean = shellCmd.trim();
-    if (!clean || busyAction || upgradingTermux) return;
+    if (!clean || busyAction || termuxRunning || upgradingTermux) return;
     setBusyAction('shell');
     try {
       await onRunShellInTermux(clean);
       setShellCmd('');
-    } finally {
-      setBusyAction(null);
-    }
-  };
-
-  const handleInitEmbedded = async (includeBaseSystem: boolean) => {
-    if (busyAction || upgradingTermux) return;
-    setBusyAction(includeBaseSystem ? 'init:full' : 'init:crawler');
-    try {
-      await onInitializeEmbeddedEnv(includeBaseSystem);
     } finally {
       setBusyAction(null);
     }
@@ -281,7 +211,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
               <button
                 type="button"
                 onClick={() => onChangeEngine('pyodide')}
-                className={`min-h-[36px] px-3 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+                className={`min-h-[44px] px-3 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
                   engine === 'pyodide'
                     ? 'bg-[var(--ide-surface)] text-[var(--ide-text)] shadow-sm'
                     : 'text-[var(--ide-text-muted)]'
@@ -292,7 +222,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
               <button
                 type="button"
                 onClick={() => onChangeEngine('termux')}
-                className={`min-h-[36px] px-3 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+                className={`min-h-[44px] px-3 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
                   engine === 'termux'
                     ? 'bg-[var(--ide-accent)] text-white shadow-sm'
                     : 'text-[var(--ide-text-muted)]'
@@ -311,7 +241,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
         ((backupStatus.missingPipPackages?.length ?? 0) > 0 ||
           (backupStatus.missingPkgPackages?.length ?? 0) > 0) &&
         onRestoreBackedUpPackages && (
-          <div className="md-card-tonal border-amber-400/70 p-3.5 flex flex-wrap items-center justify-between gap-2.5">
+          <div className="dp-callout border-l-2 border-amber-400/70 p-3.5 flex flex-wrap items-center justify-between gap-2.5">
             <div className="min-w-0 flex-1 space-y-1">
               <div className="text-sm font-semibold text-amber-900 dark:text-amber-200 flex flex-wrap items-center gap-2">
                 <PackagePlus className="w-4 h-4 shrink-0" />
@@ -336,9 +266,9 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
             </div>
             <button
               type="button"
-              disabled={restoringBackup || !!busyAction || upgradingTermux}
+              disabled={restoringBackup || !!busyAction || termuxRunning || upgradingTermux}
               onClick={() => void onRestoreBackedUpPackages()}
-              className="min-h-[42px] px-4 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center justify-center gap-2 text-center shrink-0 transition-colors max-w-full"
+              className="min-h-[44px] px-4 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center justify-center gap-2 text-center shrink-0 transition-colors max-w-full"
             >
               {restoringBackup ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -356,7 +286,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
       {(showConn || showBridge) && (
       <div className={`grid grid-cols-1 ${isAll ? 'lg:grid-cols-2' : ''} gap-4`}>
         {showConn && (
-        <div className="md-card p-3.5 sm:p-5 space-y-4 min-w-0">
+        <div className="dp-panel p-3.5 sm:p-5 space-y-4 min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-semibold flex items-center gap-2 min-w-0">
               <PlugZap className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
@@ -390,7 +320,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                 type="url"
                 value={config.endpointUrl}
                 onChange={(e) => onUpdateConfig({ endpointUrl: e.target.value })}
-                className="w-full min-w-0 min-h-[40px] px-3 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] text-xs font-mono"
+                className="w-full min-w-0 min-h-[44px] px-3 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] text-xs font-mono"
               />
             </div>
             <div className="min-w-0">
@@ -401,7 +331,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                 type="text"
                 value={config.token}
                 onChange={(e) => onUpdateConfig({ token: e.target.value })}
-                className="w-full min-w-0 min-h-[40px] px-3 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] text-xs font-mono"
+                className="w-full min-w-0 min-h-[44px] px-3 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] text-xs font-mono"
               />
             </div>
           </div>
@@ -434,9 +364,9 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                   <div className="flex flex-wrap items-center gap-1.5">
                     <button
                       type="button"
-                      disabled={isChecking || !!busyAction || upgradingTermux}
+                      disabled={isChecking || !!busyAction || termuxRunning || upgradingTermux}
                       onClick={() => void onTestConnection()}
-                      className="min-h-[30px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] text-[11px] font-medium inline-flex items-center gap-1 disabled:opacity-50"
+                      className="min-h-[44px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] text-[11px] font-medium inline-flex items-center gap-1 disabled:opacity-50"
                     >
                       <RefreshCw className={`w-3 h-3 text-[var(--ide-accent)] ${isChecking ? 'animate-spin' : ''}`} />
                       <span>{t('pkg_refresh')}</span>
@@ -444,9 +374,9 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                     {onCheckTermuxOutdated && (
                       <button
                         type="button"
-                        disabled={!!busyAction || upgradingTermux || checkingTermuxOutdated}
+                        disabled={!!busyAction || termuxRunning || upgradingTermux || checkingTermuxOutdated}
                         onClick={() => void onCheckTermuxOutdated()}
-                        className="min-h-[30px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] text-[11px] font-medium inline-flex items-center gap-1 disabled:opacity-50"
+                        className="min-h-[44px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] text-[11px] font-medium inline-flex items-center gap-1 disabled:opacity-50"
                       >
                         <RefreshCw className={`w-3 h-3 text-[var(--ide-accent)] ${checkingTermuxOutdated ? 'animate-spin' : ''}`} />
                         <span>{t('tmx_check_outdated_btn')}</span>
@@ -455,9 +385,9 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                     {onUpgradeAllTermux && (
                       <button
                         type="button"
-                        disabled={!!busyAction || upgradingTermux}
+                        disabled={!!busyAction || termuxRunning || upgradingTermux}
                         onClick={() => void onUpgradeAllTermux('pip')}
-                        className="min-h-[30px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] text-[11px] font-medium inline-flex items-center gap-1 disabled:opacity-50"
+                        className="min-h-[44px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] text-[11px] font-medium inline-flex items-center gap-1 disabled:opacity-50"
                       >
                         {upgradingTermux ? (
                           <Loader2 className="w-3 h-3 animate-spin" />
@@ -486,7 +416,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                           {outdatedItem && onUpgradeSinglePip && (
                             <button
                               type="button"
-                              disabled={!!busyAction || upgradingTermux}
+                              disabled={!!busyAction || termuxRunning || upgradingTermux}
                               onClick={() => void onUpgradeSinglePip(pipPkg)}
                               title={`${pipPkg} ${outdatedItem.currentVersion} → ${outdatedItem.latestVersion}`}
                               className="text-[var(--ide-accent-text)] hover:underline font-sans font-semibold disabled:opacity-40 shrink-0"
@@ -497,7 +427,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                           {!isCorePip && onUninstallInTermux && (
                             <button
                               type="button"
-                              disabled={!!busyAction || upgradingTermux}
+                              disabled={!!busyAction || termuxRunning || upgradingTermux}
                               onClick={() => void handleUninstallTarget('pip', pipPkg)}
                               title={`${t('tmx_uninstall_btn')} ${pipPkg}`}
                               aria-label={`${t('tmx_uninstall_btn')} ${pipPkg}`}
@@ -534,7 +464,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                             {!isCoreSys && onUninstallInTermux && (
                               <button
                                 type="button"
-                                disabled={!!busyAction || upgradingTermux}
+                                disabled={!!busyAction || termuxRunning || upgradingTermux}
                                 onClick={() => void handleUninstallTarget('pkg', sysPkg)}
                                 title={`${t('tmx_uninstall_btn')} ${sysPkg}`}
                                 aria-label={`${t('tmx_uninstall_btn')} ${sysPkg}`}
@@ -558,7 +488,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
               type="button"
               onClick={onTestConnection}
               disabled={isChecking}
-              className="min-h-[42px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white text-xs font-medium inline-flex items-center gap-2 transition-colors"
+              className="min-h-[44px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white text-xs font-medium inline-flex items-center gap-2 transition-colors"
             >
               <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${isChecking ? 'animate-spin' : ''}`} />
               <span>{t('tmx_test_btn')}</span>
@@ -566,8 +496,8 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
             <button
               type="button"
               onClick={onRunInTermux}
-              disabled={!!busyAction || upgradingTermux}
-              className="min-h-[42px] min-w-0 max-w-full overflow-hidden px-4 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium inline-flex items-center gap-2 hover:border-[var(--ide-accent)] transition-colors"
+              disabled={!!busyAction || termuxRunning || upgradingTermux}
+              className="min-h-[44px] min-w-0 max-w-full overflow-hidden px-4 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium inline-flex items-center gap-2 hover:border-[var(--ide-accent)] transition-colors"
             >
               <Play className="w-3.5 h-3.5 text-[var(--ide-accent)] shrink-0" />
               <span className="truncate">{t('tmx_run_file_btn', { name: activeFile.name })}</span>
@@ -578,7 +508,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
 
         {/* One-line Bootstrap Setup Card */}
         {showBridge && (
-        <div className="md-card p-3.5 sm:p-5 space-y-4 min-w-0">
+        <div className="dp-panel p-3.5 sm:p-5 space-y-4 min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-semibold">{t('tmx_bootstrap_title')}</h3>
             <a
@@ -604,7 +534,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
             <button
               type="button"
               onClick={handleCopyBootstrap}
-              className="min-h-[42px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium inline-flex items-center gap-2 transition-colors"
+              className="min-h-[44px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium inline-flex items-center gap-2 transition-colors"
             >
               {copiedCmd ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
               <span>{copiedCmd ? t('tmx_copied_cmd') : t('tmx_copy_cmd')}</span>
@@ -612,7 +542,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
             <button
               type="button"
               onClick={handleDownloadBridgePy}
-              className="min-h-[42px] px-4 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium inline-flex items-center gap-2 hover:border-[var(--ide-accent)] transition-colors"
+              className="min-h-[44px] px-4 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] text-xs font-medium inline-flex items-center gap-2 hover:border-[var(--ide-accent)] transition-colors"
             >
               <Download className="w-4 h-4" />
               <span>{t('tmx_dl_bridge')}</span>
@@ -625,7 +555,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
 
       {/* One-Tap Embedded APK Python + Crawler Initialization Card */}
       {showInit && (
-      <div className="md-card p-3.5 sm:p-5 space-y-4 min-w-0">
+      <div className="dp-panel p-3.5 sm:p-5 space-y-4 min-w-0">
         <div className="space-y-1">
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <Cpu className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
@@ -636,48 +566,13 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
           </p>
         </div>
 
-        <div className="selectable-text rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] px-3.5 py-2.5 font-mono text-[11px] text-[var(--ide-text-muted)] overflow-x-auto no-scrollbar whitespace-nowrap">
-          pkg update -y && pkg install -y python python-pip python-lxml libxml2 libxslt clang && pip install --no-cache-dir requests beautifulsoup4 httpx
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            type="button"
-            disabled={!!busyAction || upgradingTermux}
-            onClick={() => void handleInitEmbedded(true)}
-            className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-2 text-left max-w-full transition-colors"
-          >
-            {busyAction === 'init:full' ? (
-              <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-            ) : (
-              <Download className="w-4 h-4 shrink-0" />
-            )}
-            <span>
-              {busyAction === 'init:full' ? t('tmx_init_running') : t('tmx_init_btn_full')}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            disabled={!!busyAction || upgradingTermux}
-            onClick={() => void handleInitEmbedded(false)}
-            className="min-h-[44px] px-4 py-2 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] disabled:opacity-50 text-xs font-medium inline-flex items-center gap-2 text-left max-w-full transition-colors"
-          >
-            {busyAction === 'init:crawler' ? (
-              <Loader2 className="w-4 h-4 animate-spin text-[var(--ide-accent)] shrink-0" />
-            ) : (
-              <PackagePlus className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
-            )}
-            <span>{t('tmx_init_btn_crawler')}</span>
-          </button>
-        </div>
       </div>
       )}
 
       {/* 30-Min Python Watchdog & pip SSL (certifi / truststore) Maintenance Grid */}
       {showMaintenance && (
       <div className={`grid grid-cols-1 ${isAll ? 'lg:grid-cols-2' : ''} gap-4`}>
-        <div className="md-card p-3.5 sm:p-5 space-y-3 min-w-0">
+        <div className="dp-panel p-3.5 sm:p-5 space-y-3 min-w-0">
           <div className="space-y-1">
             <h3 className="text-sm font-semibold flex items-center gap-2">
               <Activity className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
@@ -700,7 +595,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
 
           <button
             type="button"
-            disabled={isChecking || !isConnected || Boolean(cleaningProcesses)}
+            disabled={isChecking || !isConnected || termuxRunning || Boolean(cleaningProcesses)}
             onClick={() => void onCleanupProcesses?.(true)}
             className="min-h-[44px] px-4 py-2 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-2 transition-colors"
           >
@@ -713,7 +608,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
           </button>
         </div>
 
-        <div className="md-card p-3.5 sm:p-5 space-y-3 min-w-0">
+        <div className="dp-panel p-3.5 sm:p-5 space-y-3 min-w-0">
           <div className="space-y-1">
             <h3 className="text-sm font-semibold flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
@@ -726,7 +621,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
 
           <button
             type="button"
-            disabled={!isConnected || !!busyAction || upgradingTermux}
+            disabled={!isConnected || !!busyAction || termuxRunning || upgradingTermux}
             onClick={async () => {
               if (!onRebuildPipCertifi || busyAction) return;
               setBusyAction('pip-ssl');
@@ -761,7 +656,7 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                 role="switch"
                 aria-checked={Boolean(pipTrustedHostEmergency)}
                 onClick={() => onToggleTrustedHost(!pipTrustedHostEmergency)}
-                className={`min-h-[36px] w-14 rounded-full p-1 transition-colors flex items-center shrink-0 ${
+                className={`min-h-[44px] w-14 rounded-full p-1 transition-colors flex items-center shrink-0 ${
                   pipTrustedHostEmergency
                     ? 'bg-amber-600 justify-end'
                     : 'bg-slate-300 dark:bg-slate-700 justify-start'
@@ -777,342 +672,20 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
 
       {/* Termux Remote Package & Tool Installer */}
       {(showPackages || showShell) && (
-      <div className="md-card p-3.5 sm:p-5 space-y-4 min-w-0">
+      <div className="dp-panel p-3.5 sm:p-5 space-y-4 min-w-0">
         {showPackages && (
-        <>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="text-sm font-semibold flex items-center gap-2">
-              <PackagePlus className="w-4 h-4 text-[var(--ide-accent)] shrink-0" />
-              <span>{t('tmx_pkg_title')}</span>
-            </h3>
-            <p className="text-xs text-[var(--ide-text-muted)] mt-0.5">
-              {t('tmx_pkg_desc')}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 max-w-full">
-            {onUpgradeAllPackages && (
-              <button
-                type="button"
-                disabled={!!busyAction || upgradingTermux}
-                onClick={() => void onUpgradeAllPackages()}
-                className="min-h-[36px] px-3 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-50 transition-colors"
-              >
-                {upgradingTermux ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
-                ) : (
-                  <ArrowUpCircle className="w-3.5 h-3.5 shrink-0" />
-                )}
-                <span>{t('tmx_upgrade_all_btn')}</span>
-              </button>
-            )}
-            {onUpgradeAllTermux && (
-              <div className="flex flex-wrap items-center gap-1.5">
-                <button
-                  type="button"
-                  disabled={!!busyAction || upgradingTermux}
-                  onClick={() => void onUpgradeAllTermux('pip')}
-                  className="min-h-[36px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] text-xs font-medium inline-flex items-center gap-1.5 disabled:opacity-50 transition-colors"
-                >
-                  {upgradingTermux ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--ide-accent)] shrink-0" />
-                  ) : (
-                    <ArrowUpCircle className="w-3.5 h-3.5 text-[var(--ide-accent)] shrink-0" />
-                  )}
-                  <span>{t('tmx_upgrade_pip_btn')}</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={!!busyAction || upgradingTermux}
-                  onClick={() => void onUpgradeAllTermux('pkg')}
-                  className="min-h-[36px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] text-xs font-medium inline-flex items-center gap-1.5 disabled:opacity-50 transition-colors"
-                >
-                  <RefreshCw className="w-3.5 h-3.5 text-[var(--ide-accent)] shrink-0" />
-                  <span>{t('tmx_upgrade_pkg_btn')}</span>
-                </button>
-              </div>
-            )}
-
-            <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--ide-surface-alt)] border border-[var(--ide-border)]">
-              <button
-                type="button"
-                onClick={() => setInstallMode('pip')}
-                className={`min-h-[34px] px-3 rounded-lg text-xs font-mono font-medium transition-colors ${
-                  installMode === 'pip'
-                    ? 'bg-[var(--ide-surface)] text-[var(--ide-text)] shadow-sm'
-                    : 'text-[var(--ide-text-muted)]'
-                }`}
-              >
-                pip
-              </button>
-              <button
-                type="button"
-                onClick={() => setInstallMode('pkg')}
-                className={`min-h-[34px] px-3 rounded-lg text-xs font-mono font-medium transition-colors ${
-                  installMode === 'pkg'
-                    ? 'bg-[var(--ide-surface)] text-[var(--ide-text)] shadow-sm'
-                    : 'text-[var(--ide-text-muted)]'
-                }`}
-              >
-                pkg
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <form onSubmit={handleInstallSubmit} className="flex flex-wrap sm:flex-nowrap items-center gap-2">
-            <div className="relative flex-1 min-w-0 w-full sm:w-auto">
-              <Search className="w-4 h-4 text-[var(--ide-text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="text"
-                value={pkgTarget}
-                onChange={(e) => setPkgTarget(e.target.value)}
-                placeholder={
-                  installMode === 'pkg'
-                    ? t('tmx_pkg_placeholder_pkg')
-                    : t('tmx_pkg_placeholder_pip')
-                }
-                className="w-full min-w-0 min-h-[44px] pl-10 pr-4 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
-              />
-            </div>
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <button
-                type="submit"
-                disabled={!pkgTarget.trim() || !!busyAction || upgradingTermux}
-                className="min-h-[44px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-sm font-medium disabled:opacity-40 flex items-center gap-2 whitespace-nowrap shrink-0 transition-colors"
-              >
-                {busyAction?.startsWith('install:') ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Download className="w-4 h-4" />
-                )}
-                <span>{t('tmx_install_btn')}</span>
-              </button>
-              {onUninstallInTermux && (
-                <button
-                  type="button"
-                  disabled={!pkgTarget.trim() || !!busyAction || upgradingTermux}
-                  onClick={() => void handleUninstallTarget(installMode, pkgTarget)}
-                  className="min-h-[44px] px-3.5 rounded-xl border border-red-300 dark:border-red-900/60 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 text-sm font-medium disabled:opacity-40 flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-colors"
-                >
-                  {busyAction?.startsWith('uninstall:') ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="w-4 h-4" />
-                  )}
-                  <span>{t('tmx_uninstall_btn')}</span>
-                </button>
-              )}
-            </div>
-          </form>
-
-          {/* Termux Prebuilt APT Naming Hint */}
-          {termuxNameHint && (
-            <div className="rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50/70 dark:bg-amber-950/30 p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
-              <div className="min-w-0 flex-1 text-amber-900 dark:text-amber-200">
-                <span className="font-semibold">{t('pkg_termux_hint_title')}</span>
-                <span>{termuxNameHint.reason}</span>
-              </div>
-              <button
-                type="button"
-                disabled={!!busyAction || upgradingTermux}
-                onClick={() => void handleQuickInstall(termuxNameHint.suggestedMode, termuxNameHint.suggestedTarget)}
-                className="min-h-[34px] px-3 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-semibold shrink-0 max-w-full text-center transition-colors"
-              >
-                {t('pkg_termux_hint_btn', { target: termuxNameHint.suggestedTarget })}
-              </button>
-            </div>
-          )}
-
-          {/* Fuzzy Autocomplete Suggestions */}
-          {pkgTarget.trim().length > 0 && fuzzyResults.length > 0 && (
-            <div className="rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] overflow-hidden divide-y divide-[var(--ide-border)]">
-              <div className="px-3.5 py-2 bg-[var(--ide-surface-alt)] text-[11px] font-medium text-[var(--ide-text-muted)]">
-                {t('pkg_fuzzy_header')}
-              </div>
-              {fuzzyResults.map(({ item, matchedAlias }) => {
-                const tmx = item.termux!;
-                const isBusy = busyAction === `install:${tmx.targetName}`;
-                return (
-                  <div
-                    key={item.id}
-                    className="flex items-center justify-between gap-3 px-3.5 py-2.5 hover:bg-[var(--ide-surface)] transition-colors"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setInstallMode(tmx.mode);
-                        setPkgTarget(tmx.targetName);
-                      }}
-                      className="flex-1 min-w-0 text-left"
-                    >
-                      <div className="flex items-center gap-2 text-xs font-mono font-semibold text-[var(--ide-text)]">
-                        <span>{tmx.mode} {tmx.targetName}</span>
-                        {matchedAlias && (
-                          <span className="font-sans font-normal text-[11px] text-[var(--ide-accent-text)]">
-                            · {t('pkg_fuzzy_alias', { alias: matchedAlias })}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[11px] text-[var(--ide-text-muted)] truncate mt-0.5">
-                        {item.desc}
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!!busyAction || upgradingTermux}
-                      onClick={() => void handleQuickInstall(tmx.mode, tmx.targetName)}
-                      className="min-h-[34px] px-3 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-40 text-white text-xs font-medium whitespace-nowrap shrink-0 inline-flex items-center gap-1.5"
-                    >
-                      {isBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                      <span>{t('pkg_install_short')}</span>
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Popular/Niche Tier Toggle + Category Strip */}
-        <div className="space-y-2.5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--ide-surface-alt)] border border-[var(--ide-border)]">
-              {(['all', 'popular', 'niche'] as const).map((tier) => (
-                <button
-                  key={tier}
-                  type="button"
-                  onClick={() => setTierFilter(tier)}
-                  className={`min-h-[32px] px-3 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-                    tierFilter === tier
-                      ? 'bg-[var(--ide-surface)] text-[var(--ide-accent-text)] font-semibold shadow-xs'
-                      : 'text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
-                  }`}
-                >
-                  {t(`pkg_tier_${tier}` as TranslationKey)}
-                </button>
-              ))}
-            </div>
-            <span className="text-[11px] text-[var(--ide-text-muted)] tabular-nums">
-              {t('pkg_loaded_count', { count: filteredCatalog.length })}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
-            {PACKAGE_CATEGORIES.map((cat) => {
-              const active = catFilter === cat.id;
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => setCatFilter(cat.id)}
-                  className={`min-h-[34px] px-3 rounded-xl border text-xs font-medium whitespace-nowrap shrink-0 transition-colors ${
-                    active
-                      ? 'border-[var(--ide-accent)] bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] font-semibold'
-                      : 'border-[var(--ide-border)] bg-[var(--ide-bg)] text-[var(--ide-text-muted)] hover:text-[var(--ide-text)]'
-                  }`}
-                >
-                  {t(cat.labelKey as TranslationKey)}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-[380px] overflow-y-auto ide-scroll pr-0.5">
-          {filteredCatalog.map((item) => {
-            const tmx = item.termux!;
-            const isBusyInstall = busyAction === `install:${tmx.targetName}`;
-            const isBusyUninstall = busyAction === `uninstall:${tmx.targetName}`;
-            const normTarget = normalizeTermuxPkgName(tmx.targetName);
-            const pipInstalled =
-              tmx.mode === 'pip' &&
-              Boolean(
-                healthInfo?.installedPipPackages?.some(
-                  (p) => normalizeTermuxPkgName(p) === normTarget
-                )
-              );
-            const pkgInstalled =
-              tmx.mode === 'pkg' &&
-              ((tmx.targetName === 'clang' && Boolean(healthInfo?.hasClang)) ||
-                (tmx.targetName === 'ffmpeg' && Boolean(healthInfo?.hasFfmpeg)) ||
-                Boolean(
-                  healthInfo?.installedPkgPackages?.some(
-                    (p) => p.toLowerCase() === tmx.targetName.toLowerCase()
-                  )
-                ));
-            const alreadyInstalled = pipInstalled || pkgInstalled;
-            const isCorePkg =
-              tmx.mode === 'pip'
-                ? CORE_TERMUX_PIP_PACKAGES.has(tmx.targetName.toLowerCase())
-                : CORE_TERMUX_PKG_PACKAGES.has(tmx.targetName.toLowerCase());
-            return (
-              <div
-                key={item.id}
-                className={`p-3 rounded-xl border flex flex-col justify-between gap-2 transition-colors ${
-                  alreadyInstalled
-                    ? 'border-[var(--ide-accent)]/50 bg-[var(--ide-accent-soft)]/50'
-                    : 'border-[var(--ide-border)] bg-[var(--ide-bg)]'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-xs font-semibold text-[var(--ide-text)] truncate">
-                      {tmx.mode} {tmx.targetName}
-                    </span>
-                    {alreadyInstalled && (
-                      <Check className="w-3.5 h-3.5 text-[var(--ide-accent)] shrink-0" />
-                    )}
-                  </div>
-                  <div className="text-[11px] text-[var(--ide-text-muted)] mt-1 line-clamp-2 leading-relaxed">
-                    {item.desc}
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between gap-2 pt-1">
-                  <span className="text-[10px] text-[var(--ide-text-muted)] truncate">
-                    {item.tier === 'popular' ? t('pkg_tier_popular') : t('pkg_tier_niche')} · {item.runtimeHint}
-                  </span>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {alreadyInstalled && !isCorePkg && onUninstallInTermux && (
-                      <button
-                        type="button"
-                        disabled={!!busyAction || upgradingTermux}
-                        onClick={() => void handleUninstallTarget(tmx.mode, tmx.targetName)}
-                        className="min-h-[28px] px-2 rounded-lg border border-red-300 dark:border-red-900/60 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 text-[11px] font-medium whitespace-nowrap inline-flex items-center gap-1 disabled:opacity-40"
-                      >
-                        {isBusyUninstall ? (
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                        ) : (
-                          <Trash2 className="w-3 h-3" />
-                        )}
-                        <span>{t('pkg_uninstall_btn')}</span>
-                      </button>
-                    )}
-                    {!alreadyInstalled && (
-                      <button
-                        type="button"
-                        disabled={!!busyAction || upgradingTermux}
-                        onClick={() => void handleQuickInstall(tmx.mode, tmx.targetName)}
-                        className="min-h-[28px] px-2.5 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-[11px] font-medium whitespace-nowrap inline-flex items-center gap-1 disabled:opacity-40"
-                      >
-                        {isBusyInstall ? (
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                        ) : (
-                          <Download className="w-3 h-3" />
-                        )}
-                        <span>{t('pkg_install_short')}</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        </>
+          <TermuxPackageWorkspace
+            healthInfo={healthInfo}
+            onInstallInTermux={onInstallInTermux}
+            onUpgradeAllTermux={onUpgradeAllTermux}
+            onUpgradeAllPackages={onUpgradeAllPackages}
+            onUninstallInTermux={onUninstallInTermux}
+            upgradingTermux={upgradingTermux}
+            termuxRunning={termuxRunning}
+            activeTermuxTask={activeTermuxTask}
+            busyAction={busyAction}
+            onBusyActionChange={setBusyAction}
+          />
         )}
 
         {/* Direct Termux Shell Command Runner */}
@@ -1127,12 +700,12 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                 value={shellCmd}
                 onChange={(e) => setShellCmd(e.target.value)}
                 placeholder={t('tmx_shell_placeholder')}
-                className="flex-1 min-w-0 min-h-[42px] px-3 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
+                className="flex-1 min-w-0 min-h-[44px] px-3 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)] text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
               />
               <button
                 type="submit"
-                disabled={!shellCmd.trim() || !!busyAction || upgradingTermux}
-                className="min-h-[42px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium whitespace-nowrap shrink-0 disabled:opacity-40 transition-colors"
+                disabled={!shellCmd.trim() || !!busyAction || termuxRunning || upgradingTermux}
+                className="min-h-[44px] px-4 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium whitespace-nowrap shrink-0 disabled:opacity-40 transition-colors"
               >
                 {busyAction === 'shell' ? t('tmx_shell_running') : t('tmx_shell_btn')}
               </button>
@@ -1144,12 +717,12 @@ export const TermuxIntegrationPanel: React.FC<TermuxIntegrationPanelProps> = ({
                   <button
                     key={preset}
                     type="button"
-                    disabled={!!busyAction || upgradingTermux}
+                    disabled={!!busyAction || termuxRunning || upgradingTermux}
                     onClick={() => {
                       setBusyAction('shell');
                       void onRunShellInTermux(preset).finally(() => setBusyAction(null));
                     }}
-                    className="min-h-[32px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] font-mono text-[11px] text-[var(--ide-text)] disabled:opacity-40 transition-colors"
+                    className="min-h-[44px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] font-mono text-[11px] text-[var(--ide-text)] disabled:opacity-40 transition-colors"
                   >
                     {preset}
                   </button>

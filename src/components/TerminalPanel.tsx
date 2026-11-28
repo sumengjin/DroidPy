@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Trash2, Copy, Check, AlertCircle, CornerDownLeft, Download, Maximize2, X, FileText, Pause, Play } from 'lucide-react';
+import { Trash2, Copy, Check, AlertCircle, Download, Maximize2, X, FileText, Send } from 'lucide-react';
 import { ExecutionEngine, PyodideStatus, TerminalEntry } from '../types/ide';
 import { renderAnsiText, stripAnsi } from '../utils/ansiParser';
 import { useI18n } from '../services/i18n';
@@ -14,16 +14,14 @@ interface TerminalPanelProps {
   onChangeEngine: (engine: ExecutionEngine) => void;
   termuxConnected: boolean;
   embeddedMissingPython?: boolean;
-  onQuickInitEmbedded?: () => void;
   lastDurationMs: number | null;
   runStartedAt?: number | null;
   pendingInputPrompt: string | null;
+  inputSessionActive?: boolean;
   onSubmitInput: (value: string) => void;
   onRunRepl: (statement: string) => Promise<void>;
   onSendTermuxStdin?: (text: string) => Promise<void>;
-  paused?: boolean;
-  canPause?: boolean;
-  onTogglePause?: () => void;
+  executionBusy?: boolean;
   onOpenLogs?: () => void;
   enableSandboxAddon?: boolean;
   isDark?: boolean;
@@ -73,7 +71,7 @@ const TerminalEntryRow = React.memo<TerminalEntryRowProps>(
 
     if (entry.type === 'plot' && entry.imageDataUrl) {
       return (
-        <div className="my-2 md-card p-3 font-sans">
+        <div className="my-2 dp-panel p-3 font-sans">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
             <span className="text-xs font-medium text-[var(--ide-text-muted)]">
               {plotTitle}
@@ -82,7 +80,7 @@ const TerminalEntryRow = React.memo<TerminalEntryRowProps>(
               <button
                 type="button"
                 onClick={() => onExpandPlot(entry.imageDataUrl!)}
-                className="min-h-[32px] px-2 flex items-center gap-1 rounded-md text-xs text-[var(--ide-text-muted)] hover:bg-[var(--ide-accent-soft)]"
+                className="min-h-[44px] px-2 flex items-center gap-1 rounded-md text-xs text-[var(--ide-text-muted)] hover:bg-[var(--ide-accent-soft)]"
               >
                 <Maximize2 className="w-3.5 h-3.5" />
                 <span>{plotZoomLabel}</span>
@@ -96,7 +94,7 @@ const TerminalEntryRow = React.memo<TerminalEntryRowProps>(
                     'image/png'
                   )
                 }
-                className="min-h-[32px] px-2 flex items-center gap-1 rounded-md text-xs text-[var(--ide-accent-text)] hover:bg-[var(--ide-accent-soft)]"
+                className="min-h-[44px] px-2 flex items-center gap-1 rounded-md text-xs text-[var(--ide-accent-text)] hover:bg-[var(--ide-accent-soft)]"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>PNG</span>
@@ -169,16 +167,14 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   onChangeEngine,
   termuxConnected,
   embeddedMissingPython,
-  onQuickInitEmbedded,
   lastDurationMs,
   runStartedAt,
   pendingInputPrompt,
+  inputSessionActive = false,
   onSubmitInput,
   onRunRepl,
   onSendTermuxStdin,
-  paused = false,
-  canPause = false,
-  onTogglePause,
+  executionBusy = false,
   onOpenLogs,
   enableSandboxAddon = false,
   isDark,
@@ -186,12 +182,13 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
 }) => {
   const { t } = useI18n();
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const outputWasAtBottomRef = useRef(true);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const replInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [stdinValue, setStdinValue] = useState('');
-  const [replValue, setReplValue] = useState('');
-  const [replHistory, setReplHistory] = useState<string[]>([]);
+  // One persistent input field serves Python input(), Termux stdin and the
+  // normal shell/Python REPL. The active runtime state selects the destination.
+  const [terminalValue, setTerminalValue] = useState('');
+  const [commandHistory, setCommandHistory] = useState<string[]>([]);
   const [historyIdx, setHistoryIdx] = useState<number>(-1);
   const [copied, setCopied] = useState(false);
   const [copiedSel, setCopiedSel] = useState(false);
@@ -214,16 +211,35 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   }, [entries, pendingInputPrompt]);
 
   useEffect(() => {
-    if (pendingInputPrompt !== null) {
+    if (pendingInputPrompt !== null || inputSessionActive) {
       inputRef.current?.focus();
     }
-  }, [pendingInputPrompt]);
+  }, [pendingInputPrompt, inputSessionActive]);
+
+  // Keep the newest output visible when Android's soft keyboard changes the
+  // visual viewport, without pulling users away from older output they are reading.
+  useEffect(() => {
+    const keepLatestOutputVisible = () => {
+      if (!outputWasAtBottomRef.current) return;
+      window.requestAnimationFrame(() => {
+        const output = scrollRef.current;
+        if (output) output.scrollTop = output.scrollHeight;
+      });
+    };
+    const viewport = window.visualViewport;
+    viewport?.addEventListener('resize', keepLatestOutputVisible);
+    window.addEventListener('resize', keepLatestOutputVisible);
+    return () => {
+      viewport?.removeEventListener('resize', keepLatestOutputVisible);
+      window.removeEventListener('resize', keepLatestOutputVisible);
+    };
+  }, []);
 
   const handleCopyAll = async () => {
     const text = entries
       .filter((e) => e.type !== 'plot')
       .map((e) => stripAnsi(e.content))
-      .join('\n');
+      .join('\\n');
     if (!text) return;
     const ok = await copyTextReliable(text);
     if (ok) {
@@ -242,48 +258,61 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     }
   };
 
-  const handleStdinSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSubmitInput(stdinValue);
-    setStdinValue('');
-  };
+  const submitTerminalInput = async () => {
+    const value = terminalValue;
+    const waitingForPythonInput = inputSessionActive || pendingInputPrompt !== null;
 
-  const handleReplSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmed = replValue.trim();
-    if (!trimmed || status === 'running' || (engine === 'pyodide' && status === 'loading')) return;
-    setReplHistory((prev) => [trimmed, ...prev.slice(0, 29)]);
+    if (waitingForPythonInput) {
+      setTerminalValue('');
+      onSubmitInput(value);
+      window.requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
+      return;
+    }
+
+    if (engine === 'termux' && status === 'running') {
+      if (!onSendTermuxStdin) return;
+      setTerminalValue('');
+      await onSendTermuxStdin(value);
+      window.requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
+      return;
+    }
+
+    const statement = value.trim();
+    if (!statement || status === 'running' || (engine === 'pyodide' && status === 'loading')) return;
+
+    setCommandHistory((prev) => [statement, ...prev.slice(0, 29)]);
     setHistoryIdx(-1);
-    setReplValue('');
-    await onRunRepl(trimmed);
-    replInputRef.current?.focus();
+    setTerminalValue('');
+    await onRunRepl(statement);
+    window.requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
   };
 
-  const handleTermuxStdinSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!onSendTermuxStdin) return;
-    const val = stdinValue;
-    setStdinValue('');
-    await onSendTermuxStdin(val);
+  const handleTerminalSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    void submitTerminalInput();
   };
 
-  const handleReplKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      const nextIdx = Math.min(historyIdx + 1, replHistory.length - 1);
-      if (replHistory[nextIdx] !== undefined) {
+  const handleTerminalKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+      // Keep Android WebView's soft keyboard available for consecutive stdin prompts.
+      event.preventDefault();
+      void submitTerminalInput();
+    } else if (!inputSessionActive && pendingInputPrompt === null && !(engine === 'termux' && status === 'running') && event.key === 'ArrowUp') {
+      event.preventDefault();
+      const nextIdx = Math.min(historyIdx + 1, commandHistory.length - 1);
+      if (commandHistory[nextIdx] !== undefined) {
         setHistoryIdx(nextIdx);
-        setReplValue(replHistory[nextIdx]);
+        setTerminalValue(commandHistory[nextIdx]);
       }
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault();
+    } else if (!inputSessionActive && pendingInputPrompt === null && !(engine === 'termux' && status === 'running') && event.key === 'ArrowDown') {
+      event.preventDefault();
       const nextIdx = historyIdx - 1;
       if (nextIdx < 0) {
         setHistoryIdx(-1);
-        setReplValue('');
-      } else if (replHistory[nextIdx] !== undefined) {
+        setTerminalValue('');
+      } else if (commandHistory[nextIdx] !== undefined) {
         setHistoryIdx(nextIdx);
-        setReplValue(replHistory[nextIdx]);
+        setTerminalValue(commandHistory[nextIdx]);
       }
     }
   };
@@ -302,18 +331,19 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
       : t('term_status_ready');
 
   return (
-    <div className="flex flex-col h-full bg-[var(--ide-surface-alt)] text-[var(--ide-text)] overflow-hidden">
-      {/* Sub-header */}
-      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 px-2.5 sm:px-3 py-2 border-b border-[var(--ide-border)] bg-[var(--ide-surface)] shrink-0">
-        <div className="flex items-center gap-1.5 sm:gap-2 text-xs text-[var(--ide-text-muted)] min-w-0 flex-1 overflow-hidden">
-          <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-[var(--ide-surface-alt)] border border-[var(--ide-border)] shrink-0">
+    <div className="flex flex-col h-full bg-transparent text-[var(--ide-text)] overflow-hidden">
+      {/* Compact terminal controls: preserve output space, avoid decorative framing. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0 px-2 py-0.5 bg-transparent shrink-0">
+        <div className="flex items-center gap-1.5 text-[11px] text-[var(--ide-text-muted)] min-w-0 flex-1 overflow-hidden">
+          <div className="flex items-center gap-2 shrink-0">
             {(enableSandboxAddon || engine === 'pyodide') && (
               <button
                 type="button"
                 onClick={() => onChangeEngine('pyodide')}
-                className={`min-h-[28px] px-2 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap ${
+                disabled={executionBusy}
+                className={`min-h-[32px] px-1 text-[11px] font-medium transition-colors whitespace-nowrap disabled:opacity-40 ${
                   engine === 'pyodide'
-                    ? 'bg-[var(--ide-surface)] text-[var(--ide-text)] shadow-sm'
+                    ? 'text-[var(--ide-accent-text)]'
                     : 'text-[var(--ide-text-muted)]'
                 }`}
               >
@@ -323,9 +353,10 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             <button
               type="button"
               onClick={() => onChangeEngine('termux')}
-              className={`min-h-[28px] px-2 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap ${
+              disabled={executionBusy}
+              className={`min-h-[44px] px-2 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap disabled:opacity-40 ${
                 engine === 'termux'
-                  ? 'bg-[var(--ide-accent)] text-white shadow-sm'
+                  ? 'text-[var(--ide-accent-text)]'
                   : 'text-[var(--ide-text-muted)]'
               }`}
             >
@@ -350,24 +381,12 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center gap-1 shrink-0">
-          {engine === 'termux' && status === 'running' && canPause && onTogglePause && (
-            <button
-              type="button"
-              onClick={onTogglePause}
-              aria-label={paused ? '繼續腳本' : '暫停腳本'}
-              title={paused ? '繼續腳本' : '暫停腳本'}
-              className="min-h-[38px] px-2.5 flex items-center gap-1 rounded-xl bg-[var(--ide-accent-soft)] text-[var(--ide-accent-text)] text-xs font-semibold transition-colors whitespace-nowrap"
-            >
-              {paused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
-              <span>{paused ? '繼續' : '暫停'}</span>
-            </button>
-          )}
+        <div className="flex flex-wrap items-center gap-0.5 shrink-0">
           {selectedText.length > 0 && (
             <button
               type="button"
               onClick={handleCopySelection}
-              className="min-h-[38px] px-2.5 flex items-center gap-1 rounded-xl bg-[var(--ide-accent)] text-white text-xs font-semibold transition-colors whitespace-nowrap"
+              className="min-h-[32px] px-1.5 flex items-center gap-1 text-[11px] font-semibold text-[var(--ide-accent-text)] transition-colors whitespace-nowrap"
             >
               {copiedSel ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
               <span>{copiedSel ? t('term_copied_selection') : t('term_copy_selection')}</span>
@@ -377,7 +396,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             <button
               type="button"
               onClick={onOpenLogs}
-              className="min-h-[38px] px-2.5 flex items-center gap-1 rounded-xl text-xs font-medium text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-accent-soft)] transition-colors whitespace-nowrap"
+              className="min-h-[32px] px-1.5 flex items-center gap-1 text-[11px] font-medium text-[var(--ide-text-muted)] hover:text-[var(--ide-accent-text)] transition-colors whitespace-nowrap"
             >
               <FileText className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
               <span>{t('logs_btn')}</span>
@@ -387,7 +406,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             type="button"
             onClick={handleCopyAll}
             disabled={entries.length === 0}
-            className="min-h-[38px] px-2.5 flex items-center gap-1 rounded-xl text-xs font-medium text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-accent-soft)] disabled:opacity-40 transition-colors whitespace-nowrap"
+            className="min-h-[32px] px-1.5 flex items-center gap-1 text-[11px] font-medium text-[var(--ide-text-muted)] hover:text-[var(--ide-accent-text)] disabled:opacity-40 transition-colors whitespace-nowrap"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-[var(--ide-accent)]" /> : <Copy className="w-3.5 h-3.5" />}
             <span>{copied ? t('term_copied') : t('term_copy')}</span>
@@ -396,7 +415,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
             type="button"
             onClick={onClear}
             disabled={entries.length === 0}
-            className="min-h-[38px] px-2.5 flex items-center gap-1 rounded-xl text-xs font-medium text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-accent-soft)] disabled:opacity-40 transition-colors whitespace-nowrap"
+            className="min-h-[44px] px-2.5 flex items-center gap-1 rounded-xl text-xs font-medium text-[var(--ide-text-muted)] hover:text-[var(--ide-text)] hover:bg-[var(--ide-accent-soft)] disabled:opacity-40 transition-colors whitespace-nowrap"
           >
             <Trash2 className="w-3.5 h-3.5" />
             <span>{t('term_clear')}</span>
@@ -404,28 +423,33 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         </div>
       </div>
 
-      {/* Actionable banner when Embedded Termux Python hasn't been initialized yet */}
+      {/* Python is installed automatically when the user first runs code or installs a package. */}
       {engine === 'termux' && embeddedMissingPython && status !== 'running' && (
-        <div className="px-3 py-2.5 border-b border-amber-300/60 dark:border-amber-800/60 bg-amber-50/90 dark:bg-amber-950/40 flex flex-wrap items-center justify-between gap-2 shrink-0">
-          <div className="text-xs text-amber-800 dark:text-amber-200 leading-snug min-w-0 flex-1">
-            {t('tmx_need_init_hint')}
+        <div className="px-3 py-2.5 border-b border-amber-300/60 dark:border-amber-800/60 bg-amber-50/90 dark:bg-amber-950/40 shrink-0">
+          <div className="text-xs text-amber-800 dark:text-amber-200 leading-snug">
+            {t('tmx_py_missing')}
           </div>
-          {onQuickInitEmbedded && (
-            <button
-              type="button"
-              onClick={onQuickInitEmbedded}
-              className="min-h-[34px] px-3 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shrink-0 transition-colors"
-            >
-              {t('tmx_init_btn_full')}
-            </button>
-          )}
         </div>
       )}
 
-      {/* Output Scroll Area */}
+      {/* Output and command line are one continuous terminal surface. */}
+      <div
+        className="terminal-console-surface flex-1 min-h-0 flex flex-col overflow-hidden"
+        onClick={(event) => {
+          // Like Termux, the whole terminal surface is an input target.
+          // Keep toolbar/action buttons usable without stealing their clicks.
+          if (event.target instanceof Element && event.target.closest('button, a')) return;
+          inputRef.current?.focus({ preventScroll: true });
+        }}
+      >
       <div
         ref={scrollRef}
-        className="terminal-selectable flex-1 overflow-y-auto ide-scroll p-3 sm:p-4 font-mono text-[13px] leading-relaxed space-y-2"
+        onScroll={(event) => {
+          const output = event.currentTarget;
+          outputWasAtBottomRef.current =
+            output.scrollHeight - output.scrollTop - output.clientHeight <= 48;
+        }}
+        className="terminal-selectable flex-1 min-h-0 overflow-y-auto overscroll-contain ide-scroll p-3 sm:p-4 font-mono text-[13px] leading-relaxed space-y-2"
       >
         {entries.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center py-8 text-[var(--ide-text-muted)] font-sans">
@@ -447,90 +471,56 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
         )}
       </div>
 
-      {/* Inline input() prompt bar when script requests stdin */}
-      {pendingInputPrompt !== null ? (
-        <form
-          onSubmit={handleStdinSubmit}
-          className="p-2.5 border-t border-amber-300 dark:border-amber-700/70 bg-amber-50 dark:bg-amber-950/30 flex items-center gap-2 shrink-0"
+      {/* One shared terminal input: prompt responses, Termux stdin and REPL commands. */}
+      <form
+        onSubmit={handleTerminalSubmit}
+        className="terminal-input-row px-2 py-1 bg-transparent flex items-center gap-2 shrink-0"
+      >
+        <span className={`text-xs font-semibold whitespace-nowrap shrink-0 ${inputSessionActive || pendingInputPrompt !== null ? 'text-amber-700 dark:text-amber-300' : 'text-[var(--ide-accent-text)]'}`}>
+          {inputSessionActive || pendingInputPrompt !== null
+            ? t('term_input_label')
+            : engine === 'termux' ? '$' : '>>>'}
+        </span>
+        <input
+          ref={inputRef}
+          type="text"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          value={terminalValue}
+          onChange={(event) => setTerminalValue(event.target.value)}
+          onKeyDown={handleTerminalKeyDown}
+          enterKeyHint="send"
+          aria-label={inputSessionActive || pendingInputPrompt !== null ? t('term_input_label') : 'Terminal command'}
+          placeholder={
+            pendingInputPrompt ||
+            (inputSessionActive
+              ? t('term_input_placeholder')
+              : engine === 'termux' && status === 'running'
+                ? t('term_stdin_placeholder')
+                : engine === 'termux'
+                  ? t('term_repl_termux_placeholder')
+                  : t('term_repl_py_placeholder'))
+          }
+          style={{ border: 0, outline: 0, boxShadow: 'none', background: 'transparent', appearance: 'none', WebkitAppearance: 'none' }}
+          className="flex-1 min-w-0 min-h-[44px] px-2 bg-transparent !border-0 !shadow-none text-sm font-mono text-[var(--ide-text)] placeholder:text-[var(--ide-text-muted)] focus:outline-none focus:ring-0"
+        />
+        <button
+          type="submit"
+          disabled={
+            (inputSessionActive || pendingInputPrompt !== null)
+              ? false
+              : engine === 'termux' && status === 'running'
+                ? !onSendTermuxStdin || !terminalValue
+                : !terminalValue.trim() || status === 'running' || (engine === 'pyodide' && status === 'loading')
+          }
+          className="terminal-submit-button shrink-0 min-h-[36px] px-2.5 inline-flex items-center justify-center gap-1 text-xs font-semibold text-[var(--ide-accent-text)] bg-transparent disabled:opacity-40"
         >
-          <span className="text-xs font-semibold text-amber-700 dark:text-amber-300 whitespace-nowrap shrink-0">
-            {t('term_input_label')}
-          </span>
-          <input
-            ref={inputRef}
-            type="text"
-            value={stdinValue}
-            onChange={(e) => setStdinValue(e.target.value)}
-            placeholder={pendingInputPrompt || t('term_input_placeholder')}
-            className="flex-1 min-w-0 min-h-[40px] px-3 rounded-lg bg-[var(--ide-surface)] border border-amber-300 dark:border-amber-700 text-sm font-mono text-[var(--ide-text)] focus:outline-none focus:ring-2 focus:ring-amber-500"
-          />
-          <button
-            type="submit"
-            className="min-h-[40px] px-4 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-colors"
-          >
-            <span>{t('term_send')}</span>
-            <CornerDownLeft className="w-3.5 h-3.5" />
-          </button>
-        </form>
-      ) : engine === 'termux' && status === 'running' ? (
-        <form
-          onSubmit={handleTermuxStdinSubmit}
-          className="p-2 border-t border-[var(--ide-border)] bg-[var(--ide-surface)] flex items-center gap-2 shrink-0"
-        >
-          <span className="text-xs font-semibold text-[var(--ide-accent-text)] pl-1.5 whitespace-nowrap shrink-0">
-            {t('term_stdin_label')}
-          </span>
-          <input
-            type="text"
-            value={stdinValue}
-            onChange={(e) => setStdinValue(e.target.value)}
-            placeholder={t('term_stdin_placeholder')}
-            className="flex-1 min-w-0 min-h-[40px] px-3 rounded-lg bg-[var(--ide-bg)] border border-[var(--ide-border)] text-sm font-mono text-[var(--ide-text)] focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
-          />
-          <button
-            type="submit"
-            className="min-h-[40px] px-3.5 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium whitespace-nowrap shrink-0"
-          >
-            {t('term_send')}
-          </button>
-        </form>
-      ) : (
-        /* Persistent Interactive Python REPL Input */
-        <form
-          onSubmit={handleReplSubmit}
-          className="p-2 border-t border-[var(--ide-border)] bg-[var(--ide-surface)] flex items-center gap-2 shrink-0"
-        >
-          <span className="font-mono text-xs font-semibold text-[var(--ide-accent-text)] pl-2 shrink-0 select-none">
-            {engine === 'termux' ? '$' : '>>>'}
-          </span>
-          <input
-            ref={replInputRef}
-            type="text"
-            value={replValue}
-            onChange={(e) => setReplValue(e.target.value)}
-            onKeyDown={handleReplKeyDown}
-            disabled={status === 'running' || (engine === 'pyodide' && status === 'loading')}
-            placeholder={
-              engine === 'termux'
-                ? t('term_repl_termux_placeholder')
-                : t('term_repl_py_placeholder')
-            }
-            aria-label="REPL"
-            className="flex-1 min-w-0 min-h-[40px] px-2 bg-transparent font-mono text-sm text-[var(--ide-text)] placeholder:text-[var(--ide-text-muted)] focus:outline-none"
-          />
-          <button
-            type="submit"
-            disabled={
-              !replValue.trim() ||
-              status === 'running' ||
-              (engine === 'pyodide' && status === 'loading')
-            }
-            className="min-h-[40px] px-3.5 rounded-lg bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] text-white text-xs font-medium disabled:opacity-40 transition-colors whitespace-nowrap shrink-0"
-          >
-            {t('term_exec_btn')}
-          </button>
-        </form>
-      )}
+          <Send className="w-3.5 h-3.5" />
+          <span>{inputSessionActive || pendingInputPrompt !== null || (engine === 'termux' && status === 'running') ? '送出' : '執行'}</span>
+        </button>
+      </form>
+      </div>
 
       {/* Plot Lightbox Modal */}
       {expandedPlot && (
@@ -539,7 +529,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           onClick={() => setExpandedPlot(null)}
         >
           <div
-            className="relative max-w-3xl w-full md-sheet p-4"
+            className="relative max-w-3xl w-full dp-sheet p-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-3">

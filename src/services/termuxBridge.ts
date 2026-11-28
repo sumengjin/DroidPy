@@ -72,6 +72,7 @@ import ssl
 import subprocess
 import sys
 import threading
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -88,8 +89,21 @@ WORKSPACE = os.path.expanduser("~/droidpy_workspace")
 os.makedirs(WORKSPACE, exist_ok=True)
 
 PROC_LOCK = threading.Lock()
-ACTIVE_PROC = {"pid": None, "pgid": None, "master_fd": None, "started_at": 0.0, "paused": False}
+OPERATION_LOCK = threading.Lock()
+ACTIVE_PROC = {
+    "pid": None, "pgid": None, "master_fd": None,
+    "started_at": 0.0, "paused": False,
+    "starting": False, "stop_requested": False,
+}
 _LEGACY_CERTS_SUPPORTED = None
+
+def _reserve_process_start():
+    with PROC_LOCK:
+        if ACTIVE_PROC["starting"] or ACTIVE_PROC["pgid"] is not None:
+            return False
+        ACTIVE_PROC["starting"] = True
+        ACTIVE_PROC["stop_requested"] = False
+        return True
 
 def _set_active(pid, pgid, master_fd):
     with PROC_LOCK:
@@ -98,6 +112,8 @@ def _set_active(pid, pgid, master_fd):
         ACTIVE_PROC["master_fd"] = master_fd
         ACTIVE_PROC["started_at"] = time.time()
         ACTIVE_PROC["paused"] = False
+        ACTIVE_PROC["starting"] = False
+        return bool(ACTIVE_PROC["stop_requested"])
 
 def _clear_active():
     with PROC_LOCK:
@@ -106,6 +122,39 @@ def _clear_active():
         ACTIVE_PROC["master_fd"] = None
         ACTIVE_PROC["started_at"] = 0.0
         ACTIVE_PROC["paused"] = False
+        ACTIVE_PROC["starting"] = False
+        ACTIVE_PROC["stop_requested"] = False
+
+def _stage_workspace_files(files):
+    if not isinstance(files, list):
+        raise ValueError("Invalid workspace file list")
+    for item in files:
+        if not isinstance(item, dict):
+            continue
+        raw_name = str(item.get("name", ""))
+        name = os.path.basename(raw_name.replace("\\\\", "/"))
+        if not name or name in (".", "..") or "\\x00" in name:
+            continue
+        content = item.get("content", "")
+        if not isinstance(content, str):
+            content = str(content)
+        target = os.path.join(WORKSPACE, name)
+        fd, temp_path = tempfile.mkstemp(prefix="." + name + ".", suffix=".tmp", dir=WORKSPACE)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8", newline="") as fp:
+                fp.write(content)
+                fp.flush()
+                os.fsync(fp.fileno())
+            os.replace(temp_path, target)
+            with open(target, "rb") as committed:
+                if committed.read() != content.encode("utf-8"):
+                    raise OSError("Workspace read-back verification failed for " + name)
+        finally:
+            try:
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+            except OSError:
+                pass
 
 def _find_certifi_source():
     for getter in (
@@ -1051,42 +1100,65 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
             return self._send_json(200, {"files": items})
         return self._send_json(404, {"error": "Not found"})
 
-    def _stream_pty_command(self, cmd, shell=False):
-        self._begin_ndjson()
+    def _stream_pty_command(self, cmd, shell=False, before_start=None):
+        if not _reserve_process_start():
+            return self._send_json(409, {"error": "另一個 Termux 工作仍在執行，已拒絕這次操作"})
+        master_fd = None
+        slave_fd = None
+        proc = None
         t0 = time.perf_counter()
-        master_fd, slave_fd = pty.openpty()
-        env = _resolve_certifi_env(os.environ.copy())
-
-        proc = subprocess.Popen(
-            cmd,
-            shell=shell,
-            cwd=WORKSPACE,
-            stdin=slave_fd,
-            stdout=slave_fd,
-            stderr=slave_fd,
-            env=env,
-            preexec_fn=os.setsid,
-            close_fds=True,
-        )
-        os.close(slave_fd)
-        _set_active(proc.pid, proc.pid, master_fd)
-
-        decoder = codecs.getincrementaldecoder("utf-8")("replace")
-        client_disconnected = False
-
-        def emit_stream_event(event):
-            nonlocal client_disconnected
-            if client_disconnected:
-                return
-            try:
-                self._write_ndjson(event)
-            except OSError:
-                # The HTTP client does not own the child process. Keep draining
-                # the PTY so a full output buffer cannot block the user's script.
-                # The authenticated /stop endpoint remains the only stop control.
-                client_disconnected = True
-
         try:
+            # Publish stream readiness only after reserving the process slot. A Stop
+            # arriving during file staging is remembered and applied after Popen.
+            self._begin_ndjson()
+            if before_start is not None:
+                try:
+                    before_start()
+                except Exception as exc:
+                    self._write_ndjson({
+                        "type": "stdout",
+                        "data": "[DroidPy] 無法安全寫入工作區檔案：{}: {}\\n".format(type(exc).__name__, exc),
+                    })
+                    self._write_ndjson({"type": "done", "exitCode": 1, "durationMs": int((time.perf_counter() - t0) * 1000)})
+                    return
+
+            master_fd, slave_fd = pty.openpty()
+            env = _resolve_certifi_env(os.environ.copy())
+            proc = subprocess.Popen(
+                cmd,
+                shell=shell,
+                cwd=WORKSPACE,
+                stdin=slave_fd,
+                stdout=slave_fd,
+                stderr=slave_fd,
+                env=env,
+                preexec_fn=os.setsid,
+                close_fds=True,
+            )
+            os.close(slave_fd)
+            slave_fd = None
+            stop_requested = _set_active(proc.pid, proc.pid, master_fd)
+            if stop_requested:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+            decoder = codecs.getincrementaldecoder("utf-8")("replace")
+            client_disconnected = False
+
+            def emit_stream_event(event):
+                nonlocal client_disconnected
+                if client_disconnected:
+                    return
+                try:
+                    self._write_ndjson(event)
+                except OSError:
+                    # The HTTP client does not own the child process. Keep draining
+                    # the PTY so a full output buffer cannot block the user's script.
+                    # The authenticated /stop endpoint remains the only stop control.
+                    client_disconnected = True
+
             while True:
                 rlist, _, _ = select.select([master_fd], [], [], 0.1)
                 if master_fd in rlist:
@@ -1118,15 +1190,20 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
             if tail:
                 emit_stream_event({"type": "stdout", "data": tail})
             code = proc.wait()
+            duration_ms = int((time.perf_counter() - t0) * 1000)
+            emit_stream_event({"type": "done", "exitCode": code, "durationMs": duration_ms})
         finally:
             _clear_active()
-            try:
-                os.close(master_fd)
-            except OSError:
-                pass
-
-        duration_ms = int((time.perf_counter() - t0) * 1000)
-        emit_stream_event({"type": "done", "exitCode": code, "durationMs": duration_ms})
+            if master_fd is not None:
+                try:
+                    os.close(master_fd)
+                except OSError:
+                    pass
+            if slave_fd is not None:
+                try:
+                    os.close(slave_fd)
+                except OSError:
+                    pass
 
     def _read_json_body(self):
         if self.headers.get_all("Transfer-Encoding"):
@@ -1198,96 +1275,136 @@ class DroidPyBridgeHandler(BaseHTTPRequestHandler):
 
         if self.path == "/stop":
             with PROC_LOCK:
-                pgid = ACTIVE_PROC.get("pgid")
-            if pgid is None:
+                starting = bool(ACTIVE_PROC["starting"])
+                pgid = ACTIVE_PROC["pgid"]
+                if starting or pgid is not None:
+                    ACTIVE_PROC["stop_requested"] = True
+            if not starting and pgid is None:
                 return self._send_json(200, {"ok": True, "stopped": False})
+
+            deadline = time.monotonic() + 3.5
+            while pgid is None and starting and time.monotonic() < deadline:
+                time.sleep(0.02)
+                with PROC_LOCK:
+                    starting = bool(ACTIVE_PROC["starting"])
+                    pgid = ACTIVE_PROC["pgid"]
+            if pgid is None:
+                if starting:
+                    return self._send_json(409, {"ok": False, "error": "停止逾時：程序仍在啟動"})
+                return self._send_json(200, {"ok": True, "stopped": True})
             try:
                 os.killpg(pgid, signal.SIGKILL)
+                return self._send_json(200, {"ok": True, "stopped": True})
+            except ProcessLookupError:
                 return self._send_json(200, {"ok": True, "stopped": True})
             except OSError as exc:
                 return self._send_json(500, {"error": str(exc)})
 
         if self.path in ("/run", "/run-stream"):
-            files = data.get("files", [])
-            entry = os.path.basename(data.get("entry", "main.py")) or "main.py"
-            for f in files:
-                name = os.path.basename(f.get("name", ""))
-                if not name:
-                    continue
-                target = os.path.join(WORKSPACE, name)
-                with open(target, "w", encoding="utf-8") as fp:
-                    fp.write(f.get("content", ""))
+            if not OPERATION_LOCK.acquire(blocking=False):
+                return self._send_json(409, {"error": "另一個 Termux 工作仍在執行，已拒絕這次操作"})
+            try:
+                files = data.get("files", [])
+                entry = os.path.basename(str(data.get("entry", "main.py"))) or "main.py"
+                if entry in (".", ".."):
+                    return self._send_json(400, {"error": "Invalid Python entry filename"})
+                if not isinstance(files, list):
+                    return self._send_json(400, {"error": "Invalid workspace file list"})
 
-            if self.path == "/run-stream":
-                return self._stream_pty_command(["python", "-u", entry], shell=False)
+                if self.path == "/run-stream":
+                    return self._stream_pty_command(
+                        ["python", "-u", entry],
+                        shell=False,
+                        before_start=lambda: _stage_workspace_files(files),
+                    )
 
-            t0 = time.perf_counter()
-            proc = subprocess.run(
-                ["python", "-u", entry],
-                cwd=WORKSPACE,
-                env=_resolve_certifi_env(os.environ.copy()),
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-            return self._send_json(200, {
-                "exitCode": proc.returncode,
-                "stdout": proc.stdout,
-                "stderr": proc.stderr,
-                "durationMs": int((time.perf_counter() - t0) * 1000),
-            })
+                _stage_workspace_files(files)
+                t0 = time.perf_counter()
+                proc = subprocess.run(
+                    ["python", "-u", entry],
+                    cwd=WORKSPACE,
+                    env=_resolve_certifi_env(os.environ.copy()),
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                return self._send_json(200, {
+                    "exitCode": proc.returncode,
+                    "stdout": proc.stdout,
+                    "stderr": proc.stderr,
+                    "durationMs": int((time.perf_counter() - t0) * 1000),
+                })
+            finally:
+                OPERATION_LOCK.release()
 
         if self.path in ("/install", "/install-stream"):
-            mode = data.get("mode", "pip")
-            target = str(data.get("target", "")).strip()
-            trusted_host = bool(data.get("trustedHost", False))
-            if not target:
-                return self._send_json(400, {"error": "Missing package target"})
-            pkgs = shlex.split(target)
-            if not pkgs:
-                return self._send_json(400, {"error": "Missing package target"})
-            compatibility_cmd = _compatibility_install_command(pkgs[0], trusted_host=trusted_host) if len(pkgs) == 1 else None
-            if mode == "pkg":
-                cmd = ["pkg", "install", "-y"] + pkgs
-            elif compatibility_cmd:
-                cmd = ["sh", "-c", compatibility_cmd]
-            else:
-                cmd = _build_pip_cmd(pkgs, trusted_host=trusted_host)
-            if self.path == "/install-stream":
-                return self._stream_pty_command(cmd, shell=False)
+            if not OPERATION_LOCK.acquire(blocking=False):
+                return self._send_json(409, {"error": "另一個 Termux 工作仍在執行，已拒絕這次操作"})
+            try:
+                mode = data.get("mode", "pip")
+                target = str(data.get("target", "")).strip()
+                trusted_host = bool(data.get("trustedHost", False))
+                if not target:
+                    return self._send_json(400, {"error": "Missing package target"})
+                pkgs = shlex.split(target)
+                if not pkgs:
+                    return self._send_json(400, {"error": "Missing package target"})
+                compatibility_cmd = _compatibility_install_command(pkgs[0], trusted_host=trusted_host) if len(pkgs) == 1 else None
+                if mode == "pkg":
+                    cmd = ["pkg", "install", "-y"] + pkgs
+                elif compatibility_cmd:
+                    cmd = ["sh", "-c", compatibility_cmd]
+                else:
+                    cmd = _build_pip_cmd(pkgs, trusted_host=trusted_host)
+                if self.path == "/install-stream":
+                    return self._stream_pty_command(cmd, shell=False)
 
-            t0 = time.perf_counter()
-            proc = subprocess.run(
-                cmd,
-                cwd=WORKSPACE,
-                env=_resolve_certifi_env(os.environ.copy()),
-                capture_output=True,
-                text=True,
-                timeout=300,
-            )
-            return self._send_json(200, {
-                "exitCode": proc.returncode,
-                "stdout": proc.stdout,
-                "stderr": proc.stderr,
-                "durationMs": int((time.perf_counter() - t0) * 1000),
-            })
+                t0 = time.perf_counter()
+                proc = subprocess.run(
+                    cmd,
+                    cwd=WORKSPACE,
+                    env=_resolve_certifi_env(os.environ.copy()),
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
+                return self._send_json(200, {
+                    "exitCode": proc.returncode,
+                    "stdout": proc.stdout,
+                    "stderr": proc.stderr,
+                    "durationMs": int((time.perf_counter() - t0) * 1000),
+                })
+            finally:
+                OPERATION_LOCK.release()
 
         if self.path in ("/shell", "/shell-stream"):
-            cmd_str = str(data.get("command", "")).strip()
-            if not cmd_str:
-                return self._send_json(400, {"error": "Empty command"})
-            normalized_cmd = _normalize_shell_command(cmd_str)
-            if self.path == "/shell-stream":
-                return self._stream_pty_command(normalized_cmd, shell=True)
+            if not OPERATION_LOCK.acquire(blocking=False):
+                return self._send_json(409, {"error": "另一個 Termux 工作仍在執行，已拒絕這次操作"})
+            try:
+                cmd_str = str(data.get("command", "")).strip()
+                if not cmd_str:
+                    return self._send_json(400, {"error": "Empty command"})
+                normalized_cmd = _normalize_shell_command(cmd_str)
+                if self.path == "/shell-stream":
+                    return self._stream_pty_command(normalized_cmd, shell=True)
 
-            t0 = time.perf_counter()
-            proc = subprocess.run(normalized_cmd, shell=True, cwd=WORKSPACE, capture_output=True, text=True, timeout=180)
-            return self._send_json(200, {
-                "exitCode": proc.returncode,
-                "stdout": proc.stdout,
-                "stderr": proc.stderr,
-                "durationMs": int((time.perf_counter() - t0) * 1000),
-            })
+                t0 = time.perf_counter()
+                proc = subprocess.run(
+                    normalized_cmd,
+                    shell=True,
+                    cwd=WORKSPACE,
+                    capture_output=True,
+                    text=True,
+                    timeout=180,
+                )
+                return self._send_json(200, {
+                    "exitCode": proc.returncode,
+                    "stdout": proc.stdout,
+                    "stderr": proc.stderr,
+                    "durationMs": int((time.perf_counter() - t0) * 1000),
+                })
+            finally:
+                OPERATION_LOCK.release()
 
         if self.path == "/probe-url":
             target_url = str(data.get("url", "")).strip()
@@ -1414,11 +1531,48 @@ async function termuxFetch<T>(
 }
 
 let activeStreamController: AbortController | null = null;
+let activeStreamCompletion: Promise<void> | null = null;
+let activeStreamReady: Promise<void> | null = null;
 
-export function abortActiveTermuxStream(): void {
-  // Keep the slot occupied until the aborted request reaches its cleanup path.
-  // This prevents a rapid second tap from racing the server-side Stop request.
+export async function waitForActiveTermuxStreamReady(timeoutMs = 5000): Promise<boolean> {
+  const ready = activeStreamReady;
+  if (!ready) return true;
+  let timer: number | undefined;
+  const arrived = await Promise.race([
+    ready.then(() => true),
+    new Promise<boolean>((resolve) => {
+      timer = window.setTimeout(() => resolve(false), timeoutMs);
+    }),
+  ]);
+  if (timer !== undefined) window.clearTimeout(timer);
+  return arrived;
+}
+
+export async function abortActiveTermuxStream(): Promise<void> {
+  // Keep the single-job slot occupied until the aborted reader has completed cleanup.
+  const completion = activeStreamCompletion;
   activeStreamController?.abort();
+  if (completion) await completion;
+}
+
+export async function waitForActiveTermuxStream(timeoutMs = 5000): Promise<void> {
+  const completion = activeStreamCompletion;
+  if (!completion) return;
+
+  let timer: number | undefined;
+  const timedOut = await Promise.race([
+    completion.then(() => false),
+    new Promise<boolean>((resolve) => {
+      timer = window.setTimeout(() => resolve(true), timeoutMs);
+    }),
+  ]);
+  if (timer !== undefined) window.clearTimeout(timer);
+
+  // Normally Android closes the stream after its process-tree cleanup. Abort only
+  // as a bounded fallback if a broken bridge leaves the response open.
+  if (timedOut && activeStreamCompletion === completion) {
+    await abortActiveTermuxStream();
+  }
 }
 
 async function termuxStreamRequest(
@@ -1431,12 +1585,22 @@ async function termuxStreamRequest(
   if (activeStreamController) {
     throw new Error('已有 Termux 工作正在執行；請先停止目前工作後再試。');
   }
-  const controller = new AbortController();
-  activeStreamController = controller;
 
-  let res: Response;
+  const controller = new AbortController();
+  let settleCompletion!: () => void;
+  const completion = new Promise<void>((resolve) => {
+    settleCompletion = resolve;
+  });
+  activeStreamController = controller;
+  activeStreamCompletion = completion;
+  let settleReady!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    settleReady = resolve;
+  });
+  activeStreamReady = ready;
+
   try {
-    res = await fetch(`${base}${path}`, {
+    const res = await fetch(`${base}${path}`, {
       method: 'POST',
       signal: controller.signal,
       headers: {
@@ -1445,48 +1609,30 @@ async function termuxStreamRequest(
       },
       body: JSON.stringify(payload),
     });
-  } catch (err) {
-    if (activeStreamController === controller) {
-      activeStreamController = null;
-    }
-    if (err instanceof Error && err.name === 'AbortError') {
-      return { exitCode: -1, durationMs: 0 };
-    }
-    if (err instanceof TypeError) {
-      throw new Error(`無法連線至 Termux 橋接服務 (${base})，請先在 Termux 啟動新版橋接腳本`);
-    }
-    throw err;
-  }
+    settleReady();
 
-  if (!res.ok) {
-    if (activeStreamController === controller) {
-      activeStreamController = null;
+    if (!res.ok) {
+      let msg = `Termux 橋接回應錯誤 (${res.status})`;
+      try {
+        const errJson = (await res.json()) as { error?: string };
+        if (errJson.error) msg = errJson.error;
+      } catch {
+        // ignore non-json
+      }
+      throw new Error(msg);
     }
-    let msg = `Termux 橋接回應錯誤 (${res.status})`;
-    try {
-      const errJson = (await res.json()) as { error?: string };
-      if (errJson.error) msg = errJson.error;
-    } catch {
-      // ignore non-json
+
+    if (!res.body) {
+      throw new Error('Termux 串流回應為空，請重新複製新版啟動指令啟動橋接');
     }
-    throw new Error(msg);
-  }
 
-  if (!res.body) {
-    if (activeStreamController === controller) {
-      activeStreamController = null;
-    }
-    throw new Error('Termux 串流回應為空，請重新複製新版啟動指令啟動橋接');
-  }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let exitCode = 0;
+    let durationMs = 0;
+    let sawDone = false;
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let exitCode = 0;
-  let durationMs = 0;
-  let sawDone = false;
-
-  try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -1516,22 +1662,40 @@ async function termuxStreamRequest(
         }
       }
     }
+
+    return { exitCode: sawDone ? exitCode : 1, durationMs };
   } catch (err) {
+    settleReady();
     if (err instanceof Error && err.name === 'AbortError') {
-      return { exitCode: -1, durationMs };
+      return { exitCode: -1, durationMs: 0 };
+    }
+    if (err instanceof TypeError) {
+      throw new Error(`無法連線至 Termux 橋接服務 (${base})，請先在 Termux 啟動新版橋接腳本`);
     }
     throw err;
   } finally {
     if (activeStreamController === controller) {
       activeStreamController = null;
     }
+    if (activeStreamCompletion === completion) {
+      activeStreamCompletion = null;
+    }
+    if (activeStreamReady === ready) {
+      activeStreamReady = null;
+    }
+    settleReady();
+    settleCompletion();
   }
-
-  return { exitCode: sawDone ? exitCode : 1, durationMs };
 }
 
 export async function checkTermuxHealth(config: TermuxConfig): Promise<TermuxHealthInfo> {
   const res = await termuxFetch<TermuxHealthInfo & { ok: boolean }>(config, '/health', { method: 'GET' }, 4500);
+  const installedPkgPackages = Array.isArray(res.installedPkgPackages) && res.installedPkgPackages.length > 0
+    ? res.installedPkgPackages
+    : undefined;
+  const installedPipPackages = Array.isArray(res.installedPipPackages)
+    ? filterTermuxPipPackages(res.installedPipPackages, installedPkgPackages)
+    : undefined;
   return {
     pythonVersion: res.pythonVersion,
     arch: res.arch,
@@ -1540,8 +1704,8 @@ export async function checkTermuxHealth(config: TermuxConfig): Promise<TermuxHea
     workspaceDir: res.workspaceDir,
     embedded: Boolean(res.embedded),
     hasPython: res.hasPython ?? true,
-    installedPipPackages: Array.isArray(res.installedPipPackages) ? res.installedPipPackages : undefined,
-    installedPkgPackages: Array.isArray(res.installedPkgPackages) ? res.installedPkgPackages : undefined,
+    installedPipPackages,
+    installedPkgPackages,
   };
 }
 
@@ -1557,6 +1721,28 @@ export async function fetchTermuxWorkspaceFiles(config: TermuxConfig): Promise<P
   }));
 }
 
+export function buildTermuxRunFiles(
+  activeFile: PythonFile,
+  allFiles: PythonFile[]
+): Array<{ name: string; content: string }> {
+  const activeName = activeFile.name.replace(/\\\\/g, '/').split('/').pop()?.trim() ?? '';
+  if (!activeName || activeName === '.' || activeName === '..') {
+    throw new Error('Python 檔案名稱無效，無法安全執行');
+  }
+
+  // The Termux workspace is flat. Resolve basename collisions deterministically
+  // and always stage the selected editor buffer last so a stale duplicate cannot
+  // overwrite the file that the user actually asked to run.
+  const staged = new Map<string, { name: string; content: string }>();
+  for (const file of allFiles) {
+    const name = file.name.replace(/\\\\/g, '/').split('/').pop()?.trim() ?? '';
+    if (!name || name === '.' || name === '..' || name === activeName) continue;
+    staged.set(name, { name, content: file.content });
+  }
+  staged.set(activeName, { name: activeName, content: activeFile.content });
+  return [...staged.values()];
+}
+
 export async function syncAndRunInTermux(
   config: TermuxConfig,
   activeFile: PythonFile,
@@ -1569,7 +1755,7 @@ export async function syncAndRunInTermux(
       method: 'POST',
       body: JSON.stringify({
         entry: activeFile.name,
-        files: allFiles.map((f) => ({ name: f.name, content: f.content })),
+        files: buildTermuxRunFiles(activeFile, allFiles),
       }),
     },
     125000
@@ -1587,7 +1773,7 @@ export async function streamRunInTermux(
     '/run-stream',
     {
       entry: activeFile.name,
-      files: allFiles.map((f) => ({ name: f.name, content: f.content })),
+      files: buildTermuxRunFiles(activeFile, allFiles),
     },
     callbacks
   );
@@ -1679,13 +1865,19 @@ export async function sendTermuxStdin(config: TermuxConfig, text: string): Promi
   );
 }
 
-export async function stopTermuxProcess(config: TermuxConfig): Promise<void> {
+export async function stopTermuxProcess(
+  config: TermuxConfig,
+  metadata: { source?: string; operation?: string } = {}
+): Promise<void> {
   await termuxFetch<{ ok: boolean }>(
     config,
     '/stop',
     {
       method: 'POST',
-      body: JSON.stringify({}),
+      body: JSON.stringify({
+        source: metadata.source || 'unknown',
+        operation: metadata.operation || 'unknown',
+      }),
     },
     4000
   );
@@ -1920,6 +2112,7 @@ export interface ResolvedTermuxInstallTarget {
 // Curated native Termux builds avoid expensive or unsupported Android source builds.
 export const TERMUX_NATIVE_PYTHON_PACKAGES: Record<string, string> = {
   numpy: 'python-numpy',
+  scipy: 'python-scipy',
   pandas: 'python-pandas',
   pillow: 'python-pillow',
   pil: 'python-pillow',
@@ -1939,6 +2132,31 @@ export const TERMUX_NATIVE_PYTHON_PACKAGES: Record<string, string> = {
   'torchvision': 'python-torchvision',
   'yt-dlp': 'python-yt-dlp',
 };
+
+// TUR Polars is native APT too, but its install route must first enable TUR.
+const TERMUX_TUR_NATIVE_PYTHON_PACKAGES: Record<string, string> = {
+  polars: 'python-polars',
+};
+
+export function getTermuxNativePackageName(packageName: string): string | undefined {
+  const normalized = normalizeTermuxPkgName(packageName);
+  return TERMUX_NATIVE_PYTHON_PACKAGES[normalized] ?? TERMUX_TUR_NATIVE_PYTHON_PACKAGES[normalized];
+}
+
+export function isTermuxNativePackageInstalled(packageName: string, installedPkgPackages: string[]): boolean {
+  const nativeName = getTermuxNativePackageName(packageName);
+  if (!nativeName) return false;
+  const installed = new Set(installedPkgPackages.map(normalizeTermuxPkgName));
+  return installed.has(normalizeTermuxPkgName(nativeName));
+}
+
+export function filterTermuxPipPackages(installedPipPackages: string[], installedPkgPackages?: string[]): string[] {
+  return installedPipPackages.filter((name) =>
+    installedPkgPackages === undefined
+      ? !getTermuxNativePackageName(name)
+      : !isTermuxNativePackageInstalled(name, installedPkgPackages)
+  );
+}
 
 const PYTHON_ARCHIVE_PATTERN = /\.(?:whl|tar\.gz|tgz|tar\.bz2|tbz2|tar\.xz|txz|tar|zip|egg)(?:$|[?#])/i;
 const REQUIREMENTS_INPUT_PATTERN = /(?:^|\s)(?:-r|--requirement)(?:\s+|=)/i;
@@ -1981,7 +2199,7 @@ export interface TermuxOutdatedPipItem {
   latestVersion: string;
 }
 
-export function parseOutdatedPipJson(rawOutput: string): TermuxOutdatedPipItem[] {
+export function parseOutdatedPipJson(rawOutput: string, installedPkgPackages?: string[]): TermuxOutdatedPipItem[] {
   const cleaned = stripAnsi(rawOutput).trim();
   const startIdx = cleaned.indexOf('[');
   const endIdx = cleaned.lastIndexOf(']');
@@ -1994,7 +2212,10 @@ export function parseOutdatedPipJson(rawOutput: string): TermuxOutdatedPipItem[]
     }>;
     if (!Array.isArray(parsed)) return [];
     return parsed
-      .filter((item) => item.name && item.version && item.latest_version && item.version !== item.latest_version)
+      .filter((item) => item.name && item.version && item.latest_version && item.version !== item.latest_version &&
+        (installedPkgPackages === undefined
+          ? !getTermuxNativePackageName(String(item.name))
+          : !isTermuxNativePackageInstalled(String(item.name), installedPkgPackages)))
       .map((item) => ({
         name: String(item.name),
         currentVersion: String(item.version),
@@ -2005,31 +2226,46 @@ export function parseOutdatedPipJson(rawOutput: string): TermuxOutdatedPipItem[]
   }
 }
 
-export function buildTermuxUninstallCommand(mode: 'pip' | 'pkg', target: string): string {
+export function buildTermuxUninstallCommand(mode: 'pip' | 'pkg', target: string, installedPkgPackages?: string[]): string {
   const cleaned = target
     .split(/\s+/)
     .map((p) => p.replace(/[^a-zA-Z0-9_.+-]/g, '').trim())
-    .filter((p) => {
-      if (!p) return false;
-      const lower = p.toLowerCase();
-      return mode === 'pkg' ? !CORE_TERMUX_PKG_PACKAGES.has(lower) : !CORE_TERMUX_PIP_PACKAGES.has(lower);
-    });
+    .filter(Boolean);
   if (cleaned.length === 0) return '';
+
+  // APT-provided Python distributions can appear in pip inventory. Remove them via dpkg
+  // only when the native package is confirmed installed.
+  if (mode === 'pip' && cleaned.length === 1 && installedPkgPackages !== undefined) {
+    const nativeName = getTermuxNativePackageName(cleaned[0]);
+    if (nativeName && isTermuxNativePackageInstalled(cleaned[0], installedPkgPackages)) {
+      return 'pkg uninstall -y ' + nativeName;
+    }
+  }
+
+  const safeTargets = cleaned.filter((p) => {
+    const lower = p.toLowerCase();
+    return mode === 'pkg' ? !CORE_TERMUX_PKG_PACKAGES.has(lower) : !CORE_TERMUX_PIP_PACKAGES.has(lower);
+  });
+  if (safeTargets.length === 0) return '';
   return mode === 'pkg'
-    ? `pkg uninstall -y ${cleaned.join(' ')}`
-    : `pip uninstall -y ${cleaned.join(' ')}`;
+    ? `pkg uninstall -y ${safeTargets.join(' ')}`
+    : `pip uninstall -y ${safeTargets.join(' ')}`;
 }
 
 export function buildTermuxPipUpgradeCommand(
   installedPipPackages: string[],
-  trustedHost = false
+  trustedHost = false,
+  installedPkgPackages?: string[]
 ): string {
   const hostFlags = trustedHost
     ? ' --trusted-host pypi.org --trusted-host files.pythonhosted.org'
     : '';
   const safeTargets = installedPipPackages
     .map((p) => p.replace(/[^a-zA-Z0-9_.-]/g, '').trim())
-    .filter((p) => p && !CORE_TERMUX_PIP_PACKAGES.has(p.toLowerCase()));
+    .filter((p) => p && !CORE_TERMUX_PIP_PACKAGES.has(p.toLowerCase()) &&
+      (installedPkgPackages === undefined
+        ? !getTermuxNativePackageName(p)
+        : !isTermuxNativePackageInstalled(p, installedPkgPackages)));
   if (safeTargets.length === 0) {
     return `pip install --upgrade${hostFlags} pip`;
   }

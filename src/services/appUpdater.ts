@@ -87,6 +87,17 @@ interface RawGitHubRelease {
   }[];
 }
 
+export function extractLatestReleaseNotes(rawBody: string): string {
+  const lines = rawBody.split(/\r?\n/);
+  const start = lines.findIndex((line) => /^## \[\d+\.\d+\.\d+\](?:\s|$)/.test(line));
+  if (start < 0) return rawBody.trim();
+
+  const nextSection = lines.findIndex(
+    (line, index) => index > start && /^## \[/.test(line)
+  );
+  return lines.slice(start, nextSection < 0 ? lines.length : nextSection).join('\n').trim();
+}
+
 function mapGitHubReleases(rawList: RawGitHubRelease[]): AppReleaseInfo[] {
   return rawList
     .filter((r) => !r.draft && Boolean(r.tag_name))
@@ -106,7 +117,7 @@ function mapGitHubReleases(rawList: RawGitHubRelease[]): AppReleaseInfo[] {
         tagName,
         version,
         name: String(r.name || tagName),
-        body: String(r.body || '').trim(),
+        body: extractLatestReleaseNotes(String(r.body || '')),
         publishedAt: String(r.published_at || r.created_at || ''),
         htmlUrl: String(r.html_url || ''),
         prerelease: Boolean(r.prerelease),

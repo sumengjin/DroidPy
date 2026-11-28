@@ -38,8 +38,12 @@ interface InternalStoragePanelProps {
   termuxConfig: TermuxConfig;
   files: PythonFile[];
   activeFile: PythonFile;
-  onOpenSdcardFile: (filename: string, content: string) => void;
+  onOpenSdcardFile: (filename: string, content: string, path: string) => void;
   onNotify: (msg: string) => void;
+  fullScreen?: boolean;
+  initialPath?: string;
+  basePath?: string;
+  onPathChange?: (path: string) => void;
 }
 
 function formatSize(bytes: number): string {
@@ -56,12 +60,16 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
   activeFile,
   onOpenSdcardFile,
   onNotify,
+  fullScreen = false,
+  initialPath = 'DroidPy',
+  basePath = 'DroidPy',
+  onPathChange,
 }) => {
   const { t } = useI18n();
   const [status, setStatus] = useState<SdcardStatusInfo | null>(null);
   const [appUsage, setAppUsage] = useState<AppStorageUsageInfo | null>(null);
   const [cleaningCache, setCleaningCache] = useState(false);
-  const [currentPath, setCurrentPath] = useState('');
+  const [currentPath, setCurrentPath] = useState(initialPath);
   const [entries, setEntries] = useState<SdcardEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
@@ -74,14 +82,40 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
       setLoading(true);
       setErrorMsg(null);
       try {
-        const [st, list, usage] = await Promise.all([
+        const pathParts = relPath.replace(/\\/g, '/').split('/').filter((part) => part && part !== '.');
+        if (pathParts.includes('..')) throw new Error(t('sd_path_blocked'));
+        const normalizedPath = pathParts.join('/');
+        const safePath = normalizedPath;
+        if (safePath && safePath !== basePath && !safePath.startsWith(`${basePath}/`)) {
+          throw new Error(t('sd_path_blocked'));
+        }
+        const [st, usage] = await Promise.all([
           getSdcardStatus(termuxConfig),
-          listSdcardDirectory(termuxConfig, relPath),
           getAppStorageUsage(termuxConfig),
         ]);
         setStatus(st);
         if (usage) setAppUsage(usage);
-        setCurrentPath(list.currentPath || relPath);
+        if (safePath === basePath && st.granted) {
+          // The native list endpoint returns an empty array for a missing directory,
+          // so create the main folder before the first listing rather than relying on 404.
+          await createSdcardFolder(termuxConfig, basePath);
+        }
+        let list;
+        try {
+          list = await listSdcardDirectory(termuxConfig, safePath);
+        } catch (firstError) {
+          if (safePath !== basePath || !st.granted) throw firstError;
+          // First launch: create the fixed DroidPy home folder if it does not exist yet.
+          try { await createSdcardFolder(termuxConfig, basePath); } catch { /* It may already exist. */ }
+          list = await listSdcardDirectory(termuxConfig, safePath);
+        }
+        const resolvedPath = (list.currentPath || safePath).replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+        const resolvedParts = resolvedPath.split('/').filter(Boolean);
+        if (resolvedParts.includes('..')) {
+          throw new Error(t('sd_path_blocked'));
+        }
+        setCurrentPath(resolvedPath);
+        onPathChange?.(resolvedPath);
         setEntries(Array.isArray(list.entries) ? list.entries : []);
       } catch (err) {
         setErrorMsg(err instanceof Error ? err.message : String(err));
@@ -89,17 +123,33 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
         setLoading(false);
       }
     },
-    [termuxConfig]
+    [termuxConfig, basePath, onPathChange, t]
   );
 
   useEffect(() => {
-    void loadDirectory(currentPath);
+    if (mode === 'all' || mode === 'sdcard') {
+      void loadDirectory(currentPath);
+    }
+    // The cache-only view must not initialize or browse shared storage.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
+    if (mode !== 'cache') return;
+    let cancelled = false;
+    void getAppStorageUsage(termuxConfig)
+      .then((usage) => {
+        if (!cancelled && usage) setAppUsage(usage);
+      })
+      .catch((err) => {
+        if (!cancelled) setErrorMsg(err instanceof Error ? err.message : String(err));
+      });
+    return () => { cancelled = true; };
+  }, [mode, termuxConfig]);
+
+  useEffect(() => {
     const onResume = () => {
-      if (document.visibilityState === 'visible') {
+      if ((mode === 'all' || mode === 'sdcard') && document.visibilityState === 'visible') {
         void loadDirectory(currentPath);
       }
     };
@@ -109,7 +159,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
       window.removeEventListener('focus', onResume);
       document.removeEventListener('visibilitychange', onResume);
     };
-  }, [currentPath, loadDirectory]);
+  }, [currentPath, loadDirectory, mode]);
 
   const isGranted = Boolean(status?.granted || window.DroidPyNative?.hasStoragePermission?.());
 
@@ -124,12 +174,26 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
     if (!currentPath) return;
     const parts = currentPath.split('/').filter(Boolean);
     parts.pop();
-    const parent = parts.join('/');
     setConfirmDeletePath(null);
-    void loadDirectory(parent);
+    void loadDirectory(parts.join('/'));
+  };
+
+  const isInsideBasePath = (path: string) => {
+    const parts = path.replace(/\\/g, '/').split('/').filter(Boolean);
+    const normalized = parts.join('/');
+    return !parts.includes('..') && (normalized === basePath || normalized.startsWith(`${basePath}/`));
+  };
+
+  const isWithinStoragePath = (path: string) => {
+    const parts = path.replace(/\\/g, '/').split('/').filter(Boolean);
+    return !parts.includes('..');
   };
 
   const handleOpenEntry = async (entry: SdcardEntry) => {
+    if (!isWithinStoragePath(entry.relPath)) {
+      onNotify(t('sd_path_blocked'));
+      return;
+    }
     if (entry.isDir) {
       setConfirmDeletePath(null);
       await loadDirectory(entry.relPath);
@@ -138,7 +202,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
     setBusyAction(`open:${entry.relPath}`);
     try {
       const res = await readSdcardFile(termuxConfig, entry.relPath);
-      onOpenSdcardFile(res.name || entry.name, res.content);
+      onOpenSdcardFile(res.name || entry.name, res.content, res.relPath || entry.relPath);
       onNotify(t('sd_toast_loaded', { name: res.name || entry.name }));
     } catch (err) {
       onNotify(err instanceof Error ? err.message : String(err));
@@ -149,7 +213,11 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
 
   const handleSaveActiveHere = async () => {
     if (!activeFile) return;
-    const targetRel = currentPath ? `${currentPath}/${activeFile.name}` : activeFile.name;
+    if (!isInsideBasePath(currentPath)) {
+      onNotify(t('sd_path_blocked'));
+      return;
+    }
+    const targetRel = `${currentPath}/${activeFile.name}`;
     setBusyAction('save');
     try {
       const res = await writeSdcardFile(termuxConfig, targetRel, activeFile.content);
@@ -180,8 +248,12 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
   const handleCreateFolder = async (e: React.FormEvent) => {
     e.preventDefault();
     const clean = newFolderName.replace(/[/\\]/g, '').trim();
-    if (!clean) return;
-    const targetRel = currentPath ? `${currentPath}/${clean}` : clean;
+    if (!clean || clean === '.' || clean === '..') return;
+    if (!isInsideBasePath(currentPath)) {
+      onNotify(t('sd_path_blocked'));
+      return;
+    }
+    const targetRel = `${currentPath}/${clean}`;
     setBusyAction('mkdir');
     try {
       await createSdcardFolder(termuxConfig, targetRel);
@@ -196,6 +268,10 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
   };
 
   const handleDeleteEntry = async (entry: SdcardEntry) => {
+    if (!isInsideBasePath(entry.relPath)) {
+      onNotify(t('sd_path_blocked'));
+      return;
+    }
     setBusyAction(`del:${entry.relPath}`);
     try {
       await deleteSdcardPath(termuxConfig, entry.relPath);
@@ -233,7 +309,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
   const showCache = mode === 'all' || mode === 'cache';
 
   return (
-    <div className="md-card p-3.5 sm:p-5 space-y-4 min-w-0">
+    <div className={fullScreen ? "dp-panel p-3.5 sm:p-5 space-y-4 min-w-0 h-full flex flex-col overflow-hidden" : "dp-panel p-3.5 sm:p-5 space-y-4 min-w-0"}>
       {/* Header & Permission Status */}
       {showSdcard && (
         <>
@@ -326,41 +402,31 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
       {/* Action Buttons: Save Active & Backup Project */}
       {showSdcard && (
         <>
-          <div className="flex flex-wrap items-center gap-2 min-w-0">
-            <button
-              type="button"
-              onClick={() => void handleSaveActiveHere()}
-              disabled={!!busyAction || !isGranted}
-              className="min-h-[42px] min-w-0 max-w-full overflow-hidden px-3.5 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-45 text-white text-xs font-medium inline-flex items-center gap-1.5 transition-colors"
-            >
-              {busyAction === 'save' ? <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" /> : <Save className="w-3.5 h-3.5 shrink-0" />}
-              <span className="truncate">{t('sd_save_active_btn')} ({activeFile?.name})</span>
-            </button>
+        <div className="flex flex-wrap items-center gap-2 min-w-0">
+          <button
+            type="button"
+            onClick={() => void handleSaveActiveHere()}
+            disabled={!!busyAction || !isGranted || !isInsideBasePath(currentPath)}
+            className="min-h-[42px] min-w-0 max-w-full overflow-hidden px-3.5 rounded-xl bg-[var(--ide-accent)] hover:bg-[var(--ide-accent-hover)] disabled:opacity-45 text-white text-xs font-medium inline-flex items-center gap-1.5 transition-colors"
+          >
+            {busyAction === 'save' ? <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" /> : <Save className="w-3.5 h-3.5 shrink-0" />}
+            <span className="truncate">{t('sd_save_active_btn')} ({activeFile?.name})</span>
+          </button>
 
-            <button
-              type="button"
-              onClick={() => void handleBackupAllToDroidPy()}
-              disabled={!!busyAction || !isGranted}
-              className="min-h-[42px] min-w-0 max-w-full px-3.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] disabled:opacity-45 text-xs font-medium inline-flex items-center gap-1.5 transition-colors"
-            >
-              {busyAction === 'backup' ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--ide-accent)] shrink-0" />
-              ) : (
-                <FolderSync className="w-3.5 h-3.5 text-[var(--ide-accent)] shrink-0" />
-              )}
-              <span className="truncate">{t('sd_export_proj_btn')}</span>
-            </button>
-
-            {isGranted && (
-              <button
-                type="button"
-                onClick={() => void loadDirectory('DroidPy')}
-                className="min-h-[42px] px-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] text-xs font-mono text-[var(--ide-accent-text)] transition-colors shrink-0"
-              >
-                /sdcard/DroidPy
-              </button>
+          <button
+            type="button"
+            onClick={() => void handleBackupAllToDroidPy()}
+            disabled={!!busyAction || !isGranted}
+            className="min-h-[42px] min-w-0 max-w-full px-3.5 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] hover:border-[var(--ide-accent)] disabled:opacity-45 text-xs font-medium inline-flex items-center gap-1.5 transition-colors"
+          >
+            {busyAction === 'backup' ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--ide-accent)] shrink-0" />
+            ) : (
+              <FolderSync className="w-3.5 h-3.5 text-[var(--ide-accent)] shrink-0" />
             )}
-          </div>
+            <span className="truncate">{t('sd_export_proj_btn')}</span>
+          </button>
+        </div>
 
       {/* Path Bar + Mkdir */}
       <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-[var(--ide-bg)] border border-[var(--ide-border)]">
@@ -385,18 +451,19 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
             value={newFolderName}
             onChange={(e) => setNewFolderName(e.target.value)}
             placeholder={t('sd_mkdir_placeholder')}
-            disabled={!isGranted}
+            disabled={!isGranted || !isInsideBasePath(currentPath)}
             className="flex-1 sm:flex-initial min-w-0 sm:w-40 min-h-[34px] px-2.5 rounded-lg bg-[var(--ide-surface)] border border-[var(--ide-border)] text-xs focus:outline-none focus:ring-2 focus:ring-[var(--ide-accent)]"
           />
           <button
             type="submit"
-            disabled={!newFolderName.trim() || !isGranted || !!busyAction}
+            disabled={!newFolderName.trim() || !isGranted || !isInsideBasePath(currentPath) || !!busyAction}
             className="min-h-[34px] px-2.5 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)] hover:border-[var(--ide-accent)] disabled:opacity-40 text-xs font-medium inline-flex items-center gap-1 shrink-0"
           >
             <FolderPlus className="w-3.5 h-3.5 text-[var(--ide-accent)]" />
             <span>{t('sd_mkdir_btn')}</span>
           </button>
         </form>
+
       </div>
 
       {errorMsg && (
@@ -406,7 +473,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
       )}
 
       {/* Directory Listing */}
-      <div className="rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] divide-y divide-[var(--ide-border)] max-h-72 overflow-y-auto ide-scroll">
+      <div className={fullScreen ? "rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] divide-y divide-[var(--ide-border)] overflow-y-auto ide-scroll flex-1 min-h-0" : "rounded-xl border border-[var(--ide-border)] bg-[var(--ide-bg)] divide-y divide-[var(--ide-border)] max-h-72 overflow-y-auto ide-scroll"}>
         {loading && entries.length === 0 ? (
           <div className="p-6 flex items-center justify-center gap-2 text-xs text-[var(--ide-text-muted)]">
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -450,7 +517,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
                   <button
                     type="button"
                     onClick={() => void handleDeleteEntry(entry)}
-                    disabled={!!busyAction}
+                    disabled={!!busyAction || !isInsideBasePath(entry.relPath)}
                     className="min-h-[32px] px-2.5 rounded-lg bg-red-600 text-white text-[11px] font-medium"
                   >
                     {t('sd_delete_confirm')}

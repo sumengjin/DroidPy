@@ -17,11 +17,6 @@
     --ide-accent-hover: #047857;
     --ide-accent-soft: rgba(5, 150, 105, 0.12);
     --ide-accent-text: #047857;
-    --md-surface-container-low: #F4F7FA;
-    --md-surface-container: #EDF2F7;
-    --md-surface-container-high: #E2E8F0;
-    --md-fab-bg: #059669;
-    --md-fab-fg: #FFFFFF;
   }
 
   html[data-theme="dark"] {
@@ -35,11 +30,6 @@
     --ide-accent-hover: #059669;
     --ide-accent-soft: rgba(16, 185, 129, 0.14);
     --ide-accent-text: #34D399;
-    --md-surface-container-low: #101622;
-    --md-surface-container: #161F30;
-    --md-surface-container-high: #1E293E;
-    --md-fab-bg: #34D399;
-    --md-fab-fg: #022C22;
   }
 
   html[data-theme="rose"] {
@@ -53,11 +43,6 @@
     --ide-accent-hover: #BE185D;
     --ide-accent-soft: rgba(219, 39, 119, 0.11);
     --ide-accent-text: #BE185D;
-    --md-surface-container-low: #FFF2F6;
-    --md-surface-container: #FCE8F0;
-    --md-surface-container-high: #F9DBE7;
-    --md-fab-bg: #BE185D;
-    --md-fab-fg: #FFFFFF;
   }
 
   html[data-theme="lavender"] {
@@ -71,11 +56,6 @@
     --ide-accent-hover: #6D28D9;
     --ide-accent-soft: rgba(124, 58, 237, 0.11);
     --ide-accent-text: #6D28D9;
-    --md-surface-container-low: #F3EFFD;
-    --md-surface-container: #EAE3FA;
-    --md-surface-container-high: #E0D6F8;
-    --md-fab-bg: #6D28D9;
-    --md-fab-fg: #FFFFFF;
   }
 
   html[data-theme="milktea"] {
@@ -89,11 +69,6 @@
     --ide-accent-hover: #A65529;
     --ide-accent-soft: rgba(194, 106, 58, 0.12);
     --ide-accent-text: #A65529;
-    --md-surface-container-low: #F7EFE7;
-    --md-surface-container: #F1E5D8;
-    --md-surface-container-high: #EAD9C8;
-    --md-fab-bg: #A65529;
-    --md-fab-fg: #FFFFFF;
   }
 
   html[data-theme="matcha"] {
@@ -107,11 +82,6 @@
     --ide-accent-hover: #166534;
     --ide-accent-soft: rgba(21, 128, 61, 0.11);
     --ide-accent-text: #166534;
-    --md-surface-container-low: #EFF7F1;
-    --md-surface-container: #E3F1E6;
-    --md-surface-container-high: #D5EAD9;
-    --md-fab-bg: #15803D;
-    --md-fab-fg: #FFFFFF;
   }
 
   html[data-theme="sky"] {
@@ -125,11 +95,6 @@
     --ide-accent-hover: #0369A1;
     --ide-accent-soft: rgba(2, 132, 199, 0.11);
     --ide-accent-text: #0369A1;
-    --md-surface-container-low: #ECF5FF;
-    --md-surface-container: #DFEEFF;
-    --md-surface-container-high: #D0E5FF;
-    --md-fab-bg: #0369A1;
-    --md-fab-fg: #FFFFFF;
   }
 
   html[data-theme="berry"] {
@@ -143,11 +108,6 @@
     --ide-accent-hover: #DB2777;
     --ide-accent-soft: rgba(236, 72, 153, 0.16);
     --ide-accent-text: #F9A8D4;
-    --md-surface-container-low: #1D1221;
-    --md-surface-container: #27182C;
-    --md-surface-container-high: #321F38;
-    --md-fab-bg: #F472B6;
-    --md-fab-fg: #3B0726;
   }
 
   html[data-theme="rosegold"] {
@@ -161,11 +121,6 @@
     --ide-accent-hover: #D4727F;
     --ide-accent-soft: rgba(226, 140, 151, 0.16);
     --ide-accent-text: #F4B4BC;
-    --md-surface-container-low: #1D1519;
-    --md-surface-container: #271D22;
-    --md-surface-container-high: #33262C;
-    --md-fab-bg: #F2B5BD;
-    --md-fab-fg: #38141D;
   }
 
   html[data-theme="starry"] {
@@ -179,11 +134,6 @@
     --ide-accent-hover: #8B5CF6;
     --ide-accent-soft: rgba(167, 139, 250, 0.16);
     --ide-accent-text: #C4B5FD;
-    --md-surface-container-low: #14152D;
-    --md-surface-container: #1D1F3E;
-    --md-surface-container-high: #26294F;
-    --md-fab-bg: #C4B5FD;
-    --md-fab-fg: #1E1B4B;
   }
 
   html[data-theme="peony"] {
@@ -197,11 +147,6 @@
     --ide-accent-hover: #BE123C;
     --ide-accent-soft: rgba(225, 29, 72, 0.11);
     --ide-accent-text: #BE123C;
-    --md-surface-container-low: #FFF0F3;
-    --md-surface-container: #FFE4E9;
-    --md-surface-container-high: #FFD5DE;
-    --md-fab-bg: #BE123C;
-    --md-fab-fg: #FFFFFF;
   }
 
   html[data-theme="champagne"] {
@@ -215,11 +160,6 @@
     --ide-accent-hover: #92400E;
     --ide-accent-soft: rgba(180, 83, 9, 0.11);
     --ide-accent-text: #92400E;
-    --md-surface-container-low: #F9F3EB;
-    --md-surface-container: #F3E9DC;
-    --md-surface-container-high: #EBDCC9;
-    --md-fab-bg: #92400E;
-    --md-fab-fg: #FFFFFF;
   }
 
   html[data-theme="moonrose"] {
@@ -233,11 +173,6 @@
     --ide-accent-hover: #EC4899;
     --ide-accent-soft: rgba(244, 114, 182, 0.16);
     --ide-accent-text: #F9A8D4;
-    --md-surface-container-low: #1B101C;
-    --md-surface-container: #261626;
-    --md-surface-container-high: #331E33;
-    --md-fab-bg: #F9A8D4;
-    --md-fab-fg: #3B0726;
   }
 
   html[data-theme="aurorapink"] {
@@ -251,43 +186,18 @@
     --ide-accent-hover: #E11D48;
     --ide-accent-soft: rgba(244, 63, 94, 0.17);
     --ide-accent-text: #FDA4AF;
-    --md-surface-container-low: #14162D;
-    --md-surface-container: #1E2040;
-    --md-surface-container-high: #282B54;
-    --md-fab-bg: #FB7185;
-    --md-fab-fg: #3B0718;
   }
 
-  /* Translucent glass surfaces when dynamic 3D atmosphere canvas is active (zero backdrop-blur) */
-  html.has-3d-bg[data-theme="light"],
-  html.has-3d-bg[data-theme="rose"],
-  html.has-3d-bg[data-theme="peony"],
-  html.has-3d-bg[data-theme="champagne"],
-  html.has-3d-bg[data-theme="lavender"],
-  html.has-3d-bg[data-theme="milktea"],
-  html.has-3d-bg[data-theme="matcha"],
-  html.has-3d-bg[data-theme="sky"] {
-    --ide-sheet-bg: rgba(255, 255, 255, 0.95);
-    --ide-bg: rgba(255, 250, 252, 0.66);
-    --ide-surface: rgba(255, 255, 255, 0.76);
-    --ide-surface-alt: rgba(255, 244, 248, 0.74);
-    --md-surface-container-low: rgba(255, 248, 251, 0.84);
-    --md-surface-container: rgba(252, 238, 245, 0.82);
+  /* Theme canvas colors stay opaque; workspace glass is controlled separately by the 3D transparency slider. */
+  html[data-theme] {
+    /* One thin, full-screen paper layer over the live 3D glass environment. */
+    --ide-sheet-bg: color-mix(in srgb, var(--ide-surface) 82%, transparent);
+    --ide-divider-glass: color-mix(in srgb, var(--ide-text) 30%, transparent);
+    --ide-divider-glow: color-mix(in srgb, var(--ide-surface) 72%, transparent);
   }
 
-  html.has-3d-bg[data-theme="dark"],
-  html.has-3d-bg[data-theme="berry"],
-  html.has-3d-bg[data-theme="rosegold"],
-  html.has-3d-bg[data-theme="moonrose"],
-  html.has-3d-bg[data-theme="aurorapink"],
-  html.has-3d-bg[data-theme="starry"] {
-    --ide-sheet-bg: rgba(22, 16, 28, 0.96);
-    --ide-bg: rgba(16, 12, 22, 0.64);
-    --ide-surface: rgba(24, 18, 32, 0.74);
-    --ide-surface-alt: rgba(20, 15, 28, 0.72);
-    --md-surface-container-low: rgba(22, 17, 30, 0.84);
-    --md-surface-container: rgba(31, 23, 42, 0.82);
-  }
+  /* Keep --ide-bg as the theme's original opaque canvas color.
+     Adjustable 3D glass belongs only to --ide-workspace-surface. */
 
   html,
   body,
@@ -317,36 +227,28 @@
   }
 }
 
-/* Material Design 3 Tonal Surfaces & Mobile Interaction Primitives */
-.md-card {
-  background-color: var(--md-surface-container-low);
+/* DroidPy theme-aware workspace and interaction primitives */
+.dp-panel,
+.dp-panel-tonal {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.dp-callout {
+  background: transparent;
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-radius: 0;
+}
+
+.dp-sheet {
+  background-color: var(--ide-surface);
   border: 1px solid var(--ide-border);
-  border-radius: 1.25rem;
-}
-
-.md-card-tonal {
-  background-color: var(--md-surface-container);
-  border: 1px solid var(--ide-border);
-  border-radius: 1.25rem;
-}
-
-.md-sheet {
-  background-color: var(--ide-sheet-bg, var(--ide-surface));
-  border: 1px solid var(--ide-border);
-  border-radius: 1.75rem;
-  box-shadow: 0 20px 44px -12px rgba(15, 23, 42, 0.28);
-}
-
-.md-nav-pill {
-  background-color: var(--ide-accent-soft);
-  color: var(--ide-accent-text);
-}
-
-.md-fab {
-  background-color: var(--md-fab-bg);
-  color: var(--md-fab-fg);
-  border-radius: 1.125rem;
-  box-shadow: 0 6px 18px -4px rgba(15, 23, 42, 0.28), 0 2px 6px -1px rgba(15, 23, 42, 0.16);
+  border-radius: 1rem;
+  box-shadow: none;
 }
 
 .selectable-text,
@@ -362,11 +264,11 @@
 }
 
 .pb-safe {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--droidpy-navigationbar-inset, 0px));
 }
 
 .pt-safe {
-  padding-top: env(safe-area-inset-top, 0px);
+  padding-top: max(env(safe-area-inset-top, 0px), var(--droidpy-statusbar-inset, 0px));
 }
 
 .ide-scroll::-webkit-scrollbar {
@@ -403,4 +305,519 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+
+/* Android edge-to-edge and gesture-navigation safe areas */
+@layer base {
+  html {
+    width: 100%;
+    min-width: 0;
+    min-height: 100%;
+    height: 100%;
+    overflow: hidden;
+    touch-action: pan-x pan-y;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body,
+  #root {
+    width: 100%;
+    min-width: 0;
+    min-height: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  button,
+  [role="button"],
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
+  }
+
+  .droidpy-edge-safe {
+    padding-left: max(env(safe-area-inset-left, 0px), 0px);
+    padding-right: max(env(safe-area-inset-right, 0px), 0px);
+  }
+}
+
+
+/* Compact translucent phone workspace dock. Keep the Android gesture area
+   transparent and reserve it through the existing pb-safe utility. */
+.dp-phone-navigation {
+  box-sizing: border-box;
+  align-items: stretch;
+  padding-top: 5px;
+  border-top: 1px solid color-mix(in srgb, var(--ide-border) 52%, transparent);
+  background: color-mix(in srgb, var(--ide-surface) 76%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.16);
+  backdrop-filter: blur(18px) saturate(1.16);
+  box-shadow: 0 -5px 22px color-mix(in srgb, var(--ide-text) 5%, transparent);
+}
+
+.dp-phone-nav-item {
+  position: relative;
+  border: 1px solid transparent;
+  transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dp-phone-nav-item[aria-current="page"] {
+  color: var(--ide-accent-text);
+  background: color-mix(in srgb, var(--ide-accent) 10%, transparent);
+  border-color: color-mix(in srgb, var(--ide-accent) 13%, transparent);
+}
+
+.dp-phone-nav-item[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  width: 18px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--ide-accent);
+  transform: translateX(-50%);
+}
+
+.dp-phone-nav-item:active {
+  background: color-mix(in srgb, var(--ide-accent) 15%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dp-phone-nav-item {
+    transition: none;
+  }
+}
+
+/* Minimal workspace interaction: selected state is communicated by text color only. */
+.dp-nav-item {
+  border: 0;
+  color: var(--ide-text-muted);
+  background: transparent;
+  transition: color 120ms ease;
+}
+
+.dp-nav-item[aria-current="page"],
+.dp-nav-item[aria-selected="true"],
+.dp-nav-item[aria-pressed="true"] {
+  color: var(--ide-accent-text);
+}
+
+.dp-nav-item:not([aria-current="page"]):not([aria-selected="true"]):not([aria-pressed="true"]):not(:disabled):hover {
+  color: var(--ide-text);
+}
+
+.dp-nav-item:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.dp-nav-item:focus-visible {
+  outline: 2px solid var(--ide-accent);
+  outline-offset: 2px;
+}
+
+.dp-workspace-row {
+  border-bottom: 0;
+  background: transparent;
+  color: var(--ide-text);
+  transition: color 160ms ease;
+}
+
+.dp-workspace-row:hover {
+  color: var(--ide-accent-text);
+}
+
+.dp-workspace-row .dp-row-icon {
+  color: var(--ide-text-muted);
+}
+
+.dp-workspace-row:hover .dp-row-icon {
+  color: var(--ide-accent-text);
+}
+
+
+.dp-icon-button {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ide-text-muted);
+  transition: color 160ms ease;
+}
+
+.dp-icon-button:hover:not(:disabled) {
+  color: var(--ide-accent-text);
+}
+
+.dp-icon-button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.dp-icon-button:focus-visible {
+  outline: 2px solid var(--ide-accent);
+  outline-offset: 2px;
+}
+
+
+/* Theme-aware switches: the same selected state works across every DroidPy theme. */
+.dp-switch {
+  justify-content: flex-start;
+  border: 1px solid var(--ide-border);
+  background: var(--ide-surface-alt);
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.dp-switch[aria-checked="true"] {
+  justify-content: flex-end;
+  border-color: var(--ide-accent);
+  background: var(--ide-accent);
+}
+
+.dp-switch > span {
+  display: block;
+  flex: 0 0 auto;
+  border: 1px solid var(--ide-border);
+  background: var(--ide-surface);
+  border-radius: 9999px;
+  transition: transform 160ms ease, background-color 160ms ease;
+}
+
+.dp-switch:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.dp-switch:focus-visible {
+  outline: 2px solid var(--ide-accent);
+  outline-offset: 2px;
+}
+
+
+/* Native Android WebView buttons can retain platform chrome despite utility classes.
+   Force the workspace execution controls to render without any browser/theme border. */
+button.dp-execution-control,
+button.dp-execution-control:hover,
+button.dp-execution-control:active,
+button.dp-execution-control:focus,
+button.dp-execution-control:focus-visible,
+button.dp-execution-control:disabled {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  border: 0 !important;
+  border-width: 0 !important;
+  border-style: none !important;
+  border-color: transparent !important;
+  border-image: none !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  background-image: none !important;
+  filter: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+
+button.dp-execution-control::before,
+button.dp-execution-control::after {
+  content: none !important;
+  display: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+/* Phone and non-split terminal retain their shared frame. */
+.terminal-console-surface {
+  background: var(--ide-workspace-surface, color-mix(in srgb, var(--ide-surface) 34%, transparent)) !important;
+  border: 1px solid color-mix(in srgb, var(--ide-border) 72%, transparent) !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+}
+
+/* Tablet split workspace only: remove the terminal frame without changing phone UI. */
+.tablet-split-layout .terminal-console-surface {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+/* Tablet landscape divider aperture is assembled from four alpha-matched
+   paper pieces in App.tsx. Avoid CSS mask-composite here: Android WebView can
+   composite the multi-layer mask as an empty surface, hiding the transparency
+   slider's entire paper layer. */
+.tablet-landscape-split-paper {
+  background: transparent !important;
+}
+/* The 28 px interaction surface stays invisible and full-height for easy dragging.
+   The visible 1.5 mm clear-glass guide stays centered at 84% length. */
+.tablet-gel-divider,
+.tablet-gel-divider-active,
+.tablet-gel-divider-horizontal,
+.tablet-gel-divider-active.tablet-gel-divider-horizontal {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.tablet-divider-clear-core {
+  /* Keep the aperture optically empty. Even sub-pixel backdrop blur can create
+     dark antialias fringes at the rounded ends while Android WebView moves it. */
+  border-radius: 9999px !important;
+  background: transparent !important;
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  filter: none !important;
+}
+
+.tablet-gel-handle {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, white 17%, transparent),
+    color-mix(in srgb, white 13%, transparent) 52%,
+    color-mix(in srgb, white 10%, transparent)
+  );
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  border: 0;
+  box-shadow: none;
+  opacity: 0.82;
+  transition: opacity 150ms ease, background 150ms ease, backdrop-filter 150ms ease;
+}
+
+.tablet-gel-handle-vertical {
+  width: 1mm;
+  height: 10mm;
+}
+
+.tablet-gel-handle-horizontal {
+  width: 10mm;
+  height: 1mm;
+}
+
+.tablet-gel-handle-active {
+  opacity: 1;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, white 25%, transparent),
+    color-mix(in srgb, white 20%, transparent) 52%,
+    color-mix(in srgb, white 16%, transparent)
+  );
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
+}
+
+.terminal-console-surface .terminal-input-row {
+  width: 100% !important;
+  max-width: none !important;
+  flex: 0 0 auto;
+  min-width: 0;
+  box-sizing: border-box;
+  margin-inline: 0;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.terminal-console-surface input,
+.terminal-console-surface .terminal-submit-button {
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+}
+
+.android-symbol-bar {
+  position: relative;
+  z-index: 50;
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  margin-inline: 0;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  border: 0 !important;
+  border-top: 0 !important;
+  border-bottom: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+.android-symbol-bar button,
+.android-symbol-bar button:hover,
+.android-symbol-bar button:active,
+.android-symbol-bar button:focus,
+.android-symbol-bar button:focus-visible {
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+}
+
+/* Search / replace panel: readable theme-aware glass dialog. */
+.cm-editor .cm-panels,
+.cm-editor .cm-panels-top,
+.cm-editor .cm-panels-bottom,
+:is(.cm-panels-top, .cm-panels-bottom) .cm-search {
+  color: var(--ide-text) !important;
+}
+
+.cm-editor .cm-panels {
+  background: color-mix(in srgb, var(--ide-surface) 86%, transparent) !important;
+  border-color: color-mix(in srgb, var(--ide-border) 78%, transparent) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(1.18);
+  backdrop-filter: blur(18px) saturate(1.18);
+}
+
+/* Keep CodeMirror's search panel in its native DOM parent and use the
+   complete editor pane as the positioning reference. */
+.dp-code-editor-container {
+  position: relative !important;
+  min-width: 0;
+  min-height: 0;
+}
+
+.dp-code-editor-container .cm-editor {
+  position: relative !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+}
+
+/* CodeMirror may mount search in either the top or bottom panel host.
+   Cover the entire editor pane in both cases so the dialog always centers. */
+.dp-code-editor-container .cm-editor > .cm-panels-top,
+.dp-code-editor-container .cm-editor > .cm-panels-bottom {
+  position: absolute !important;
+  inset: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  box-sizing: border-box !important;
+  padding: 16px !important;
+  background: transparent !important;
+  border: 0 !important;
+  pointer-events: none !important;
+  z-index: 100000 !important;
+}
+
+:is(.cm-panels-top, .cm-panels-bottom) .cm-search {
+  position: relative !important;
+  inset: auto !important;
+  z-index: 1 !important;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  width: min(420px, 100%);
+  max-width: 100%;
+  max-height: 70vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 12px;
+  color: var(--ide-text) !important;
+  background: color-mix(in srgb, var(--ide-surface) 94%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--ide-border) 82%, transparent) !important;
+  border-radius: 20px !important;
+  box-shadow:
+    0 0 0 100vmax rgba(8, 13, 24, 0.54),
+    0 24px 72px rgba(0, 0, 0, 0.28) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.22);
+  backdrop-filter: blur(24px) saturate(1.22);
+  transform: none;
+  pointer-events: auto;
+  animation: dp-search-dialog-in 160ms ease-out both;
+}
+
+@keyframes dp-search-dialog-in {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+:is(.cm-panels-top, .cm-panels-bottom) .cm-search input:not([type="checkbox"]),
+:is(.cm-panels-top, .cm-panels-bottom) .cm-search .cm-textfield {
+  min-width: 0;
+  min-height: 36px;
+  padding: 6px 9px !important;
+  color: var(--ide-text) !important;
+  background: color-mix(in srgb, var(--ide-surface) 92%, transparent) !important;
+  border: 1px solid var(--ide-border) !important;
+  border-radius: 10px !important;
+  outline-color: var(--ide-accent) !important;
+}
+
+:is(.cm-panels-top, .cm-panels-bottom) .cm-search input::placeholder {
+  color: var(--ide-text-muted);
+  opacity: 0.9;
+}
+
+/* Keep each option's checkbox and Traditional Chinese label on one baseline. */
+:is(.cm-panels-top, .cm-panels-bottom) .cm-search label {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: flex-start;
+  gap: 7px;
+  min-height: 28px;
+  margin: 0;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+:is(.cm-panels-top, .cm-panels-bottom) .cm-search input[type="checkbox"] {
+  flex: 0 0 16px;
+  width: 16px !important;
+  min-width: 16px !important;
+  height: 16px !important;
+  min-height: 16px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  accent-color: var(--ide-accent);
+}
+
+:is(.cm-panels-top, .cm-panels-bottom) .cm-search button,
+:is(.cm-panels-top, .cm-panels-bottom) .cm-search .cm-button {
+  min-height: 36px;
+  padding: 6px 10px !important;
+  color: var(--ide-text) !important;
+  background: color-mix(in srgb, var(--ide-surface-alt) 88%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--ide-border) 86%, transparent) !important;
+  border-radius: 10px !important;
+  font: inherit;
+  line-height: 1.2;
+}
+
+:is(.cm-panels-top, .cm-panels-bottom) .cm-search button:focus-visible,
+:is(.cm-panels-top, .cm-panels-bottom) .cm-search input:focus-visible {
+  outline: 2px solid var(--ide-accent) !important;
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  :is(.cm-panels-top, .cm-panels-bottom) .cm-search {
+    gap: 6px;
+    width: min(380px, calc(100vw - 48px));
+    max-width: calc(100vw - 48px);
+    max-height: 70vh;
+    padding: 10px;
+    border-radius: 16px !important;
+  }
+
+  :is(.cm-panels-top, .cm-panels-bottom) .cm-search input {
+    flex: 1 1 42%;
+  }
+
 }

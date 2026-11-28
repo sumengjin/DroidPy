@@ -6,6 +6,7 @@ export interface PythonFile {
   name: string;
   content: string;
   updatedAt: number;
+  externalPath?: string;
 }
 
 export type TerminalEntryType =
@@ -49,10 +50,11 @@ export interface EditorSettings {
   pipTrustedHostEmergency?: boolean;
   enable3dBg?: boolean;
   atmosphere3dMode?: Atmosphere3dMode;
+  workspaceTransparency?: number;
 }
 
-export type MobileTab = 'editor' | 'console' | 'browser' | 'files';
-export type NegativeScreenSection = 'termux' | 'packages' | 'android' | 'settings';
+export type MobileTab = 'editor' | 'console' | 'browser' | 'files' | 'packages';
+export type SettingsWorkspaceSection = 'termux' | 'packages' | 'android' | 'settings' | 'files';
 export type DeviceClass = 'phone' | 'tablet';
 export type TabletPaneTab = 'terminal' | 'browser' | 'files';
 
@@ -185,6 +187,7 @@ export interface AppStorageCleanupResult {
 }
 
 export interface DroidPyNativeBridge {
+  setSystemBarAppearance?: (isDark: boolean) => void;
   isNativeApp?: () => boolean;
   getAppVersionName?: () => string;
   getBridgeToken?: () => string;

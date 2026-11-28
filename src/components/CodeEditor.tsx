@@ -27,7 +27,7 @@ import {
   HighlightStyle,
 } from '@codemirror/language';
 import { closeBrackets, closeBracketsKeymap, autocompletion, completionKeymap } from '@codemirror/autocomplete';
-import { searchKeymap, highlightSelectionMatches, openSearchPanel } from '@codemirror/search';
+import { searchKeymap, highlightSelectionMatches, openSearchPanel, closeSearchPanel } from '@codemirror/search';
 import { python } from '@codemirror/lang-python';
 import { json } from '@codemirror/lang-json';
 import { linter, lintGutter, Diagnostic, forceLinting } from '@codemirror/lint';
@@ -415,21 +415,15 @@ const EDITOR_SURFACE_TOKENS: Record<
   },
 };
 
-function hexToRgba(hex: string, alpha: number): string {
-  const clean = hex.replace('#', '').trim();
-  if (clean.length !== 6) return hex;
-  const r = parseInt(clean.slice(0, 2), 16);
-  const g = parseInt(clean.slice(2, 4), 16);
-  const b = parseInt(clean.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
 function createEditorTheme(themeId: ThemeId, fontSize: number, transparentBg = false) {
   const meta = getThemeMeta(themeId);
   const t = EDITOR_SURFACE_TOKENS[themeId] ?? EDITOR_SURFACE_TOKENS.rose;
-  const editorBg = transparentBg ? hexToRgba(t.bg, meta.isDark ? 0.72 : 0.76) : t.bg;
-  const gutterBg = transparentBg ? hexToRgba(t.gutterBg, meta.isDark ? 0.78 : 0.82) : t.gutterBg;
-  const panelBg = transparentBg ? hexToRgba(t.panelBg, 0.9) : t.panelBg;
+  // The workspace paper already provides the shared translucent surface.
+  // Keep the editor canvas transparent like the terminal instead of stacking
+  // a second tinted layer above the paper.
+  const editorBg = transparentBg ? 'transparent' : t.bg;
+  const gutterBg = transparentBg ? 'transparent' : t.gutterBg;
+  const panelBg = transparentBg ? 'var(--ide-workspace-surface, transparent)' : t.panelBg;
   return EditorView.theme(
     {
       '&': {
@@ -452,12 +446,23 @@ function createEditorTheme(themeId: ThemeId, fontSize: number, transparentBg = f
       '.cm-gutters': {
         backgroundColor: gutterBg,
         color: t.gutterFg,
-        borderRight: `1px solid ${t.gutterBorder}`,
+        borderRight: transparentBg ? 'none' : `1px solid ${t.gutterBorder}`,
+        paddingLeft: '1px',
+        paddingRight: '1px',
         fontVariantNumeric: 'tabular-nums',
         userSelect: 'none',
       },
+      '.cm-gutterElement': {
+        padding: '0 2px',
+        fontSize: '0.82em',
+      },
+      '.cm-lineNumbers .cm-gutterElement': {
+        minWidth: '0',
+        paddingLeft: '2px',
+        paddingRight: '2px',
+      },
       '.cm-activeLineGutter': {
-        backgroundColor: t.activeGutterBg,
+        backgroundColor: transparentBg ? 'transparent' : t.activeGutterBg,
         color: t.accent,
         fontWeight: '600',
       },
@@ -501,6 +506,77 @@ function createEditorTheme(themeId: ThemeId, fontSize: number, transparentBg = f
     },
     { dark: meta.isDark }
   );
+}
+
+function localizeSearchPanel(root: HTMLElement): void {
+  const panel = root.querySelector<HTMLElement>('.cm-search');
+  if (!panel) return;
+
+  const translations: Record<string, string> = {
+    all: '全部',
+    'all:': '全部：',
+    find: '尋找',
+    'find:': '尋找：',
+    replace: '取代',
+    'replace:': '取代：',
+    next: '下一個',
+    previous: '上一個',
+    'replace all': '全部取代',
+    replaceall: '全部取代',
+    select: '選取',
+    'select all': '全部選取',
+    close: '關閉',
+    search: '搜尋',
+    'search:': '搜尋：',
+    'match case': '符合大小寫',
+    'match case:': '符合大小寫：',
+    regexp: '正規表達式',
+    'regexp:': '正規表達式：',
+    'by word': '整字匹配',
+    'by word:': '整字匹配：',
+  };
+  const translate = (value: string) =>
+    translations[value.trim().toLowerCase().replace(/\s+/g, ' ')] ?? value;
+
+  panel.querySelectorAll<HTMLElement>('[aria-label], [title], input').forEach((element) => {
+    if (element instanceof HTMLInputElement && element.placeholder) {
+      element.placeholder = translate(element.placeholder);
+    }
+    const ariaLabel = element.getAttribute('aria-label');
+    if (ariaLabel) element.setAttribute('aria-label', translate(ariaLabel));
+    const title = element.getAttribute('title');
+    if (title) element.setAttribute('title', translate(title));
+  });
+
+  // Translate visible text nodes rather than assigning element.textContent:
+  // CodeMirror nests checkbox inputs inside labels, and replacing textContent
+  // would accidentally remove those working controls.
+  const walker = document.createTreeWalker(panel, NodeFilter.SHOW_TEXT);
+  let textNode: Node | null;
+  while ((textNode = walker.nextNode())) {
+    const original = textNode.nodeValue ?? '';
+    const trimmed = original.trim();
+    if (!trimmed) continue;
+    const localized = translate(trimmed);
+    if (localized !== trimmed) {
+      const leading = original.match(/^\s*/)?.[0] ?? '';
+      const trailing = original.match(/\s*$/)?.[0] ?? '';
+      textNode.nodeValue = leading + localized + trailing;
+    }
+  }
+
+  panel.querySelectorAll<HTMLElement>('button, label, [aria-label], [title]').forEach((element) => {
+    const label = element.getAttribute('aria-label');
+    const title = element.getAttribute('title');
+    if (label) element.setAttribute('aria-label', translate(label));
+    if (title) element.setAttribute('title', translate(title));
+    const text = element.textContent?.trim() ?? '';
+    // The dialog is closed from the editor toolbar (tap Search again),
+    // Escape, Android Back, or tapping outside. Remove CodeMirror's tiny X.
+    if (text === '×' || /^(close|關閉)$/i.test(label || title || '')) {
+      element.remove();
+    }
+  });
 }
 
 function getLanguageMode(filename?: string): 'python' | 'json' | 'plain' {
@@ -572,6 +648,7 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
     const onCursorRef = useRef(onCursorChange);
     const filenameRef = useRef(filename);
     const isExternalSyncRef = useRef(false);
+    const closeSearchRef = useRef<(() => boolean) | null>(null);
 
     const themeCompartment = useRef(new Compartment()).current;
     const highlightCompartment = useRef(new Compartment()).current;
@@ -650,7 +727,75 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
 
       viewRef.current = view;
 
+      // Keep CodeMirror's search form in its native panel container. Reparenting
+      // the live panel breaks CodeMirror's panel lifecycle on some Android WebViews
+      // and can make a rapid close/reopen tap race.
+      const editorContainer = containerRef.current;
+      const getSearchPanel = () => view.dom.querySelector<HTMLElement>('.cm-search');
+
+      let searchHistoryPushed = false;
+      const closeSearchDialog = () => {
+        if (!getSearchPanel()) return;
+        closeSearchPanel(view);
+      };
+      const closeSearchFromNativeBack = () => {
+        if (!getSearchPanel()) return false;
+        closeSearchDialog();
+        return true;
+      };
+      closeSearchRef.current = closeSearchFromNativeBack;
+      window.__droidpyCloseSearch = closeSearchFromNativeBack;
+
+      const handleSearchBack = () => {
+        searchHistoryPushed = false;
+        closeSearchDialog();
+      };
+      const handleSearchKeydown = (event: KeyboardEvent) => {
+        if (!getSearchPanel()) return;
+        if (event.key === 'Escape' || event.key === 'BrowserBack' || event.key === 'GoBack' || event.keyCode === 4) {
+          event.preventDefault();
+          event.stopPropagation();
+          closeSearchDialog();
+        }
+      };
+      const handleSearchOutsideClick = (event: PointerEvent) => {
+        const target = event.target;
+        if (target instanceof Element && target.closest('[data-dp-search-trigger]')) return;
+        const panel = getSearchPanel();
+        if (panel && target instanceof Node && !panel.contains(target)) closeSearchDialog();
+      };
+      const searchPanelObserver = new MutationObserver(() => {
+        const panel = getSearchPanel();
+        if (panel) {
+          localizeSearchPanel(editorContainer);
+          if (!searchHistoryPushed) {
+            window.history.pushState({ ...(window.history.state || {}), dpSearchDialog: true }, '');
+            searchHistoryPushed = true;
+          }
+        } else if (searchHistoryPushed) {
+          // Remove the marker in place; a delayed popstate must not close a
+          // newly opened dialog after a rapid second tap.
+          searchHistoryPushed = false;
+          const currentState = window.history.state || {};
+          if (currentState.dpSearchDialog) {
+            const { dpSearchDialog: _dpSearchDialog, ...restState } = currentState;
+            window.history.replaceState(restState, '');
+          }
+        }
+      });
+      searchPanelObserver.observe(view.dom, { childList: true, subtree: true });
+      window.addEventListener('popstate', handleSearchBack);
+      document.addEventListener('keydown', handleSearchKeydown, true);
+      document.addEventListener('pointerdown', handleSearchOutsideClick, true);
+      localizeSearchPanel(editorContainer);
+
       return () => {
+        searchPanelObserver.disconnect();
+        if (window.__droidpyCloseSearch === closeSearchFromNativeBack) delete window.__droidpyCloseSearch;
+        if (closeSearchRef.current === closeSearchFromNativeBack) closeSearchRef.current = null;
+        window.removeEventListener('popstate', handleSearchBack);
+        document.removeEventListener('keydown', handleSearchKeydown, true);
+        document.removeEventListener('pointerdown', handleSearchOutsideClick, true);
         view.destroy();
         viewRef.current = null;
       };
@@ -756,8 +901,15 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
         viewRef.current?.focus();
       },
       openSearch: () => {
-        if (viewRef.current) {
-          openSearchPanel(viewRef.current);
+        const view = viewRef.current;
+        if (!view) return;
+        // Query CodeMirror's native panel location so this remains a true toggle
+        // while Android's input method changes the visible viewport.
+        const isOpen = Boolean(view.dom.querySelector('.cm-search'));
+        if (isOpen) {
+          closeSearchRef.current?.();
+        } else {
+          openSearchPanel(view);
         }
       },
       formatCode: () => {
@@ -797,7 +949,7 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
       },
     }));
 
-    return <div ref={containerRef} className="h-full w-full overflow-hidden" />;
+    return <div ref={containerRef} className="dp-code-editor-container h-full w-full overflow-hidden" />;
   }
 );
 
