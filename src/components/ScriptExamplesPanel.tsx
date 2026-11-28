@@ -96,7 +96,7 @@ export const ScriptExamplesPanel: React.FC<ScriptExamplesPanelProps> = ({
               type="button"
               onClick={() => {
                 const existing = template.existingFileId
-                  ? files.find((file) => file.id === template.existingFileId)
+                  ? files.find((file) => file.id === template.existingFileId) ?? files.find((file) => file.name.toLowerCase() === template.filename.toLowerCase())
                   : undefined;
                 if (existing) {
                   onSelectFile(existing.id);
