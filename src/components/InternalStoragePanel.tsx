@@ -127,13 +127,16 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
   );
 
   useEffect(() => {
-    void loadDirectory(currentPath);
+    if (mode === 'all' || mode === 'sdcard') {
+      void loadDirectory(currentPath);
+    }
+    // The cache-only view must not initialize or browse shared storage.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     const onResume = () => {
-      if (document.visibilityState === 'visible') {
+      if ((mode === 'all' || mode === 'sdcard') && document.visibilityState === 'visible') {
         void loadDirectory(currentPath);
       }
     };
@@ -143,7 +146,7 @@ export const InternalStoragePanel: React.FC<InternalStoragePanelProps> = ({
       window.removeEventListener('focus', onResume);
       document.removeEventListener('visibilitychange', onResume);
     };
-  }, [currentPath, loadDirectory]);
+  }, [currentPath, loadDirectory, mode]);
 
   const isGranted = Boolean(status?.granted || window.DroidPyNative?.hasStoragePermission?.());
 
