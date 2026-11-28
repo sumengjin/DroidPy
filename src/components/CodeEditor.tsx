@@ -740,7 +740,17 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(
       // behavior; localize its generated controls as soon as the panel is mounted.
       let searchHistoryPushed = false;
       const closeSearchDialog = () => {
-        if (getSearchPanel()) closeSearchPanel(view);
+        const panel = getSearchPanel();
+        if (!panel) return;
+
+        // CodeMirror's panel lifecycle expects its panel DOM to remain under
+        // view.dom. The centering overlay temporarily reparents it, so restore
+        // it before asking CodeMirror to close; otherwise its internal panel
+        // manager can fail to remove the detached node on Android WebView.
+        if (panel.parentElement !== view.dom) {
+          view.dom.appendChild(panel);
+        }
+        closeSearchPanel(view);
       };
       const handleSearchBack = () => {
         searchHistoryPushed = false;
