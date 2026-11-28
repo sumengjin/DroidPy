@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
   Copy,
@@ -53,6 +53,7 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
   const [nativeLogs, setNativeLogs] = useState<TermuxNativeLogsResponse | null>(null);
   const [loadingNative, setLoadingNative] = useState(false);
   const [copied, setCopied] = useState(false);
+  const nativeRequestIdRef = useRef(0);
 
   // The modal stays mounted while hidden, so explicitly reset its view state
   // on every close/open instead of carrying filters or native output forward.
@@ -72,43 +73,34 @@ export const AppExecutionLogModal: React.FC<AppExecutionLogModalProps> = ({
   }, [open]);
 
   const loadNative = async () => {
+    const requestId = ++nativeRequestIdRef.current;
     if (!termuxConnected) {
       setNativeLogs(null);
+      setLoadingNative(false);
       return;
     }
     setLoadingNative(true);
     try {
       const res = await fetchTermuxNativeLogs(termuxConfig);
-      setNativeLogs(res);
+      if (requestId === nativeRequestIdRef.current) setNativeLogs(res);
     } catch {
-      setNativeLogs(null);
+      if (requestId === nativeRequestIdRef.current) setNativeLogs(null);
     } finally {
-      setLoadingNative(false);
+      if (requestId === nativeRequestIdRef.current) setLoadingNative(false);
     }
   };
 
   useEffect(() => {
-    if (!open || !termuxConnected) {
+    if (open && termuxConnected) {
+      void loadNative();
+    } else {
+      nativeRequestIdRef.current += 1;
       setNativeLogs(null);
       setLoadingNative(false);
-      return;
     }
-
-    let cancelled = false;
-    setLoadingNative(true);
-    void fetchTermuxNativeLogs(termuxConfig)
-      .then((res) => {
-        if (!cancelled) setNativeLogs(res);
-      })
-      .catch(() => {
-        if (!cancelled) setNativeLogs(null);
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingNative(false);
-      });
-
     return () => {
-      cancelled = true;
+      // Invalidate automatic and manual refreshes when the modal is dismissed.
+      nativeRequestIdRef.current += 1;
     };
     // termuxConfig is managed by the parent and is stable for this modal session.
     // eslint-disable-next-line react-hooks/exhaustive-deps
